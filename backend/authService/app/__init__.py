@@ -1,0 +1,1 @@
+"""authService application package."""
