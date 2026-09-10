@@ -29,18 +29,22 @@ jobs:
       - run: npm audit --audit-level=high
 
   python-audit:
-    name: Audit Python dependencies
+    name: Audit Python dependencies (${{ matrix.service }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [authService, eventService]
     defaults:
       run:
-        working-directory: backend/authService
+        working-directory: backend/${{ matrix.service }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/authService/pyproject.toml
+          cache-dependency-path: backend/${{ matrix.service }}/pyproject.toml
       - run: python -m pip install --upgrade pip
       - run: python -m pip install . pip-audit
       - run: pip-audit --local

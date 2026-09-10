@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "event-service"
+version = "0.1.0"
+description = "Event microservice for SPM"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.34,<1.0",
+    "sqlalchemy>=2.0,<3.0",
+    "psycopg[binary]>=3.2,<4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx2>=2,<3",
+    "pytest>=8,<10",
+    "ruff>=0.12,<1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's Depends()/Header() are meant to be called as parameter defaults;
+# without this, ruff's B008 flags every route handler.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Header"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

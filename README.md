@@ -37,6 +37,7 @@ npm run build
 | Service | Technology | Local port | Purpose |
 | --- | --- | --- | --- |
 | `authService` | FastAPI | `8001` | Authentication service scaffold |
+| `eventService` | FastAPI + Postgres | `8002` | Event lifecycle and status transitions |
 
 Start the services with Docker Compose:
 
