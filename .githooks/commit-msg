@@ -6,8 +6,9 @@ subject=$(sed -n '1p' "$commit_message_file" | tr -d '\r')
 # Conventional Commits: type, optional scope, optional breaking-change marker,
 # followed by a non-empty description.
 pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([[:alnum:]_.-]+\))?!?: .+'
+github_merge_pattern='^Merge pull request #[0-9]+ from [^[:space:]]+$'
 
-if printf '%s\n' "$subject" | grep -Eq "$pattern"; then
+if printf '%s\n' "$subject" | grep -Eq "$pattern|$github_merge_pattern"; then
     exit 0
 fi
 
@@ -23,6 +24,7 @@ Examples:
   feat!: remove the legacy endpoint
 
 Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+GitHub-generated pull request merge commits are also allowed.
 EOF
 
 exit 1
