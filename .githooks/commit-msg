@@ -1,0 +1,28 @@
+#!/bin/sh
+
+commit_message_file="$1"
+subject=$(sed -n '1p' "$commit_message_file" | tr -d '\r')
+
+# Conventional Commits: type, optional scope, optional breaking-change marker,
+# followed by a non-empty description.
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([[:alnum:]_.-]+\))?!?: .+'
+
+if printf '%s\n' "$subject" | grep -Eq "$pattern"; then
+    exit 0
+fi
+
+cat >&2 <<'EOF'
+Invalid commit message.
+
+Use the Conventional Commits format:
+  <type>(optional-scope): <description>
+
+Examples:
+  feat: add user authentication
+  fix(api): handle empty responses
+  feat!: remove the legacy endpoint
+
+Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+EOF
+
+exit 1

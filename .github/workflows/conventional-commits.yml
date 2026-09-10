@@ -1,0 +1,70 @@
+name: Conventional Commits
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate commit messages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate pushed commits
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -uo pipefail
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base_sha="$PR_BASE_SHA"
+            head_sha="$PR_HEAD_SHA"
+          else
+            base_sha="$BEFORE_SHA"
+            head_sha="$CURRENT_SHA"
+          fi
+
+          zero_sha="0000000000000000000000000000000000000000"
+          if [[ -z "$base_sha" || "$base_sha" == "$zero_sha" ]] || \
+             ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+            default_ref="origin/${DEFAULT_BRANCH}"
+            merge_base=$(git merge-base "$head_sha" "$default_ref" 2>/dev/null || true)
+
+            if [[ -n "$merge_base" && "$merge_base" != "$head_sha" ]]; then
+              commits=$(git rev-list --reverse "${merge_base}..${head_sha}")
+            else
+              commits="$head_sha"
+            fi
+          else
+            commits=$(git rev-list --reverse "${base_sha}..${head_sha}")
+          fi
+
+          failed=0
+          for commit in $commits; do
+            message_file=$(mktemp)
+            git show -s --format=%B "$commit" > "$message_file"
+
+            if ! sh .githooks/commit-msg "$message_file"; then
+              subject=$(git show -s --format=%s "$commit")
+              echo "::error title=Invalid commit message::${commit}: ${subject}"
+              failed=1
+            fi
+
+            rm -f "$message_file"
+          done
+
+          exit "$failed"
