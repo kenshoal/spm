@@ -25,3 +25,7 @@ class EventRead(BaseModel):
 
 class StatusTransitionRequest(BaseModel):
     target_status: EventStatus
+
+
+class CoordinatorAssignRequest(BaseModel):
+    coordinator_id: str

@@ -13,8 +13,13 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import CurrentUser, Role, get_current_user
 from app.models import Event, StatusHistory
-from app.schemas import EventCreate, EventRead, StatusTransitionRequest
-from app.status import EventStatus, can_transition
+from app.schemas import (
+    CoordinatorAssignRequest,
+    EventCreate,
+    EventRead,
+    StatusTransitionRequest,
+)
+from app.status import EventStatus, can_transition, is_terminal
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -44,6 +49,43 @@ def create_event(
 @router.get("/{event_id}", response_model=EventRead)
 def read_event(event_id: str, db: Session = Depends(get_db)) -> Event:
     return _get_event_or_404(db, event_id)
+
+
+@router.post("/{event_id}/coordinator", response_model=EventRead)
+def assign_coordinator(
+    event_id: str,
+    body: CoordinatorAssignRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Event:
+    """Assign (or reassign) the Event Coordinator for an event.
+
+    Only an Operations Manager may do this, and only once the event has
+    been submitted. Assignment does not change the event's status.
+    """
+    if current_user.role is not Role.OPERATIONS_MANAGER:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Only an Event Operations Manager can assign a Coordinator",
+        )
+
+    event = _get_event_or_404(db, event_id)
+
+    if event.status is EventStatus.DRAFT:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail="Cannot assign a Coordinator before the event is submitted",
+        )
+    if is_terminal(event.status):
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=f"Cannot assign a Coordinator to a {event.status} event",
+        )
+
+    event.coordinator_id = body.coordinator_id
+    db.commit()
+    db.refresh(event)
+    return event
 
 
 @router.post("/{event_id}/status", response_model=EventRead)

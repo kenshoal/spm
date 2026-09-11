@@ -15,6 +15,7 @@ from fastapi import Header, HTTPException, status
 class Role(StrEnum):
     ORGANISER = "organiser"
     EVENT_COORDINATOR = "event_coordinator"
+    OPERATIONS_MANAGER = "operations_manager"
 
 
 @dataclass(frozen=True)
