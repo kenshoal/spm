@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from app.routers import venues
+
 
 class ServiceResponse(BaseModel):
     service: str
@@ -17,6 +19,8 @@ app = FastAPI(
     description="Venue catalogue and search microservice for SPM.",
     version="0.1.0",
 )
+
+app.include_router(venues.router)
 
 
 @app.get("/", response_model=ServiceResponse, tags=["service"])

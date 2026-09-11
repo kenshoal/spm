@@ -1,7 +1,17 @@
 # venueService
 
-Initial FastAPI microservice scaffold for the venue catalogue and venue search
-/ filtering.
+FastAPI microservice for the venue catalogue and venue search / filtering.
+
+## Scope
+
+| Capability | Endpoints |
+| --- | --- |
+| Maintain the venue catalogue | `POST /venues`, `GET /venues/{id}`, `PATCH /venues/{id}`, `GET /venues` |
+
+Storage is an in-memory repository (`app/repository.py`) — a scaffold to be
+replaced with a persistent backend once the project's database infrastructure
+lands. Authorisation dependencies in `app/dependencies.py` are stubs pending
+integration with `authService`.
 
 ## Run locally
 
