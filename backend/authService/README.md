@@ -1,25 +1,26 @@
 # authService
 
-Initial FastAPI authentication microservice scaffold.
+FastAPI authentication microservice scaffold backed by Supabase Auth.
 
 ## Run locally
 
 ```powershell
-python -m venv .venv
-./.venv/Scripts/Activate.ps1
-python -m pip install -e ".[dev]"
-uvicorn app.main:app --reload
+uv sync --extra dev --locked
+Copy-Item .env.example .env
+uv run uvicorn app.main:app --reload
 ```
 
 The service is available at `http://localhost:8000`, its health check at `http://localhost:8000/health`, and interactive API documentation at `http://localhost:8000/docs`.
 
-## Current authentication features
+Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `.env` using the values from your Supabase project settings. Never place a Supabase secret or service-role key in client-facing configuration.
 
-- `POST /users` registers a user and returns public profile data.
-- Passwords are hashed with Argon2 before storage.
-- Email addresses are unique without regard to letter casing.
+## Current authentication setup
 
-User storage is intentionally in memory for this increment and resets whenever the service restarts.
+- The official Supabase Python SDK is configured behind a cached client factory.
+- Supabase Auth will own credentials, password handling, sessions, and JWT issuance.
+- The service does not expose sign-up or sign-in endpoints yet; those will be added incrementally.
+
+The previous in-memory user store and local password hashing have been removed to avoid maintaining a second authentication source.
 
 ## Test
 

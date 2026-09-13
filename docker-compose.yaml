@@ -23,6 +23,9 @@ services:
   auth-service:
     build:
       context: ./backend/authService
+    environment:
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
     ports:
       - "8001:8000"
     healthcheck:
