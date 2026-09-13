@@ -33,6 +33,13 @@ def _get_event_or_404(db: Session, event_id: str) -> Event:
     return event
 
 
+def _is_assigned_coordinator(current_user: CurrentUser, event: Event) -> bool:
+    return (
+        current_user.role is Role.EVENT_COORDINATOR
+        and current_user.id == event.coordinator_id
+    )
+
+
 @router.post("", response_model=EventRead, status_code=http_status.HTTP_201_CREATED)
 def create_event(
     body: EventCreate,
@@ -104,21 +111,22 @@ def transition_status(
             detail=f"Cannot transition from {event.status} to {target}",
         )
 
-    if target is EventStatus.CANCELLED and event.coordinator_id is not None:
-        is_assigned_coordinator = (
-            current_user.role is Role.EVENT_COORDINATOR
-            and current_user.id == event.coordinator_id
-        )
-        if not is_assigned_coordinator:
-            raise HTTPException(
-                status_code=http_status.HTTP_403_FORBIDDEN,
-                detail="Only the assigned Event Coordinator can cancel this event",
-            )
-
-    if target is EventStatus.COMPLETED and current_user.role is not Role.EVENT_COORDINATOR:
+    if (
+        target is EventStatus.CANCELLED
+        and event.coordinator_id is not None
+        and not _is_assigned_coordinator(current_user, event)
+    ):
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
-            detail="Only an Event Coordinator can mark an event complete",
+            detail="Only the assigned Event Coordinator can cancel this event",
+        )
+
+    if target is EventStatus.COMPLETED and not _is_assigned_coordinator(
+        current_user, event
+    ):
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Only the assigned Event Coordinator can mark an event complete",
         )
 
     previous_status = event.status
