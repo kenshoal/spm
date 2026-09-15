@@ -14,15 +14,16 @@ def test_supabase_client_uses_configured_publishable_key(
     create_client = Mock(return_value=object())
     monkeypatch.setattr(supabase_integration, "create_client", create_client)
     get_settings.cache_clear()
-    supabase_integration.get_supabase_client.cache_clear()
 
-    client = supabase_integration.get_supabase_client()
+    first_client = supabase_integration.get_supabase_client()
+    second_client = supabase_integration.get_supabase_client()
 
-    assert client is create_client.return_value
-    create_client.assert_called_once_with(
+    assert first_client is create_client.return_value
+    assert second_client is create_client.return_value
+    assert create_client.call_count == 2
+    create_client.assert_called_with(
         "https://example.supabase.co",
         "sb_publishable_test",
     )
 
-    supabase_integration.get_supabase_client.cache_clear()
     get_settings.cache_clear()

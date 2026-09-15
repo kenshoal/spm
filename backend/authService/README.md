@@ -16,9 +16,10 @@ Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `.env` using the values fro
 
 ## Current authentication setup
 
-- The official Supabase Python SDK is configured behind a cached client factory.
+- The official Supabase Python SDK is configured from environment variables.
 - Supabase Auth will own credentials, password handling, sessions, and JWT issuance.
-- The service does not expose sign-up or sign-in endpoints yet; those will be added incrementally.
+- `POST /auth/register` creates an email/password user through Supabase Auth.
+- Registration returns whether email confirmation is required, but does not expose session tokens.
 
 The previous in-memory user store and local password hashing have been removed to avoid maintaining a second authentication source.
 
