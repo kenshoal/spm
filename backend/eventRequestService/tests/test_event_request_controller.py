@@ -1,20 +1,88 @@
-from pathlib import Path
+from datetime import UTC, datetime
+from typing import Any
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.main import create_app
 
 
-def make_client(database_path: Path) -> TestClient:
-    return TestClient(create_app(database_path))
+class FakeEventRequestRepository:
+    def __init__(self) -> None:
+        self.rows: dict[str, dict[str, Any]] = {}
+
+    def create(self, values: dict[str, Any]) -> dict[str, Any]:
+        now = datetime.now(UTC).isoformat()
+        row = {
+            **values,
+            "id": str(uuid4()),
+            "created_at": now,
+            "updated_at": now,
+        }
+        self.rows[row["id"]] = row
+        return dict(row)
+
+    def list_for_temporary_organiser(
+        self, organiser_id: str
+    ) -> list[dict[str, Any]]:
+        return [
+            dict(row)
+            for row in reversed(list(self.rows.values()))
+            if row["temporary_organiser_id"] == organiser_id
+        ]
+
+    def get_for_temporary_organiser(
+        self, event_request_id: str, organiser_id: str
+    ) -> dict[str, Any] | None:
+        row = self.rows.get(event_request_id)
+        if row is None or row["temporary_organiser_id"] != organiser_id:
+            return None
+        return dict(row)
+
+    def update_for_temporary_organiser(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        row = self.rows.get(event_request_id)
+        if (
+            row is None
+            or row["temporary_organiser_id"] != organiser_id
+            or row["status"] != "Draft"
+        ):
+            return None
+        row.update(values)
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
+    def delete_for_temporary_organiser(
+        self, event_request_id: str, organiser_id: str
+    ) -> bool:
+        row = self.rows.get(event_request_id)
+        if (
+            row is None
+            or row["temporary_organiser_id"] != organiser_id
+            or row["status"] != "Draft"
+        ):
+            return False
+        del self.rows[event_request_id]
+        return True
+
+
+def make_client(
+    repository: FakeEventRequestRepository | None = None,
+) -> TestClient:
+    return TestClient(create_app(repository or FakeEventRequestRepository()))
 
 
 def organiser_headers(organiser_id: str = "organiser-1") -> dict[str, str]:
     return {"X-Organiser-Id": organiser_id}
 
 
-def test_health(tmp_path: Path) -> None:
-    with make_client(tmp_path / "health.db") as client:
+# Purpose: Confirms the service exposes a basic readiness signal.
+def test_health() -> None:
+    with make_client() as client:
         response = client.get("/health")
 
     assert response.status_code == 200
@@ -24,8 +92,9 @@ def test_health(tmp_path: Path) -> None:
     }
 
 
-def test_create_and_get_incomplete_draft(tmp_path: Path) -> None:
-    with make_client(tmp_path / "create.db") as client:
+# Purpose: Proves an organiser can save and retrieve an intentionally incomplete draft.
+def test_create_and_get_incomplete_draft() -> None:
+    with make_client() as client:
         created = client.post(
             "/event-requests",
             headers=organiser_headers(),
@@ -45,8 +114,48 @@ def test_create_and_get_incomplete_draft(tmp_path: Path) -> None:
     assert fetched.json() == created.json()
 
 
-def test_list_returns_only_the_current_organisers_requests(tmp_path: Path) -> None:
-    with make_client(tmp_path / "list.db") as client:
+# Purpose: Proves every SCRUM-8 field can be saved and retrieved without value loss.
+def test_all_draft_fields_round_trip_unchanged() -> None:
+    payload = {
+        "event_name": "Community Technology Workshop",
+        "purpose": "Teach practical skills",
+        "description": "A hands-on community programme",
+        "proposed_date_times": [
+            "2026-10-20T10:00:00+08:00",
+            "2026-10-21T14:30:00+08:00",
+        ],
+        "expected_attendance": 80,
+        "venue_requirements": "Classroom with movable tables",
+        "accessibility_needs": "Wheelchair-accessible route",
+        "equipment_requirements": "Projector and two microphones",
+        "registration_needs": "Online registration and check-in desk",
+    }
+
+    with make_client() as client:
+        created = client.post(
+            "/event-requests",
+            headers=organiser_headers(),
+            json=payload,
+        )
+        fetched = client.get(
+            f"/event-requests/{created.json()['id']}",
+            headers=organiser_headers(),
+        )
+
+    assert created.status_code == 201
+    assert created.json()["status"] == "Draft"
+    assert fetched.status_code == 200
+    assert fetched.json() == created.json()
+    for field, value in payload.items():
+        if field == "proposed_date_times":
+            assert len(created.json()[field]) == len(value)
+        else:
+            assert created.json()[field] == value
+
+
+# Purpose: Protects draft privacy by keeping each organiser's list isolated.
+def test_list_returns_only_the_current_organisers_requests() -> None:
+    with make_client() as client:
         client.post(
             "/event-requests",
             headers=organiser_headers("organiser-1"),
@@ -65,8 +174,9 @@ def test_list_returns_only_the_current_organisers_requests(tmp_path: Path) -> No
     assert [item["event_name"] for item in response.json()] == ["Visible event"]
 
 
-def test_patch_updates_the_same_draft_and_can_clear_a_field(tmp_path: Path) -> None:
-    with make_client(tmp_path / "update.db") as client:
+# Purpose: Proves reopening a draft updates the same record and supports clearing fields.
+def test_patch_updates_the_same_draft_and_can_clear_a_field() -> None:
+    with make_client() as client:
         created = client.post(
             "/event-requests",
             headers=organiser_headers(),
@@ -84,8 +194,9 @@ def test_patch_updates_the_same_draft_and_can_clear_a_field(tmp_path: Path) -> N
     assert response.json()["purpose"] is None
 
 
-def test_delete_removes_the_draft(tmp_path: Path) -> None:
-    with make_client(tmp_path / "delete.db") as client:
+# Purpose: Confirms an organiser can discard a draft and it is no longer retrievable.
+def test_delete_removes_the_draft() -> None:
+    with make_client() as client:
         created = client.post(
             "/event-requests",
             headers=organiser_headers(),
@@ -104,8 +215,9 @@ def test_delete_removes_the_draft(tmp_path: Path) -> None:
     assert fetched.status_code == 404
 
 
-def test_other_organiser_cannot_read_update_or_delete(tmp_path: Path) -> None:
-    with make_client(tmp_path / "ownership.db") as client:
+# Purpose: Prevents one organiser from viewing or changing another organiser's draft.
+def test_other_organiser_cannot_read_update_or_delete() -> None:
+    with make_client() as client:
         created = client.post(
             "/event-requests",
             headers=organiser_headers("owner"),
@@ -123,8 +235,9 @@ def test_other_organiser_cannot_read_update_or_delete(tmp_path: Path) -> None:
     assert deleted.status_code == 404
 
 
-def test_requires_non_blank_organiser_header(tmp_path: Path) -> None:
-    with make_client(tmp_path / "header.db") as client:
+# Purpose: Ensures draft operations reject requests without a usable organiser identity.
+def test_requires_non_blank_organiser_header() -> None:
+    with make_client() as client:
         missing = client.get("/event-requests")
         blank = client.get("/event-requests", headers={"X-Organiser-Id": " "})
 
@@ -132,8 +245,20 @@ def test_requires_non_blank_organiser_header(tmp_path: Path) -> None:
     assert blank.status_code == 422
 
 
-def test_rejects_invalid_expected_attendance(tmp_path: Path) -> None:
-    with make_client(tmp_path / "validation.db") as client:
+# Purpose: Prevents temporary identities from altering Supabase filter expressions.
+def test_rejects_unsupported_organiser_header_characters() -> None:
+    with make_client() as client:
+        response = client.get(
+            "/event-requests",
+            headers={"X-Organiser-Id": "organiser,or(status.eq.Submitted)"},
+        )
+
+    assert response.status_code == 422
+
+
+# Purpose: Prevents an invalid attendance value from being persisted in a draft.
+def test_rejects_invalid_expected_attendance() -> None:
+    with make_client() as client:
         response = client.post(
             "/event-requests",
             headers=organiser_headers(),
@@ -143,16 +268,17 @@ def test_rejects_invalid_expected_attendance(tmp_path: Path) -> None:
     assert response.status_code == 422
 
 
-def test_draft_persists_when_the_application_restarts(tmp_path: Path) -> None:
-    database_path = tmp_path / "persistence.db"
-    with make_client(database_path) as first_client:
+# Purpose: Proves saved values survive a new application instance using the same repository.
+def test_draft_persists_when_the_application_restarts() -> None:
+    repository = FakeEventRequestRepository()
+    with make_client(repository) as first_client:
         created = first_client.post(
             "/event-requests",
             headers=organiser_headers(),
             json={"description": "Persist this value"},
         ).json()
 
-    with make_client(database_path) as restarted_client:
+    with make_client(repository) as restarted_client:
         response = restarted_client.get(
             f"/event-requests/{created['id']}",
             headers=organiser_headers(),
@@ -160,4 +286,3 @@ def test_draft_persists_when_the_application_restarts(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["description"] == "Persist this value"
-

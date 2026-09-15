@@ -1,12 +1,16 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from pydantic import ValidationError
 
+from app.config import get_settings
 from app.models.event_request import (
     EventRequestCreate,
     EventRequestResponse,
     EventRequestUpdate,
 )
+from app.repositories import SupabaseEventRequestRepository
 from app.services.event_request_service import EventRequestService
 
 router = APIRouter(prefix="/event-requests", tags=["event requests"])
@@ -14,7 +18,21 @@ router = APIRouter(prefix="/event-requests", tags=["event requests"])
 
 def get_event_request_service(request: Request) -> EventRequestService:
     """Return the service owned by this FastAPI application instance."""
-    return request.app.state.event_request_service
+    service = request.app.state.event_request_service
+    if service is not None:
+        return service
+
+    try:
+        repository = SupabaseEventRequestRepository.from_settings(get_settings())
+    except ValidationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Supabase is not configured for eventRequestService",
+        ) from error
+
+    service = EventRequestService(repository)
+    request.app.state.event_request_service = service
+    return service
 
 
 def get_organiser_id(
@@ -24,8 +42,15 @@ def get_organiser_id(
     organiser_id = x_organiser_id.strip()
     if not organiser_id:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="X-Organiser-Id must not be blank",
+        )
+    if len(organiser_id) > 128 or not all(
+        character.isalnum() or character in "._:@-" for character in organiser_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="X-Organiser-Id contains unsupported characters",
         )
     return organiser_id
 
@@ -57,29 +82,28 @@ def list_event_requests(
 
 @router.get("/{event_request_id}", response_model=EventRequestResponse)
 def get_event_request(
-    event_request_id: str,
+    event_request_id: UUID,
     organiser_id: OrganiserDependency,
     service: ServiceDependency,
 ) -> EventRequestResponse:
-    return service.get(event_request_id, organiser_id)
+    return service.get(str(event_request_id), organiser_id)
 
 
 @router.patch("/{event_request_id}", response_model=EventRequestResponse)
 def update_event_request(
-    event_request_id: str,
+    event_request_id: UUID,
     payload: EventRequestUpdate,
     organiser_id: OrganiserDependency,
     service: ServiceDependency,
 ) -> EventRequestResponse:
-    return service.update(event_request_id, organiser_id, payload)
+    return service.update(str(event_request_id), organiser_id, payload)
 
 
 @router.delete("/{event_request_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_event_request(
-    event_request_id: str,
+    event_request_id: UUID,
     organiser_id: OrganiserDependency,
     service: ServiceDependency,
 ) -> Response:
-    service.delete(event_request_id, organiser_id)
+    service.delete(str(event_request_id), organiser_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
