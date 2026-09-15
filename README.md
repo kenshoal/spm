@@ -32,14 +32,26 @@ npm run test:e2e
 npm run build
 ```
 
+The purpose, layer and acceptance-criterion coverage of the SCRUM-8 tests are
+documented in
+[`docs/testcases/scrum_8_testcases.md`](docs/testcases/scrum_8_testcases.md).
+
 ## Services
 
 | Service | Technology | Local port | Purpose |
 | --- | --- | --- | --- |
 | `authService` | FastAPI | `8001` | Authentication service scaffold |
+| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Editable event-request drafts |
 
 Start the services with Docker Compose:
 
 ```powershell
 docker compose up --build
 ```
+
+The event-request API documentation is available at
+`http://localhost:8003/docs`. Event-request endpoints currently require an
+`X-Organiser-Id` header until authentication integration is implemented.
+
+The draft-request and operational-event ownership boundary is documented in
+[`docs/event-domain-boundaries.md`](docs/event-domain-boundaries.md).

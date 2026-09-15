@@ -1,4 +1,25 @@
 services:
+  event-request-service:
+    build:
+      context: ./backend/eventRequestService
+    ports:
+      - "8003:8000"
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-https://rrmvhxrxrrnigjdxcbwt.supabase.co}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health').read()
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   auth-service:
     build:
       context: ./backend/authService
