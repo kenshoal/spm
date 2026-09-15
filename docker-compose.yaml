@@ -17,30 +17,16 @@ services:
       retries: 3
       start_period: 5s
 
-  event-db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: event
-      POSTGRES_PASSWORD: event
-      POSTGRES_DB: event
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U event"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
   event-service:
     build:
       context: ./backend/eventService
     environment:
-      DATABASE_URL: postgresql+psycopg://event:event@event-db:5432/event
+      # Shared Supabase Postgres project; event-service owns the
+      # event_service schema there. Set in a root .env (docker compose
+      # reads it automatically) or export it before `docker compose up`.
+      DATABASE_URL: ${DATABASE_URL}
     ports:
       - "8002:8000"
-    depends_on:
-      event-db:
-        condition: service_healthy
     healthcheck:
       test:
         - CMD

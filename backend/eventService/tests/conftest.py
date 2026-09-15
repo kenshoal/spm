@@ -24,11 +24,14 @@ OPERATIONS_MANAGER = {"X-User-Id": "ops-1", "X-User-Role": "operations_manager"}
 
 @pytest.fixture
 def session_factory() -> Iterator[sessionmaker]:
+    # SQLite has no concept of app.db's "event_service" schema, so translate
+    # it away for this engine — models stay schema-qualified for Postgres
+    # without the test DB needing to know about it.
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
-    )
+    ).execution_options(schema_translate_map={Base.metadata.schema: None})
     Base.metadata.create_all(engine)
     testing_session_local = sessionmaker(bind=engine)
 

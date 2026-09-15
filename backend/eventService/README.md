@@ -11,6 +11,26 @@ non-terminal status).
 - `app/routers/events.py` — create/read/discard an event, and the
   `POST /events/{id}/status` transition action.
 
+## Database
+
+Data lives in the team's shared Supabase Postgres project. Each
+microservice owns its own schema there rather than a separate database —
+this service's tables live under `event_service`, not `public`.
+
+Copy `.env.example` to `.env` and fill in `DATABASE_URL` from the Supabase
+project's **Connect** panel — use the **Session pooler** string (port 5432,
+user `postgres.<project-ref>`), not Direct connection: this project doesn't
+have a direct-connection host provisioned, only the pooler. `.env` is
+gitignored — never commit real credentials.
+
+The schema and tables don't exist until you create them — there's no
+migration tooling in this repo yet, so run this once (and again any time
+models change, it's idempotent):
+
+```powershell
+python -m app.init_db
+```
+
 ## Run locally
 
 ```powershell
@@ -24,9 +44,10 @@ The service is available at `http://localhost:8000`, its health check at
 `http://localhost:8000/health`, and interactive API documentation at
 `http://localhost:8000/docs`.
 
-By default it connects to Postgres at
-`postgresql+psycopg://event:event@localhost:5432/event`; override with the
-`DATABASE_URL` environment variable.
+Without a configured `DATABASE_URL`, it falls back to a local Postgres at
+`postgresql+psycopg://event:event@localhost:5432/event` — useful for a
+quick check without touching the shared database, but most local dev
+should point at Supabase via `.env`.
 
 ## Test
 
