@@ -17,14 +17,13 @@ on:
 permissions:
   contents: read
 
-defaults:
-  run:
-    working-directory: backend/authService
-
 jobs:
   test:
     name: Lint and test authService
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/authService
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -39,6 +38,63 @@ jobs:
   container:
     name: Build authService container
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/authService
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build .
+
+  test-equipment:
+    name: Lint and test equipmentService
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/equipmentService
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/equipmentService/pyproject.toml
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check .
+      - run: pytest
+
+  container-equipment:
+    name: Build equipmentService container
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/equipmentService
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build .
+
+  test-equipment-status:
+    name: Lint and test equipmentStatusService
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/equipmentStatusService
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/equipmentStatusService/pyproject.toml
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check .
+      - run: pytest
+
+  container-equipment-status:
+    name: Build equipmentStatusService container
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/equipmentStatusService
     steps:
       - uses: actions/checkout@v7
       - run: docker build .

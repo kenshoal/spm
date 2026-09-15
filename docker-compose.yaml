@@ -16,3 +16,41 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+
+  equipment-service:
+    build:
+      context: ./backend/equipmentService
+    ports:
+      - "8002:8000"
+    env_file: .env
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health').read()
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  equipment-status-service:
+    build:
+      context: ./backend/equipmentStatusService
+    ports:
+      - "8003:8000"
+    env_file: .env
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health').read()
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
