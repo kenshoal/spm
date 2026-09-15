@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: "http://127.0.0.1:3100",
     trace: "on-first-retry",
   },
   projects: [
@@ -17,10 +17,22 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: "npm run build && npm run start",
-    url: "http://127.0.0.1:3000",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: "node e2e/support/event-request-api.mjs",
+      url: "http://127.0.0.1:8103/health",
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+    {
+      command: "npm run build && npm run start -- --hostname 127.0.0.1 --port 3100",
+      url: "http://127.0.0.1:3100",
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        EVENT_REQUEST_API_URL: "http://127.0.0.1:8103",
+        EVENT_REQUEST_ORGANISER_ID: "playwright-organiser",
+      },
+    },
+  ],
 });
