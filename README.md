@@ -35,23 +35,29 @@ npm run build
 The purpose, layer and acceptance-criterion coverage of the SCRUM-8 tests are
 documented in
 [`docs/testcases/scrum_8_testcases.md`](docs/testcases/scrum_8_testcases.md).
+Authentication coverage for SCRUM-26 is documented in
+[`docs/testcases/scrum_26_testcases.md`](docs/testcases/scrum_26_testcases.md).
 
 ## Services
 
 | Service | Technology | Local port | Purpose |
 | --- | --- | --- | --- |
-| `authService` | FastAPI | `8001` | Authentication service scaffold |
+| `authService` | FastAPI | `8001` | Registration, login and session verification |
 | `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Editable event-request drafts |
 
 Start the services with Docker Compose:
+
+Create a local, untracked `.env` at the repository root with
+`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and the server-only
+`SUPABASE_SECRET_KEY` from the development project. Never commit the secret.
 
 ```powershell
 docker compose up --build
 ```
 
 The event-request API documentation is available at
-`http://localhost:8003/docs`. Event-request endpoints currently require an
-`X-Organiser-Id` header until authentication integration is implemented.
+`http://localhost:8003/docs`. Protected endpoints require a Supabase access
+token in the `Authorization: Bearer` header.
 
 The draft-request and operational-event ownership boundary is documented in
 [`docs/event-domain-boundaries.md`](docs/event-domain-boundaries.md).
