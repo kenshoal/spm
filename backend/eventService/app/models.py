@@ -1,65 +1,48 @@
 """SQLAlchemy models.
 
-Kept separate from schemas.py (API request/response shapes) so persistence
-and the wire format can change independently.
+`EventRequestRef` is a **read-only mirror** of eventRequestService's
+`event_requests` table — owned and migrated by that service, not this one.
+It declares only the columns this service actually reads (id, status).
+Never used to create or alter that table: app/init_db.py explicitly
+restricts table creation to this service's own table, and SQLAlchemy's
+default `create_all(checkfirst=True)` would skip an existing table anyway,
+but the restriction keeps that safe regardless.
+
+`EventCoordinatorAssignment` is this service's own table: which Coordinator
+is assigned to an event request, and by whom. One row per assignment, not
+just the current one — reassigning inserts a new row rather than
+overwriting, so who was assigned before is never lost. "Current assignment"
+= the most recent row for a given event_request_id, determined by `id`
+(autoincrementing, so monotonic by construction) rather than `assigned_at`
+— a server-clock timestamp doesn't have reliable enough resolution to
+order two assignments made in quick succession.
 """
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy import Enum as SAEnum
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DateTime, ForeignKey, String, Uuid, func
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
-from app.status import EventStatus
 
 
-def _new_id() -> str:
-    return str(uuid.uuid4())
+class EventRequestRef(Base):
+    __tablename__ = "event_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    status: Mapped[str] = mapped_column(String(30))
 
 
-class Event(Base):
-    __tablename__ = "events"
+class EventCoordinatorAssignment(Base):
+    __tablename__ = "event_coordinator_assignments"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
-    title: Mapped[str] = mapped_column(String(200))
-    status: Mapped[EventStatus] = mapped_column(
-        SAEnum(EventStatus, native_enum=False, length=30),
-        default=EventStatus.DRAFT,
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("event_requests.id"), index=True
     )
-    organiser_id: Mapped[str] = mapped_column(String(64))
-    coordinator_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
+    coordinator_id: Mapped[str] = mapped_column(String(64))
+    assigned_by: Mapped[str] = mapped_column(String(64))
+    assigned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    history: Mapped[list["StatusHistory"]] = relationship(
-        back_populates="event", cascade="all, delete-orphan"
-    )
-
-
-class StatusHistory(Base):
-    """Audit trail of every status change, in support of the requirement
-    that current (and by extension past) status be visible to users with
-    access to the event."""
-
-    __tablename__ = "event_status_history"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
-    event_id: Mapped[str] = mapped_column(ForeignKey("events.id"))
-    from_status: Mapped[EventStatus | None] = mapped_column(
-        SAEnum(EventStatus, native_enum=False, length=30), nullable=True
-    )
-    to_status: Mapped[EventStatus] = mapped_column(
-        SAEnum(EventStatus, native_enum=False, length=30)
-    )
-    changed_by: Mapped[str] = mapped_column(String(64))
-    changed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-    event: Mapped["Event"] = relationship(back_populates="history")

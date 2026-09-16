@@ -1,9 +1,10 @@
 """SQLAlchemy engine and session setup.
 
-Connects to the shared Supabase Postgres project. Each microservice owns
-its own schema there — see SCHEMA below — rather than a separate database,
-so this module namespaces every table under it instead of the default
-"public" schema.
+Connects to the shared Supabase Postgres project — the same database
+eventRequestService (and other services) use, in the default "public"
+schema (there's no dedicated per-service schema in practice; an earlier
+attempt at "one schema per microservice" didn't end up being what the team
+actually built against).
 
 Loads a local `.env` file if one is present (see `.env.example`) without
 overwriting a real environment variable, so deployed environments that set
@@ -19,13 +20,10 @@ import re
 from collections.abc import Iterator
 
 from dotenv import load_dotenv
-from sqlalchemy import MetaData, create_engine
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 load_dotenv()
-
-# One schema per microservice in the shared Supabase project.
-SCHEMA = "event_service"
 
 _LOCAL_FALLBACK_URL = "postgresql+psycopg://event:event@localhost:5432/event"
 
@@ -43,11 +41,9 @@ DATABASE_URL = _as_psycopg_url(os.getenv("DATABASE_URL", _LOCAL_FALLBACK_URL))
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-metadata = MetaData(schema=SCHEMA)
-
 
 class Base(DeclarativeBase):
-    metadata = metadata
+    pass
 
 
 def get_db() -> Iterator[Session]:

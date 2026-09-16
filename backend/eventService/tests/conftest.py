@@ -3,8 +3,14 @@
 Uses a StaticPool so the same in-memory DB survives across connections,
 letting tests run without a live Postgres instance — matching CI, which
 doesn't start one.
+
+`event_requests` is eventRequestService's table, not ours (see
+app/models.py — EventRequestRef is a read-only mirror). Tests still need
+rows in it to assign a Coordinator against, so `seed_event_request` inserts
+one directly, standing in for what eventRequestService would have created.
 """
 
+import uuid
 from collections.abc import Iterator
 
 import pytest
@@ -15,23 +21,21 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import app
+from app.models import EventRequestRef
 
-ORGANISER = {"X-User-Id": "org-1", "X-User-Role": "organiser"}
+OPERATIONS_MANAGER = {"X-User-Id": "ops-1", "X-User-Role": "operations_manager"}
 COORDINATOR = {"X-User-Id": "coord-1", "X-User-Role": "event_coordinator"}
 OTHER_COORDINATOR = {"X-User-Id": "coord-2", "X-User-Role": "event_coordinator"}
-OPERATIONS_MANAGER = {"X-User-Id": "ops-1", "X-User-Role": "operations_manager"}
+ORGANISER = {"X-User-Id": "org-1", "X-User-Role": "organiser"}
 
 
 @pytest.fixture
 def session_factory() -> Iterator[sessionmaker]:
-    # SQLite has no concept of app.db's "event_service" schema, so translate
-    # it away for this engine — models stay schema-qualified for Postgres
-    # without the test DB needing to know about it.
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
-    ).execution_options(schema_translate_map={Base.metadata.schema: None})
+    )
     Base.metadata.create_all(engine)
     testing_session_local = sessionmaker(bind=engine)
 
@@ -53,7 +57,13 @@ def client(session_factory: sessionmaker) -> Iterator[TestClient]:
         yield test_client
 
 
-def create_event(client: TestClient, headers: dict[str, str] = ORGANISER) -> str:
-    response = client.post("/events", json={"title": "Orientation"}, headers=headers)
-    assert response.status_code == 201
-    return response.json()["id"]
+def seed_event_request(
+    session_factory: sessionmaker, status: str = "Submitted"
+) -> uuid.UUID:
+    """Insert a stand-in event_requests row, as if eventRequestService had
+    created it. Returns its id."""
+    event_request_id = uuid.uuid4()
+    with session_factory() as db:
+        db.add(EventRequestRef(id=event_request_id, status=status))
+        db.commit()
+    return event_request_id
