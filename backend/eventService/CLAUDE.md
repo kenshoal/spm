@@ -1,76 +1,78 @@
 # eventService — Sprint Plan
 
-Two-week sprint, two user stories. Status logic (state machine + role-gated
-cancel/complete/discard) is already scaffolded — see `app/status.py` and
-`app/routers/events.py`. What's below is the remaining work, split evenly
-across the two weeks.
+## Scope change (2026-09-16)
 
-## Stories
+Originally two stories: Coordinator Assignment (SCRUM-14) and Event Status
+(SCRUM-28). Discovered both stories described one continuous event
+lifecycle, split across this service and Heng Rui's `eventRequestService`
+with no connection between them — his story even names SCRUM-14 directly
+("after assignment through SCRUM-14, the assigned Coordinator can access
+it for review").
 
-**A — Coordinator Assignment** (Event Operations Manager)
-Assign an Event Coordinator to a Submitted event; assignment alone doesn't
-change status; only the assigned Coordinator starting review moves it to
-Under Review; Coordinator is notified; reassignment is supported.
+Resolved: **one shared Supabase database, two tables, clean split**.
+- His `event_requests` table: event creation, drafting, submission,
+  and now **status** too (SCRUM-28 handed to him — whoever owns event
+  creation should own its lifecycle).
+- This service's `event_coordinator_assignments` table: who's assigned,
+  and the full history of assignments. Nothing else.
 
-**B — Event Status** (Event Coordinator)
-Exactly one current status at a time, moved only along allowed transitions;
-Coordinator-only cancel/complete once assigned; Organiser-only discard of an
-unsubmitted Draft; status visible to users with access, appropriate to role.
+This service was rebuilt around that on 2026-09-16 (see `app/models.py`,
+`app/routers/assignments.py`). Days 1–3 below (original Coordinator
+Assignment build) mostly still stands conceptually; the code itself was
+reworked to point at his table instead of a local `Event` row.
 
-## Original schedule (superseded below — see Revised schedule)
+## Story (current scope)
 
-Blocking: Story B's cancel/complete role checks were initially only
-exercised with `coordinator_id` set directly in the DB in tests — there was
-no real assignment path yet. Days 1–3 closed that gap.
+**Coordinator Assignment** (Event Operations Manager, SCRUM-14)
+Assign an Event Coordinator to a submitted event request; assignment alone
+doesn't change status; only the assigned Coordinator starting review moves
+it to Under Review (his logic, gated on data from this service); Coordinator
+is notified; reassignment is supported.
 
-- ✅ **Day 1–2**: `POST /events/{id}/coordinator` — assign one Coordinator to
-  a Submitted event. Reject if the event isn't Submitted yet. Assignment
-  does not change status (stays Submitted). Tests.
-- ✅ **Day 3**: Reassignment — same endpoint allows changing the assigned
-  Coordinator. Tests for reassign, and for the previous Coordinator losing
-  cancel/complete rights once reassigned (this caught a real bug: the
-  Completed check only verified role, not the specific assigned Coordinator).
-- **Day 4**: Restrict the Submitted→Under Review transition so only the
-  *assigned* Coordinator can trigger it via `POST /events/{id}/status` —
-  confirms "assignment alone does not move it to Under Review." Tests.
-- **Day 5**: Notification on assign/reassign — minimal notifier interface
-  (stub/outbox-record, per plan for a future Notification System) fired on
-  assignment. Tests.
-- **Day 6–7**: Role-appropriate status visibility — relationship-based
-  access (Organiser/Coordinator/etc. per their relationship to *that* event)
-  plus field shaping (an Attendee sees less than an Organiser). Tests.
-- **Day 8**: Replace remaining test-only shortcuts with real authorization
-  checks consistent across all endpoints — including `GET /events/{id}`,
-  which currently has no auth check at all.
-- **Day 9**: End-to-end lifecycle tests using real assignment (not
-  DB-injected `coordinator_id`): create → submit → assign → review start →
-  approve → plan → confirm → complete; plus cancel and discard paths.
-- **Day 10**: Buffer — review fixes, README/API docs update, demo prep.
+## Done
 
-(Unplanned but done along the way: migrated the DB from local Postgres to
-the shared Supabase project, `event_service` schema — see 2026-09-15.)
+- ✅ `POST /event-requests/{id}/coordinator` — assign/reassign, Operations-
+  Manager-only, refused before submission and once the request is terminal.
+- ✅ `GET /event-requests/{id}/coordinator` — current assignment. This is
+  the integration point his status logic needs to call for the cancel/
+  complete permission check ("only the assigned Coordinator").
+- ✅ Full assignment history preserved (new row per assignment, not an
+  overwrite) — caught and fixed a real ordering bug (timestamp resolution
+  isn't reliable for "which assignment is latest"; fixed to order by an
+  autoincrementing id instead).
+- ✅ 10/10 tests passing, `ruff check .` clean, table created on the real
+  Supabase project, confirmed reading his live `event_requests` table works.
 
-## Revised schedule — 3 working days left (today, Thu, Sun)
+## Remaining — 2 working days left (Thursday, Sunday)
 
-Days 1–3 above are done. What's left (original Days 4–10, one detour spent
-on the Supabase migration instead of Day 4) is compressed into 3 sessions,
-grouped by what belongs together rather than split evenly line-by-line:
+- **Thursday**:
+  - Confirm the full status value set with Heng Rui and update
+    `_DRAFT_STATUS` / `_TERMINAL_STATUSES` in `app/routers/assignments.py`
+    to match exactly — currently a guess (`Completed`, `Cancelled`,
+    `Rejected`), since his table so far only has Draft/Submitted defined.
+  - Confirm with him that his review-start and cancel/complete logic
+    actually calls this service's `GET /event-requests/{id}/coordinator`
+    — pair on wiring this if it isn't done on his side yet.
+  - Build the notification stub for "Coordinator is notified of
+    assignment" — still not built. Outbox-record pattern (per the team's
+    planned future Notification System), fired from `assign_coordinator`.
+  - If real Supabase Auth users exist by then, do a real live
+    create → submit → assign round trip (blocked today — his
+    `event_requests.organiser_id` has a foreign key to `auth.users`, and
+    none exist yet).
 
-- **Today**: finish Story A — Day 4 (restrict review-start to the assigned
-  Coordinator) + Day 5 (notification stub). Small, both Coordinator-
-  assignment-adjacent, closes Story A entirely.
-- **Thursday**: Story B's remaining gaps — Day 6–7 (role-appropriate
-  visibility) + Day 8 (real authorization everywhere, incl. the
-  `GET /events/{id}` gap). The largest remaining chunk; grouped because
-  visibility and authorization are the same underlying question of "who
-  can see/do what."
-- **Sunday**: Day 9 (end-to-end lifecycle tests with real assignment) +
-  Day 10 (buffer, docs, demo prep). Last pass before submission — testing
-  and polish, not new endpoints.
+- **Sunday**:
+  - Full lifecycle integration test with Heng Rui together: create →
+    submit → assign → his review-start check → cancel/complete gated on
+    assignment.
+  - Polish: error messages, edge cases surfaced by the integration test.
+  - Open the PR: `feat/coordinator-assignment` → `dev`. Coordinate merge
+    order with his branch — separate files/tables, low conflict risk, but
+    decide who merges first.
+  - Buffer for whatever the end-to-end pass turns up.
 
-## Open questions to resolve early (Week 1, Day 1)
+## Resolved questions
 
-- Does "notified" require a real notification channel this sprint, or is a
-  stub acceptable? (Plan above assumes stub.)
-- What does "appropriate to role" mean for visibility — hidden fields, or
-  just read/no-read access to the event at all?
+- Notification: stub/outbox-record, not a real channel this sprint.
+- Role-appropriate status visibility: no longer this service's concern —
+  moved to Heng Rui with SCRUM-28.
