@@ -2,8 +2,12 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+import httpx
+import pytest
+from fastapi import Header
 from fastapi.testclient import TestClient
 
+from app.controllers.event_request_controller import get_organiser_id
 from app.main import create_app
 
 
@@ -73,11 +77,17 @@ class FakeEventRequestRepository:
 def make_client(
     repository: FakeEventRequestRepository | None = None,
 ) -> TestClient:
-    return TestClient(create_app(repository or FakeEventRequestRepository()))
+    app = create_app(repository or FakeEventRequestRepository())
+
+    def fake_organiser_id(authorization: str = Header()) -> str:
+        return authorization.removeprefix("Bearer ")
+
+    app.dependency_overrides[get_organiser_id] = fake_organiser_id
+    return TestClient(app)
 
 
 def organiser_headers(organiser_id: str = "organiser-1") -> dict[str, str]:
-    return {"X-Organiser-Id": organiser_id}
+    return {"Authorization": f"Bearer {organiser_id}"}
 
 
 # Purpose: Confirms the service exposes a basic readiness signal.
@@ -235,25 +245,101 @@ def test_other_organiser_cannot_read_update_or_delete() -> None:
     assert deleted.status_code == 404
 
 
-# Purpose: Ensures draft operations reject requests without a usable organiser identity.
-def test_requires_non_blank_organiser_header() -> None:
-    with make_client() as client:
+# Purpose: Ensures protected draft operations reject missing and malformed sessions.
+def test_requires_bearer_session() -> None:
+    with TestClient(create_app(FakeEventRequestRepository())) as client:
         missing = client.get("/event-requests")
-        blank = client.get("/event-requests", headers={"X-Organiser-Id": " "})
+        blank = client.get("/event-requests", headers={"Authorization": "Bearer "})
+        wrong_scheme = client.get(
+            "/event-requests", headers={"Authorization": "Basic token"}
+        )
 
-    assert missing.status_code == 422
-    assert blank.status_code == 422
+    assert missing.status_code == 401
+    assert blank.status_code == 401
+    assert wrong_scheme.status_code == 401
 
 
-# Purpose: Prevents temporary identities from altering Supabase filter expressions.
-def test_rejects_unsupported_organiser_header_characters() -> None:
-    with make_client() as client:
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/event-requests"),
+        ("POST", "/event-requests"),
+        ("GET", "/event-requests/00000000-0000-0000-0000-000000000001"),
+        ("PATCH", "/event-requests/00000000-0000-0000-0000-000000000001"),
+        ("DELETE", "/event-requests/00000000-0000-0000-0000-000000000001"),
+    ],
+)
+def test_every_draft_operation_rejects_unauthenticated_requests(
+    method: str, path: str
+) -> None:
+    with TestClient(create_app(FakeEventRequestRepository())) as client:
+        response = client.request(method, path, json={} if method in {"POST", "PATCH"} else None)
+
+    assert response.status_code == 401
+
+
+# Purpose: Refuses an identity supplied by the browser in place of a session.
+def test_organiser_header_cannot_bypass_authentication() -> None:
+    with TestClient(create_app(FakeEventRequestRepository())) as client:
         response = client.get(
             "/event-requests",
             headers={"X-Organiser-Id": "organiser,or(status.eq.Submitted)"},
         )
 
-    assert response.status_code == 422
+    assert response.status_code == 401
+
+
+# Purpose: Binds all draft operations to the identity verified by authService.
+def test_verified_identity_overrides_spoofed_header(monkeypatch: Any) -> None:
+    organiser_id = str(uuid4())
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(200, json={"id": organiser_id}),
+    )
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app(FakeEventRequestRepository())) as client:
+            created = client.post(
+                "/event-requests",
+                headers={
+                    "Authorization": "Bearer valid-token",
+                    "X-Organiser-Id": "attacker",
+                },
+                json={},
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert created.status_code == 201
+    assert created.json()["organiser_id"] == organiser_id
+
+
+# Purpose: Rejects invalid or expired sessions before reading protected drafts.
+def test_invalid_session_is_rejected(monkeypatch: Any) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(401, json={"detail": "Invalid session"}),
+    )
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app(FakeEventRequestRepository())) as client:
+            response = client.get(
+                "/event-requests", headers={"Authorization": "Bearer expired"}
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 401
 
 
 # Purpose: Prevents an invalid attendance value from being persisted in a draft.

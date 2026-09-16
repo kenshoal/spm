@@ -1,6 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import ValidationError
 
@@ -36,23 +37,43 @@ def get_event_request_service(request: Request) -> EventRequestService:
 
 
 def get_organiser_id(
-    x_organiser_id: Annotated[str, Header(alias="X-Organiser-Id")],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> str:
-    """Temporary identity boundary until the authentication service is integrated."""
-    organiser_id = x_organiser_id.strip()
-    if not organiser_id:
+    """Resolve the organiser from a validated Supabase session, not a caller ID."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token or " " in token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
+
+    try:
+        auth_service_url = str(get_settings().auth_service_url).rstrip("/")
+    except ValidationError as error:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="X-Organiser-Id must not be blank",
+            status.HTTP_503_SERVICE_UNAVAILABLE, "eventRequestService is not configured"
+        ) from error
+    try:
+        response = httpx.get(
+            f"{auth_service_url}/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
         )
-    if len(organiser_id) > 128 or not all(
-        character.isalnum() or character in "._:@-" for character in organiser_id
-    ):
+    except httpx.HTTPError as error:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="X-Organiser-Id contains unsupported characters",
+            status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
+        ) from error
+    if response.status_code == status.HTTP_401_UNAUTHORIZED:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
+    if not response.is_success:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
         )
-    return organiser_id
+    try:
+        return str(UUID(response.json()["id"]))
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication service returned no user"
+        ) from error
 
 
 ServiceDependency = Annotated[EventRequestService, Depends(get_event_request_service)]

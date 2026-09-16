@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     supabase_url: AnyHttpUrl
     supabase_secret_key: SecretStr
+    auth_service_url: AnyHttpUrl = "http://127.0.0.1:8001"
 
     model_config = SettingsConfigDict(
         env_file=".env",
