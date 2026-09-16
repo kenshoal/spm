@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from supabase import Client
 from supabase_auth.errors import AuthApiError, AuthError
@@ -39,6 +39,11 @@ class LoginResponse(BaseModel):
     refresh_token: str
     expires_in: int
     token_type: str
+
+
+class AuthenticatedUser(BaseModel):
+    id: str
+    email: str | None
 
 
 app = FastAPI(
@@ -136,3 +141,33 @@ def login(
 
     response.headers["Cache-Control"] = "no-store"
     return LoginResponse.model_validate(auth_response.session, from_attributes=True)
+
+
+@app.get("/auth/me", response_model=AuthenticatedUser, tags=["auth"])
+def current_user(
+    supabase: Annotated[Client, Depends(get_supabase_client)],
+    response: Response,
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthenticatedUser:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token or " " in token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
+
+    try:
+        auth_response = supabase.auth.get_user(token)
+    except AuthApiError as error:
+        if 400 <= error.status < 500:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session") from error
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
+        ) from error
+    except AuthError as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
+        ) from error
+    if auth_response.user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
+    response.headers["Cache-Control"] = "no-store"
+    return AuthenticatedUser(id=auth_response.user.id, email=auth_response.user.email)

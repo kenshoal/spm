@@ -156,3 +156,49 @@ def test_login_maps_network_failure_to_bad_gateway(
 
     assert response.status_code == 502
     assert response.json() == {"detail": "Authentication provider unavailable"}
+
+
+def test_current_user_verifies_supabase_access_token(
+    client: TestClient, supabase: Mock
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(id="user-id", email="member@example.com")
+    )
+
+    response = client.get("/auth/me", headers={"Authorization": "Bearer access-token"})
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {"id": "user-id", "email": "member@example.com"}
+    supabase.auth.get_user.assert_called_once_with("access-token")
+
+
+@pytest.mark.parametrize("authorization", [None, "Basic abc", "Bearer ", "Bearer a b"])
+def test_current_user_requires_bearer_token(
+    client: TestClient, supabase: Mock, authorization: str | None
+) -> None:
+    response = client.get(
+        "/auth/me",
+        headers={"Authorization": authorization} if authorization is not None else {},
+    )
+
+    assert response.status_code == 401
+    supabase.auth.get_user.assert_not_called()
+
+
+def test_current_user_rejects_invalid_token(client: TestClient, supabase: Mock) -> None:
+    supabase.auth.get_user.side_effect = AuthApiError("expired", 401, "bad_jwt")
+
+    response = client.get("/auth/me", headers={"Authorization": "Bearer expired"})
+
+    assert response.status_code == 401
+
+
+def test_current_user_maps_provider_failure(client: TestClient, supabase: Mock) -> None:
+    supabase.auth.get_user.side_effect = AuthUnknownError(
+        "connection failed", ConnectionError()
+    )
+
+    response = client.get("/auth/me", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 502
