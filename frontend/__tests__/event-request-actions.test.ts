@@ -7,6 +7,7 @@ const navigation = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ redirect: navigation.redirect }));
 vi.mock("next/cache", () => ({ revalidatePath: navigation.revalidatePath }));
+vi.mock("@/lib/auth", () => ({ requireAccessToken: async () => "valid-token" }));
 
 import {
   createEventRequest,
@@ -33,6 +34,7 @@ test("creates an incomplete draft through the event request API", async () => {
   expect(fetchMock).toHaveBeenCalledOnce();
   expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8003/event-requests");
   expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "POST" });
+  expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ Authorization: "Bearer valid-token" });
   expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
     event_name: "Community Dinner",
     purpose: null,
@@ -73,7 +75,7 @@ test("rejects non-positive attendance without calling the API", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-// Purpose: Proves deleting a draft targets the selected record under the current organiser identity.
+// Purpose: Proves deleting a draft sends the authenticated session, not a caller identity.
 test("deletes the selected draft through the event request API", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204 });
   vi.stubGlobal("fetch", fetchMock);
@@ -84,7 +86,7 @@ test("deletes the selected draft through the event request API", async () => {
     "http://127.0.0.1:8003/event-requests/draft%2F1",
     {
       method: "DELETE",
-      headers: { "X-Organiser-Id": "test-organiser-heng-rui" },
+      headers: { Authorization: "Bearer valid-token" },
     },
   );
   expect(navigation.revalidatePath).toHaveBeenCalledWith("/event-requests");

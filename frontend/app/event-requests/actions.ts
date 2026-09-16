@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAccessToken } from "@/lib/auth";
 
 export interface EventRequestFormState {
   message?: string;
@@ -14,8 +15,6 @@ export interface DeleteEventRequestState {
 }
 
 const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
-const organiserId =
-  process.env.EVENT_REQUEST_ORGANISER_ID ?? "test-organiser-heng-rui";
 
 function optionalText(formData: FormData, field: string): string | null {
   const value = String(formData.get(field) ?? "").trim();
@@ -58,14 +57,16 @@ export async function createEventRequest(
     return { message: "Check the highlighted fields.", errors };
   }
 
+  const token = await requireAccessToken();
   const response = await fetch(`${apiUrl}/event-requests`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Organiser-Id": organiserId,
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
   });
+  if (response.status === 401) redirect("/auth");
   if (!response.ok) {
     return { message: "The request could not be saved. Please try again." };
   }
@@ -84,17 +85,19 @@ export async function updateEventRequest(
     return { message: "Check the highlighted fields.", errors };
   }
 
+  const token = await requireAccessToken();
   const response = await fetch(
     `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}`,
     {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        "X-Organiser-Id": organiserId,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
     },
   );
+  if (response.status === 401) redirect("/auth");
   if (!response.ok) {
     return {
       message:
@@ -117,29 +120,30 @@ export async function deleteEventRequest(
   void previousState;
   void formData;
 
+  const token = await requireAccessToken();
+  let response: Response;
   try {
-    const response = await fetch(
+    response = await fetch(
       `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}`,
       {
         method: "DELETE",
-        headers: { "X-Organiser-Id": organiserId },
+        headers: { Authorization: `Bearer ${token}` },
       },
     );
-
-    if (!response.ok) {
-      return {
-        message:
-          response.status === 404
-            ? "This draft could not be found. Refresh the page and try again."
-            : response.status === 409
-              ? "Only draft requests can be deleted."
-              : "The draft could not be deleted. Please try again.",
-      };
-    }
-
-    revalidatePath("/event-requests");
-    return { deleted: true };
   } catch {
     return { message: "The draft could not be deleted. Please try again." };
   }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    return {
+      message:
+        response.status === 404
+          ? "This draft could not be found. Refresh the page and try again."
+          : response.status === 409
+            ? "Only draft requests can be deleted."
+            : "The draft could not be deleted. Please try again.",
+    };
+  }
+  revalidatePath("/event-requests");
+  return { deleted: true };
 }
