@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 
 // Purpose: Proves unfinished work survives browser navigation and remains editable without being submitted.
 test("organiser can save, reopen, update, and delete a draft", async ({ page }) => {
+  await page.goto("/auth");
+  await page.getByLabel("Email").fill("playwright@example.com");
+  await page.getByLabel("Password").fill("test-password-123");
+  await page.getByRole("button", { name: "Log in", exact: true }).last().click();
+  await expect(page).toHaveURL(/\/event-requests$/);
   await page.goto("/event-requests/new");
 
   await expect(

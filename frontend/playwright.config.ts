@@ -19,6 +19,12 @@ export default defineConfig({
   ],
   webServer: [
     {
+      command: "node e2e/support/auth-api.mjs",
+      url: "http://127.0.0.1:8104/health",
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+    {
       command: "node e2e/support/event-request-api.mjs",
       url: "http://127.0.0.1:8103/health",
       reuseExistingServer: false,
@@ -30,8 +36,8 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000,
       env: {
+        AUTH_SERVICE_URL: "http://127.0.0.1:8104",
         EVENT_REQUEST_API_URL: "http://127.0.0.1:8103",
-        EVENT_REQUEST_ORGANISER_ID: "playwright-organiser",
       },
     },
   ],
