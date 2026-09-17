@@ -2,9 +2,13 @@ services:
   event-request-service:
     build:
       context: ./backend/eventRequestService
+    depends_on:
+      auth-service:
+        condition: service_healthy
     ports:
       - "8003:8000"
     environment:
+      AUTH_SERVICE_URL: http://auth-service:8000
       SUPABASE_URL: ${SUPABASE_URL:-https://rrmvhxrxrrnigjdxcbwt.supabase.co}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
     healthcheck:
@@ -23,6 +27,9 @@ services:
   auth-service:
     build:
       context: ./backend/authService
+    environment:
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
     ports:
       - "8001:8000"
     healthcheck:

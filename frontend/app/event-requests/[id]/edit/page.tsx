@@ -38,5 +38,5 @@ function EditLoading() {
 }
 
 export default function EditEventRequestPage({ params }: { params: Promise<{ id: string }> }) {
-  return <AppShell><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} />)}</Suspense></AppShell>;
+  return <AppShell signedIn><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} />)}</Suspense></AppShell>;
 }

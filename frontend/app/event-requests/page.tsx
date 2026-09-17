@@ -27,7 +27,7 @@ function ListLoading() {
 
 export default function EventRequestsPage() {
   return (
-    <AppShell>
+    <AppShell signedIn>
       <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0f6b5b]">Organiser workspace</p>

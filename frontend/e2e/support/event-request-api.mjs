@@ -17,7 +17,7 @@ async function readJson(request) {
 
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
-  const organiserId = String(request.headers["x-organiser-id"] ?? "");
+  const organiserId = request.headers.authorization === "Bearer test-session" ? "playwright-user" : "";
 
   if (request.method === "GET" && url.pathname === "/health") {
     send(response, 200, { status: "ok" });
@@ -25,7 +25,7 @@ createServer(async (request, response) => {
   }
 
   if (!organiserId) {
-    send(response, 422, { detail: "Missing organiser identity" });
+    send(response, 401, { detail: "Authentication required" });
     return;
   }
 

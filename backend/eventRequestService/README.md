@@ -14,11 +14,12 @@ drafts. Drafts are persisted in the shared Supabase project.
 | `DELETE` | `/event-requests/{id}` | Delete a Draft |
 | `GET` | `/health` | Service health check |
 
-Until `authService` exposes an authentication contract, every event-request
-operation requires an `X-Organiser-Id` header. The backend stores this value in
-`temporary_organiser_id` and uses a server-only Supabase secret key. This header
-is spoofable and must be replaced by the authenticated user's `auth.uid()`
-before release.
+Every event-request operation requires `Authorization: Bearer <access-token>`.
+The service asks authService to verify that token with Supabase, then scopes
+drafts to the returned user ID. The browser cannot choose the organiser ID.
+The existing `temporary_organiser_id` column stores that verified ID until a
+separate schema migration. Drafts saved under older temporary names remain in
+the database but do not automatically appear in an authenticated user's list.
 
 ## Run locally on macOS/Linux
 
@@ -30,6 +31,7 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 cp .env.example .env
 # Replace SUPABASE_SECRET_KEY with the server-only key from Supabase.
+# Run authService on port 8001, or set AUTH_SERVICE_URL to its internal URL.
 uvicorn app.main:app --reload --port 8003
 ```
 

@@ -5,7 +5,7 @@ import { EventRequestForm } from "./event-request-form";
 
 export default function NewEventRequestPage() {
   return (
-    <AppShell>
+    <AppShell signedIn>
       <div className="mx-auto max-w-4xl">
         <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline">
           <ArrowIcon className="size-4 rotate-180" /> Back to event requests

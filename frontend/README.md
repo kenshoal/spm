@@ -16,15 +16,23 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-The local defaults use `http://127.0.0.1:8003` and organiser ID `test-organiser-heng-rui`. Override them when needed:
+The sign-up and login page is at [http://localhost:3000/auth](http://localhost:3000/auth).
+Start authService on port `8001` (for example, `docker compose up auth-service`) or set
+`AUTH_SERVICE_URL` for the Next.js server. If running authService directly with Uvicorn on
+port `8000`, set `AUTH_SERVICE_URL=http://127.0.0.1:8000`. A successful login sets an
+HTTP-only, same-site browser cookie for the access token and opens the protected
+event-request area. Log out removes the local cookie; the session expires with
+the access token (currently no automatic refresh).
+
+The event-request API defaults to `http://127.0.0.1:8003`. Override it when needed:
 
 ```bash
 EVENT_REQUEST_API_URL=http://127.0.0.1:8003 \
-EVENT_REQUEST_ORGANISER_ID=test-organiser-heng-rui \
 npm run dev
 ```
 
-`EVENT_REQUEST_ORGANISER_ID` is temporary development identity. Production authentication must replace the `X-Organiser-Id` header before deployment.
+The Next.js server forwards the session token to eventRequestService. Never put
+the Supabase secret key in frontend environment variables.
 
 Run the frontend checks with:
 
@@ -36,9 +44,9 @@ npm run test:e2e
 npm run build
 ```
 
-The Playwright suite starts an isolated in-memory API on port `8103` and the
-frontend on port `3100`. It exercises the browser workflow without changing the
-shared Supabase project or requiring production authentication.
+The Playwright suite starts isolated auth and event-request APIs on ports `8104`
+and `8103`, plus a frontend on `3100`. It exercises the browser workflow without
+changing the shared Supabase project.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
