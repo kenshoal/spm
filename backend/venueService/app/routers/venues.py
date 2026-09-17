@@ -16,6 +16,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.block_models import VenueBlock, VenueBlockCreate
+from app.block_repository import VenueBlockRepository, block_repository
 from app.dependencies import Principal, require_authenticated, require_venue_staff
 from app.models import (
     RoomLayout,
@@ -39,6 +41,33 @@ def get_repository() -> VenueRepository:
 RepoDep = Annotated[VenueRepository, Depends(get_repository)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
 AuthenticatedDep = Annotated[Principal, Depends(require_authenticated)]
+
+
+def get_block_repository() -> VenueBlockRepository:
+    return block_repository
+
+
+BlockRepoDep = Annotated[VenueBlockRepository, Depends(get_block_repository)]
+
+
+@router.post(
+    "/{venue_id}/blocks",
+    response_model=VenueBlock,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_venue_block(
+    venue_id: str,
+    payload: VenueBlockCreate,
+    principal: VenueStaffDep,
+    repo: RepoDep,
+    blocks: BlockRepoDep,
+) -> VenueBlock:
+    """Validate and store a dated block; booking impact is integrated later."""
+    if repo.get(venue_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Venue not found"
+        )
+    return blocks.create(venue_id, payload, created_by=principal.user_id)
 
 
 @router.post("", response_model=Venue, status_code=status.HTTP_201_CREATED)
