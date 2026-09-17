@@ -22,6 +22,9 @@ class VenueBlockRepository:
     def list(self) -> list[VenueBlock]:
         return list(self._blocks.values())
 
+    def list_for_venue(self, venue_id: str) -> list[VenueBlock]:
+        return [block for block in self._blocks.values() if block.venue_id == venue_id]
+
     def clear(self) -> None:
         self._blocks.clear()
 

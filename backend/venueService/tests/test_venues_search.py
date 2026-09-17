@@ -140,7 +140,7 @@ def test_no_filters_returns_all_available_venues() -> None:
     assert {v["name"] for v in response.json()} == {"One", "Two"}
 
 
-def test_date_param_is_accepted_but_not_yet_filtering() -> None:
+def test_date_search_returns_venue_without_blocks() -> None:
     _make_venue(name="Any")
 
     response = client.get("/venues/search", params={"date": "2026-10-01"})
