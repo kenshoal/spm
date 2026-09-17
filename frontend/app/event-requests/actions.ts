@@ -48,6 +48,71 @@ function parseEventRequestForm(formData: FormData) {
   return { payload, errors };
 }
 
+function validateSubmission(
+  payload: ReturnType<typeof parseEventRequestForm>["payload"],
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const requiredTextFields = [
+    "event_name",
+    "purpose",
+    "description",
+    "venue_requirements",
+    "accessibility_needs",
+    "equipment_requirements",
+    "registration_needs",
+  ] as const;
+  for (const field of requiredTextFields) {
+    if (!payload[field]) errors[field] = "Complete this field before submitting.";
+  }
+  if (!payload.proposed_date_times.length) {
+    errors.proposed_date_times = "Add at least one proposed date and time.";
+  }
+  if (payload.expected_attendance === null) {
+    errors.expected_attendance = "Enter the expected attendance.";
+  }
+  return errors;
+}
+
+async function submitEventRequest(
+  path: string,
+  formData: FormData,
+): Promise<EventRequestFormState> {
+  const { payload, errors: parsingErrors } = parseEventRequestForm(formData);
+  const errors = { ...parsingErrors, ...validateSubmission(payload) };
+  if (Object.keys(errors).length) {
+    return { message: "Complete all required fields before submitting.", errors };
+  }
+
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { message: "The request could not be submitted. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    return {
+      message:
+        response.status === 409
+          ? "This request has already been submitted and is now read-only."
+          : response.status === 422
+            ? "Complete all required fields before submitting."
+            : "The request could not be submitted. Please try again.",
+    };
+  }
+
+  revalidatePath("/event-requests");
+  redirect("/event-requests?status=in-progress");
+}
+
 export async function createEventRequest(
   _previousState: EventRequestFormState,
   formData: FormData,
@@ -110,6 +175,24 @@ export async function updateEventRequest(
   revalidatePath("/event-requests");
   revalidatePath(`/event-requests/${eventRequestId}/edit`);
   redirect("/event-requests");
+}
+
+export async function submitNewEventRequest(
+  _previousState: EventRequestFormState,
+  formData: FormData,
+): Promise<EventRequestFormState> {
+  return submitEventRequest("/event-requests/submissions", formData);
+}
+
+export async function submitDraftEventRequest(
+  eventRequestId: string,
+  _previousState: EventRequestFormState,
+  formData: FormData,
+): Promise<EventRequestFormState> {
+  return submitEventRequest(
+    `/event-requests/${encodeURIComponent(eventRequestId)}/submit`,
+    formData,
+  );
 }
 
 export async function deleteEventRequest(

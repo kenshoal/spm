@@ -4,6 +4,7 @@ import { getEventRequest } from "@/lib/event-requests";
 import { AppShell } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { EventRequestForm } from "../../new/event-request-form";
+import { RequestDetails } from "../../request-details";
 
 async function EditDraft({ id }: { id: string }) {
   const result = await getEventRequest(id)
@@ -17,7 +18,7 @@ async function EditDraft({ id }: { id: string }) {
     return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">Draft not found</h1><p className="mt-2 text-sm text-[#718078]">It may belong to another organiser or have been deleted.</p></div>;
   }
   if (result.request.status !== "Draft") {
-    return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">This request is read-only</h1><p className="mt-2 text-sm text-[#718078]">Only Draft requests can be updated.</p><Link href="/event-requests" className="mt-5 inline-flex rounded-xl bg-[#0f6b5b] px-5 py-3 text-sm font-bold text-white">Back to drafts</Link></div>;
+    return <div className="mx-auto max-w-4xl"><Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link><div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div><RequestDetails request={result.request} /></div>;
   }
 
   return (

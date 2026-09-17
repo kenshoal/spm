@@ -37,6 +37,8 @@ documented in
 [`docs/testcases/scrum_8_testcases.md`](docs/testcases/scrum_8_testcases.md).
 Authentication coverage for SCRUM-26 is documented in
 [`docs/testcases/scrum_26_testcases.md`](docs/testcases/scrum_26_testcases.md).
+Submission coverage for SCRUM-11 is documented in
+[`docs/testcases/scrum_11_testcases.md`](docs/testcases/scrum_11_testcases.md).
 
 ## Services
 

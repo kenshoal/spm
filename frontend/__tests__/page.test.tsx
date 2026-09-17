@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { EventRequestForm } from "@/app/event-requests/new/event-request-form";
 import { RequestList } from "@/app/event-requests/request-list";
+import { RequestTabs } from "@/app/event-requests/request-tabs";
 import type { EventRequest } from "@/lib/event-requests";
 
 afterEach(cleanup);
@@ -22,6 +23,17 @@ const draft: EventRequest = {
   registration_needs: null,
   created_at: "2026-09-13T03:00:00Z",
   updated_at: "2026-09-14T03:00:00Z",
+};
+
+const completeDraft: EventRequest = {
+  ...draft,
+  description: "A hands-on community programme",
+  proposed_date_times: ["2026-10-20T02:00:00Z"],
+  expected_attendance: 80,
+  venue_requirements: "Classroom",
+  accessibility_needs: "None",
+  equipment_requirements: "Projector",
+  registration_needs: "Online registration",
 };
 
 // Purpose: Confirms a saved draft gives the organiser a direct path back to editing it.
@@ -60,8 +72,8 @@ test("allows an incomplete event request to be saved as a draft", () => {
 
   const saveButton = screen.getByRole("button", { name: "Save draft" });
   expect((saveButton as HTMLButtonElement).formNoValidate).toBe(true);
-  expect((screen.getByLabelText("Event name") as HTMLInputElement).required).toBe(false);
-  expect(screen.queryByRole("button", { name: /submit for review/i })).toBeNull();
+  expect((screen.getByLabelText("Event name") as HTMLInputElement).required).toBe(true);
+  expect(screen.getByRole("button", { name: "Submit request" })).toBeDefined();
 });
 
 // Purpose: Confirms reopening a draft restores its saved values before further edits.
@@ -75,4 +87,40 @@ test("prefills the form when an organiser continues a draft", () => {
     "Teach practical skills",
   );
   expect(screen.getByRole("button", { name: "Save changes" })).toBeDefined();
+});
+
+// Purpose: Requires explicit confirmation before a completed form becomes read-only.
+test("confirms submission of a complete request", () => {
+  render(<EventRequestForm request={completeDraft} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Submit request" }));
+
+  const dialog = screen.getByRole("alertdialog", {
+    name: "Submit event request?",
+  });
+  expect(dialog.textContent).toContain("cannot edit or delete");
+});
+
+// Purpose: Shows a submitted request as view-only and removes draft mutation controls.
+test("renders a submitted request as read-only in the list", () => {
+  render(<RequestList requests={[{ ...completeDraft, status: "Submitted" }]} />);
+
+  expect(screen.getByText("Submitted")).toBeDefined();
+  expect(screen.getByRole("link", { name: /view request/i })).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Delete draft" })).toBeNull();
+});
+
+// Purpose: Gives organisers visible request groupings and record counts for status tracking.
+test("shows all request tracking tabs with counts", () => {
+  render(
+    <RequestTabs
+      selected="in-progress"
+      counts={{ all: 3, draft: 1, "in-progress": 2, completed: 0 }}
+    />,
+  );
+
+  expect(screen.getByRole("link", { name: "All (3)" })).toBeDefined();
+  expect(screen.getByRole("link", { name: "Draft (1)" })).toBeDefined();
+  expect(screen.getByRole("link", { name: "In progress (2)" }).getAttribute("aria-current")).toBe("page");
+  expect(screen.getByRole("link", { name: "Completed (0)" })).toBeDefined();
 });

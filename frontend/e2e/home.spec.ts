@@ -14,7 +14,7 @@ test("organiser can save, reopen, update, and delete a draft", async ({ page }) 
   ).toBeVisible();
   await page.getByLabel("Event name").fill("Playwright community dinner");
   await page.getByLabel("Purpose").fill("Save this incomplete request");
-  await expect(page.getByRole("button", { name: /submit for review/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Submit request" })).toBeVisible();
 
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page).toHaveURL(/\/event-requests$/);
@@ -45,4 +45,36 @@ test("organiser can save, reopen, update, and delete a draft", async ({ page }) 
   await expect(
     page.getByRole("heading", { name: "Playwright community dinner" }),
   ).toHaveCount(0);
+});
+
+// Purpose: Proves a complete new form can be submitted directly and becomes visible but read-only.
+test("organiser can submit a complete new event request", async ({ page }) => {
+  await page.goto("/auth");
+  await page.getByLabel("Email").fill("playwright@example.com");
+  await page.getByLabel("Password").fill("test-password-123");
+  await page.getByRole("button", { name: "Log in", exact: true }).last().click();
+  await expect(page).toHaveURL(/\/event-requests$/);
+  await page.goto("/event-requests/new");
+
+  await page.getByLabel("Event name").fill("Submitted Community Workshop");
+  await page.getByLabel("Purpose").fill("Teach practical skills");
+  await page.getByLabel("Description").fill("A hands-on community programme");
+  await page.getByLabel("Proposed date and time 1").fill("2026-10-20T10:00");
+  await page.getByLabel("Expected attendance").fill("80");
+  await page.getByLabel("Venue requirements").fill("Classroom");
+  await page.getByLabel("Equipment requirements").fill("Projector");
+  await page.getByLabel("Accessibility needs").fill("None");
+  await page.getByLabel("Registration needs").fill("Online registration");
+  await page.getByRole("button", { name: "Submit request" }).click();
+
+  const dialog = page.getByRole("alertdialog", { name: "Submit event request?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Submit request" }).click();
+
+  await expect(page).toHaveURL(/\/event-requests\?status=in-progress$/);
+  await expect(page.getByText("Submitted Community Workshop")).toBeVisible();
+  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: /view request/i }).click();
+  await expect(page.getByText("This request is read-only after submission.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete draft" })).toHaveCount(0);
 });

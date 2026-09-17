@@ -3,8 +3,19 @@ import Link from "next/link";
 import { listEventRequests } from "@/lib/event-requests";
 import { AppShell } from "../components/app-shell";
 import { RequestList } from "./request-list";
+import { RequestTabs, type RequestFilter } from "./request-tabs";
 
-async function RequestData() {
+const validFilters = new Set<RequestFilter>(["all", "draft", "in-progress", "completed"]);
+
+async function RequestData({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const requestedFilter = (await searchParams).status;
+  const filter: RequestFilter = validFilters.has(requestedFilter as RequestFilter)
+    ? requestedFilter as RequestFilter
+    : "all";
   const result = await listEventRequests()
     .then((requests) => ({ requests, failed: false as const }))
     .catch(() => ({ requests: [], failed: true as const }));
@@ -18,14 +29,44 @@ async function RequestData() {
     );
   }
   const drafts = result.requests.filter((request) => request.status === "Draft");
-  return <RequestList requests={drafts} />;
+  // Completion is owned by eventService and stays empty until that integration exists.
+  const completed: typeof result.requests = [];
+  const inProgress = result.requests.filter((request) => request.status === "Submitted");
+  const groups = {
+    all: result.requests,
+    draft: drafts,
+    "in-progress": inProgress,
+    completed,
+  };
+  const emptyMessages: Record<RequestFilter, string> = {
+    all: "Create an event request to get started.",
+    draft: "Your saved drafts will appear here.",
+    "in-progress": "Submitted requests will appear here.",
+    completed: "Completed events will appear here after coordination finishes.",
+  };
+  const counts = {
+    all: result.requests.length,
+    draft: drafts.length,
+    "in-progress": inProgress.length,
+    completed: completed.length,
+  };
+  return (
+    <>
+      <RequestTabs selected={filter} counts={counts} />
+      <RequestList requests={groups[filter]} emptyMessage={emptyMessages[filter]} />
+    </>
+  );
 }
 
 function ListLoading() {
   return <div aria-label="Loading event requests" className="space-y-3">{[1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" />)}</div>;
 }
 
-export default function EventRequestsPage() {
+export default function EventRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   return (
     <AppShell signedIn>
       <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
@@ -40,7 +81,7 @@ export default function EventRequestsPage() {
         </Link>
       </div>
       <Suspense fallback={<ListLoading />}>
-        <RequestData />
+        <RequestData searchParams={searchParams} />
       </Suspense>
     </AppShell>
   );
