@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.models.event_request import (
     EventRequestCreate,
     EventRequestResponse,
+    EventRequestSubmission,
     EventRequestUpdate,
 )
 from app.repositories import SupabaseEventRequestRepository
@@ -93,6 +94,19 @@ def create_event_request(
     return service.create(payload, organiser_id)
 
 
+@router.post(
+    "/submissions",
+    response_model=EventRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def submit_new_event_request(
+    payload: EventRequestSubmission,
+    organiser_id: OrganiserDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    return service.create_submission(payload, organiser_id)
+
+
 @router.get("", response_model=list[EventRequestResponse])
 def list_event_requests(
     organiser_id: OrganiserDependency,
@@ -118,6 +132,16 @@ def update_event_request(
     service: ServiceDependency,
 ) -> EventRequestResponse:
     return service.update(str(event_request_id), organiser_id, payload)
+
+
+@router.post("/{event_request_id}/submit", response_model=EventRequestResponse)
+def submit_draft_event_request(
+    event_request_id: UUID,
+    payload: EventRequestSubmission,
+    organiser_id: OrganiserDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    return service.submit(str(event_request_id), organiser_id, payload)
 
 
 @router.delete("/{event_request_id}", status_code=status.HTTP_204_NO_CONTENT)

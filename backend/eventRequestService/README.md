@@ -8,18 +8,26 @@ drafts. Drafts are persisted in the shared Supabase project.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/event-requests` | Create a Draft |
+| `POST` | `/event-requests/submissions` | Submit a complete new request |
 | `GET` | `/event-requests` | List the current organiser's requests |
 | `GET` | `/event-requests/{id}` | Retrieve one request |
 | `PATCH` | `/event-requests/{id}` | Update a Draft |
+| `POST` | `/event-requests/{id}/submit` | Submit a completed Draft |
 | `DELETE` | `/event-requests/{id}` | Delete a Draft |
 | `GET` | `/health` | Service health check |
 
 Every event-request operation requires `Authorization: Bearer <access-token>`.
 The service asks authService to verify that token with Supabase, then scopes
 drafts to the returned user ID. The browser cannot choose the organiser ID.
-The existing `temporary_organiser_id` column stores that verified ID until a
-separate schema migration. Drafts saved under older temporary names remain in
-the database but do not automatically appear in an authenticated user's list.
+The `organiser_id` column stores that verified ID. Existing databases must be
+migrated from `temporary_organiser_id` to `organiser_id` before using this
+service with authenticated requests. Drafts saved under the old column remain
+available after the migration when their values are preserved.
+
+Draft fields may remain incomplete. Submission requires every currently defined
+event-request field, changes the status to `Submitted`, and makes the request
+read-only. Requirements that do not apply must still contain explicit text such
+as `None`.
 
 ## Run locally on macOS/Linux
 

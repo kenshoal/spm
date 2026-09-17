@@ -9,8 +9,7 @@ from app.repositories import SupabaseEventRequestRepository, SupabaseRepositoryE
 def response_row(**overrides: object) -> dict[str, object]:
     return {
         "id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
-        "organiser_id": None,
-        "temporary_organiser_id": "organiser-1",
+        "organiser_id": "organiser-1",
         "status": "Draft",
         "event_name": "Community Dinner",
         "purpose": None,
@@ -27,7 +26,7 @@ def response_row(**overrides: object) -> dict[str, object]:
     }
 
 
-# Purpose: Verifies draft creation uses the server-only key and temporary identity columns.
+# Purpose: Verifies draft creation uses the server-only key and organiser identity.
 def test_create_sends_expected_supabase_request() -> None:
     captured: dict[str, object] = {}
 
@@ -46,8 +45,7 @@ def test_create_sends_expected_supabase_request() -> None:
     )
     created = repository.create(
         {
-            "organiser_id": None,
-            "temporary_organiser_id": "organiser-1",
+            "organiser_id": "organiser-1",
             "status": "Draft",
             "event_name": "Community Dinner",
         }
@@ -59,8 +57,7 @@ def test_create_sends_expected_supabase_request() -> None:
         "apikey": "sb_secret_test",
         "authorization": None,
         "body": {
-            "organiser_id": None,
-            "temporary_organiser_id": "organiser-1",
+            "organiser_id": "organiser-1",
             "status": "Draft",
             "event_name": "Community Dinner",
         },
@@ -68,8 +65,8 @@ def test_create_sends_expected_supabase_request() -> None:
     assert created["status"] == "Draft"
 
 
-# Purpose: Confirms retrieval filters by both request ID and temporary organiser ID.
-def test_get_scopes_query_to_temporary_organiser() -> None:
+# Purpose: Confirms retrieval filters by both request ID and organiser ID.
+def test_get_scopes_query_to_organiser() -> None:
     captured_query: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -81,10 +78,10 @@ def test_get_scopes_query_to_temporary_organiser() -> None:
         "sb_secret_test",
         transport=httpx.MockTransport(handler),
     )
-    row = repository.get_for_temporary_organiser("request-1", "organiser-1")
+    row = repository.get_for_organiser("request-1", "organiser-1")
 
     assert captured_query["id"] == "eq.request-1"
-    assert captured_query["temporary_organiser_id"] == "eq.organiser-1"
+    assert captured_query["organiser_id"] == "eq.organiser-1"
     assert row is not None
 
 
@@ -103,18 +100,52 @@ def test_update_scopes_query_to_owner_and_draft_status() -> None:
         "sb_secret_test",
         transport=httpx.MockTransport(handler),
     )
-    repository.update_for_temporary_organiser(
+    repository.update_for_organiser(
         "request-1", "organiser-1", {"event_name": "Updated"}
     )
 
     assert captured["method"] == "PATCH"
     assert captured["query"] == {
         "id": "eq.request-1",
-        "temporary_organiser_id": "eq.organiser-1",
+        "organiser_id": "eq.organiser-1",
         "status": "eq.Draft",
         "select": "*",
     }
     assert captured["body"] == {"event_name": "Updated"}
+
+
+# Purpose: Makes submission a single owner-scoped Draft-to-Submitted database update.
+def test_submit_atomically_scopes_and_changes_status() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.method
+        captured["query"] = dict(request.url.params)
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=[response_row(status="Submitted")])
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    submitted = repository.submit_for_organiser(
+        "request-1", "organiser-1", {"event_name": "Complete request"}
+    )
+
+    assert captured["method"] == "PATCH"
+    assert captured["query"] == {
+        "id": "eq.request-1",
+        "organiser_id": "eq.organiser-1",
+        "status": "eq.Draft",
+        "select": "*",
+    }
+    assert captured["body"] == {
+        "event_name": "Complete request",
+        "status": "Submitted",
+    }
+    assert submitted is not None
+    assert submitted["status"] == "Submitted"
 
 
 # Purpose: Prevents deletion of a request unless its ID, owner, and Draft status all match.
@@ -131,14 +162,12 @@ def test_delete_scopes_query_to_owner_and_draft_status() -> None:
         "sb_secret_test",
         transport=httpx.MockTransport(handler),
     )
-    deleted = repository.delete_for_temporary_organiser(
-        "request-1", "organiser-1"
-    )
+    deleted = repository.delete_for_organiser("request-1", "organiser-1")
 
     assert captured["method"] == "DELETE"
     assert captured["query"] == {
         "id": "eq.request-1",
-        "temporary_organiser_id": "eq.organiser-1",
+        "organiser_id": "eq.organiser-1",
         "status": "eq.Draft",
         "select": "id",
     }
@@ -156,4 +185,4 @@ def test_supabase_failure_raises_repository_error() -> None:
     )
 
     with pytest.raises(SupabaseRepositoryError):
-        repository.list_for_temporary_organiser("organiser-1")
+        repository.list_for_organiser("organiser-1")

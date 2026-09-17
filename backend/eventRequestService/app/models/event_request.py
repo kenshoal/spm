@@ -78,6 +78,22 @@ class EventRequestUpdate(BaseModel):
         return value
 
 
+class EventRequestSubmission(BaseModel):
+    """Complete form required to enter the coordination workflow."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    event_name: str = Field(min_length=1, max_length=200)
+    purpose: str = Field(min_length=1, max_length=1_000)
+    description: str = Field(min_length=1, max_length=5_000)
+    proposed_date_times: list[datetime] = Field(min_length=1)
+    expected_attendance: int = Field(gt=0)
+    venue_requirements: str = Field(min_length=1, max_length=2_000)
+    accessibility_needs: str = Field(min_length=1, max_length=2_000)
+    equipment_requirements: str = Field(min_length=1, max_length=2_000)
+    registration_needs: str = Field(min_length=1, max_length=2_000)
+
+
 class EventRequestResponse(EventRequestFields):
     id: str
     organiser_id: str
@@ -89,4 +105,3 @@ class EventRequestResponse(EventRequestFields):
 class HealthResponse(BaseModel):
     service: str
     status: str
-

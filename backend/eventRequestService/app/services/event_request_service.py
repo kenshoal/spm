@@ -1,9 +1,10 @@
-from typing import Any
+from typing import Any, NoReturn
 
 from app.models.event_request import (
     EventRequestCreate,
     EventRequestResponse,
     EventRequestStatus,
+    EventRequestSubmission,
     EventRequestUpdate,
 )
 from app.repositories import EventRequestRepository
@@ -12,6 +13,12 @@ from app.repositories import EventRequestRepository
 class EventRequestNotFoundError(Exception):
     def __init__(self, event_request_id: str) -> None:
         super().__init__(f"Event request {event_request_id} was not found")
+        self.event_request_id = event_request_id
+
+
+class EventRequestNotDraftError(Exception):
+    def __init__(self, event_request_id: str) -> None:
+        super().__init__(f"Event request {event_request_id} is no longer a Draft")
         self.event_request_id = event_request_id
 
 
@@ -27,21 +34,30 @@ class EventRequestService:
         values = payload.model_dump(mode="json")
         values.update(
             {
-                "organiser_id": None,
-                "temporary_organiser_id": organiser_id,
+                "organiser_id": organiser_id,
                 "status": EventRequestStatus.DRAFT.value,
             }
         )
         return self._row_to_response(self.repository.create(values))
 
+    def create_submission(
+        self, payload: EventRequestSubmission, organiser_id: str
+    ) -> EventRequestResponse:
+        values = payload.model_dump(mode="json")
+        values.update(
+            {
+                "organiser_id": organiser_id,
+                "status": EventRequestStatus.SUBMITTED.value,
+            }
+        )
+        return self._row_to_response(self.repository.create(values))
+
     def list_for_organiser(self, organiser_id: str) -> list[EventRequestResponse]:
-        rows = self.repository.list_for_temporary_organiser(organiser_id)
+        rows = self.repository.list_for_organiser(organiser_id)
         return [self._row_to_response(row) for row in rows]
 
     def get(self, event_request_id: str, organiser_id: str) -> EventRequestResponse:
-        row = self.repository.get_for_temporary_organiser(
-            event_request_id, organiser_id
-        )
+        row = self.repository.get_for_organiser(event_request_id, organiser_id)
         if row is None:
             raise EventRequestNotFoundError(event_request_id)
         return self._row_to_response(row)
@@ -56,27 +72,45 @@ class EventRequestService:
         if not changes:
             return self.get(event_request_id, organiser_id)
 
-        row = self.repository.update_for_temporary_organiser(
+        row = self.repository.update_for_organiser(
             event_request_id,
             organiser_id,
             changes,
         )
         if row is None:
-            raise EventRequestNotFoundError(event_request_id)
+            self._raise_not_found_or_not_draft(event_request_id, organiser_id)
+        return self._row_to_response(row)
+
+    def submit(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        payload: EventRequestSubmission,
+    ) -> EventRequestResponse:
+        row = self.repository.submit_for_organiser(
+            event_request_id,
+            organiser_id,
+            payload.model_dump(mode="json"),
+        )
+        if row is None:
+            self._raise_not_found_or_not_draft(event_request_id, organiser_id)
         return self._row_to_response(row)
 
     def delete(self, event_request_id: str, organiser_id: str) -> None:
-        deleted = self.repository.delete_for_temporary_organiser(
-            event_request_id, organiser_id
-        )
+        deleted = self.repository.delete_for_organiser(event_request_id, organiser_id)
         if not deleted:
+            self._raise_not_found_or_not_draft(event_request_id, organiser_id)
+
+    def _raise_not_found_or_not_draft(
+        self, event_request_id: str, organiser_id: str
+    ) -> NoReturn:
+        row = self.repository.get_for_organiser(event_request_id, organiser_id)
+        if row is None:
             raise EventRequestNotFoundError(event_request_id)
+        raise EventRequestNotDraftError(event_request_id)
 
     @staticmethod
     def _row_to_response(row: dict[str, Any]) -> EventRequestResponse:
         response_values = dict(row)
-        response_values["organiser_id"] = (
-            response_values.get("organiser_id")
-            or response_values["temporary_organiser_id"]
-        )
+        response_values["organiser_id"] = response_values.get("organiser_id")
         return EventRequestResponse.model_validate(response_values)

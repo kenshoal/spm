@@ -5,6 +5,7 @@ from app.controllers.event_request_controller import router as event_request_rou
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.services.event_request_service import (
+    EventRequestNotDraftError,
     EventRequestNotFoundError,
     EventRequestService,
 )
@@ -27,6 +28,15 @@ def create_app(repository: EventRequestRepository | None = None) -> FastAPI:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(EventRequestNotDraftError)
+    async def event_request_not_draft(
+        request: Request, error: EventRequestNotDraftError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
             content={"detail": str(error)},
         )
 
