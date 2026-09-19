@@ -46,6 +46,13 @@ class EventRequestService:
             raise EventRequestNotFoundError(event_request_id)
         return self._row_to_response(row)
 
+    def get_by_id(self, event_request_id: str) -> EventRequestResponse:
+        """Unscoped lookup for a caller who isn't the owning organiser."""
+        row = self.repository.get_by_id(event_request_id)
+        if row is None:
+            raise EventRequestNotFoundError(event_request_id)
+        return self._row_to_response(row)
+
     def update(
         self,
         event_request_id: str,

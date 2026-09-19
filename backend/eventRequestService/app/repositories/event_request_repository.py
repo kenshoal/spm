@@ -16,6 +16,8 @@ class EventRequestRepository(Protocol):
         self, event_request_id: str, organiser_id: str
     ) -> dict[str, Any] | None: ...
 
+    def get_by_id(self, event_request_id: str) -> dict[str, Any] | None: ...
+
     def update_for_temporary_organiser(
         self,
         event_request_id: str,
@@ -88,6 +90,20 @@ class SupabaseEventRequestRepository:
             params={
                 "id": f"eq.{event_request_id}",
                 "temporary_organiser_id": f"eq.{organiser_id}",
+                "select": "*",
+                "limit": "1",
+            },
+        )
+        return rows[0] if rows else None
+
+    def get_by_id(self, event_request_id: str) -> dict[str, Any] | None:
+        """Unscoped lookup, for a caller who isn't the owning organiser (e.g.
+        an Operations Manager assigning a Coordinator) — every other method
+        on this repository is deliberately scoped to the temporary organiser."""
+        rows = self._request(
+            "GET",
+            params={
+                "id": f"eq.{event_request_id}",
                 "select": "*",
                 "limit": "1",
             },
