@@ -1,6 +1,6 @@
 # equipmentService
 
-Equipment catalogue & status microservice (SCRUM-16, SCRUM-45). Reads/writes the `equipment` table in Supabase, seeds the first `equipment_status_history` row on create, and performs status transitions atomically via the `transition_equipment_status` Postgres function.
+Equipment catalogue & status microservice (SCRUM-16, SCRUM-45). Reads/writes the `equipment` table in Supabase. Every mutation is a single atomic Postgres function call: creation also seeds the first `equipment_status_history` row, quantity changes append to `equipment_quantity_history` under a row lock, and status transitions go through `transition_equipment_status`.
 
 ## Run locally
 
@@ -18,6 +18,20 @@ The service is available at `http://localhost:8002`, its health check at `http:/
 ## Auth seam
 
 Endpoints require an `Authorization: Bearer <token>` header whose access token is verified with authService (see `app/deps.py` and `docs/AUTH_INTEGRATION.md`). Requests without a valid token return 401; authenticated users without the `technical_support` role get 403 on mutations.
+
+## Database & RPCs
+
+Mutations are Postgres functions (RPCs) in the shared database, defined in [`database/migrations/`](../../database/migrations/) — apply new files in filename order via the Supabase SQL Editor (see [`database/README.md`](../../database/README.md)):
+
+| Function | Behaviour |
+| --- | --- |
+| `create_equipment` | Inserts the equipment row and its first `equipment_status_history` entry (`old_status` NULL) in one transaction; returns the row |
+| `update_equipment_quantity` | Locks the row (`FOR UPDATE`), appends old/new quantities to `equipment_quantity_history`, updates the row; returns it |
+| `transition_equipment_status` | Locks the row, updates `operational_status`, appends to `equipment_status_history` |
+
+All three raise with ERRCODE `P0002` when the equipment id is unknown; the service maps that code to `404 Equipment not found` (`app/rpc_errors.py`) rather than matching error-message text. Any other RPC failure maps to `500`.
+
+Note: `transition_equipment_status` did not exist in the live database until migration `0002` — `PATCH /equipment/{id}/status` fails with `500` until it is applied.
 
 ## Endpoints
 
