@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import CurrentUser, Role, get_current_user
-from app.models import EventCoordinatorAssignment, EventRequestRef
+from app.models import EventCoordinatorAssignment, EventRequestRef, NotificationOutbox
 from app.schemas import CoordinatorAssignmentRead, CoordinatorAssignRequest
 
 router = APIRouter(prefix="/event-requests", tags=["coordinator assignment"])
@@ -26,6 +26,8 @@ _DRAFT_STATUS = "Draft"
 # eventRequestService's status set isn't fully confirmed beyond Draft/
 # Submitted yet — update this once the full lifecycle is settled with them.
 _TERMINAL_STATUSES = {"Completed", "Cancelled", "Rejected"}
+
+COORDINATOR_ASSIGNED = "coordinator_assigned"
 
 
 def _get_event_request_or_404(
@@ -111,6 +113,22 @@ def assign_coordinator(
         assigned_by=current_user.id,
     )
     db.add(assignment)
+
+    # Outbox record, not a real notification channel yet — a future
+    # dispatcher (the planned Notification System) delivers it. Written in
+    # the same transaction as the assignment so the two can't diverge.
+    db.add(
+        NotificationOutbox(
+            event_type=COORDINATOR_ASSIGNED,
+            recipient_id=body.coordinator_id,
+            payload={
+                "event_request_id": str(event_request.id),
+                "coordinator_id": body.coordinator_id,
+                "assigned_by": current_user.id,
+            },
+        )
+    )
+
     db.commit()
     db.refresh(assignment)
     return assignment

@@ -164,6 +164,35 @@ def test_assignment_history_is_preserved_across_reassignment(
     assert {row.coordinator_id for row in rows} == {"coord-1", "coord-2"}
 
 
+def test_assignment_writes_a_notification_outbox_record(
+    client: TestClient, session_factory: sessionmaker
+) -> None:
+    """Outbox-record stub for 'Coordinator is notified of assignment' — no
+    real delivery channel yet, so this is the whole implementation."""
+    event_request_id = seed_event_request(session_factory, status="Submitted")
+
+    client.post(
+        f"/event-requests/{event_request_id}/coordinator",
+        json={"coordinator_id": "coord-1"},
+        headers=OPERATIONS_MANAGER,
+    )
+
+    from app.models import NotificationOutbox
+
+    with session_factory() as db:
+        records = db.query(NotificationOutbox).all()
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.event_type == "coordinator_assigned"
+    assert record.recipient_id == "coord-1"
+    assert record.payload == {
+        "event_request_id": str(event_request_id),
+        "coordinator_id": "coord-1",
+        "assigned_by": "ops-1",
+    }
+
+
 def test_only_assigned_coordinator_can_be_identified_for_permission_checks(
     client: TestClient, session_factory: sessionmaker
 ) -> None:

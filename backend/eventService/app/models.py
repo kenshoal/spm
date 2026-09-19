@@ -20,8 +20,9 @@ order two assignments made in quick succession.
 
 import uuid
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, Uuid, func
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -44,5 +45,25 @@ class EventCoordinatorAssignment(Base):
     coordinator_id: Mapped[str] = mapped_column(String(64))
     assigned_by: Mapped[str] = mapped_column(String(64))
     assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class NotificationOutbox(Base):
+    """Outbox record for a notification this service wants sent — no real
+    delivery channel exists yet, so this is the whole implementation for
+    now. Written in the same transaction as the state change it reports, so
+    the two can never diverge (the classic outbox-pattern guarantee); a
+    future dispatcher can poll/stream this table without this service
+    needing to know or care how delivery eventually works.
+    """
+
+    __tablename__ = "notification_outbox"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    event_type: Mapped[str] = mapped_column(String(64))
+    recipient_id: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
