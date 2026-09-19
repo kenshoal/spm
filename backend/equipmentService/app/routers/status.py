@@ -23,6 +23,7 @@ class StatusOut(BaseModel):
     equipment_id: UUID
     operational_status: OperationalStatus
     available: bool
+    available_quantity: int
 
 
 class StatusTransitionIn(BaseModel):
@@ -55,7 +56,7 @@ def get_status(
 ) -> StatusOut:
     response = (
         client.table("equipment")
-        .select("id, operational_status")
+        .select("id, operational_status, total_owned_quantity")
         .eq("id", str(equipment_id))
         .limit(1)
         .execute()
@@ -65,10 +66,14 @@ def get_status(
             status_code=status.HTTP_404_NOT_FOUND, detail="Equipment not found"
         )
     row = response.data[0]
+    # Pre-reservations semantics (SCRUM-10 will subtract committed units):
+    # status is row-level, so a non-AVAILABLE row has zero serviceable units.
+    serviceable = row["operational_status"] == OperationalStatus.AVAILABLE
     return StatusOut(
         equipment_id=row["id"],
         operational_status=row["operational_status"],
-        available=row["operational_status"] == OperationalStatus.AVAILABLE,
+        available=serviceable,
+        available_quantity=row["total_owned_quantity"] if serviceable else 0,
     )
 
 

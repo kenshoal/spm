@@ -10,6 +10,7 @@ EQUIPMENT_ID = "22222222-2222-2222-2222-222222222222"
 EQUIPMENT_ROW: dict[str, Any] = {
     "id": EQUIPMENT_ID,
     "operational_status": "AVAILABLE",
+    "total_owned_quantity": 4,
 }
 
 
@@ -49,7 +50,22 @@ def test_get_status_available(client: TestClient, fake_client, auth) -> None:
         "equipment_id": EQUIPMENT_ID,
         "operational_status": "AVAILABLE",
         "available": True,
+        "available_quantity": 4,
     }
+
+
+def test_get_status_available_zero_owned(
+    client: TestClient, fake_client, auth
+) -> None:
+    fake_client.table_data["equipment"] = [{**EQUIPMENT_ROW, "total_owned_quantity": 0}]
+
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/status", headers=bearer()
+    )
+
+    assert response.status_code == 200
+    assert response.json()["available"] is True
+    assert response.json()["available_quantity"] == 0
 
 
 def test_get_status_unavailable(client: TestClient, fake_client, auth) -> None:
@@ -63,6 +79,7 @@ def test_get_status_unavailable(client: TestClient, fake_client, auth) -> None:
 
     assert response.status_code == 200
     assert response.json()["available"] is False
+    assert response.json()["available_quantity"] == 0
 
 
 def test_get_status_not_found(client: TestClient, fake_client, auth) -> None:
