@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import Client
 
 from app.db import get_client
@@ -27,7 +27,7 @@ class StatusOut(BaseModel):
 
 class StatusTransitionIn(BaseModel):
     new_status: OperationalStatus
-    reason: str | None = None
+    reason: str | None = Field(default=None, max_length=255)
 
 
 class StatusTransitionOut(BaseModel):

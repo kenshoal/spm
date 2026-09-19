@@ -133,6 +133,19 @@ def test_transition_status_invalid_status(
     assert response.status_code == 422
 
 
+def test_transition_status_reason_too_long(
+    client: TestClient, fake_client, auth_staff
+) -> None:
+    response = client.patch(
+        f"/equipment/{EQUIPMENT_ID}/status",
+        headers=bearer(),
+        json={"new_status": "DAMAGED", "reason": "x" * 256},
+    )
+
+    assert response.status_code == 422
+    assert fake_client.rpc_calls == []
+
+
 def test_transition_status_without_reason(
     client: TestClient, fake_client, auth_staff
 ) -> None:
