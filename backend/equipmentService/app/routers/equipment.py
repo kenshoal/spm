@@ -8,12 +8,13 @@ from pydantic import BaseModel, Field
 from supabase import Client
 
 from app.db import get_client
-from app.deps import User, get_current_user
+from app.deps import TECHNICAL_SUPPORT_ROLE, User, get_current_user, require_role
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
 ClientDep = Annotated[Client, Depends(get_client)]
-UserDep = Annotated[User, Depends(get_current_user)]
+ViewerDep = Annotated[User, Depends(get_current_user)]
+StaffDep = Annotated[User, Depends(require_role(TECHNICAL_SUPPORT_ROLE))]
 
 
 class OperationalStatus(StrEnum):
@@ -51,6 +52,7 @@ class QuantityUpdate(BaseModel):
 @router.get("", response_model=list[EquipmentOut])
 def list_equipment(
     client: ClientDep,
+    _user: ViewerDep,
     type: str | None = None,
     operational_status: OperationalStatus | None = None,
 ) -> list[EquipmentOut]:
@@ -67,6 +69,7 @@ def list_equipment(
 def get_equipment(
     equipment_id: UUID,
     client: ClientDep,
+    _user: ViewerDep,
 ) -> EquipmentOut:
     response = (
         client.table("equipment")
@@ -85,7 +88,7 @@ def get_equipment(
 @router.post("", response_model=EquipmentOut, status_code=status.HTTP_201_CREATED)
 def create_equipment(
     payload: EquipmentCreate,
-    user: UserDep,
+    user: StaffDep,
     client: ClientDep,
 ) -> EquipmentOut:
     response = (
@@ -119,7 +122,7 @@ def create_equipment(
 def update_quantity(
     equipment_id: UUID,
     payload: QuantityUpdate,
-    _user: UserDep,
+    _user: StaffDep,
     client: ClientDep,
 ) -> EquipmentOut:
     response = (

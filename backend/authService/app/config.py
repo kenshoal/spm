@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     supabase_url: AnyHttpUrl
     supabase_publishable_key: SecretStr
+    # Server-side only: needed by the admin API for role assignment.
+    supabase_secret_key: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,19 +1,33 @@
 # Auth Integration Contract (authService → equipment services)
 
-What the future authService implementer needs to wire real authentication into `equipmentService` (SCRUM-45) and `equipmentStatusService` (SCRUM-16) **without touching any equipment endpoint handlers**.
+Implemented: `equipmentService` (SCRUM-45) and `equipmentStatusService` (SCRUM-16) verify every caller with authService and enforce role-based authorisation. The stub that trusted the `X-User-Id` header is gone.
 
-## Current seam (stub)
+## The Bearer contract
 
 Both equipment services expose a FastAPI dependency `get_current_user` in `app/deps.py`:
 
-- Today it trusts the `X-User-Id` request header, returning `User(id=<header value>, role="technical_support")`.
-- A missing header returns `401`.
-- The role is stubbed; every caller is treated as `technical_support`.
-- `changed_by` (status transitions) and `created_by` (equipment creation) are derived server-side from `user.id` — clients never send them in a body.
+- Callers send `Authorization: Bearer <supabase-access-token>` (the token issued by `POST /auth/login`).
+- Missing or malformed headers return `401 Authentication required`.
+- The service calls authService `GET /auth/me` with the token; authService verifies it against Supabase and returns `{id, email, role}`.
+- authService `401` → `401 Invalid session`; any other non-2xx or network failure → `502 Authentication service unavailable`; an unusable payload → `502`.
+- Identity is resolved server-side only — no caller-supplied ID is trusted. `changed_by` (status transitions) and `created_by` (equipment creation) are derived from the verified `id`.
 
-Endpoints using the dependency today:
+On top of it, `require_role(*allowed)` returns `403 Insufficient permissions` for callers whose role is not allowed.
 
-| Service | Route | Intended requirement (once roles are real) |
+## Role model
+
+Roles are read per request from Supabase **`app_metadata.role`** (never `user_metadata`, which users can self-edit). A user without a stored role is treated as `event_coordinator`. Role changes take effect immediately — no new token is needed.
+
+| Role | Meaning |
+| --- | --- |
+| `event_coordinator` | Default for every authenticated user; read access |
+| `technical_support` | Equipment mutations (SCRUM-16/SCRUM-45 actors) |
+| `admin` | Role assignment via the authService admin endpoint |
+| `venue_staff` | Reserved (matches the venueService stub) |
+
+## Endpoint requirements
+
+| Service | Route | Requirement |
 | --- | --- | --- |
 | equipmentService | `POST /equipment` | `technical_support` |
 | equipmentService | `PATCH /equipment/{id}/quantity` | `technical_support` |
@@ -21,32 +35,21 @@ Endpoints using the dependency today:
 | equipmentService | `GET /equipment`, `GET /equipment/{id}` | any authenticated user |
 | equipmentStatusService | `GET /equipment/{id}/status`, `GET /equipment/{id}/status/history` | any authenticated user |
 
-This table covers SCRUM-45's "viewed by an authorised user" acceptance criterion: read-only views need any authenticated user; mutations need `technical_support`.
+This covers SCRUM-45's "viewed by an authorised user" acceptance criterion: reads need any authenticated user; mutations need `technical_support`.
 
-## What authService must deliver
+## Role assignment
 
-1. **Login endpoint** that issues a signed JWT.
-2. **Token contract (claims):**
-   - `sub` — the user's UUID (this is what authService owns in its users table)
-   - `role` — e.g. `technical_support`
-3. **A way for other services to verify the token**: either a published verification key (JWKS endpoint or shared public key) or a verification endpoint. Signed-token verification local to each service is preferred — no network call per request.
+Two ways to set `app_metadata.role`:
 
-## The swap
+1. **Bootstrap (one-off)**: Supabase dashboard → Authentication → Users → user → *Edit* → **Raw App Meta Data** JSON, e.g. `{"role": "admin"}` for one lead account, `{"role": "technical_support"}` for staff.
+2. **Ongoing**: `PATCH /auth/users/{user_id}/role` on authService with an admin's Bearer token and body `{"role": ...}`. Requires authService to have `SUPABASE_SECRET_KEY` configured (server-side only); returns `503` when unset, `404` for unknown users, `403` for non-admin callers.
 
-In each equipment service, replace only the body of `get_current_user` in `app/deps.py`:
-
-- Read the `Authorization: Bearer <token>` header instead of `X-User-Id`.
-- Verify signature + expiry.
-- Extract `sub` and `role` claims.
-- Return `User(id=<sub>, role=<role>)`.
-
-Optionally add a `require_role(...)` dependency layered on top for the mutation routes listed above. No handler code changes are required — handlers already receive `user` via `Depends(get_current_user)`.
-
-## Caller contract changes
-
-- Clients stop sending `X-User-Id` and send `Authorization: Bearer <token>` instead.
-- `changed_by` / creator continue to be derived server-side from `sub` — no request-body changes.
+Target `user_id` values come from that user's `/auth/me` response (or the Supabase dashboard user list).
 
 ## Where users come from
 
-authService owns the users table. The `created_by` / `changed_by` UUIDs stored in Supabase are authService user UUIDs; there is deliberately **no cross-service foreign key** — referential integrity of users is authService's responsibility.
+Supabase Auth owns the user records. The `created_by` / `changed_by` UUIDs stored in Supabase are Supabase Auth user UUIDs; there is deliberately **no cross-service foreign key** — referential integrity of users is Supabase Auth's responsibility.
+
+## Why no local JWT verification (yet)
+
+Role is not in the JWT claims without Supabase's custom access-token hook. Calling `/auth/me` is the sanctioned "verification endpoint" option from the original contract; if per-request latency ever matters, local signature verification (JWKS or a shared public key) plus the custom access-token hook is the upgrade path.
