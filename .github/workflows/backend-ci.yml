@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [authService]
+        service: [authService, venueService]
     defaults:
       run:
         working-directory: backend/${{ matrix.service }}
@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [authService]
+        service: [authService, venueService]
     steps:
       - uses: actions/checkout@v7
       - run: docker build .
@@ -75,4 +75,5 @@ jobs:
         working-directory: backend/eventRequestService
     steps:
       - uses: actions/checkout@v6
-      - run: docker build backend/${{ matrix.service }}
+      - run: docker build .
+        working-directory: backend/${{ matrix.service }}
