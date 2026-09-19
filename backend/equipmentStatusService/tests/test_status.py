@@ -1,5 +1,6 @@
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
 
@@ -10,6 +11,10 @@ EQUIPMENT_ROW: dict[str, Any] = {
     "id": EQUIPMENT_ID,
     "operational_status": "AVAILABLE",
 }
+
+
+def bearer() -> dict[str, str]:
+    return {"Authorization": "Bearer test-token"}
 
 
 def test_hello(client: TestClient) -> None:
@@ -32,10 +37,32 @@ def test_health(client: TestClient) -> None:
     }
 
 
-def test_get_status_available(client: TestClient, fake_client) -> None:
+def test_get_status_requires_authentication(client: TestClient) -> None:
+    response = client.get(f"/equipment/{EQUIPMENT_ID}/status")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "authorization", ["Basic abc", "Bearer ", "Bearer a b", "Bearer"]
+)
+def test_get_status_rejects_malformed_bearer(
+    client: TestClient, authorization: str
+) -> None:
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/status",
+        headers={"Authorization": authorization},
+    )
+
+    assert response.status_code == 401
+
+
+def test_get_status_available(client: TestClient, fake_client, auth) -> None:
     fake_client.table_data["equipment"] = [EQUIPMENT_ROW]
 
-    response = client.get(f"/equipment/{EQUIPMENT_ID}/status")
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/status", headers=bearer()
+    )
 
     assert response.status_code == 200
     assert response.json() == {
@@ -45,27 +72,52 @@ def test_get_status_available(client: TestClient, fake_client) -> None:
     }
 
 
-def test_get_status_unavailable(client: TestClient, fake_client) -> None:
+def test_get_status_unavailable(client: TestClient, fake_client, auth) -> None:
     fake_client.table_data["equipment"] = [
         {**EQUIPMENT_ROW, "operational_status": "DAMAGED"}
     ]
 
-    response = client.get(f"/equipment/{EQUIPMENT_ID}/status")
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/status", headers=bearer()
+    )
 
     assert response.status_code == 200
     assert response.json()["available"] is False
 
 
-def test_get_status_not_found(client: TestClient, fake_client) -> None:
-    response = client.get(f"/equipment/{EQUIPMENT_ID}/status")
+def test_get_status_not_found(client: TestClient, fake_client, auth) -> None:
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/status", headers=bearer()
+    )
 
     assert response.status_code == 404
 
 
-def test_transition_status(client: TestClient, fake_client) -> None:
+def test_transition_status_requires_authentication(client: TestClient) -> None:
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/status",
-        headers={"X-User-Id": USER_ID},
+        json={"new_status": "DAMAGED"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_transition_status_forbidden_for_event_coordinator(
+    client: TestClient, auth
+) -> None:
+    response = client.patch(
+        f"/equipment/{EQUIPMENT_ID}/status",
+        headers=bearer(),
+        json={"new_status": "DAMAGED"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_transition_status(client: TestClient, fake_client, auth_staff) -> None:
+    response = client.patch(
+        f"/equipment/{EQUIPMENT_ID}/status",
+        headers=bearer(),
         json={"new_status": "DAMAGED", "reason": "Dropped during setup"},
     )
 
@@ -89,27 +141,50 @@ def test_transition_status(client: TestClient, fake_client) -> None:
     ]
 
 
-def test_transition_status_requires_user(client: TestClient) -> None:
+def test_transition_status_invalid_status(
+    client: TestClient, auth_staff
+) -> None:
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/status",
-        json={"new_status": "DAMAGED"},
-    )
-
-    assert response.status_code == 401
-
-
-def test_transition_status_invalid_status(client: TestClient) -> None:
-    response = client.patch(
-        f"/equipment/{EQUIPMENT_ID}/status",
-        headers={"X-User-Id": USER_ID},
+        headers=bearer(),
         json={"new_status": "ON_FIRE"},
     )
 
     assert response.status_code == 422
 
 
+def test_transition_status_without_reason(
+    client: TestClient, fake_client, auth_staff
+) -> None:
+    response = client.patch(
+        f"/equipment/{EQUIPMENT_ID}/status",
+        headers=bearer(),
+        json={"new_status": "UNDER_REPAIR"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["new_status"] == "UNDER_REPAIR"
+    assert body["reason"] is None
+    assert fake_client.rpc_calls[0][1]["p_reason"] is None
+    assert fake_client.rpc_calls[0][0] == "transition_equipment_status"
+
+
+def test_transition_status_invalid_equipment_id(
+    client: TestClient, fake_client, auth_staff
+) -> None:
+    response = client.patch(
+        "/equipment/not-a-uuid/status",
+        headers=bearer(),
+        json={"new_status": "DAMAGED"},
+    )
+
+    assert response.status_code == 422
+    assert fake_client.rpc_calls == []
+
+
 def test_transition_status_unknown_equipment(
-    client: TestClient, fake_client
+    client: TestClient, fake_client, auth_staff
 ) -> None:
     fake_client.rpc_error = APIError(
         {"message": "equipment not found", "code": "P0001"}
@@ -117,7 +192,7 @@ def test_transition_status_unknown_equipment(
 
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/status",
-        headers={"X-User-Id": USER_ID},
+        headers=bearer(),
         json={"new_status": "RETIRED"},
     )
 
@@ -125,20 +200,26 @@ def test_transition_status_unknown_equipment(
 
 
 def test_transition_status_rpc_failure(
-    client: TestClient, fake_client
+    client: TestClient, fake_client, auth_staff
 ) -> None:
     fake_client.rpc_error = APIError({"message": "database exploded"})
 
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/status",
-        headers={"X-User-Id": USER_ID},
+        headers=bearer(),
         json={"new_status": "DAMAGED"},
     )
 
     assert response.status_code == 500
 
 
-def test_status_history(client: TestClient, fake_client) -> None:
+def test_status_history_requires_authentication(client: TestClient) -> None:
+    response = client.get(f"/equipment/{EQUIPMENT_ID}/status/history")
+
+    assert response.status_code == 401
+
+
+def test_status_history(client: TestClient, fake_client, auth) -> None:
     fake_client.table_data["equipment"] = [EQUIPMENT_ROW]
     fake_client.table_data["equipment_status_history"] = [
         {
@@ -161,7 +242,9 @@ def test_status_history(client: TestClient, fake_client) -> None:
         },
     ]
 
-    response = client.get(f"/equipment/{EQUIPMENT_ID}/status/history")
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/status/history", headers=bearer()
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -172,8 +255,28 @@ def test_status_history(client: TestClient, fake_client) -> None:
 
 
 def test_status_history_unknown_equipment(
-    client: TestClient, fake_client
+    client: TestClient, fake_client, auth
 ) -> None:
-    response = client.get(f"/equipment/{EQUIPMENT_ID}/status/history")
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/status/history", headers=bearer()
+    )
 
     assert response.status_code == 404
+
+
+def test_status_history_empty(client: TestClient, fake_client, auth) -> None:
+    fake_client.table_data["equipment"] = [EQUIPMENT_ROW]
+    fake_client.table_data["equipment_status_history"] = []
+
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/status/history", headers=bearer()
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_status_invalid_equipment_id(client: TestClient, auth) -> None:
+    response = client.get("/equipment/not-a-uuid/status", headers=bearer())
+
+    assert response.status_code == 422

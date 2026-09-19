@@ -9,12 +9,13 @@ from pydantic import BaseModel
 from supabase import Client
 
 from app.db import get_client
-from app.deps import User, get_current_user
+from app.deps import TECHNICAL_SUPPORT_ROLE, User, get_current_user, require_role
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
 ClientDep = Annotated[Client, Depends(get_client)]
-UserDep = Annotated[User, Depends(get_current_user)]
+ViewerDep = Annotated[User, Depends(get_current_user)]
+StaffDep = Annotated[User, Depends(require_role(TECHNICAL_SUPPORT_ROLE))]
 
 
 class OperationalStatus(StrEnum):
@@ -57,6 +58,7 @@ class HistoryOut(BaseModel):
 def get_status(
     equipment_id: UUID,
     client: ClientDep,
+    _user: ViewerDep,
 ) -> StatusOut:
     response = (
         client.table("equipment")
@@ -81,7 +83,7 @@ def get_status(
 def transition_status(
     equipment_id: UUID,
     payload: StatusTransitionIn,
-    user: UserDep,
+    user: StaffDep,
     client: ClientDep,
 ) -> StatusTransitionOut:
     try:
@@ -119,6 +121,7 @@ def transition_status(
 def get_status_history(
     equipment_id: UUID,
     client: ClientDep,
+    _user: ViewerDep,
 ) -> list[HistoryOut]:
     exists = (
         client.table("equipment")

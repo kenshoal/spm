@@ -9,7 +9,7 @@ services:
       - "8003:8000"
     environment:
       AUTH_SERVICE_URL: http://auth-service:8000
-      SUPABASE_URL: ${SUPABASE_URL:-https://rrmvhxrxrrnigjdxcbwt.supabase.co}
+      SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
     healthcheck:
       test:
@@ -30,6 +30,7 @@ services:
     environment:
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
       SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
     ports:
       - "8001:8000"
     healthcheck:
@@ -48,9 +49,14 @@ services:
   equipment-service:
     build:
       context: ./backend/equipmentService
+    depends_on:
+      auth-service:
+        condition: service_healthy
     ports:
       - "8002:8000"
     env_file: .env
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8000
     healthcheck:
       test:
         - CMD
@@ -67,9 +73,14 @@ services:
   equipment-status-service:
     build:
       context: ./backend/equipmentStatusService
+    depends_on:
+      auth-service:
+        condition: service_healthy
     ports:
-      - "8003:8000"
+      - "8005:8000"
     env_file: .env
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8000
     healthcheck:
       test:
         - CMD

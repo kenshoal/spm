@@ -1,10 +1,14 @@
 from typing import Any
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import get_settings
 from app.db import get_client
 from app.main import app
+
+USER_ID = "11111111-1111-1111-1111-111111111111"
 
 
 class FakeResponse:
@@ -55,6 +59,34 @@ class FakeQuery:
 @pytest.fixture
 def fake_client() -> FakeSupabase:
     return FakeSupabase()
+
+
+def _mock_auth(monkeypatch: pytest.MonkeyPatch, role: str) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(
+            200, json={"id": USER_ID, "role": role}
+        ),
+    )
+
+
+@pytest.fixture
+def auth(monkeypatch: pytest.MonkeyPatch):
+    _mock_auth(monkeypatch, "event_coordinator")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def auth_staff(monkeypatch: pytest.MonkeyPatch):
+    _mock_auth(monkeypatch, "technical_support")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture
