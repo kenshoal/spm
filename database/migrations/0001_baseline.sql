@@ -1,5 +1,10 @@
 -- Baseline schema for the shared Supabase database: equipment domain.
 --
+-- NOTE: this state already exists in the live database — that is exactly
+-- what this file was reconciled against. Do NOT re-run it against the live
+-- DB (the plain CREATE TABLE statements will error). It serves as a
+-- reference snapshot and for fresh environments only.
+--
 -- Reconciled against the live database on 2026-09-19 using the export
 -- queries in database/README.md (columns, types, nullability, defaults,
 -- constraints, and indexes all verified). Status values are enforced by

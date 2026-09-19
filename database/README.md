@@ -16,11 +16,12 @@ Apply each file exactly once and never edit a file that has already been applied
 
 | File | Purpose |
 | --- | --- |
-| `migrations/0001_baseline.sql` | `equipment` and `equipment_status_history` tables, status CHECK constraints, indexes |
+| `migrations/0001_baseline.sql` | `equipment` and `equipment_status_history` tables, status CHECK constraints, indexes. **Reference snapshot / fresh environments only** — this state already exists in the live DB; do not re-run it there |
 | `migrations/0002_transition_equipment_status.sql` | `transition_equipment_status` RPC: atomic status change + history row; ERRCODE `P0002` for unknown ids |
 | `migrations/0003_create_equipment_fn.sql` | `create_equipment` RPC: atomic insert of the equipment row + first history entry |
 | `migrations/0004_quantity_history.sql` | `equipment_quantity_history` audit table + `update_equipment_quantity` RPC (row lock, ERRCODE `P0002`) |
-| `migrations/0005_rls_and_function_access.sql` | RLS enabled on the three equipment tables (default-deny for anon/authenticated); RPC `EXECUTE` revoked from `anon`/`authenticated` |
+| `migrations/0005_rls_and_function_access.sql` | RLS enabled on the three equipment tables (default-deny for anon/authenticated). Its function revokes were a no-op — see 0006 |
+| `migrations/0006_rpc_execute_grants.sql` | RPC `EXECUTE` revoked from `PUBLIC` (which anon/authenticated inherit through) and granted explicitly to `service_role` |
 
 `0001_baseline.sql` was derived from what `equipmentService` implies, then reconciled against the live database (columns, types, nullability, defaults, constraints, indexes) using the export queries below. One thing is deliberately absent:
 
