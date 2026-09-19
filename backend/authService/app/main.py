@@ -44,6 +44,12 @@ class LoginResponse(BaseModel):
 class AuthenticatedUser(BaseModel):
     id: str
     email: str | None
+    # Server-controlled authorization claim, e.g. "operations_manager" —
+    # stored in Supabase's app_metadata (not user_metadata, which the user
+    # can edit themselves). None until something actually sets it; setting
+    # it requires the service-role key, which this service doesn't hold —
+    # for now that's a manual step in the Supabase dashboard.
+    role: str | None = None
 
 
 app = FastAPI(
@@ -170,4 +176,10 @@ def current_user(
     if auth_response.user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
     response.headers["Cache-Control"] = "no-store"
-    return AuthenticatedUser(id=auth_response.user.id, email=auth_response.user.email)
+    # getattr, not .app_metadata: existing test doubles construct a bare
+    # SimpleNamespace(id=..., email=...) with no app_metadata at all.
+    app_metadata = getattr(auth_response.user, "app_metadata", None) or {}
+    role = app_metadata.get("role")
+    return AuthenticatedUser(
+        id=auth_response.user.id, email=auth_response.user.email, role=role
+    )
