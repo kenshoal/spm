@@ -22,9 +22,17 @@ class FakeSupabase:
         self.inserts: list[dict[str, Any]] = []
         self.updates: list[dict[str, Any]] = []
         self.filters: list[tuple[str, Any]] = []
+        self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
+        self.rpc_error: Exception | None = None
 
     def table(self, name: str) -> "FakeQuery":
         return FakeQuery(self, self.table_data.get(name))
+
+    def rpc(self, name: str, params: dict[str, Any]) -> "FakeQuery":
+        self.rpc_calls.append((name, params))
+        if self.rpc_error is not None:
+            raise self.rpc_error
+        return FakeQuery(self, None)
 
 
 class FakeQuery:
@@ -48,6 +56,10 @@ class FakeQuery:
         return self
 
     def limit(self, count: int) -> "FakeQuery":
+        return self
+
+    def order(self, column: str, desc: bool = False) -> "FakeQuery":
+        self._fake.filters.append(("order", column))
         return self
 
     def single(self) -> "FakeQuery":

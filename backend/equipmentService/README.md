@@ -1,6 +1,6 @@
 # equipmentService
 
-Equipment catalogue microservice (SCRUM-45). Reads/writes the `equipment` table in Supabase and seeds the first `equipment_status_history` row on create.
+Equipment catalogue & status microservice (SCRUM-16, SCRUM-45). Reads/writes the `equipment` table in Supabase, seeds the first `equipment_status_history` row on create, and performs status transitions atomically via the `transition_equipment_status` Postgres function.
 
 ## Run locally
 
@@ -27,6 +27,11 @@ Endpoints require an `Authorization: Bearer <token>` header whose access token i
 | GET | `/equipment/{id}` | Fetch one item (404 if missing; any authenticated user) |
 | POST | `/equipment` | Create item (`technical_support` only); creator comes from the verified token; seeds first history row |
 | PATCH | `/equipment/{id}/quantity` | Update `total_owned_quantity` (must be >= 0; `technical_support` only) |
+| GET | `/equipment/{id}/status` | Current status plus computed `available` flag (only `AVAILABLE` is in service; any authenticated user) |
+| PATCH | `/equipment/{id}/status` | Atomic transition (`technical_support` only): body `{ "new_status": ..., "reason": ... }`; records who/when in history |
+| GET | `/equipment/{id}/status/history` | Audit trail, newest first (any authenticated user) |
+
+Valid statuses: `AVAILABLE`, `DAMAGED`, `UNDER_REPAIR`, `UNDER_MAINTENANCE`, `RETIRED`.
 
 ## Test
 

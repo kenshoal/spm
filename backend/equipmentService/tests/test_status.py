@@ -17,26 +17,6 @@ def bearer() -> dict[str, str]:
     return {"Authorization": "Bearer test-token"}
 
 
-def test_hello(client: TestClient) -> None:
-    response = client.get("/")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "service": "equipmentStatusService",
-        "message": "Hello from equipmentStatusService",
-    }
-
-
-def test_health(client: TestClient) -> None:
-    response = client.get("/health")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "service": "equipmentStatusService",
-        "status": "ok",
-    }
-
-
 def test_get_status_requires_authentication(client: TestClient) -> None:
     response = client.get(f"/equipment/{EQUIPMENT_ID}/status")
 

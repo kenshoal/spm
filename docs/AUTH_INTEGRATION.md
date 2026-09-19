@@ -1,10 +1,10 @@
 # Auth Integration Contract (authService → equipment services)
 
-Implemented: `equipmentService` (SCRUM-45) and `equipmentStatusService` (SCRUM-16) verify every caller with authService and enforce role-based authorisation. The stub that trusted the `X-User-Id` header is gone.
+Implemented: `equipmentService` (SCRUM-16, SCRUM-45) verifies every caller with authService and enforces role-based authorisation. The stub that trusted the `X-User-Id` header is gone.
 
 ## The Bearer contract
 
-Both equipment services expose a FastAPI dependency `get_current_user` in `app/deps.py`:
+The equipment service exposes a FastAPI dependency `get_current_user` in `app/deps.py`:
 
 - Callers send `Authorization: Bearer <supabase-access-token>` (the token issued by `POST /auth/login`).
 - Missing or malformed headers return `401 Authentication required`.
@@ -31,9 +31,9 @@ Roles are read per request from Supabase **`app_metadata.role`** (never `user_me
 | --- | --- | --- |
 | equipmentService | `POST /equipment` | `technical_support` |
 | equipmentService | `PATCH /equipment/{id}/quantity` | `technical_support` |
-| equipmentStatusService | `PATCH /equipment/{id}/status` | `technical_support` |
+| equipmentService | `PATCH /equipment/{id}/status` | `technical_support` |
 | equipmentService | `GET /equipment`, `GET /equipment/{id}` | any authenticated user |
-| equipmentStatusService | `GET /equipment/{id}/status`, `GET /equipment/{id}/status/history` | any authenticated user |
+| equipmentService | `GET /equipment/{id}/status`, `GET /equipment/{id}/status/history` | any authenticated user |
 
 This covers SCRUM-45's "viewed by an authorised user" acceptance criterion: reads need any authenticated user; mutations need `technical_support`.
 

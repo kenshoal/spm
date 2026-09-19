@@ -70,30 +70,6 @@ services:
       retries: 3
       start_period: 5s
 
-  equipment-status-service:
-    build:
-      context: ./backend/equipmentStatusService
-    depends_on:
-      auth-service:
-        condition: service_healthy
-    ports:
-      - "8005:8000"
-    env_file: .env
-    environment:
-      AUTH_SERVICE_URL: http://auth-service:8000
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - >-
-          import urllib.request;
-          urllib.request.urlopen('http://localhost:8000/health').read()
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
-
   venue-service:
     build:
       context: ./backend/venueService

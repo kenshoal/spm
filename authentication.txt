@@ -1,6 +1,6 @@
 # Manual auth test guide (SCRUM-16 / SCRUM-45 role-based access)
 
-Ports: authService 8001 | equipmentService 8002 | equipmentStatusService 8005
+Ports: authService 8001 | equipmentService 8002
 
 ## 0. Setup
 
@@ -37,7 +37,7 @@ curl -s localhost:8001/auth/me -H "Authorization: Bearer $STAFF"
 curl -s localhost:8002/equipment -H "Authorization: Bearer $COORD"          # 200
 curl -s localhost:8002/equipment                                            # 401
 curl -s localhost:8002/equipment -H "Authorization: Basic abc"              # 401
-curl -s localhost:8005/equipment/<equipment_id>/status -H "Authorization: Bearer $COORD"   # 200
+curl -s localhost:8002/equipment/<equipment_id>/status -H "Authorization: Bearer $COORD"   # 200
 
 ## 3. Mutations blocked for event_coordinator
 
@@ -48,7 +48,7 @@ curl -s -X POST localhost:8002/equipment -H "Authorization: Bearer $COORD" \
 curl -s -X PATCH localhost:8002/equipment/<id>/quantity -H "Authorization: Bearer $COORD" \
   -H "Content-Type: application/json" -d '{"total_owned_quantity": 6}'       # 403
 
-curl -s -X PATCH localhost:8005/equipment/<id>/status -H "Authorization: Bearer $COORD" \
+curl -s -X PATCH localhost:8002/equipment/<id>/status -H "Authorization: Bearer $COORD" \
   -H "Content-Type: application/json" -d '{"new_status":"DAMAGED"}'          # 403
 
 ## 4. Mutations allowed for technical_support
@@ -60,10 +60,10 @@ curl -s -X POST localhost:8002/equipment -H "Authorization: Bearer $STAFF" \
 curl -s -X PATCH localhost:8002/equipment/<id>/quantity -H "Authorization: Bearer $STAFF" \
   -H "Content-Type: application/json" -d '{"total_owned_quantity": 6}'       # 200
 
-curl -s -X PATCH localhost:8005/equipment/<id>/status -H "Authorization: Bearer $STAFF" \
+curl -s -X PATCH localhost:8002/equipment/<id>/status -H "Authorization: Bearer $STAFF" \
   -H "Content-Type: application/json" -d '{"new_status":"DAMAGED","reason":"test"}'  # 200, changed_by = staff id
 
-curl -s localhost:8005/equipment/<id>/status/history -H "Authorization: Bearer $STAFF"  # 200, newest first
+curl -s localhost:8002/equipment/<id>/status/history -H "Authorization: Bearer $STAFF"  # 200, newest first
 
 ## 5. Role assignment (admin only)
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from app.routers import equipment
+from app.routers import equipment, status
 
 
 class ServiceResponse(BaseModel):
@@ -16,11 +16,12 @@ class HealthResponse(BaseModel):
 
 app = FastAPI(
     title="equipmentService",
-    description="Equipment catalogue microservice for SPM (SCRUM-45).",
+    description="Equipment catalogue & status microservice for SPM (SCRUM-16, SCRUM-45).",
     version="0.1.0",
 )
 
 app.include_router(equipment.router)
+app.include_router(status.router)
 
 
 @app.get("/", response_model=ServiceResponse, tags=["service"])

@@ -1,5 +1,4 @@
 from datetime import datetime
-from enum import StrEnum
 from typing import Annotated
 from uuid import UUID
 
@@ -10,20 +9,13 @@ from supabase import Client
 
 from app.db import get_client
 from app.deps import TECHNICAL_SUPPORT_ROLE, User, get_current_user, require_role
+from app.models import OperationalStatus
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
 ClientDep = Annotated[Client, Depends(get_client)]
 ViewerDep = Annotated[User, Depends(get_current_user)]
 StaffDep = Annotated[User, Depends(require_role(TECHNICAL_SUPPORT_ROLE))]
-
-
-class OperationalStatus(StrEnum):
-    AVAILABLE = "AVAILABLE"
-    DAMAGED = "DAMAGED"
-    UNDER_REPAIR = "UNDER_REPAIR"
-    UNDER_MAINTENANCE = "UNDER_MAINTENANCE"
-    RETIRED = "RETIRED"
 
 
 class StatusOut(BaseModel):
