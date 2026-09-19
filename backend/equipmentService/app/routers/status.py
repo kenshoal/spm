@@ -10,6 +10,7 @@ from supabase import Client
 from app.db import get_client
 from app.deps import TECHNICAL_SUPPORT_ROLE, User, get_current_user, require_role
 from app.models import OperationalStatus
+from app.rpc_errors import rpc_error_to_http
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
@@ -89,15 +90,7 @@ def transition_status(
             },
         ).execute()
     except APIError as exc:
-        if "equipment not found" in str(exc):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Equipment not found",
-            ) from exc
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Status transition failed",
-        ) from exc
+        raise rpc_error_to_http(exc) from exc
     return StatusTransitionOut(
         equipment_id=equipment_id,
         new_status=payload.new_status,

@@ -1,14 +1,16 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field
 from supabase import Client
 
 from app.db import get_client
 from app.deps import TECHNICAL_SUPPORT_ROLE, User, get_current_user, require_role
 from app.models import OperationalStatus
+from app.rpc_errors import rpc_error_to_http
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
@@ -83,54 +85,39 @@ def create_equipment(
     user: StaffDep,
     client: ClientDep,
 ) -> EquipmentOut:
-    response = (
-        client.table("equipment")
-        .insert(
+    try:
+        response = client.rpc(
+            "create_equipment",
             {
-                "type": payload.type,
-                "description": payload.description,
-                "total_owned_quantity": payload.total_owned_quantity,
-                "home_location": payload.home_location,
-                "operational_status": payload.operational_status.value,
-                "created_by": user.id,
-            }
-        )
-        .select("*")
-        .execute()
-    )
-    equipment = response.data[0]
-    client.table("equipment_status_history").insert(
-        {
-            "equipment_id": equipment["id"],
-            "old_status": None,
-            "new_status": equipment["operational_status"],
-            "changed_by": user.id,
-        }
-    ).execute()
-    return EquipmentOut.model_validate(equipment)
+                "p_type": payload.type,
+                "p_description": payload.description,
+                "p_total_owned_quantity": payload.total_owned_quantity,
+                "p_home_location": payload.home_location,
+                "p_operational_status": payload.operational_status.value,
+                "p_created_by": user.id,
+            },
+        ).execute()
+    except APIError as exc:
+        raise rpc_error_to_http(exc) from exc
+    return EquipmentOut.model_validate(response.data)
 
 
 @router.patch("/{equipment_id}/quantity", response_model=EquipmentOut)
 def update_quantity(
     equipment_id: UUID,
     payload: QuantityUpdate,
-    _user: StaffDep,
+    user: StaffDep,
     client: ClientDep,
 ) -> EquipmentOut:
-    response = (
-        client.table("equipment")
-        .update(
+    try:
+        response = client.rpc(
+            "update_equipment_quantity",
             {
-                "total_owned_quantity": payload.total_owned_quantity,
-                "updated_at": datetime.now(UTC).isoformat(),
-            }
-        )
-        .eq("id", str(equipment_id))
-        .select()
-        .execute()
-    )
-    if not response.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Equipment not found"
-        )
-    return EquipmentOut.model_validate(response.data[0])
+                "p_equipment_id": str(equipment_id),
+                "p_new_quantity": payload.total_owned_quantity,
+                "p_changed_by": user.id,
+            },
+        ).execute()
+    except APIError as exc:
+        raise rpc_error_to_http(exc) from exc
+    return EquipmentOut.model_validate(response.data)

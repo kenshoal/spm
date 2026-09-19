@@ -167,7 +167,7 @@ def test_transition_status_unknown_equipment(
     client: TestClient, fake_client, auth_staff
 ) -> None:
     fake_client.rpc_error = APIError(
-        {"message": "equipment not found", "code": "P0001"}
+        {"message": "no rows", "code": "P0002"}
     )
 
     response = client.patch(
@@ -177,6 +177,24 @@ def test_transition_status_unknown_equipment(
     )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == "Equipment not found"
+
+
+def test_transition_status_other_error_with_not_found_message(
+    client: TestClient, fake_client, auth_staff
+) -> None:
+    # Regression: 404 must key off ERRCODE P0002, not error-message text.
+    fake_client.rpc_error = APIError(
+        {"message": "equipment not found", "code": "P0001"}
+    )
+
+    response = client.patch(
+        f"/equipment/{EQUIPMENT_ID}/status",
+        headers=bearer(),
+        json={"new_status": "RETIRED"},
+    )
+
+    assert response.status_code == 500
 
 
 def test_transition_status_rpc_failure(

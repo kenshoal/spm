@@ -17,11 +17,15 @@ Apply each file exactly once and never edit a file that has already been applied
 | File | Purpose |
 | --- | --- |
 | `migrations/0001_baseline.sql` | `equipment` and `equipment_status_history` tables, status CHECK constraints, indexes |
+| `migrations/0002_transition_equipment_status.sql` | `transition_equipment_status` RPC: atomic status change + history row; ERRCODE `P0002` for unknown ids |
+| `migrations/0003_create_equipment_fn.sql` | `create_equipment` RPC: atomic insert of the equipment row + first history entry |
+| `migrations/0004_quantity_history.sql` | `equipment_quantity_history` audit table + `update_equipment_quantity` RPC (row lock, ERRCODE `P0002`) |
 
-`0001_baseline.sql` was derived from what `equipmentService` implies, then reconciled against the live database (columns, types, nullability, defaults, constraints, indexes) using the export queries below. Two things are deliberately absent:
+`0001_baseline.sql` was derived from what `equipmentService` implies, then reconciled against the live database (columns, types, nullability, defaults, constraints, indexes) using the export queries below. One thing is deliberately absent:
 
 - **No `operational_status` enum type** — the live DB stores status as `varchar` with CHECK constraints; the API mirrors the allowed values in `app/models.py`.
-- **No `transition_equipment_status` function** — the live DB does not have it (verified 2026-09-19), so it is created by a later migration written to the router's RPC contract.
+
+Note: `transition_equipment_status` did **not** exist in the live database (verified 2026-09-19) even though `PATCH /equipment/{id}/status` calls it — `0002` creates it from the router's RPC contract.
 
 ## Verification queries
 

@@ -24,6 +24,7 @@ class FakeSupabase:
         self.filters: list[tuple[str, Any]] = []
         self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
         self.rpc_error: Exception | None = None
+        self.rpc_result: Any = None
 
     def table(self, name: str) -> "FakeQuery":
         return FakeQuery(self, self.table_data.get(name))
@@ -32,7 +33,7 @@ class FakeSupabase:
         self.rpc_calls.append((name, params))
         if self.rpc_error is not None:
             raise self.rpc_error
-        return FakeQuery(self, None)
+        return FakeQuery(self, self.rpc_result)
 
 
 class FakeQuery:

@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
 EQUIPMENT_ID = "22222222-2222-2222-2222-222222222222"
@@ -147,7 +148,7 @@ def test_create_equipment_forbidden_for_event_coordinator(
 
 
 def test_create_equipment(client: TestClient, fake_client, auth_staff) -> None:
-    fake_client.table_data["equipment"] = [dict(EQUIPMENT_ROW)]
+    fake_client.rpc_result = dict(EQUIPMENT_ROW)
 
     response = client.post(
         "/equipment",
@@ -162,21 +163,19 @@ def test_create_equipment(client: TestClient, fake_client, auth_staff) -> None:
 
     assert response.status_code == 201
     assert response.json()["id"] == EQUIPMENT_ID
-
-    equipment_inserts = [
-        i for i in fake_client.inserts if "home_location" in i
+    assert fake_client.rpc_calls == [
+        (
+            "create_equipment",
+            {
+                "p_type": "Speaker",
+                "p_description": "PA speaker",
+                "p_total_owned_quantity": 4,
+                "p_home_location": "Store Room B",
+                "p_operational_status": "AVAILABLE",
+                "p_created_by": USER_ID,
+            },
+        )
     ]
-    assert len(equipment_inserts) == 1
-    assert equipment_inserts[0]["created_by"] == USER_ID
-    assert equipment_inserts[0]["operational_status"] == "AVAILABLE"
-
-    history_inserts = [
-        i for i in fake_client.inserts if "equipment_id" in i
-    ]
-    assert len(history_inserts) == 1
-    assert history_inserts[0]["old_status"] is None
-    assert history_inserts[0]["new_status"] == "AVAILABLE"
-    assert history_inserts[0]["changed_by"] == USER_ID
 
 
 def test_create_equipment_negative_quantity(
@@ -240,9 +239,10 @@ def test_create_equipment_home_location_too_long(
 def test_create_equipment_with_explicit_status(
     client: TestClient, fake_client, auth_staff
 ) -> None:
-    fake_client.table_data["equipment"] = [
-        {**EQUIPMENT_ROW, "operational_status": "DAMAGED"}
-    ]
+    fake_client.rpc_result = {
+        **EQUIPMENT_ROW,
+        "operational_status": "DAMAGED",
+    }
 
     response = client.post(
         "/equipment",
@@ -257,25 +257,13 @@ def test_create_equipment_with_explicit_status(
 
     assert response.status_code == 201
     assert response.json()["operational_status"] == "DAMAGED"
-
-    equipment_inserts = [
-        i for i in fake_client.inserts if "home_location" in i
-    ]
-    assert equipment_inserts[0]["operational_status"] == "DAMAGED"
-
-    history_inserts = [
-        i for i in fake_client.inserts if "equipment_id" in i
-    ]
-    assert history_inserts[0]["old_status"] is None
-    assert history_inserts[0]["new_status"] == "DAMAGED"
+    assert fake_client.rpc_calls[0][1]["p_operational_status"] == "DAMAGED"
 
 
 def test_create_equipment_description_optional(
     client: TestClient, fake_client, auth_staff
 ) -> None:
-    fake_client.table_data["equipment"] = [
-        {**EQUIPMENT_ROW, "description": None}
-    ]
+    fake_client.rpc_result = {**EQUIPMENT_ROW, "description": None}
 
     response = client.post(
         "/equipment",
@@ -289,10 +277,7 @@ def test_create_equipment_description_optional(
 
     assert response.status_code == 201
     assert response.json()["description"] is None
-    equipment_inserts = [
-        i for i in fake_client.inserts if "home_location" in i
-    ]
-    assert equipment_inserts[0]["description"] is None
+    assert fake_client.rpc_calls[0][1]["p_description"] is None
 
 
 def test_update_quantity_requires_authentication(client: TestClient) -> None:
@@ -317,9 +302,7 @@ def test_update_quantity_forbidden_for_event_coordinator(
 
 
 def test_update_quantity(client: TestClient, fake_client, auth_staff) -> None:
-    fake_client.table_data["equipment"] = [
-        {**EQUIPMENT_ROW, "total_owned_quantity": 6}
-    ]
+    fake_client.rpc_result = {**EQUIPMENT_ROW, "total_owned_quantity": 6}
 
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/quantity",
@@ -329,12 +312,21 @@ def test_update_quantity(client: TestClient, fake_client, auth_staff) -> None:
 
     assert response.status_code == 200
     assert response.json()["total_owned_quantity"] == 6
-    assert len(fake_client.updates) == 1
-    assert fake_client.updates[0]["total_owned_quantity"] == 6
-    assert ("id", EQUIPMENT_ID) in fake_client.filters
+    assert fake_client.rpc_calls == [
+        (
+            "update_equipment_quantity",
+            {
+                "p_equipment_id": EQUIPMENT_ID,
+                "p_new_quantity": 6,
+                "p_changed_by": USER_ID,
+            },
+        )
+    ]
 
 
-def test_update_quantity_negative(client: TestClient, auth_staff) -> None:
+def test_update_quantity_negative(
+    client: TestClient, fake_client, auth_staff
+) -> None:
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/quantity",
         headers=bearer(),
@@ -342,12 +334,11 @@ def test_update_quantity_negative(client: TestClient, auth_staff) -> None:
     )
 
     assert response.status_code == 422
+    assert fake_client.rpc_calls == []
 
 
 def test_update_quantity_zero(client: TestClient, fake_client, auth_staff) -> None:
-    fake_client.table_data["equipment"] = [
-        {**EQUIPMENT_ROW, "total_owned_quantity": 0}
-    ]
+    fake_client.rpc_result = {**EQUIPMENT_ROW, "total_owned_quantity": 0}
 
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/quantity",
@@ -362,6 +353,10 @@ def test_update_quantity_zero(client: TestClient, fake_client, auth_staff) -> No
 def test_update_quantity_not_found(
     client: TestClient, fake_client, auth_staff
 ) -> None:
+    fake_client.rpc_error = APIError(
+        {"message": "row not found", "code": "P0002"}
+    )
+
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/quantity",
         headers=bearer(),
@@ -369,3 +364,20 @@ def test_update_quantity_not_found(
     )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == "Equipment not found"
+
+
+def test_update_quantity_rpc_failure(
+    client: TestClient, fake_client, auth_staff
+) -> None:
+    fake_client.rpc_error = APIError(
+        {"message": "equipment not found", "code": "P0001"}
+    )
+
+    response = client.patch(
+        f"/equipment/{EQUIPMENT_ID}/quantity",
+        headers=bearer(),
+        json={"total_owned_quantity": 6},
+    )
+
+    assert response.status_code == 500
