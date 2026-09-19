@@ -1,1 +1,0 @@
-"""eventService application package."""

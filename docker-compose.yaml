@@ -44,26 +44,3 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
-
-  event-service:
-    build:
-      context: ./backend/eventService
-    environment:
-      # Shared Supabase Postgres project; event-service owns the
-      # event_service schema there. Set in a root .env (docker compose
-      # reads it automatically) or export it before `docker compose up`.
-      DATABASE_URL: ${DATABASE_URL}
-    ports:
-      - "8002:8000"
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - >-
-          import urllib.request;
-          urllib.request.urlopen('http://localhost:8000/health').read()
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 5s

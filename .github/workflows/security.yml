@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [authService, eventService]
+        service: [authService]
     defaults:
       run:
         working-directory: backend/${{ matrix.service }}
