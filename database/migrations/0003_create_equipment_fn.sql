@@ -5,13 +5,15 @@
 -- audit trail. This function performs both in one transaction and returns
 -- the created row, which PostgREST serialises as a JSON object.
 
+-- Parameters with defaults must come last (Postgres requirement); callers
+-- use named arguments, so the order is invisible to the service.
 CREATE FUNCTION create_equipment(
     p_type varchar,
-    p_description text DEFAULT NULL,
     p_total_owned_quantity integer,
     p_home_location varchar,
-    p_operational_status varchar DEFAULT 'AVAILABLE',
-    p_created_by uuid
+    p_created_by uuid,
+    p_description text DEFAULT NULL,
+    p_operational_status varchar DEFAULT 'AVAILABLE'
 )
 RETURNS equipment
 LANGUAGE plpgsql
