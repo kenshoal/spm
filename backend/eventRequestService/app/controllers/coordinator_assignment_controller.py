@@ -18,6 +18,7 @@ from app.repositories.coordinator_assignment_repository import (
     SupabaseCoordinatorAssignmentRepository,
 )
 from app.services.coordinator_assignment_service import CoordinatorAssignmentService
+from app.services.notification_client import NotificationClient
 
 router = APIRouter(prefix="/event-requests", tags=["coordinator assignment"])
 
@@ -41,7 +42,9 @@ def get_coordinator_assignment_service(
         ) from error
 
     service = CoordinatorAssignmentService(
-        repository, get_event_request_service(request)
+        repository,
+        get_event_request_service(request),
+        NotificationClient.from_settings(get_settings()),
     )
     request.app.state.coordinator_assignment_service = service
     return service

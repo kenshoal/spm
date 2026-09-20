@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     supabase_url: AnyHttpUrl
     supabase_secret_key: SecretStr
     auth_service_url: AnyHttpUrl = "http://127.0.0.1:8001"
+    # No Notification System exists yet — unset means NotificationClient is
+    # a no-op. Set once one does.
+    notification_service_url: AnyHttpUrl | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

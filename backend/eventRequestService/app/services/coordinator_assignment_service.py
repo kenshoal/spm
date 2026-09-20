@@ -7,6 +7,7 @@ from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
 )
 from app.services.event_request_service import EventRequestService
+from app.services.notification_client import NotificationClient
 
 _TERMINAL_STATUSES = {
     EventRequestStatus.COMPLETED,
@@ -38,9 +39,11 @@ class CoordinatorAssignmentService:
         self,
         repository: CoordinatorAssignmentRepository,
         event_request_service: EventRequestService,
+        notification_client: NotificationClient | None = None,
     ) -> None:
         self.repository = repository
         self.event_request_service = event_request_service
+        self.notification_client = notification_client or NotificationClient(None)
 
     def assign(
         self,
@@ -67,6 +70,11 @@ class CoordinatorAssignmentService:
                 "coordinator_id": payload.coordinator_id,
                 "assigned_by": assigned_by,
             }
+        )
+        self.notification_client.notify_coordinator_assigned(
+            event_request_id=event_request_id,
+            coordinator_id=payload.coordinator_id,
+            assigned_by=assigned_by,
         )
         return CoordinatorAssignmentResponse.model_validate(row)
 
