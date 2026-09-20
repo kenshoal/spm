@@ -23,7 +23,7 @@ class EventRequestNotDraftError(Exception):
 
 
 class EventRequestService:
-    """Owns draft rules independently of the Supabase transport."""
+    """Owns Draft and submission rules independently of Supabase transport."""
 
     def __init__(self, repository: EventRequestRepository) -> None:
         self.repository = repository
@@ -111,6 +111,4 @@ class EventRequestService:
 
     @staticmethod
     def _row_to_response(row: dict[str, Any]) -> EventRequestResponse:
-        response_values = dict(row)
-        response_values["organiser_id"] = response_values.get("organiser_id")
-        return EventRequestResponse.model_validate(response_values)
+        return EventRequestResponse.model_validate(row)

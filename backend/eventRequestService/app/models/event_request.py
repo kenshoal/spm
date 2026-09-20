@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 
 class EventRequestStatus(str, Enum):
@@ -18,7 +18,7 @@ class EventRequestFields(BaseModel):
     event_name: str | None = Field(default=None, max_length=200)
     purpose: str | None = Field(default=None, max_length=1_000)
     description: str | None = Field(default=None, max_length=5_000)
-    proposed_date_times: list[datetime] = Field(default_factory=list)
+    proposed_date_times: list[AwareDatetime] = Field(default_factory=list)
     expected_attendance: int | None = Field(default=None, gt=0)
     venue_requirements: str | None = Field(default=None, max_length=2_000)
     accessibility_needs: str | None = Field(default=None, max_length=2_000)
@@ -54,7 +54,7 @@ class EventRequestUpdate(BaseModel):
     event_name: str | None = Field(default=None, max_length=200)
     purpose: str | None = Field(default=None, max_length=1_000)
     description: str | None = Field(default=None, max_length=5_000)
-    proposed_date_times: list[datetime] | None = None
+    proposed_date_times: list[AwareDatetime] | None = None
     expected_attendance: int | None = Field(default=None, gt=0)
     venue_requirements: str | None = Field(default=None, max_length=2_000)
     accessibility_needs: str | None = Field(default=None, max_length=2_000)
@@ -86,7 +86,7 @@ class EventRequestSubmission(BaseModel):
     event_name: str = Field(min_length=1, max_length=200)
     purpose: str = Field(min_length=1, max_length=1_000)
     description: str = Field(min_length=1, max_length=5_000)
-    proposed_date_times: list[datetime] = Field(min_length=1)
+    proposed_date_times: list[AwareDatetime] = Field(min_length=1)
     expected_attendance: int = Field(gt=0)
     venue_requirements: str = Field(min_length=1, max_length=2_000)
     accessibility_needs: str = Field(min_length=1, max_length=2_000)

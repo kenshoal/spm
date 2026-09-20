@@ -18,11 +18,12 @@ drafts. Drafts are persisted in the shared Supabase project.
 
 Every event-request operation requires `Authorization: Bearer <access-token>`.
 The service asks authService to verify that token with Supabase, then scopes
-drafts to the returned user ID. The browser cannot choose the organiser ID.
-The `organiser_id` column stores that verified ID. Existing databases must be
-migrated from `temporary_organiser_id` to `organiser_id` before using this
-service with authenticated requests. Drafts saved under the old column remain
-available after the migration when their values are preserved.
+drafts to the returned user ID. It also requires the established
+`app_metadata.role` value `organiser`; authenticated users with any other or no
+role receive 403. The browser cannot choose the organiser ID.
+The non-null `organiser_id` column stores that verified UUID. This service no
+longer reads or writes `temporary_organiser_id`; the deployed Supabase table
+must match that contract before authenticated requests are tested.
 
 Draft fields may remain incomplete. Submission requires every currently defined
 event-request field, changes the status to `Submitted`, and makes the request

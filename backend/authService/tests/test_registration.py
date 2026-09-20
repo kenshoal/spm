@@ -162,15 +162,42 @@ def test_current_user_verifies_supabase_access_token(
     client: TestClient, supabase: Mock
 ) -> None:
     supabase.auth.get_user.return_value = SimpleNamespace(
-        user=SimpleNamespace(id="user-id", email="member@example.com")
+        user=SimpleNamespace(
+            id="user-id",
+            email="member@example.com",
+            app_metadata={"role": "organiser"},
+            user_metadata={"role": "admin"},
+        )
     )
 
     response = client.get("/auth/me", headers={"Authorization": "Bearer access-token"})
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert response.json() == {"id": "user-id", "email": "member@example.com"}
+    assert response.json() == {
+        "id": "user-id",
+        "email": "member@example.com",
+        "role": "organiser",
+    }
     supabase.auth.get_user.assert_called_once_with("access-token")
+
+
+def test_current_user_returns_no_role_when_app_metadata_has_none(
+    client: TestClient, supabase: Mock
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="user-id",
+            email="member@example.com",
+            app_metadata={},
+            user_metadata={"role": "organiser"},
+        )
+    )
+
+    response = client.get("/auth/me", headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 200
+    assert response.json()["role"] is None
 
 
 @pytest.mark.parametrize("authorization", [None, "Basic abc", "Bearer ", "Bearer a b"])

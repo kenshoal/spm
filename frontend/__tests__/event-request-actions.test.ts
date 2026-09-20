@@ -102,9 +102,49 @@ test("submits a completed existing draft", async () => {
   expect(fetchMock.mock.calls[0][0]).toBe(
     "http://127.0.0.1:8003/event-requests/draft%2F1/submit",
   );
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({
+    method: "POST",
+    headers: { Authorization: "Bearer valid-token" },
+  });
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+    event_name: "Community Workshop",
+    expected_attendance: 80,
+    proposed_date_times: ["2026-10-20T02:00:00.000Z"],
+  });
   expect(navigation.redirect).toHaveBeenCalledWith(
     "/event-requests?status=in-progress",
   );
+});
+
+// Purpose: Keeps a submitted request visible as read-only when a duplicate submission is attempted.
+test("reports that an already submitted request is read-only", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: false, status: 409 }),
+  );
+
+  const state = await submitDraftEventRequest(
+    "submitted-1",
+    {},
+    completeFormData(),
+  );
+
+  expect(state).toEqual({
+    message: "This request has already been submitted and is now read-only.",
+  });
+  expect(navigation.redirect).not.toHaveBeenCalled();
+});
+
+// Purpose: Gives the organiser a recoverable error without losing form values when the API is unavailable.
+test("returns an actionable error when submission cannot reach the API", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+
+  const state = await submitNewEventRequest({}, completeFormData());
+
+  expect(state).toEqual({
+    message: "The request could not be submitted. Please try again.",
+  });
+  expect(navigation.redirect).not.toHaveBeenCalled();
 });
 
 // Purpose: Stops incomplete form data before it can enter the coordination workflow.

@@ -16,6 +16,7 @@ from app.repositories import SupabaseEventRequestRepository
 from app.services.event_request_service import EventRequestService
 
 router = APIRouter(prefix="/event-requests", tags=["event requests"])
+ORGANISER_ROLE = "organiser"
 
 
 def get_event_request_service(request: Request) -> EventRequestService:
@@ -40,7 +41,7 @@ def get_event_request_service(request: Request) -> EventRequestService:
 def get_organiser_id(
     authorization: Annotated[str | None, Header()] = None,
 ) -> str:
-    """Resolve the organiser from a validated Supabase session, not a caller ID."""
+    """Resolve an authorised organiser from a validated Supabase session."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
     token = authorization.removeprefix("Bearer ").strip()
@@ -70,11 +71,18 @@ def get_organiser_id(
             status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
         )
     try:
-        return str(UUID(response.json()["id"]))
+        authenticated_user = response.json()
+        organiser_id = str(UUID(authenticated_user["id"]))
     except (ValueError, KeyError, TypeError) as error:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Authentication service returned no user"
         ) from error
+    if authenticated_user.get("role") != ORGANISER_ROLE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Event Organiser role required",
+        )
+    return organiser_id
 
 
 ServiceDependency = Annotated[EventRequestService, Depends(get_event_request_service)]

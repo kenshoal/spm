@@ -29,3 +29,16 @@ test("protected pages require a valid session", async ({ page }) => {
   await page.goto("/event-requests");
   await expect(page).toHaveURL(/\/auth$/);
 });
+
+test("event-request pages require the Event Organiser role", async ({ page }) => {
+  await page.context().addCookies([{
+    name: "cs_access_token",
+    value: "non-organiser-session",
+    url: "http://127.0.0.1:3100",
+  }]);
+
+  await page.goto("/event-requests");
+
+  await expect(page).toHaveURL(/\/unauthorised$/);
+  await expect(page.getByRole("heading", { name: "Event Organiser access required" })).toBeVisible();
+});

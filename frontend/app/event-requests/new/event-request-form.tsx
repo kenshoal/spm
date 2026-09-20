@@ -176,6 +176,11 @@ export function EventRequestForm({ request }: { request?: EventRequest }) {
             <p id="submit-event-request-description" className="mt-2 text-sm leading-6 text-[#68776f]">
               The coordination team will receive this request. You cannot edit or delete it after submission.
             </p>
+            {submissionState.message ? (
+              <p role="alert" className="mt-4 rounded-lg border border-[#efc7c4] bg-[#fff4f3] px-3 py-2 text-sm text-[#8e3d35]">
+                {submissionState.message}
+              </p>
+            ) : null}
             <div className="mt-6 flex justify-end gap-3">
               <button type="button" autoFocus disabled={submissionPending} onClick={() => setIsConfirmingSubmission(false)} className="rounded-lg border border-[#ccd8d2] px-4 py-2.5 text-sm font-semibold text-[#34473f] hover:bg-[#f4f7f5] disabled:opacity-60">Cancel</button>
               <button type="submit" formAction={submissionFormAction} disabled={submissionPending} className="rounded-lg bg-[#0f6b5b] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#0b5b4d] disabled:opacity-60">

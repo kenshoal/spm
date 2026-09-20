@@ -44,6 +44,7 @@ class LoginResponse(BaseModel):
 class AuthenticatedUser(BaseModel):
     id: str
     email: str | None
+    role: str | None
 
 
 app = FastAPI(
@@ -170,4 +171,10 @@ def current_user(
     if auth_response.user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
     response.headers["Cache-Control"] = "no-store"
-    return AuthenticatedUser(id=auth_response.user.id, email=auth_response.user.email)
+    app_metadata = auth_response.user.app_metadata or {}
+    role = app_metadata.get("role")
+    return AuthenticatedUser(
+        id=auth_response.user.id,
+        email=auth_response.user.email,
+        role=role if isinstance(role, str) else None,
+    )

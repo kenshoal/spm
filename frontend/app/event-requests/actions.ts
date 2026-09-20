@@ -21,13 +21,21 @@ function optionalText(formData: FormData, field: string): string | null {
   return value || null;
 }
 
+function singaporeDateTimeToIso(value: FormDataEntryValue): string | null {
+  const localValue = String(value).trim();
+  if (!localValue) return null;
+
+  const date = new Date(`${localValue}:00+08:00`);
+  return Number.isNaN(date.getTime()) ? localValue : date.toISOString();
+}
+
 function parseEventRequestForm(formData: FormData) {
   const attendanceText = String(formData.get("expected_attendance") ?? "").trim();
   const attendance = attendanceText ? Number(attendanceText) : null;
   const proposedDateTimes = formData
     .getAll("proposed_date_times")
-    .map(String)
-    .filter(Boolean);
+    .map(singaporeDateTimeToIso)
+    .filter((value): value is string => value !== null);
 
   const payload = {
     event_name: optionalText(formData, "event_name"),

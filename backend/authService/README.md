@@ -21,7 +21,8 @@ Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `.env` using the values fro
 - `POST /auth/register` creates an email/password user through Supabase Auth.
 - Registration returns whether email confirmation is required, but does not expose session tokens.
 - `POST /auth/login` signs in a confirmed user and returns Supabase access and refresh tokens. Send credentials only over HTTPS and store refresh tokens securely.
-- `GET /auth/me` verifies a `Bearer` access token with Supabase and returns the authenticated user ID; missing or invalid tokens receive 401.
+- `GET /auth/me` verifies a `Bearer` access token with Supabase and returns the authenticated user ID and role; missing or invalid tokens receive 401.
+- Authorisation roles come only from Supabase `app_metadata.role`. User-editable `user_metadata` is deliberately ignored for access control.
 
 The previous in-memory user store and local password hashing have been removed to avoid maintaining a second authentication source.
 
