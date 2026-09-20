@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from supabase_auth.errors import AuthApiError, AuthUnknownError
 
 from app.integrations import get_supabase_client
-from app.main import app
+from app.main import app, get_admin_client
 
 
 @pytest.fixture
@@ -15,6 +15,14 @@ def supabase() -> Iterator[Mock]:
     supabase = Mock()
     app.dependency_overrides[get_supabase_client] = lambda: supabase
     yield supabase
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def admin() -> Iterator[Mock]:
+    admin_client = Mock()
+    app.dependency_overrides[get_admin_client] = lambda: admin_client
+    yield admin_client
     app.dependency_overrides.clear()
 
 
@@ -162,7 +170,11 @@ def test_current_user_verifies_supabase_access_token(
     client: TestClient, supabase: Mock
 ) -> None:
     supabase.auth.get_user.return_value = SimpleNamespace(
-        user=SimpleNamespace(id="user-id", email="member@example.com")
+        user=SimpleNamespace(
+            id="user-id",
+            email="member@example.com",
+            app_metadata={"role": "technical_support"},
+        )
     )
 
     response = client.get("/auth/me", headers={"Authorization": "Bearer access-token"})
@@ -172,26 +184,167 @@ def test_current_user_verifies_supabase_access_token(
     assert response.json() == {
         "id": "user-id",
         "email": "member@example.com",
-        "role": None,
+        "role": "technical_support",
     }
     supabase.auth.get_user.assert_called_once_with("access-token")
 
 
-def test_current_user_returns_role_from_app_metadata(
-    client: TestClient, supabase: Mock
+@pytest.mark.parametrize("app_metadata", [{}, None])
+def test_current_user_defaults_role_to_event_coordinator(
+    client: TestClient, supabase: Mock, app_metadata: dict | None
 ) -> None:
     supabase.auth.get_user.return_value = SimpleNamespace(
         user=SimpleNamespace(
-            id="user-id",
-            email="ops@example.com",
-            app_metadata={"role": "operations_manager"},
+            id="user-id", email="member@example.com", app_metadata=app_metadata
         )
     )
 
     response = client.get("/auth/me", headers={"Authorization": "Bearer access-token"})
 
     assert response.status_code == 200
-    assert response.json()["role"] == "operations_manager"
+    assert response.json()["role"] == "event_coordinator"
+
+
+def test_admin_assigns_role(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="admin-id",
+            email="admin@example.com",
+            app_metadata={"role": "admin"},
+        )
+    )
+    admin.auth.admin.update_user_by_id.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="user-id",
+            email="member@example.com",
+            app_metadata={"role": "technical_support"},
+        )
+    )
+
+    response = client.patch(
+        "/auth/users/user-id/role",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"role": "technical_support"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "user-id",
+        "email": "member@example.com",
+        "role": "technical_support",
+    }
+    admin.auth.admin.update_user_by_id.assert_called_once_with(
+        "user-id", {"app_metadata": {"role": "technical_support"}}
+    )
+
+
+@pytest.mark.parametrize(
+    ("caller_role", "app_metadata"),
+    [
+        ("technical_support", {"role": "technical_support"}),
+        ("event_coordinator", {}),
+        ("event_coordinator", None),
+    ],
+)
+def test_admin_endpoint_requires_admin_role(
+    client: TestClient, supabase: Mock, admin: Mock, caller_role: str, app_metadata
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="user-id", email="member@example.com", app_metadata=app_metadata
+        )
+    )
+
+    response = client.patch(
+        "/auth/users/user-id/role",
+        headers={"Authorization": "Bearer token"},
+        json={"role": "technical_support"},
+    )
+
+    assert response.status_code == 403
+    admin.auth.admin.update_user_by_id.assert_not_called()
+
+
+def test_admin_endpoint_requires_authentication(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    response = client.patch(
+        "/auth/users/user-id/role", json={"role": "technical_support"}
+    )
+
+    assert response.status_code == 401
+    admin.auth.admin.update_user_by_id.assert_not_called()
+
+
+def test_admin_endpoint_rejects_invalid_role(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="admin-id", email="admin@example.com", app_metadata={"role": "admin"}
+        )
+    )
+
+    response = client.patch(
+        "/auth/users/user-id/role",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"role": "superuser"},
+    )
+
+    assert response.status_code == 422
+    admin.auth.admin.update_user_by_id.assert_not_called()
+
+
+def test_admin_endpoint_maps_missing_user(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="admin-id", email="admin@example.com", app_metadata={"role": "admin"}
+        )
+    )
+    admin.auth.admin.update_user_by_id.side_effect = AuthApiError(
+        "user not found", 404, "user_not_found"
+    )
+
+    response = client.patch(
+        "/auth/users/missing-user/role",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"role": "technical_support"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "User not found"}
+
+
+def test_admin_endpoint_returns_503_without_secret_key(
+    client: TestClient,
+    supabase: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test")
+    monkeypatch.delenv("SUPABASE_SECRET_KEY", raising=False)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="admin-id", email="admin@example.com", app_metadata={"role": "admin"}
+        )
+    )
+    try:
+        response = client.patch(
+            "/auth/users/user-id/role",
+            headers={"Authorization": "Bearer admin-token"},
+            json={"role": "technical_support"},
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 503
 
 
 @pytest.mark.parametrize("authorization", [None, "Basic abc", "Bearer ", "Bearer a b"])

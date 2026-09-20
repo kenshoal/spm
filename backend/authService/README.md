@@ -14,6 +14,8 @@ The service is available at `http://localhost:8000`, its health check at `http:/
 
 Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `.env` using the values from your Supabase project settings. Never place a Supabase secret or service-role key in client-facing configuration.
 
+Optionally set `SUPABASE_SECRET_KEY` (service-role key) to enable role assignment. It is used server-side only, never in client-facing configuration.
+
 ## Current authentication setup
 
 - The official Supabase Python SDK is configured from environment variables.
@@ -21,7 +23,9 @@ Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in `.env` using the values fro
 - `POST /auth/register` creates an email/password user through Supabase Auth.
 - Registration returns whether email confirmation is required, but does not expose session tokens.
 - `POST /auth/login` signs in a confirmed user and returns Supabase access and refresh tokens. Send credentials only over HTTPS and store refresh tokens securely.
-- `GET /auth/me` verifies a `Bearer` access token with Supabase and returns the authenticated user ID; missing or invalid tokens receive 401.
+- `GET /auth/me` verifies a `Bearer` access token with Supabase and returns the authenticated user ID and role; missing or invalid tokens receive 401.
+- Roles are read per request from Supabase `app_metadata.role` (never `user_metadata`, which users can self-edit). Without a stored role the caller is treated as `event_coordinator`.
+- `PATCH /auth/users/{user_id}/role` assigns a role (`admin`, `technical_support`, `event_coordinator`, `venue_staff`). The caller must be authenticated with the `admin` role (403 otherwise); requires `SUPABASE_SECRET_KEY` (503 if unset). Role changes take effect immediately — no new token needed.
 
 The previous in-memory user store and local password hashing have been removed to avoid maintaining a second authentication source.
 
