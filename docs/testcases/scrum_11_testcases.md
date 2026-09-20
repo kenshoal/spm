@@ -2,35 +2,48 @@
 
 Last reviewed: 20 September 2026
 
-This catalogue traces the submission increment from its acceptance behavior to
-automated evidence. It covers direct submission of a new form and submission of
-an existing Draft. Coordinator assignment and later operational transitions
-remain outside SCRUM-11.
+This catalogue traces the live Jira acceptance criteria for SCRUM-11 to
+implementation and test evidence. The branch also supports direct submission of
+a complete new form, but Jira defines submission of an existing Draft as the
+required story path. Coordinator assignment remains owned by SCRUM-14.
 
 ## How to run the suites
 
 | Area | Command | Current automated cases |
 | --- | --- | ---: |
-| Event-request service | `cd backend/eventRequestService && .venv/bin/pytest` | 44 |
+| Event-request service | `cd backend/eventRequestService && uv run --extra dev --locked pytest` | 44 |
 | Frontend components and actions | `cd frontend && npm test` | 24 |
 | Frontend browser journeys | `cd frontend && npm run test:e2e` | 4 |
 
-## Acceptance-criterion coverage
+## Acceptance-criterion test matrix
 
-These local criterion IDs reflect the agreed submission scope and should be
-reconciled with the final Jira wording before SCRUM-11 is closed.
+The criterion IDs below follow the acceptance criteria currently recorded in
+Jira SCRUM-11, reviewed on 20 September 2026.
 
-| ID | Acceptance criterion | Automated evidence | Status and limitation |
-| --- | --- | --- | --- |
-| AC1 | An authenticated organiser can submit a complete new form directly. | `test_submit_complete_new_event_request_directly`; `submits a complete new event request directly`; Playwright submission journey | Covered. |
-| AC2 | An authenticated organiser can submit their completed saved Draft without creating a duplicate. | `test_submit_completed_draft`; `submits a completed existing draft` | Covered. |
-| AC3 | Submission requires all nine event-request fields, including explicit requirement text where a category does not apply. | `test_direct_submission_requires_every_form_field`; `test_incomplete_draft_remains_draft_after_rejected_submission`; `requires all submission fields before calling the API` | Covered. |
-| AC4 | Submission changes the persisted state from `Draft` to `Submitted` in one owner-scoped update. | `test_submit_completed_draft`; `test_submit_atomically_scopes_and_changes_status` | Covered at service and Supabase contract layers. |
-| AC5 | A different organiser cannot submit the owner's Draft. | `test_other_organiser_cannot_submit_draft` | Covered. |
-| AC6 | A submitted request cannot be resubmitted, edited or deleted. | `test_submitted_request_is_read_only`; `renders a submitted request as read-only in the list`; Playwright submission journey | Covered. |
-| AC7 | Organisers can see request counts and filter All, Draft, Submitted and Completed. | `shows all request tracking tabs with counts`; Playwright submission journey verifies Submitted | Completed remains empty until the downstream event service exposes completion state. |
-| AC8 | Failed or invalid submission does not move a saved Draft into coordination. | `test_incomplete_draft_remains_draft_after_rejected_submission`; `requires all submission fields before calling the API`; `returns an actionable error when submission cannot reach the API` | Validation and frontend network failure are covered. A live Supabase outage is not exercised by the browser suite. |
-| AC9 | Only a user assigned the Event Organiser role can access event-request operations. | `test_event_request_operations_require_organiser_role`; `allows an authenticated Event Organiser into the event-request workspace`; `redirects a signed-in user without the organiser role`; Playwright role-gate journey | Covered at the backend API and frontend route boundaries. The trusted role is read from Supabase `app_metadata`, not user-editable metadata. |
+| ID | Purpose | Preconditions and input | Action | Expected result and forbidden side effects | Layer and automated evidence | Status / limitation |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC1 | Prevent unauthorised submission of another organiser's work or a non-Draft request. | Organiser A is authenticated; the target is either A's Draft, organiser B's Draft or already Submitted. | Attempt submission for each target. | Only A's Draft can move to `Submitted`; another owner's request returns `404`, and a non-Draft mutation returns `409` without changing stored data. | API component: `test_other_organiser_cannot_submit_draft`, `test_submitted_request_is_read_only`; repository contract: `test_submit_atomically_scopes_and_changes_status`. | Covered. |
+| AC2 | Enforce Jira's nine-field submission minimum while allowing explicit requirement placeholders. | A Draft has event name, purpose, description, at least one aware date/time, positive attendance and all four requirement fields; missing-field variants omit each field. | Attempt submission of the complete and incomplete variants. | The complete request is accepted; every missing field is reported and no incomplete submission reaches persistence. Requirement text may record a real need or `Not required` / `Not known yet`. | API component: `test_direct_submission_requires_every_form_field`, `test_submission_requires_timezone_aware_dates`; frontend action: `requires all submission fields before calling the API`. | Covered for presence and data shape. The UI does not restrict placeholder wording because free-text requirements are valid. |
+| AC3 | Keep expected attendance as one event-level value for later venue checks. | A valid request supplies one positive integer attendance value. | Save and submit the request. | `expected_attendance` round-trips as one top-level field and is not duplicated within `venue_requirements`. | Model and API coverage: `test_submit_completed_draft`, `test_rejects_invalid_expected_attendance`; browser submission journey. | Covered by the schema and request model. |
+| AC4 | Keep an invalid submission editable and free of downstream side effects. | The organiser owns an incomplete Draft. | Attempt submission. | Submission is refused, all missing items are identified and the request remains an editable `Draft`; no assignment, notification or submission event is created. | API component: `test_incomplete_draft_remains_draft_after_rejected_submission`; frontend actions: `requires all submission fields before calling the API`, `returns an actionable error when submission cannot reach the API`. | Partially covered: Draft retention and validation are tested, and no assignment integration exists. Submission-event absence cannot be asserted until the event mechanism exists. |
+| AC5 | Preserve saved values while moving one Draft to Submitted. | The authenticated organiser owns one complete Draft. | Submit the reopened Draft. | The same request ID and values are preserved, status becomes `Submitted`, and the row count remains one. | API component: `test_submit_completed_draft`; repository contract: `test_submit_atomically_scopes_and_changes_status`; frontend action: `submits a completed existing draft`. | Covered. |
+| AC6 | Expose an unassigned submission to the Event Operations Manager without requiring a per-submission manager notification. | A request has just reached `Submitted` and no coordinator is assigned. | The Operations Manager opens their awaiting-assignment view or API. | The request appears as awaiting assignment; no coordinator is implied and no manager notification is required. | No automated evidence. The current controller rejects `operations_manager`, and the migration grants only organiser-owned visibility. | **Missing implementation and test.** |
+| AC7 | Keep coordinator responsibility empty until SCRUM-14 performs assignment. | A request is Submitted and unassigned. | Inspect its coordination ownership before and after the future SCRUM-14 assignment flow. | No coordinator is responsible before assignment; after SCRUM-14, only the assigned coordinator gains review access. | Domain boundary documentation and absence of coordinator fields in `event_requests`. | Pre-assignment boundary is covered; post-assignment behavior is an explicit SCRUM-14 dependency. |
+| AC8 | Let the responsible organiser view status while preventing direct edits after submission. | The organiser owns a `Submitted` request. | View it, then attempt update, resubmission and deletion. | Viewing succeeds; all mutations return `409`, original values remain and the UI exposes view controls only. | API component: `test_submitted_request_is_read_only`; component: `renders a submitted request as read-only in the list`; browser submission journey. | Covered. |
+| AC9 | Raise exactly one successful-submission event and none for failed attempts. | One complete Draft and one incomplete Draft exist. | Submit each request once. | Successful submission atomically records or publishes one submission event for the organiser notification workflow; failed submission records or publishes none. | No event publisher, outbox or submission-event table exists in the current service or migration. | **Missing implementation and test.** |
+
+## Latest verification
+
+Run on 20 September 2026 against commit `d86dde6` plus this documentation
+update:
+
+- Event-request service: 44 passed; two dependency deprecation warnings.
+- Frontend lint: passed.
+- Frontend type checking: passed.
+- Frontend component and action tests: 24 passed.
+- Playwright Chromium journeys and production build: 4 passed.
+- Docker health check: not rerun in this audit because Docker Desktop was not
+  running; the previous branch verification had all four containers healthy.
 
 ## Submission tests
 
