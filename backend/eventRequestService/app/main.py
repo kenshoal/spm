@@ -5,6 +5,7 @@ from app.controllers.coordinator_assignment_controller import (
     router as coordinator_assignment_router,
 )
 from app.controllers.event_request_controller import router as event_request_router
+from app.controllers.event_review_controller import router as event_review_router
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.repositories.coordinator_assignment_repository import (
@@ -18,6 +19,12 @@ from app.services.coordinator_assignment_service import (
 from app.services.event_request_service import (
     EventRequestNotFoundError,
     EventRequestService,
+    EventRequestTransitionConflictError,
+)
+from app.services.event_review_service import (
+    EventReviewService,
+    ReviewForbiddenError,
+    ReviewNotAllowedError,
 )
 
 
@@ -33,14 +40,22 @@ def create_app(
     event_request_service = (
         EventRequestService(repository) if repository is not None else None
     )
-    application.state.event_request_service = event_request_service
-    application.state.coordinator_assignment_service = (
+    coordinator_assignment_service = (
         CoordinatorAssignmentService(coordinator_repository, event_request_service)
         if coordinator_repository is not None and event_request_service is not None
         else None
     )
+    application.state.event_request_service = event_request_service
+    application.state.coordinator_assignment_service = coordinator_assignment_service
+    application.state.event_review_service = (
+        EventReviewService(event_request_service, coordinator_assignment_service)
+        if event_request_service is not None
+        and coordinator_assignment_service is not None
+        else None
+    )
     application.include_router(event_request_router)
     application.include_router(coordinator_assignment_router)
+    application.include_router(event_review_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(
@@ -66,6 +81,33 @@ def create_app(
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(EventRequestTransitionConflictError)
+    async def event_request_transition_conflict(
+        request: Request, error: EventRequestTransitionConflictError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(ReviewNotAllowedError)
+    async def review_not_allowed(
+        request: Request, error: ReviewNotAllowedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(ReviewForbiddenError)
+    async def review_forbidden(
+        request: Request, error: ReviewForbiddenError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": str(error)},
         )
 

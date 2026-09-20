@@ -25,6 +25,15 @@ class FakeEventRequestRepository(_BaseFakeEventRequestRepository):
         row = self.rows.get(event_request_id)
         return dict(row) if row is not None else None
 
+    def update_status(
+        self, event_request_id: str, from_status: str, to_status: str
+    ) -> dict[str, Any] | None:
+        row = self.rows.get(event_request_id)
+        if row is None or row["status"] != from_status:
+            return None
+        row["status"] = to_status
+        return dict(row)
+
 
 class FakeCoordinatorAssignmentRepository:
     def __init__(self) -> None:

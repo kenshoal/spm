@@ -18,6 +18,10 @@ class EventRequestRepository(Protocol):
 
     def get_by_id(self, event_request_id: str) -> dict[str, Any] | None: ...
 
+    def update_status(
+        self, event_request_id: str, from_status: str, to_status: str
+    ) -> dict[str, Any] | None: ...
+
     def update_for_temporary_organiser(
         self,
         event_request_id: str,
@@ -107,6 +111,25 @@ class SupabaseEventRequestRepository:
                 "select": "*",
                 "limit": "1",
             },
+        )
+        return rows[0] if rows else None
+
+    def update_status(
+        self, event_request_id: str, from_status: str, to_status: str
+    ) -> dict[str, Any] | None:
+        """Scoped to from_status, like every other write here is scoped to
+        an expected current state — a concurrent transition away from
+        from_status makes this a no-op (returns None) rather than clobbering
+        whatever the row became."""
+        rows = self._request(
+            "PATCH",
+            json={"status": to_status},
+            params={
+                "id": f"eq.{event_request_id}",
+                "status": f"eq.{from_status}",
+                "select": "*",
+            },
+            headers={"Prefer": "return=representation"},
         )
         return rows[0] if rows else None
 
