@@ -32,6 +32,11 @@ as `None`.
 
 ## Run locally on macOS/Linux
 
+The standard project workflow is to run `docker compose up --build -d` from
+the repository root. This exposes eventRequestService on
+`http://localhost:8003`. Use the commands below only when developing this
+service by itself.
+
 Python 3.11 or newer is required.
 
 ```bash

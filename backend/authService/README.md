@@ -4,6 +4,10 @@ FastAPI authentication microservice scaffold backed by Supabase Auth.
 
 ## Run locally
 
+The standard project workflow is to run `docker compose up --build -d` from
+the repository root. This exposes authService on `http://localhost:8001`.
+Use the commands below only when developing this service by itself.
+
 ```powershell
 uv sync --extra dev --locked
 Copy-Item .env.example .env

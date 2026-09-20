@@ -21,6 +21,10 @@ calendar / venue-blocking stories.
 
 ## Run locally
 
+The standard project workflow is to run `docker compose up --build -d` from
+the repository root. This exposes venueService on `http://localhost:8004`.
+Use the commands below only when developing this service by itself.
+
 ```powershell
 python -m venv .venv
 ./.venv/Scripts/Activate.ps1
