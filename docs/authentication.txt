@@ -1,0 +1,99 @@
+# Manual auth test guide (SCRUM-16 / SCRUM-45 role-based access)
+
+Ports: authService 8001 | equipmentService 8002
+
+## 0. Setup
+
+1. Root `.env` has SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY.
+2. In Supabase → SQL Editor, bootstrap roles (dashboard raw_app_meta_data is read-only):
+
+   update auth.users
+   set raw_app_meta_data = raw_app_meta_data || '{"role": "admin"}'::jsonb
+   where email = 'admin@example.com';
+
+   -- repeat with '{"role": "technical_support"}'::jsonb for staff@example.com
+   -- leave coordinator@example.com untouched (defaults to event_coordinator)
+
+3. Start the stack and wait for healthy:  docker compose up --build -d
+
+## 1. Get bearer tokens (one per role)
+
+docker compose exec auth-service curl -s -X POST localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"PASSWORD"}'
+
+Copy "access_token" from the response, then export it:
+
+export ADMIN="<access_token>"
+export STAFF="<staff access_token>"
+export COORD="<coordinator access_token>"
+
+Sanity check (shows id, email, role):
+
+curl -s localhost:8001/auth/me -H "Authorization: Bearer $STAFF"
+
+## 2. Read access (any authenticated user)
+
+curl -s localhost:8002/equipment -H "Authorization: Bearer $COORD"          # 200
+curl -s localhost:8002/equipment                                            # 401
+curl -s localhost:8002/equipment -H "Authorization: Basic abc"              # 401
+curl -s localhost:8002/equipment/<equipment_id>/status -H "Authorization: Bearer $COORD"   # 200
+
+## 3. Mutations blocked for event_coordinator
+
+curl -s -X POST localhost:8002/equipment -H "Authorization: Bearer $COORD" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"Speaker","total_owned_quantity":4,"home_location":"Store Room B"}'   # 403
+
+curl -s -X PATCH localhost:8002/equipment/<id>/quantity -H "Authorization: Bearer $COORD" \
+  -H "Content-Type: application/json" -d '{"total_owned_quantity": 6}'       # 403
+
+curl -s -X PATCH localhost:8002/equipment/<id>/status -H "Authorization: Bearer $COORD" \
+  -H "Content-Type: application/json" -d '{"new_status":"DAMAGED"}'          # 403
+
+## 4. Mutations allowed for technical_support
+
+curl -s -X POST localhost:8002/equipment -H "Authorization: Bearer $STAFF" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"Speaker","total_owned_quantity":4,"home_location":"Store Room B"}'   # 201, created_by = staff id
+
+curl -s -X PATCH localhost:8002/equipment/<id>/quantity -H "Authorization: Bearer $STAFF" \
+  -H "Content-Type: application/json" -d '{"total_owned_quantity": 6}'       # 200
+
+curl -s -X PATCH localhost:8002/equipment/<id>/status -H "Authorization: Bearer $STAFF" \
+  -H "Content-Type: application/json" -d '{"new_status":"DAMAGED","reason":"test"}'  # 200, changed_by = staff id
+
+curl -s localhost:8002/equipment/<id>/status/history -H "Authorization: Bearer $STAFF"  # 200, newest first
+
+## 5. Role assignment (admin only)
+
+curl -s -X PATCH localhost:8001/auth/users/<target_user_id>/role \
+  -H "Authorization: Bearer $COORD" -H "Content-Type: application/json" \
+  -d '{"role":"technical_support"}'                                          # 403 (not admin)
+
+curl -s -X PATCH localhost:8001/auth/users/<target_user_id>/role \
+  -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{"role":"superuser"}'                                                  # 422 (invalid role)
+
+curl -s -X PATCH localhost:8001/auth/users/<target_user_id>/role \
+  -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{"role":"technical_support"}'                                          # 200
+
+Target user_id comes from their /auth/me response (or Supabase dashboard user list).
+
+## 6. Role change applies without re-login
+
+Right after step 5 promotes the target user, THEIR OLD token works immediately:
+
+curl -s localhost:8001/auth/me -H "Authorization: Bearer <their old token>"  # role: technical_support
+curl -s -X POST localhost:8002/equipment -H "Authorization: Bearer <their old token>" -H \
+  "Content-Type: application/json" -d '{"type":"Mic","total_owned_quantity":1,"home_location":"A"}'  # 201
+
+Demote them back (role "event_coordinator") and the same token gets 403 again.
+
+## 7. authService down -> clean degradation
+
+docker compose stop auth-service
+curl -s localhost:8002/equipment -H "Authorization: Bearer $COORD"           # 502
+docker compose start auth-service
+curl -s localhost:8002/equipment -H "Authorization: Bearer $COORD"           # 200 again

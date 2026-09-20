@@ -88,7 +88,7 @@ test("submits a complete new event request directly", async () => {
   );
   expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "POST" });
   expect(navigation.redirect).toHaveBeenCalledWith(
-    "/event-requests?status=in-progress",
+    "/event-requests?status=submitted",
   );
 });
 
@@ -112,7 +112,7 @@ test("submits a completed existing draft", async () => {
     proposed_date_times: ["2026-10-20T02:00:00.000Z"],
   });
   expect(navigation.redirect).toHaveBeenCalledWith(
-    "/event-requests?status=in-progress",
+    "/event-requests?status=submitted",
   );
 });
 

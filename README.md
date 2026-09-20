@@ -45,7 +45,7 @@ Submission coverage for SCRUM-11 is documented in
 | Service | Technology | Local port | Purpose |
 | --- | --- | --- | --- |
 | `authService` | FastAPI | `8001` | Registration, login and session verification |
-| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Editable event-request drafts |
+| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event-request draft and submission workflow |
 
 Start the services with Docker Compose:
 

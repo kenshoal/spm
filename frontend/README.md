@@ -1,6 +1,6 @@
 This is the ConnectSphere organiser frontend. An authenticated organiser can
 save incomplete drafts, submit a complete new request or saved draft, and track
-requests using All, Draft, In progress and Completed tabs. Submitted requests
+requests using All, Draft, Submitted and Completed tabs. Submitted requests
 are read-only.
 
 ## Getting Started

@@ -28,7 +28,7 @@ reconciled with the final Jira wording before SCRUM-11 is closed.
 | AC4 | Submission changes the persisted state from `Draft` to `Submitted` in one owner-scoped update. | `test_submit_completed_draft`; `test_submit_atomically_scopes_and_changes_status` | Covered at service and Supabase contract layers. |
 | AC5 | A different organiser cannot submit the owner's Draft. | `test_other_organiser_cannot_submit_draft` | Covered. |
 | AC6 | A submitted request cannot be resubmitted, edited or deleted. | `test_submitted_request_is_read_only`; `renders a submitted request as read-only in the list`; Playwright submission journey | Covered. |
-| AC7 | Organisers can see request counts and filter All, Draft, In progress and Completed. | `shows all request tracking tabs with counts`; Playwright submission journey verifies In progress | Completed remains empty until the downstream event service exposes completion state. |
+| AC7 | Organisers can see request counts and filter All, Draft, Submitted and Completed. | `shows all request tracking tabs with counts`; Playwright submission journey verifies Submitted | Completed remains empty until the downstream event service exposes completion state. |
 | AC8 | Failed or invalid submission does not move a saved Draft into coordination. | `test_incomplete_draft_remains_draft_after_rejected_submission`; `requires all submission fields before calling the API`; `returns an actionable error when submission cannot reach the API` | Validation and frontend network failure are covered. A live Supabase outage is not exercised by the browser suite. |
 | AC9 | Only a user assigned the Event Organiser role can access event-request operations. | `test_event_request_operations_require_organiser_role`; `allows an authenticated Event Organiser into the event-request workspace`; `redirects a signed-in user without the organiser role`; Playwright role-gate journey | Covered at the backend API and frontend route boundaries. The trusted role is read from Supabase `app_metadata`, not user-editable metadata. |
 
@@ -81,7 +81,7 @@ Source: `frontend/e2e/home.spec.ts`
 
 | Test | Purpose |
 | --- | --- |
-| `organiser can submit a complete new event request` | Verifies login, complete form submission, In progress visibility and the read-only detail view through the browser. |
+| `organiser can submit a complete new event request` | Verifies login, complete form submission, Submitted visibility and the read-only detail view through the browser. |
 | `event-request pages require the Event Organiser role` | Verifies a valid signed-in user with a non-organiser role is redirected to the access explanation page. |
 
 ## Explicitly deferred

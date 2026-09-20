@@ -5,7 +5,7 @@ import { AppShell } from "../components/app-shell";
 import { RequestList } from "./request-list";
 import { RequestTabs, type RequestFilter } from "./request-tabs";
 
-const validFilters = new Set<RequestFilter>(["all", "draft", "in-progress", "completed"]);
+const validFilters = new Set<RequestFilter>(["all", "draft", "submitted", "completed"]);
 
 async function RequestData({
   searchParams,
@@ -31,23 +31,23 @@ async function RequestData({
   const drafts = result.requests.filter((request) => request.status === "Draft");
   // Completion is owned by eventService and stays empty until that integration exists.
   const completed: typeof result.requests = [];
-  const inProgress = result.requests.filter((request) => request.status === "Submitted");
+  const submitted = result.requests.filter((request) => request.status === "Submitted");
   const groups = {
     all: result.requests,
     draft: drafts,
-    "in-progress": inProgress,
+    submitted,
     completed,
   };
   const emptyMessages: Record<RequestFilter, string> = {
     all: "Create an event request to get started.",
     draft: "Your saved drafts will appear here.",
-    "in-progress": "Submitted requests will appear here.",
+    submitted: "Submitted requests will appear here.",
     completed: "Completed events will appear here after coordination finishes.",
   };
   const counts = {
     all: result.requests.length,
     draft: drafts.length,
-    "in-progress": inProgress.length,
+    submitted: submitted.length,
     completed: completed.length,
   };
   return (

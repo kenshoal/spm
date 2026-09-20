@@ -1,11 +1,11 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from supabase import Client
 from supabase_auth.errors import AuthApiError, AuthError
 
-from app.integrations import get_supabase_client
+from app.integrations import get_supabase_admin_client, get_supabase_client
 
 
 class ServiceResponse(BaseModel):
@@ -44,7 +44,29 @@ class LoginResponse(BaseModel):
 class AuthenticatedUser(BaseModel):
     id: str
     email: str | None
-    role: str | None
+    role: str
+
+
+Role = Literal[
+    "admin",
+    "organiser",
+    "technical_support",
+    "event_coordinator",
+    "venue_staff",
+]
+
+DEFAULT_ROLE = "event_coordinator"
+ADMIN_ROLE = "admin"
+
+
+class RoleUpdateRequest(BaseModel):
+    role: Role
+
+
+class RoleUpdateResponse(BaseModel):
+    id: str
+    email: str | None
+    role: str
 
 
 app = FastAPI(
@@ -144,12 +166,7 @@ def login(
     return LoginResponse.model_validate(auth_response.session, from_attributes=True)
 
 
-@app.get("/auth/me", response_model=AuthenticatedUser, tags=["auth"])
-def current_user(
-    supabase: Annotated[Client, Depends(get_supabase_client)],
-    response: Response,
-    authorization: Annotated[str | None, Header()] = None,
-) -> AuthenticatedUser:
+def _verify_bearer(supabase: Client, authorization: str | None):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
     token = authorization.removeprefix("Bearer ").strip()
@@ -170,11 +187,79 @@ def current_user(
         ) from error
     if auth_response.user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
+    return auth_response.user
+
+
+def _role_of(user) -> str:
+    return (user.app_metadata or {}).get("role", DEFAULT_ROLE)
+
+
+def get_admin_client() -> Client:
+    try:
+        return get_supabase_admin_client()
+    except ValueError as error:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Role assignment is not configured"
+        ) from error
+
+
+@app.get("/auth/me", response_model=AuthenticatedUser, tags=["auth"])
+def current_user(
+    supabase: Annotated[Client, Depends(get_supabase_client)],
+    response: Response,
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthenticatedUser:
+    user = _verify_bearer(supabase, authorization)
     response.headers["Cache-Control"] = "no-store"
-    app_metadata = auth_response.user.app_metadata or {}
-    role = app_metadata.get("role")
     return AuthenticatedUser(
-        id=auth_response.user.id,
-        email=auth_response.user.email,
-        role=role if isinstance(role, str) else None,
+        id=user.id, email=user.email, role=_role_of(user)
+    )
+
+
+@app.patch(
+    "/auth/users/{user_id}/role",
+    response_model=RoleUpdateResponse,
+    tags=["auth"],
+)
+def update_user_role(
+    user_id: str,
+    payload: RoleUpdateRequest,
+    supabase: Annotated[Client, Depends(get_supabase_client)],
+    admin_client: Annotated[Client, Depends(get_admin_client)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> RoleUpdateResponse:
+    caller = _verify_bearer(supabase, authorization)
+    if _role_of(caller) != ADMIN_ROLE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Insufficient permissions"
+        )
+
+    try:
+        response = admin_client.auth.admin.update_user_by_id(
+            user_id, {"app_metadata": {"role": payload.role}}
+        )
+    except AuthApiError as error:
+        if error.status == status.HTTP_404_NOT_FOUND:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "User not found"
+            ) from error
+        if 400 <= error.status < 500:
+            raise HTTPException(error.status, error.message) from error
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
+        ) from error
+    except AuthError as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
+        ) from error
+    if response.user is None:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Authentication provider returned no user",
+        )
+
+    return RoleUpdateResponse(
+        id=response.user.id,
+        email=response.user.email,
+        role=(response.user.app_metadata or {}).get("role", payload.role),
     )

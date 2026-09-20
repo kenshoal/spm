@@ -1,11 +1,11 @@
 import Link from "next/link";
 
-export type RequestFilter = "all" | "draft" | "in-progress" | "completed";
+export type RequestFilter = "all" | "draft" | "submitted" | "completed";
 
 const tabs: Array<{ value: RequestFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "draft", label: "Draft" },
-  { value: "in-progress", label: "In progress" },
+  { value: "submitted", label: "Submitted" },
   { value: "completed", label: "Completed" },
 ];
 

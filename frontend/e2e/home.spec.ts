@@ -71,7 +71,7 @@ test("organiser can submit a complete new event request", async ({ page }) => {
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Submit request" }).click();
 
-  await expect(page).toHaveURL(/\/event-requests\?status=in-progress$/);
+  await expect(page).toHaveURL(/\/event-requests\?status=submitted$/);
   await expect(page.getByText("Submitted Community Workshop")).toBeVisible();
   await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: /view request/i }).click();

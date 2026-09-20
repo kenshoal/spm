@@ -118,7 +118,7 @@ async function submitEventRequest(
   }
 
   revalidatePath("/event-requests");
-  redirect("/event-requests?status=in-progress");
+  redirect("/event-requests?status=submitted");
 }
 
 export async function createEventRequest(
