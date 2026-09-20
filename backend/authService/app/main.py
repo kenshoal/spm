@@ -47,7 +47,9 @@ class AuthenticatedUser(BaseModel):
     role: str
 
 
-Role = Literal["admin", "technical_support", "event_coordinator", "venue_staff"]
+Role = Literal[
+    "admin", "technical_support", "event_coordinator", "venue_staff", "operations_manager"
+]
 
 DEFAULT_ROLE = "event_coordinator"
 ADMIN_ROLE = "admin"
