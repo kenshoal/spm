@@ -1,7 +1,36 @@
 services:
+  event-request-service:
+    build:
+      context: ./backend/eventRequestService
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    ports:
+      - "8003:8000"
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8000
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health').read()
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   auth-service:
     build:
       context: ./backend/authService
+    environment:
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
     ports:
       - "8001:8000"
     healthcheck:
@@ -16,11 +45,36 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+
+  equipment-service:
+    build:
+      context: ./backend/equipmentService
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    ports:
+      - "8002:8000"
+    env_file: .env
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8000
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health').read()
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   venue-service:
     build:
       context: ./backend/venueService
     ports:
-      - "8002:8000"
+      - "8004:8000"
     healthcheck:
       test:
         - CMD
