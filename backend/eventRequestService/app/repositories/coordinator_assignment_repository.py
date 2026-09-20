@@ -1,0 +1,89 @@
+from typing import Any, Protocol
+
+import httpx
+
+from app.config import Settings
+from app.repositories.event_request_repository import SupabaseRepositoryError
+
+
+class CoordinatorAssignmentRepository(Protocol):
+    def create(self, values: dict[str, Any]) -> dict[str, Any]: ...
+
+    def latest_for_event_request(
+        self, event_request_id: str
+    ) -> dict[str, Any] | None: ...
+
+
+class SupabaseCoordinatorAssignmentRepository:
+    """Persists Coordinator assignments through Supabase's Data API.
+
+    Every assignment is inserted as a new row rather than updating one in
+    place, so `latest_for_event_request` — ordered by the autoincrementing
+    `id`, not `assigned_at` (server-clock resolution isn't reliable enough to
+    order two assignments made in quick succession) — is what "current
+    assignment" means; the full history stays queryable.
+    """
+
+    def __init__(
+        self,
+        supabase_url: str,
+        secret_key: str,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        headers = {"apikey": secret_key}
+        # Legacy service-role keys are JWTs; new sb_secret keys use apikey only.
+        if not secret_key.startswith("sb_secret_"):
+            headers["Authorization"] = f"Bearer {secret_key}"
+        self._client = httpx.Client(
+            base_url=f"{supabase_url.rstrip('/')}/rest/v1",
+            headers=headers,
+            timeout=10,
+            transport=transport,
+        )
+
+    @classmethod
+    def from_settings(
+        cls, settings: Settings
+    ) -> "SupabaseCoordinatorAssignmentRepository":
+        return cls(
+            str(settings.supabase_url),
+            settings.supabase_secret_key.get_secret_value(),
+        )
+
+    def create(self, values: dict[str, Any]) -> dict[str, Any]:
+        rows = self._request(
+            "POST",
+            json=values,
+            params={"select": "*"},
+            headers={"Prefer": "return=representation"},
+        )
+        return rows[0]
+
+    def latest_for_event_request(
+        self, event_request_id: str
+    ) -> dict[str, Any] | None:
+        rows = self._request(
+            "GET",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "id.desc",
+                "select": "*",
+                "limit": "1",
+            },
+        )
+        return rows[0] if rows else None
+
+    def _request(self, method: str, **kwargs: Any) -> list[dict[str, Any]]:
+        try:
+            response = self._client.request(
+                method, "/event_coordinator_assignments", **kwargs
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the coordinator assignment operation"
+            ) from error
+        return response.json()
+
+    def close(self) -> None:
+        self._client.close()

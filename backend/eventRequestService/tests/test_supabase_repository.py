@@ -117,6 +117,46 @@ def test_update_scopes_query_to_owner_and_draft_status() -> None:
     assert captured["body"] == {"event_name": "Updated"}
 
 
+# Purpose: Confirms a status transition is scoped to the expected current status,
+# so a concurrent change makes it a no-op rather than clobbering the row.
+def test_update_status_scopes_query_to_from_status() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.method
+        captured["query"] = dict(request.url.params)
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=[response_row(status="Under Review")])
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    row = repository.update_status("request-1", "Submitted", "Under Review")
+
+    assert captured["method"] == "PATCH"
+    assert captured["query"] == {
+        "id": "eq.request-1",
+        "status": "eq.Submitted",
+        "select": "*",
+    }
+    assert captured["body"] == {"status": "Under Review"}
+    assert row is not None
+    assert row["status"] == "Under Review"
+
+
+# Purpose: A row not currently in from_status means no rows match — a no-op, not an error.
+def test_update_status_returns_none_when_not_in_from_status() -> None:
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=[])),
+    )
+
+    assert repository.update_status("request-1", "Submitted", "Under Review") is None
+
+
 # Purpose: Prevents deletion of a request unless its ID, owner, and Draft status all match.
 def test_delete_scopes_query_to_owner_and_draft_status() -> None:
     captured: dict[str, object] = {}

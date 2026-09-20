@@ -43,7 +43,7 @@ Authentication coverage for SCRUM-26 is documented in
 | Service | Technology | Local port | Purpose |
 | --- | --- | --- | --- |
 | `authService` | FastAPI | `8001` | Registration, login and session verification |
-| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Editable event-request drafts |
+| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event-request drafts, status, and coordinator assignment |
 
 Start the services with Docker Compose:
 

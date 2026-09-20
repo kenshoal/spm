@@ -240,6 +240,37 @@ def test_admin_assigns_role(
     )
 
 
+# Purpose: operations_manager was added to the Role literal after Coordinator
+# assignment (eventRequestService) needed it — confirms it's assignable
+# through the real endpoint, not just directly via the Admin API.
+def test_admin_assigns_operations_manager_role(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="admin-id",
+            email="admin@example.com",
+            app_metadata={"role": "admin"},
+        )
+    )
+    admin.auth.admin.update_user_by_id.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="user-id",
+            email="ops@example.com",
+            app_metadata={"role": "operations_manager"},
+        )
+    )
+
+    response = client.patch(
+        "/auth/users/user-id/role",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"role": "operations_manager"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["role"] == "operations_manager"
+
+
 @pytest.mark.parametrize(
     ("caller_role", "app_metadata"),
     [
