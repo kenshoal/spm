@@ -99,6 +99,21 @@ def test_assign_coordinator_to_submitted_request() -> None:
     assert response.json()["assigned_by"] == "ops-1"
 
 
+# Purpose: Confirms assignment alone doesn't change the event request's status (AC:
+# "remains Submitted") — assignment and status are owned by separate tables/services.
+def test_assign_coordinator_does_not_change_event_request_status() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        event_request_id = submit_event_request(event_requests)
+        client.post(
+            f"/event-requests/{event_request_id}/coordinator",
+            headers=headers(),
+            json={"coordinator_id": "coord-1"},
+        )
+
+    assert event_requests.rows[event_request_id]["status"] == "Submitted"
+
+
 # Purpose: Refuses assignment before the request has been submitted.
 def test_assign_coordinator_refused_before_submission() -> None:
     event_requests = FakeEventRequestRepository()
