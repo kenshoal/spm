@@ -178,6 +178,24 @@ def test_create_equipment(client: TestClient, fake_client, auth_staff) -> None:
     ]
 
 
+def test_create_equipment_allows_matching_role_in_roles_list(
+    client: TestClient, fake_client, auth_manager_staff
+) -> None:
+    fake_client.rpc_result = dict(EQUIPMENT_ROW)
+
+    response = client.post(
+        "/equipment",
+        headers=bearer(),
+        json={
+            "type": "Speaker",
+            "total_owned_quantity": 4,
+            "home_location": "Store Room B",
+        },
+    )
+
+    assert response.status_code == 201
+
+
 def test_create_equipment_negative_quantity(
     client: TestClient, auth_staff
 ) -> None:

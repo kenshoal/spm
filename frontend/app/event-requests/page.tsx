@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { requireRole } from "@/lib/auth";
 import { listEventRequests } from "@/lib/event-requests";
 import { AppShell } from "../components/app-shell";
 import { RequestList } from "./request-list";
@@ -62,11 +63,12 @@ function ListLoading() {
   return <div aria-label="Loading event requests" className="space-y-3">{[1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" />)}</div>;
 }
 
-export default function EventRequestsPage({
+export default async function EventRequestsPage({
   searchParams,
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
+  await requireRole("event_organiser");
   return (
     <AppShell signedIn>
       <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">

@@ -16,7 +16,7 @@ from app.repositories import SupabaseEventRequestRepository
 from app.services.event_request_service import EventRequestService
 
 router = APIRouter(prefix="/event-requests", tags=["event requests"])
-ORGANISER_ROLE = "organiser"
+EVENT_ORGANISER_ROLE = "event_organiser"
 
 
 def get_event_request_service(request: Request) -> EventRequestService:
@@ -71,18 +71,21 @@ def get_organiser_id(
             status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
         )
     try:
-        authenticated_user = response.json()
-        organiser_id = str(UUID(authenticated_user["id"]))
+        user = response.json()
+        roles = user.get("roles") or [user["role"]]
+        if not isinstance(roles, list) or not all(
+            isinstance(role, str) for role in roles
+        ):
+            raise TypeError
+        if EVENT_ORGANISER_ROLE not in roles:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Insufficient permissions"
+            )
+        return str(UUID(user["id"]))
     except (ValueError, KeyError, TypeError) as error:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Authentication service returned no user"
         ) from error
-    if authenticated_user.get("role") != ORGANISER_ROLE:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Event Organiser role required",
-        )
-    return organiser_id
 
 
 ServiceDependency = Annotated[EventRequestService, Depends(get_event_request_service)]

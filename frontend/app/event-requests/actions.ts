@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAccessToken } from "@/lib/auth";
+import { requireAccessToken, requireRole } from "@/lib/auth";
 
 export interface EventRequestFormState {
   message?: string;
@@ -130,6 +130,7 @@ export async function createEventRequest(
     return { message: "Check the highlighted fields.", errors };
   }
 
+  await requireRole("event_organiser");
   const token = await requireAccessToken();
   const response = await fetch(`${apiUrl}/event-requests`, {
     method: "POST",
@@ -158,6 +159,7 @@ export async function updateEventRequest(
     return { message: "Check the highlighted fields.", errors };
   }
 
+  await requireRole("event_organiser");
   const token = await requireAccessToken();
   const response = await fetch(
     `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}`,
@@ -211,6 +213,7 @@ export async function deleteEventRequest(
   void previousState;
   void formData;
 
+  await requireRole("event_organiser");
   const token = await requireAccessToken();
   let response: Response;
   try {

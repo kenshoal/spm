@@ -11,8 +11,8 @@ FastAPI microservice for the venue catalogue and venue search / filtering.
 
 Storage is an in-memory repository (`app/repository.py`) — a scaffold to be
 replaced with a persistent backend once the project's database infrastructure
-lands. Authorisation dependencies in `app/dependencies.py` are stubs pending
-integration with `authService`.
+lands. All routes verify the bearer token with `authService`; create and update
+operations require the `venue_staff` role.
 
 `GET /venues/search` accepts a `date` parameter but does not yet evaluate
 per-date availability; a venue is excluded only when its whole-venue `status`

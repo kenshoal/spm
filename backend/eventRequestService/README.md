@@ -16,7 +16,8 @@ drafts. Drafts are persisted in the shared Supabase project.
 | `DELETE` | `/event-requests/{id}` | Delete a Draft |
 | `GET` | `/health` | Service health check |
 
-Every event-request operation requires `Authorization: Bearer <access-token>`.
+Every event-request operation requires `Authorization: Bearer <access-token>`
+and the `event_organiser` role.
 The service asks authService to verify that token with Supabase, then scopes
 drafts to the returned user ID. It also requires the established
 `app_metadata.role` value `organiser`; authenticated users with any other or no
