@@ -354,10 +354,10 @@ def test_operations_manager_assigns_event_coordinator(
     )
 
 
-# Purpose: operations_manager was added to the Role literal after Coordinator
-# assignment (eventRequestService) needed it — confirms it's assignable
+# Purpose: event_operations_manager is assignable after Coordinator assignment
+# (eventRequestService) introduced the role — confirms it works
 # through the real endpoint, not just directly via the Admin API.
-def test_admin_assigns_operations_manager_role(
+def test_admin_assigns_event_operations_manager_role(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
     supabase.auth.get_user.return_value = SimpleNamespace(
@@ -367,22 +367,26 @@ def test_admin_assigns_operations_manager_role(
             app_metadata={"role": "admin"},
         )
     )
-    admin.auth.admin.update_user_by_id.return_value = SimpleNamespace(
+    admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        SimpleNamespace(data=[{"role": "admin"}]),
+        SimpleNamespace(data=[{"role": "event_operations_manager"}]),
+    ]
+    admin.auth.admin.get_user_by_id.return_value = SimpleNamespace(
         user=SimpleNamespace(
             id="user-id",
             email="ops@example.com",
-            app_metadata={"role": "operations_manager"},
+            app_metadata={"role": "event_operations_manager"},
         )
     )
 
     response = client.patch(
         "/auth/users/user-id/role",
         headers={"Authorization": "Bearer admin-token"},
-        json={"role": "operations_manager"},
+        json={"role": "event_operations_manager"},
     )
 
     assert response.status_code == 200
-    assert response.json()["role"] == "operations_manager"
+    assert response.json()["role"] == "event_operations_manager"
 
 
 @pytest.mark.parametrize(

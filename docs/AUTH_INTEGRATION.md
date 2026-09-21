@@ -1,10 +1,8 @@
-# Auth Integration Contract (authService → equipment services)
+# Auth Integration Contract
 
-Implemented: `equipmentService` (SCRUM-16, SCRUM-45) verifies every caller with authService and enforces role-based authorisation. The stub that trusted the `X-User-Id` header is gone.
+Backend services verify callers with authService and enforce role-based authorisation.
 
 ## The Bearer contract
-
-The equipment service exposes a FastAPI dependency `get_current_user` in `app/deps.py`:
 
 - Callers send `Authorization: Bearer <supabase-access-token>` (the token issued by `POST /auth/login`).
 - Missing or malformed headers return `401 Authentication required`.
@@ -37,7 +35,10 @@ Roles are read per request from the `staff_roles` table, with Supabase `app_meta
 | equipmentService | `PATCH /equipment/{id}/status` | `technical_support` |
 | equipmentService | `GET /equipment`, `GET /equipment/{id}` | any authenticated user |
 | equipmentService | `GET /equipment/{id}/status`, `GET /equipment/{id}/status/history` | any authenticated user |
-| eventRequestService | `/event-requests*` | `event_organiser` |
+| eventRequestService | Draft CRUD under `/event-requests` | `event_organiser` |
+| eventRequestService | `POST /event-requests/{id}/coordinator` | `event_operations_manager` |
+| eventRequestService | `POST /event-requests/{id}/review` | `event_coordinator` and current assignment |
+| eventRequestService | `GET /event-requests/{id}/coordinator` | any authenticated user |
 | venueService | `POST /venues`, `PATCH /venues/{id}` | `venue_staff` |
 | venueService | venue reads and search | any authenticated user |
 

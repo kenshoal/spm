@@ -5,14 +5,15 @@ Ports: authService 8001 | equipmentService 8002
 ## 0. Setup
 
 1. Root `.env` has SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY.
-2. In Supabase → SQL Editor, bootstrap roles (dashboard raw_app_meta_data is read-only):
+2. Apply `database/migrations/0007_staff_roles.sql`, then bootstrap roles in the
+   Supabase SQL Editor:
 
-   update auth.users
-   set raw_app_meta_data = raw_app_meta_data || '{"role": "admin"}'::jsonb
-   where email = 'admin@example.com';
+   insert into public.staff_roles (user_id, role)
+   select id, 'admin' from auth.users where email = 'admin@example.com'
+   on conflict do nothing;
 
-   -- repeat with '{"role": "technical_support"}'::jsonb for staff@example.com
-   -- leave coordinator@example.com untouched (defaults to event_coordinator)
+   -- repeat with technical_support and event_coordinator for the staff accounts
+   -- users without an assigned role default to attendee
 
 3. Start the stack and wait for healthy:  docker compose up --build -d
 
@@ -28,7 +29,7 @@ export ADMIN="<access_token>"
 export STAFF="<staff access_token>"
 export COORD="<coordinator access_token>"
 
-Sanity check (shows id, email, role):
+Sanity check (shows id, email, role, and roles):
 
 curl -s localhost:8001/auth/me -H "Authorization: Bearer $STAFF"
 
@@ -65,7 +66,7 @@ curl -s -X PATCH localhost:8002/equipment/<id>/status -H "Authorization: Bearer 
 
 curl -s localhost:8002/equipment/<id>/status/history -H "Authorization: Bearer $STAFF"  # 200, newest first
 
-## 5. Role assignment (admin only)
+## 5. Role assignment
 
 curl -s -X PATCH localhost:8001/auth/users/<target_user_id>/role \
   -H "Authorization: Bearer $COORD" -H "Content-Type: application/json" \
@@ -80,6 +81,8 @@ curl -s -X PATCH localhost:8001/auth/users/<target_user_id>/role \
   -d '{"role":"technical_support"}'                                          # 200
 
 Target user_id comes from their /auth/me response (or Supabase dashboard user list).
+An Event Operations Manager may use the same endpoint only to assign
+`event_coordinator`; unrelated roles return 403.
 
 ## 6. Role change applies without re-login
 
@@ -89,7 +92,7 @@ curl -s localhost:8001/auth/me -H "Authorization: Bearer <their old token>"  # r
 curl -s -X POST localhost:8002/equipment -H "Authorization: Bearer <their old token>" -H \
   "Content-Type: application/json" -d '{"type":"Mic","total_owned_quantity":1,"home_location":"A"}'  # 201
 
-Demote them back (role "event_coordinator") and the same token gets 403 again.
+To remove a role, delete that user's matching row from `public.staff_roles`.
 
 ## 7. authService down -> clean degradation
 

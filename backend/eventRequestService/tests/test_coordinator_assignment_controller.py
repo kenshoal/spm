@@ -13,7 +13,10 @@ from test_event_request_controller import (
 from app.controllers.coordinator_assignment_controller import (
     get_operations_manager_id,
 )
-from app.controllers.event_request_controller import get_organiser_id
+from app.controllers.event_request_controller import (
+    get_authenticated_user_id,
+    get_organiser_id,
+)
 from app.main import create_app
 
 
@@ -71,6 +74,7 @@ def make_client(
     # the bearer value as the caller id. The role gate itself is tested
     # separately below, against the real get_operations_manager_id.
     app.dependency_overrides[get_organiser_id] = fake_caller_id
+    app.dependency_overrides[get_authenticated_user_id] = fake_caller_id
     app.dependency_overrides[get_operations_manager_id] = fake_caller_id
     return TestClient(app)
 
@@ -206,7 +210,7 @@ def test_get_coordinator_when_none_assigned() -> None:
 
 
 # Purpose: Ensures both endpoints reject requests without a verified session
-# (exercising the real get_organiser_id, not the test's fake override).
+# (exercising the real authentication dependencies, not the test overrides).
 def test_requires_bearer_session() -> None:
     app = create_app(FakeEventRequestRepository(), FakeCoordinatorAssignmentRepository())
     with TestClient(app) as client:
@@ -223,7 +227,7 @@ def test_requires_bearer_session() -> None:
 
 
 # Purpose: Refuses assignment for an authenticated caller who isn't an Operations Manager
-# (exercising the real get_operations_manager_id, via authService's app_metadata role).
+# (exercising the real get_operations_manager_id against all assigned roles).
 def test_assign_coordinator_requires_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -234,7 +238,13 @@ def test_assign_coordinator_requires_operations_manager_role(
         httpx,
         "get",
         lambda *args, **kwargs: httpx.Response(
-            200, json={"id": caller_id, "email": None, "role": "event_coordinator"}
+            200,
+            json={
+                "id": caller_id,
+                "email": None,
+                "role": "event_coordinator",
+                "roles": ["event_coordinator"],
+            },
         ),
     )
     from app.config import get_settings
@@ -256,8 +266,8 @@ def test_assign_coordinator_requires_operations_manager_role(
     assert response.status_code == 403
 
 
-# Purpose: Allows assignment once authService reports the operations_manager role.
-def test_assign_coordinator_allows_operations_manager_role(
+# Purpose: Allows assignment when one of the caller's roles is Event Operations Manager.
+def test_assign_coordinator_allows_event_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     caller_id = str(uuid4())
@@ -267,7 +277,13 @@ def test_assign_coordinator_allows_operations_manager_role(
         httpx,
         "get",
         lambda *args, **kwargs: httpx.Response(
-            200, json={"id": caller_id, "email": None, "role": "operations_manager"}
+            200,
+            json={
+                "id": caller_id,
+                "email": None,
+                "role": "venue_staff",
+                "roles": ["venue_staff", "event_operations_manager"],
+            },
         ),
     )
     from app.config import get_settings

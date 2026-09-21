@@ -1,3 +1,7 @@
+from uuid import uuid4
+
+import httpx
+import pytest
 from fastapi import Header
 from fastapi.testclient import TestClient
 from test_coordinator_assignment_controller import (
@@ -6,7 +10,10 @@ from test_coordinator_assignment_controller import (
     submit_event_request,
 )
 
-from app.controllers.event_request_controller import get_organiser_id
+from app.controllers.event_request_controller import (
+    get_coordinator_id,
+    get_organiser_id,
+)
 from app.main import create_app
 
 
@@ -23,6 +30,7 @@ def make_client(
         return authorization.removeprefix("Bearer ")
 
     app.dependency_overrides[get_organiser_id] = fake_caller_id
+    app.dependency_overrides[get_coordinator_id] = fake_caller_id
     return TestClient(app)
 
 
@@ -163,3 +171,42 @@ def test_start_review_requires_bearer_session() -> None:
         )
 
     assert response.status_code == 401
+
+
+def test_start_review_requires_event_coordinator_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    caller_id = str(uuid4())
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "id": caller_id,
+                "email": None,
+                "role": "attendee",
+                "roles": ["attendee"],
+            },
+        ),
+    )
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    try:
+        app = create_app(event_requests, coordinators)
+        event_request_id = submit_event_request(event_requests)
+        assign_coordinator(coordinators, event_request_id, caller_id)
+        with TestClient(app) as client:
+            response = client.post(
+                f"/event-requests/{event_request_id}/review",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 403
