@@ -6,8 +6,24 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 
 class EventRequestStatus(str, Enum):
+    """The full status set is the team's agreed design (backlog C-2, not yet
+    built here) — see spm-brain/backlog/user-stories.md. Only Draft and
+    Submitted have real transitions implemented so far; the rest are added
+    so a row in any of these states can still be read back (EventRequestResponse
+    would otherwise fail to validate it) and so terminal-status checks
+    elsewhere (e.g. coordinator assignment) have real values to check against.
+    """
+
     DRAFT = "Draft"
     SUBMITTED = "Submitted"
+    UNDER_REVIEW = "Under Review"
+    CHANGES_REQUESTED = "Changes Requested"
+    APPROVED = "Approved"
+    PLANNING = "Planning"
+    CONFIRMED = "Confirmed"
+    COMPLETED = "Completed"
+    CANCELLED = "Cancelled"
+    REJECTED = "Rejected"
 
 
 class EventRequestFields(BaseModel):

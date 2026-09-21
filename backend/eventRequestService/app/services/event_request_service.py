@@ -22,6 +22,18 @@ class EventRequestNotDraftError(Exception):
         self.event_request_id = event_request_id
 
 
+class EventRequestTransitionConflictError(Exception):
+    """The row wasn't in from_status when the transition was attempted —
+    a concurrent change, since callers check status before transitioning."""
+
+    def __init__(self, event_request_id: str, from_status: str, to_status: str) -> None:
+        super().__init__(
+            f"Event request {event_request_id} was not {from_status!r} when "
+            f"transitioning to {to_status!r}"
+        )
+        self.event_request_id = event_request_id
+
+
 class EventRequestService:
     """Owns Draft and submission rules independently of Supabase transport."""
 
@@ -60,6 +72,28 @@ class EventRequestService:
         row = self.repository.get_for_organiser(event_request_id, organiser_id)
         if row is None:
             raise EventRequestNotFoundError(event_request_id)
+        return self._row_to_response(row)
+
+    def get_by_id(self, event_request_id: str) -> EventRequestResponse:
+        """Unscoped lookup for a caller who isn't the owning organiser."""
+        row = self.repository.get_by_id(event_request_id)
+        if row is None:
+            raise EventRequestNotFoundError(event_request_id)
+        return self._row_to_response(row)
+
+    def transition_status(
+        self,
+        event_request_id: str,
+        from_status: EventRequestStatus,
+        to_status: EventRequestStatus,
+    ) -> EventRequestResponse:
+        row = self.repository.update_status(
+            event_request_id, from_status.value, to_status.value
+        )
+        if row is None:
+            raise EventRequestTransitionConflictError(
+                event_request_id, from_status.value, to_status.value
+            )
         return self._row_to_response(row)
 
     def update(

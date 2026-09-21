@@ -46,7 +46,7 @@ Submission coverage for SCRUM-11 is documented in
 | --- | --- | --- | --- |
 | `authService` | FastAPI | `8001` | Registration, login and session verification |
 | `equipmentService` | FastAPI + Supabase | `8002` | Equipment catalogue, quantities and status |
-| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event-request draft and submission workflow |
+| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event-request drafts, submission, status and coordinator assignment |
 | `venueService` | FastAPI | `8004` | Venue catalogue and search |
 
 ### Run the project from the repository root

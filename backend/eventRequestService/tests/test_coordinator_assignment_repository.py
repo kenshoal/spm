@@ -1,0 +1,104 @@
+import json
+
+import httpx
+import pytest
+
+from app.repositories import (
+    SupabaseCoordinatorAssignmentRepository,
+    SupabaseRepositoryError,
+)
+
+
+def response_row(**overrides: object) -> dict[str, object]:
+    return {
+        "id": 1,
+        "event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
+        "coordinator_id": "coord-1",
+        "assigned_by": "ops-1",
+        "assigned_at": "2026-09-15T12:00:00+00:00",
+        **overrides,
+    }
+
+
+# Purpose: Verifies assignment creation posts to the coordinator-assignments table.
+def test_create_sends_expected_supabase_request() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.method
+        captured["path"] = request.url.path
+        captured["apikey"] = request.headers.get("apikey")
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(201, json=[response_row()])
+
+    repository = SupabaseCoordinatorAssignmentRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    created = repository.create(
+        {
+            "event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
+            "coordinator_id": "coord-1",
+            "assigned_by": "ops-1",
+        }
+    )
+
+    assert captured == {
+        "method": "POST",
+        "path": "/rest/v1/event_coordinator_assignments",
+        "apikey": "sb_secret_test",
+        "body": {
+            "event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
+            "coordinator_id": "coord-1",
+            "assigned_by": "ops-1",
+        },
+    }
+    assert created["coordinator_id"] == "coord-1"
+
+
+# Purpose: Confirms "current assignment" is the most recent row by id, not by timestamp.
+def test_latest_orders_by_id_descending() -> None:
+    captured_query: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_query.update(dict(request.url.params))
+        return httpx.Response(200, json=[response_row(id=2, coordinator_id="coord-2")])
+
+    repository = SupabaseCoordinatorAssignmentRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    row = repository.latest_for_event_request("0f73ff70-9ec6-4bc2-b3de-617760cfd507")
+
+    assert captured_query["event_request_id"] == "eq.0f73ff70-9ec6-4bc2-b3de-617760cfd507"
+    assert captured_query["order"] == "id.desc"
+    assert captured_query["limit"] == "1"
+    assert row is not None
+    assert row["coordinator_id"] == "coord-2"
+
+
+# Purpose: Confirms no rows means no assignment yet, not an error.
+def test_latest_returns_none_when_never_assigned() -> None:
+    repository = SupabaseCoordinatorAssignmentRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=[])),
+    )
+
+    assert repository.latest_for_event_request("missing") is None
+
+
+# Purpose: Converts upstream Supabase failures into the shared repository error.
+def test_supabase_failure_raises_repository_error() -> None:
+    repository = SupabaseCoordinatorAssignmentRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(500, json={"message": "failure"})
+        ),
+    )
+
+    with pytest.raises(SupabaseRepositoryError):
+        repository.latest_for_event_request("0f73ff70-9ec6-4bc2-b3de-617760cfd507")

@@ -53,6 +53,7 @@ Role = Literal[
     "technical_support",
     "event_coordinator",
     "venue_staff",
+    "operations_manager",
 ]
 
 DEFAULT_ROLE = "event_coordinator"
