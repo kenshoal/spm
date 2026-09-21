@@ -1,6 +1,6 @@
 # SCRUM-11 Test Cases: Submit an Event Request
 
-Last reviewed: 20 September 2026
+Last reviewed: 21 September 2026
 
 This catalogue traces the live Jira acceptance criteria for SCRUM-11 to
 implementation and test evidence. The branch also supports direct submission of
@@ -18,30 +18,35 @@ required story path. Coordinator assignment remains owned by SCRUM-14.
 ## Acceptance-criterion test matrix
 
 The criterion IDs below follow the acceptance criteria currently recorded in
-Jira SCRUM-11, reviewed on 20 September 2026.
+Jira SCRUM-11, reviewed on 21 September 2026.
 
 | ID | Purpose | Preconditions and input | Action | Expected result and forbidden side effects | Layer and automated evidence | Status / limitation |
 | --- | --- | --- | --- | --- | --- | --- |
 | AC1 | Prevent unauthorised submission of another organiser's work or a non-Draft request. | Organiser A is authenticated; the target is either A's Draft, organiser B's Draft or already Submitted. | Attempt submission for each target. | Only A's Draft can move to `Submitted`; another owner's request returns `404`, and a non-Draft mutation returns `409` without changing stored data. | API component: `test_other_organiser_cannot_submit_draft`, `test_submitted_request_is_read_only`; repository contract: `test_submit_atomically_scopes_and_changes_status`. | Covered. |
 | AC2 | Enforce Jira's nine-field submission minimum while allowing explicit requirement placeholders. | A Draft has event name, purpose, description, at least one aware date/time, positive attendance and all four requirement fields; missing-field variants omit each field. | Attempt submission of the complete and incomplete variants. | The complete request is accepted; every missing field is reported and no incomplete submission reaches persistence. Requirement text may record a real need or `Not required` / `Not known yet`. | API component: `test_direct_submission_requires_every_form_field`, `test_submission_requires_timezone_aware_dates`; frontend action: `requires all submission fields before calling the API`. | Covered for presence and data shape. The UI does not restrict placeholder wording because free-text requirements are valid. |
 | AC3 | Keep expected attendance as one event-level value for later venue checks. | A valid request supplies one positive integer attendance value. | Save and submit the request. | `expected_attendance` round-trips as one top-level field and is not duplicated within `venue_requirements`. | Model and API coverage: `test_submit_completed_draft`, `test_rejects_invalid_expected_attendance`; browser submission journey. | Covered by the schema and request model. |
-| AC4 | Keep an invalid submission editable and free of downstream side effects. | The organiser owns an incomplete Draft. | Attempt submission. | Submission is refused, all missing items are identified and the request remains an editable `Draft`; no assignment, notification or submission event is created. | API component: `test_incomplete_draft_remains_draft_after_rejected_submission`; frontend actions: `requires all submission fields before calling the API`, `returns an actionable error when submission cannot reach the API`. | Partially covered: Draft retention and validation are tested, and no assignment integration exists. Submission-event absence cannot be asserted until the event mechanism exists. |
+| AC4 | Keep an invalid submission editable and free of downstream side effects. | The organiser owns an incomplete Draft. | Attempt submission. | Submission is refused, all missing items are identified and the request remains an editable `Draft`; no assignment, notification or submission event is created. | API component: `test_incomplete_draft_remains_draft_after_rejected_submission`; frontend actions: `requires all submission fields before calling the API`, `returns an actionable error when submission cannot reach the API`; database verification proves a Draft creates no outbox event. | Covered across validation and persistence boundaries. |
 | AC5 | Preserve saved values while moving one Draft to Submitted. | The authenticated organiser owns one complete Draft. | Submit the reopened Draft. | The same request ID and values are preserved, status becomes `Submitted`, and the row count remains one. | API component: `test_submit_completed_draft`; repository contract: `test_submit_atomically_scopes_and_changes_status`; frontend action: `submits a completed existing draft`. | Covered. |
 | AC6 | Expose an unassigned submission to the Event Operations Manager without requiring a per-submission manager notification. | A request has just reached `Submitted` and no coordinator is assigned. | The Operations Manager opens their awaiting-assignment view or API. | The request appears as awaiting assignment; no coordinator is implied and no manager notification is required. | No automated evidence. The current controller rejects `operations_manager`, and the migration grants only organiser-owned visibility. | **Missing implementation and test.** |
 | AC7 | Keep coordinator responsibility empty until SCRUM-14 performs assignment. | A request is Submitted and unassigned. | Inspect its coordination ownership before and after the future SCRUM-14 assignment flow. | No coordinator is responsible before assignment; after SCRUM-14, only the assigned coordinator gains review access. | Domain boundary documentation and absence of coordinator fields in `event_requests`. | Pre-assignment boundary is covered; post-assignment behavior is an explicit SCRUM-14 dependency. |
 | AC8 | Let the responsible organiser view status while preventing direct edits after submission. | The organiser owns a `Submitted` request. | View it, then attempt update, resubmission and deletion. | Viewing succeeds; all mutations return `409`, original values remain and the UI exposes view controls only. | API component: `test_submitted_request_is_read_only`; component: `renders a submitted request as read-only in the list`; browser submission journey. | Covered. |
-| AC9 | Raise exactly one successful-submission event and none for failed attempts. | One complete Draft and one incomplete Draft exist. | Submit each request once. | Successful submission atomically records or publishes one submission event for the organiser notification workflow; failed submission records or publishes none. | No event publisher, outbox or submission-event table exists in the current service or migration. | **Missing implementation and test.** |
+| AC9 | Atomically record one durable submission event per successfully submitted request. | A complete Draft or complete new request has a stable request UUID; an incomplete Draft remains unsubmitted. | Submit through either supported path, including a repeated status write. | The request change and one `event_request.submitted` outbox row commit together, keyed by request UUID and event type; failed or repeated attempts add no event. A later notification consumer uses the outbox event UUID for idempotent delivery. | Database triggers and unique constraint in `0008_event_request_submission_outbox.sql`; rollback-only integration verification in `verify_event_request_submission_outbox.sql`. | Covered at the database transaction boundary; external notification delivery remains a separate workflow. |
 
 ## Latest verification
 
-Run on 20 September 2026 against commit `d86dde6` plus this documentation
-update:
+Run on 21 September 2026 after applying migrations 0008 and 0009:
 
 - Event-request service: 44 passed; two dependency deprecation warnings.
 - Frontend lint: passed.
 - Frontend type checking: passed.
 - Frontend component and action tests: 24 passed.
 - Playwright Chromium journeys and production build: 4 passed.
+- Event-request outbox SQL: live rollback-only verification passed for zero
+  Draft events, exactly one Draft-submission event, exactly one direct-submission
+  event and no duplicate on a repeated status write.
+- Outbox security: RLS enabled, no client policies, no `anon` or `authenticated`
+  read access, and the private trigger function is not directly executable by
+  application roles.
 - Docker health check: not rerun in this audit because Docker Desktop was not
   running; the previous branch verification had all four containers healthy.
 

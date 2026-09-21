@@ -23,6 +23,8 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0005_rls_and_function_access.sql` | RLS enabled on the three equipment tables (default-deny for anon/authenticated). Its function revokes were a no-op — see 0006 |
 | `migrations/0006_rpc_execute_grants.sql` | RPC `EXECUTE` revoked from `PUBLIC` (which anon/authenticated inherit through) and granted explicitly to `service_role` |
 | `migrations/0007_event_requests.sql` | Event-request table, validation constraints, update timestamp trigger and organiser-only RLS policies. The shared development project already matched this schema on 20 September 2026 |
+| `migrations/0008_event_request_submission_outbox.sql` | Private transactional outbox and triggers that record one `event_request.submitted` event for a direct submission or Draft-to-Submitted transition |
+| `migrations/0009_event_request_outbox_organiser_index.sql` | Covering index for the outbox organiser foreign key and future notification-recipient lookups |
 
 `0001_baseline.sql` was derived from what `equipmentService` implies, then reconciled against the live database (columns, types, nullability, defaults, constraints, indexes) using the export queries below. One thing is deliberately absent:
 
@@ -33,6 +35,12 @@ Note: `transition_equipment_status` did **not** exist in the live database (veri
 ## Verifying the SQL functions
 
 The service's pytest suite fakes the database, so the functions' real behaviour (atomicity, `P0002` contract, audit logging, the quantity CHECK) is verified by [verify_equipment_functions.sql](verify_equipment_functions.sql). Run it in the SQL Editor after applying the migrations: it exercises every function including failure paths, prints `ALL EQUIPMENT FUNCTION VERIFICATIONS PASSED` on success, and `ROLLBACK`s — leaving no data behind. RLS behaviour is verified separately with the publishable key over the REST API (see `docs/`).
+
+The event-request submission outbox is verified by
+[`verify_event_request_submission_outbox.sql`](verify_event_request_submission_outbox.sql).
+It proves that a Draft creates no event, each supported submission path creates
+exactly one event, and a repeated status write does not create a duplicate. The
+script rolls back all test rows.
 
 ## Verification queries
 
