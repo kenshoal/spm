@@ -173,7 +173,8 @@ def test_current_user_verifies_supabase_access_token(
         user=SimpleNamespace(
             id="user-id",
             email="member@example.com",
-            app_metadata={"role": "technical_support"},
+            app_metadata={"role": "organiser"},
+            user_metadata={"role": "admin"},
         )
     )
 
@@ -184,7 +185,7 @@ def test_current_user_verifies_supabase_access_token(
     assert response.json() == {
         "id": "user-id",
         "email": "member@example.com",
-        "role": "technical_support",
+        "role": "organiser",
     }
     supabase.auth.get_user.assert_called_once_with("access-token")
 
@@ -219,24 +220,24 @@ def test_admin_assigns_role(
         user=SimpleNamespace(
             id="user-id",
             email="member@example.com",
-            app_metadata={"role": "technical_support"},
+            app_metadata={"role": "organiser"},
         )
     )
 
     response = client.patch(
         "/auth/users/user-id/role",
         headers={"Authorization": "Bearer admin-token"},
-        json={"role": "technical_support"},
+        json={"role": "organiser"},
     )
 
     assert response.status_code == 200
     assert response.json() == {
         "id": "user-id",
         "email": "member@example.com",
-        "role": "technical_support",
+        "role": "organiser",
     }
     admin.auth.admin.update_user_by_id.assert_called_once_with(
-        "user-id", {"app_metadata": {"role": "technical_support"}}
+        "user-id", {"app_metadata": {"role": "organiser"}}
     )
 
 

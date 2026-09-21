@@ -1,4 +1,7 @@
-This is the ConnectSphere organiser frontend. Its current increment lets an organiser create, list and continue event-request drafts backed by the event request service.
+This is the ConnectSphere organiser frontend. An authenticated organiser can
+save incomplete drafts, submit a complete new request or saved draft, and track
+requests using All, Draft, Submitted and Completed tabs. Submitted requests
+are read-only.
 
 ## Getting Started
 

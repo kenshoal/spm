@@ -11,8 +11,15 @@ createServer(async (request, response) => {
     return;
   }
   if (request.method === "GET" && request.url === "/auth/me") {
-    const valid = request.headers.authorization === "Bearer test-session";
-    send(response, valid ? 200 : 401, valid ? { id: "playwright-user", email: "playwright@example.com" } : { detail: "Invalid session" });
+    if (request.headers.authorization === "Bearer test-session") {
+      send(response, 200, { id: "playwright-user", email: "playwright@example.com", role: "organiser" });
+      return;
+    }
+    if (request.headers.authorization === "Bearer non-organiser-session") {
+      send(response, 200, { id: "admin-user", email: "admin@example.com", role: "admin" });
+      return;
+    }
+    send(response, 401, { detail: "Invalid session" });
     return;
   }
   if (request.method === "POST" && request.url === "/auth/login") {

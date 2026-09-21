@@ -82,8 +82,7 @@ def headers(caller_id: str = "ops-1") -> dict[str, str]:
 def submit_event_request(repository: FakeEventRequestRepository) -> str:
     row = repository.create(
         {
-            "organiser_id": None,
-            "temporary_organiser_id": "organiser-1",
+            "organiser_id": "organiser-1",
             "status": "Submitted",
             "event_name": "Community Dinner",
         }

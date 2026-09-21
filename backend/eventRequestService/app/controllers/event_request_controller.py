@@ -9,12 +9,14 @@ from app.config import get_settings
 from app.models.event_request import (
     EventRequestCreate,
     EventRequestResponse,
+    EventRequestSubmission,
     EventRequestUpdate,
 )
 from app.repositories import SupabaseEventRequestRepository
 from app.services.event_request_service import EventRequestService
 
 router = APIRouter(prefix="/event-requests", tags=["event requests"])
+ORGANISER_ROLE = "organiser"
 
 
 def get_event_request_service(request: Request) -> EventRequestService:
@@ -39,7 +41,7 @@ def get_event_request_service(request: Request) -> EventRequestService:
 def get_organiser_id(
     authorization: Annotated[str | None, Header()] = None,
 ) -> str:
-    """Resolve the organiser from a validated Supabase session, not a caller ID."""
+    """Resolve an authorised organiser from a validated Supabase session."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
     token = authorization.removeprefix("Bearer ").strip()
@@ -69,11 +71,18 @@ def get_organiser_id(
             status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
         )
     try:
-        return str(UUID(response.json()["id"]))
+        authenticated_user = response.json()
+        organiser_id = str(UUID(authenticated_user["id"]))
     except (ValueError, KeyError, TypeError) as error:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Authentication service returned no user"
         ) from error
+    if authenticated_user.get("role") != ORGANISER_ROLE:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Event Organiser role required",
+        )
+    return organiser_id
 
 
 ServiceDependency = Annotated[EventRequestService, Depends(get_event_request_service)]
@@ -91,6 +100,19 @@ def create_event_request(
     service: ServiceDependency,
 ) -> EventRequestResponse:
     return service.create(payload, organiser_id)
+
+
+@router.post(
+    "/submissions",
+    response_model=EventRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def submit_new_event_request(
+    payload: EventRequestSubmission,
+    organiser_id: OrganiserDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    return service.create_submission(payload, organiser_id)
 
 
 @router.get("", response_model=list[EventRequestResponse])
@@ -118,6 +140,16 @@ def update_event_request(
     service: ServiceDependency,
 ) -> EventRequestResponse:
     return service.update(str(event_request_id), organiser_id, payload)
+
+
+@router.post("/{event_request_id}/submit", response_model=EventRequestResponse)
+def submit_draft_event_request(
+    event_request_id: UUID,
+    payload: EventRequestSubmission,
+    organiser_id: OrganiserDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    return service.submit(str(event_request_id), organiser_id, payload)
 
 
 @router.delete("/{event_request_id}", status_code=status.HTTP_204_NO_CONTENT)

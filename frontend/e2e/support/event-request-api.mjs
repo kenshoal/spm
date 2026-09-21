@@ -44,6 +44,21 @@ createServer(async (request, response) => {
     return;
   }
 
+  if (url.pathname === "/event-requests/submissions" && request.method === "POST") {
+    const now = new Date().toISOString();
+    const record = {
+      ...(await readJson(request)),
+      id: randomUUID(),
+      organiser_id: organiserId,
+      status: "Submitted",
+      created_at: now,
+      updated_at: now,
+    };
+    records.set(record.id, record);
+    send(response, 201, record);
+    return;
+  }
+
   if (url.pathname === "/event-requests" && request.method === "GET") {
     send(
       response,
@@ -53,8 +68,9 @@ createServer(async (request, response) => {
     return;
   }
 
+  const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
   const match = url.pathname.match(/^\/event-requests\/([^/]+)$/);
-  const id = match ? decodeURIComponent(match[1]) : null;
+  const id = decodeURIComponent(submitMatch?.[1] ?? match?.[1] ?? "") || null;
   const record = id ? records.get(id) : undefined;
   if (!id || !record || record.organiser_id !== organiserId) {
     send(response, 404, { detail: "Draft not found" });
@@ -66,7 +82,30 @@ createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "POST" && submitMatch) {
+    if (record.status !== "Draft") {
+      send(response, 409, { detail: "Only Draft requests can be submitted" });
+      return;
+    }
+    const updated = {
+      ...record,
+      ...(await readJson(request)),
+      id: record.id,
+      organiser_id: record.organiser_id,
+      status: "Submitted",
+      created_at: record.created_at,
+      updated_at: new Date().toISOString(),
+    };
+    records.set(id, updated);
+    send(response, 200, updated);
+    return;
+  }
+
   if (request.method === "PATCH") {
+    if (record.status !== "Draft") {
+      send(response, 409, { detail: "Only Draft requests can be updated" });
+      return;
+    }
     const updated = {
       ...record,
       ...(await readJson(request)),
@@ -82,6 +121,10 @@ createServer(async (request, response) => {
   }
 
   if (request.method === "DELETE") {
+    if (record.status !== "Draft") {
+      send(response, 409, { detail: "Only Draft requests can be deleted" });
+      return;
+    }
     records.delete(id);
     send(response, 204);
     return;

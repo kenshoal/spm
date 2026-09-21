@@ -17,6 +17,7 @@ from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentService,
 )
 from app.services.event_request_service import (
+    EventRequestNotDraftError,
     EventRequestNotFoundError,
     EventRequestService,
     EventRequestTransitionConflictError,
@@ -63,6 +64,15 @@ def create_app(
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(EventRequestNotDraftError)
+    async def event_request_not_draft(
+        request: Request, error: EventRequestNotDraftError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
             content={"detail": str(error)},
         )
 

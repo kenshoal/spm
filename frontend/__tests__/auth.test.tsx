@@ -1,19 +1,45 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 
-const session = vi.hoisted(() => ({ set: vi.fn(), delete: vi.fn(), redirect: vi.fn() }));
+const session = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), delete: vi.fn(), redirect: vi.fn() }));
 vi.mock("next/headers", () => ({ cookies: async () => session }));
 vi.mock("next/navigation", () => ({ redirect: session.redirect }));
 
 import { AuthForm } from "@/app/auth/auth-form";
 import { login, logout, register } from "@/app/auth/actions";
+import { requireEventOrganiser } from "@/lib/auth";
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  session.get.mockReset();
   session.set.mockReset();
   session.delete.mockReset();
   session.redirect.mockReset();
+});
+
+test("allows an authenticated Event Organiser into the event-request workspace", async () => {
+  session.get.mockReturnValue({ value: "valid-token" });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ id: "user-id", email: "organiser@example.com", role: "organiser" }),
+  }));
+
+  await expect(requireEventOrganiser()).resolves.toMatchObject({ role: "organiser" });
+  expect(session.redirect).not.toHaveBeenCalled();
+});
+
+test("redirects a signed-in user without the organiser role", async () => {
+  session.get.mockReturnValue({ value: "valid-token" });
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ id: "user-id", email: "admin@example.com", role: "admin" }),
+  }));
+
+  await requireEventOrganiser();
+  expect(session.redirect).toHaveBeenCalledWith("/unauthorised");
 });
 
 function credentials() {

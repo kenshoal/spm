@@ -12,8 +12,8 @@ Examples include `feat: add user authentication`, `fix(api): handle empty respon
 
 For earlier feedback before pushing, enable the version-controlled local Git hook once after cloning:
 
-```powershell
-./scripts/setup-git-hooks.ps1
+```bash
+git config core.hooksPath .githooks
 ```
 
 Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, and `revert`.
@@ -37,26 +37,63 @@ documented in
 [`docs/testcases/scrum_8_testcases.md`](docs/testcases/scrum_8_testcases.md).
 Authentication coverage for SCRUM-26 is documented in
 [`docs/testcases/scrum_26_testcases.md`](docs/testcases/scrum_26_testcases.md).
+Submission coverage for SCRUM-11 is documented in
+[`docs/testcases/scrum_11_testcases.md`](docs/testcases/scrum_11_testcases.md).
 
 ## Services
 
 | Service | Technology | Local port | Purpose |
 | --- | --- | --- | --- |
 | `authService` | FastAPI | `8001` | Registration, login and session verification |
-| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event-request drafts, status, and coordinator assignment |
+| `equipmentService` | FastAPI + Supabase | `8002` | Equipment catalogue, quantities and status |
+| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event-request drafts, submission, status and coordinator assignment |
+| `venueService` | FastAPI | `8004` | Venue catalogue and search |
 
-Start the services with Docker Compose:
+### Run the project from the repository root
 
-Create a local, untracked `.env` at the repository root with
-`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and the server-only
-`SUPABASE_SECRET_KEY` from the development project. Never commit the secret.
+Create the one shared, untracked environment file:
 
-```powershell
-docker compose up --build
+```bash
+cp .env.example .env
 ```
 
-The event-request API documentation is available at
-`http://localhost:8003/docs`. Protected endpoints require a Supabase access
+Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and the server-only
+`SUPABASE_SECRET_KEY` in that root `.env`. Never commit this file.
+
+Build and start every backend microservice:
+
+```bash
+docker compose up --build -d
+docker compose ps
+```
+
+Start the frontend from the same root in a second terminal:
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run dev
+```
+
+Open the services at:
+
+| Component | URL |
+| --- | --- |
+| Frontend | http://localhost:3000 |
+| Auth API docs | http://localhost:8001/docs |
+| Equipment API docs | http://localhost:8002/docs |
+| Event-request API docs | http://localhost:8003/docs |
+| Venue API docs | http://localhost:8004/docs |
+
+Inspect logs or stop the backend stack from the root:
+
+```bash
+docker compose logs -f
+docker compose down
+```
+
+Inside Compose, every API listens on port `8000`; the host ports above keep
+the services distinct. Inter-service URLs use Compose service names, such as
+`http://auth-service:8000`. Protected endpoints require a Supabase access
 token in the `Authorization: Bearer` header.
 
 The draft-request and operational-event ownership boundary is documented in

@@ -8,11 +8,11 @@ from app.config import Settings
 class EventRequestRepository(Protocol):
     def create(self, values: dict[str, Any]) -> dict[str, Any]: ...
 
-    def list_for_temporary_organiser(
+    def list_for_organiser(
         self, organiser_id: str
     ) -> list[dict[str, Any]]: ...
 
-    def get_for_temporary_organiser(
+    def get_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> dict[str, Any] | None: ...
 
@@ -22,14 +22,21 @@ class EventRequestRepository(Protocol):
         self, event_request_id: str, from_status: str, to_status: str
     ) -> dict[str, Any] | None: ...
 
-    def update_for_temporary_organiser(
+    def update_for_organiser(
         self,
         event_request_id: str,
         organiser_id: str,
         values: dict[str, Any],
     ) -> dict[str, Any] | None: ...
 
-    def delete_for_temporary_organiser(
+    def submit_for_organiser(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None: ...
+
+    def delete_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> bool: ...
 
@@ -39,7 +46,7 @@ class SupabaseRepositoryError(RuntimeError):
 
 
 class SupabaseEventRequestRepository:
-    """Persists temporary-organiser drafts through Supabase's Data API."""
+    """Persists organiser drafts through Supabase's Data API."""
 
     def __init__(
         self,
@@ -74,26 +81,26 @@ class SupabaseEventRequestRepository:
         )
         return rows[0]
 
-    def list_for_temporary_organiser(
+    def list_for_organiser(
         self, organiser_id: str
     ) -> list[dict[str, Any]]:
         return self._request(
             "GET",
             params={
-                "temporary_organiser_id": f"eq.{organiser_id}",
+                "organiser_id": f"eq.{organiser_id}",
                 "order": "created_at.desc",
                 "select": "*",
             },
         )
 
-    def get_for_temporary_organiser(
+    def get_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> dict[str, Any] | None:
         rows = self._request(
             "GET",
             params={
                 "id": f"eq.{event_request_id}",
-                "temporary_organiser_id": f"eq.{organiser_id}",
+                "organiser_id": f"eq.{organiser_id}",
                 "select": "*",
                 "limit": "1",
             },
@@ -101,9 +108,7 @@ class SupabaseEventRequestRepository:
         return rows[0] if rows else None
 
     def get_by_id(self, event_request_id: str) -> dict[str, Any] | None:
-        """Unscoped lookup, for a caller who isn't the owning organiser (e.g.
-        an Operations Manager assigning a Coordinator) — every other method
-        on this repository is deliberately scoped to the temporary organiser."""
+        """Look up a request for an authorised coordination workflow."""
         rows = self._request(
             "GET",
             params={
@@ -133,7 +138,7 @@ class SupabaseEventRequestRepository:
         )
         return rows[0] if rows else None
 
-    def update_for_temporary_organiser(
+    def update_for_organiser(
         self,
         event_request_id: str,
         organiser_id: str,
@@ -144,7 +149,7 @@ class SupabaseEventRequestRepository:
             json=values,
             params={
                 "id": f"eq.{event_request_id}",
-                "temporary_organiser_id": f"eq.{organiser_id}",
+                "organiser_id": f"eq.{organiser_id}",
                 "status": "eq.Draft",
                 "select": "*",
             },
@@ -152,14 +157,33 @@ class SupabaseEventRequestRepository:
         )
         return rows[0] if rows else None
 
-    def delete_for_temporary_organiser(
+    def submit_for_organiser(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        rows = self._request(
+            "PATCH",
+            json={**values, "status": "Submitted"},
+            params={
+                "id": f"eq.{event_request_id}",
+                "organiser_id": f"eq.{organiser_id}",
+                "status": "eq.Draft",
+                "select": "*",
+            },
+            headers={"Prefer": "return=representation"},
+        )
+        return rows[0] if rows else None
+
+    def delete_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> bool:
         rows = self._request(
             "DELETE",
             params={
                 "id": f"eq.{event_request_id}",
-                "temporary_organiser_id": f"eq.{organiser_id}",
+                "organiser_id": f"eq.{organiser_id}",
                 "status": "eq.Draft",
                 "select": "id",
             },
