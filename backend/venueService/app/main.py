@@ -1,7 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.routers import venues
+from app.routers import block_checks, venues
+from app.supabase_repository import StorageError
 
 
 class ServiceResponse(BaseModel):
@@ -21,6 +23,12 @@ app = FastAPI(
 )
 
 app.include_router(venues.router)
+app.include_router(block_checks.router)
+
+
+@app.exception_handler(StorageError)
+async def storage_error(request: Request, error: StorageError) -> JSONResponse:
+    return JSONResponse(status_code=error.status_code, content={"detail": str(error)})
 
 
 @app.get("/", response_model=ServiceResponse, tags=["service"])

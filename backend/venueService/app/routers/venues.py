@@ -18,7 +18,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.availability import available_slots
 from app.block_models import VenueBlock, VenueBlockCreate
-from app.block_repository import VenueBlockRepository, block_repository
 from app.dependencies import Principal, require_authenticated, require_venue_staff
 from app.models import (
     RoomLayout,
@@ -28,27 +27,27 @@ from app.models import (
     VenueStatus,
     VenueUpdate,
 )
-from app.repository import VenueRepository, repository
+from app.storage import BlockStore, Stores, VenueStore, get_stores
 
 router = APIRouter(prefix="/venues", tags=["venues"])
 
 
-def get_repository() -> VenueRepository:
+def get_repository(stores: Annotated[Stores, Depends(get_stores)]) -> VenueStore:
     """Dependency seam so tests can override the store."""
 
-    return repository
+    return stores.venues
 
 
-RepoDep = Annotated[VenueRepository, Depends(get_repository)]
+RepoDep = Annotated[VenueStore, Depends(get_repository)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
 AuthenticatedDep = Annotated[Principal, Depends(require_authenticated)]
 
 
-def get_block_repository() -> VenueBlockRepository:
-    return block_repository
+def get_block_repository(stores: Annotated[Stores, Depends(get_stores)]) -> BlockStore:
+    return stores.blocks
 
 
-BlockRepoDep = Annotated[VenueBlockRepository, Depends(get_block_repository)]
+BlockRepoDep = Annotated[BlockStore, Depends(get_block_repository)]
 
 
 @router.get("/{venue_id}/blocks", response_model=list[VenueBlock])
