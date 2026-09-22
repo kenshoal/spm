@@ -12,11 +12,11 @@ createServer(async (request, response) => {
   }
   if (request.method === "GET" && request.url === "/auth/me") {
     if (request.headers.authorization === "Bearer test-session") {
-      send(response, 200, { id: "playwright-user", email: "playwright@example.com", role: "organiser" });
+      send(response, 200, { id: "playwright-user", email: "playwright@example.com", role: "event_organiser", roles: ["event_organiser"] });
       return;
     }
     if (request.headers.authorization === "Bearer non-organiser-session") {
-      send(response, 200, { id: "admin-user", email: "admin@example.com", role: "admin" });
+      send(response, 200, { id: "admin-user", email: "admin@example.com", role: "admin", roles: ["admin"] });
       return;
     }
     send(response, 401, { detail: "Invalid session" });

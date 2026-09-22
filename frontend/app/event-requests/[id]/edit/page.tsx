@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { requireRole } from "@/lib/auth";
 import { getEventRequest } from "@/lib/event-requests";
 import { AppShell } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
@@ -38,6 +39,7 @@ function EditLoading() {
   return <div aria-label="Loading draft" className="mx-auto h-[34rem] max-w-4xl animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" />;
 }
 
-export default function EditEventRequestPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditEventRequestPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireRole("event_organiser");
   return <AppShell signedIn><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} />)}</Suspense></AppShell>;
 }

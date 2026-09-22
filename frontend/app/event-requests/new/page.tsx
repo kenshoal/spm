@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { requireRole } from "@/lib/auth";
 import { AppShell } from "../../components/app-shell";
 import { ArrowIcon } from "../../components/icons";
 import { EventRequestForm } from "./event-request-form";
 
-export default function NewEventRequestPage() {
+export default async function NewEventRequestPage() {
+  await requireRole("event_organiser");
+
   return (
     <AppShell signedIn>
       <div className="mx-auto max-w-4xl">

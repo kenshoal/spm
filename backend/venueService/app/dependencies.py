@@ -1,33 +1,65 @@
-"""Authorisation dependencies.
-
-These are placeholders. The briefing requires role-based access (Venue Staff
-maintain the catalogue; authorised internal users may read it), but the auth
-service is a separate scaffold and no shared token verification exists yet.
-Each function currently returns a stub principal so the endpoint contracts
-express who is meant to call them.
-
-TODO: replace with real verification against authService — validate the bearer
-token and confirm the caller's role.
-"""
+"""Authentication and role checks delegated to authService."""
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from typing import Annotated
+from uuid import UUID
+
+import httpx
+from fastapi import Depends, Header, HTTPException, status
 
 
 @dataclass(frozen=True)
 class Principal:
     user_id: str
-    role: str
+    roles: tuple[str, ...]
 
 
-def require_venue_staff() -> Principal:
-    """Caller must be Venue Staff (create / update catalogue records)."""
+def require_authenticated(
+    authorization: Annotated[str | None, Header()] = None,
+) -> Principal:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token or " " in token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
 
-    return Principal(user_id="stub-venue-staff", role="venue_staff")
+    try:
+        response = httpx.get(
+            f"{os.getenv('AUTH_SERVICE_URL', 'http://127.0.0.1:8001').rstrip('/')}/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+    except httpx.HTTPError as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
+        ) from error
+    if response.status_code == status.HTTP_401_UNAUTHORIZED:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
+    if not response.is_success:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
+        )
+    try:
+        user = response.json()
+        roles = user.get("roles") or [user["role"]]
+        if not isinstance(roles, list) or not all(
+            isinstance(role, str) for role in roles
+        ):
+            raise TypeError
+        return Principal(str(UUID(user["id"])), tuple(roles))
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Authentication service returned no user",
+        ) from error
 
 
-def require_authenticated() -> Principal:
-    """Caller must be an authenticated internal user (read / search)."""
-
-    return Principal(user_id="stub-internal-user", role="event_coordinator")
+def require_venue_staff(
+    principal: Annotated[Principal, Depends(require_authenticated)],
+) -> Principal:
+    if "venue_staff" not in principal.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return principal

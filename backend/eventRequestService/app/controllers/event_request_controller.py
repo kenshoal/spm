@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
@@ -16,7 +17,14 @@ from app.repositories import SupabaseEventRequestRepository
 from app.services.event_request_service import EventRequestService
 
 router = APIRouter(prefix="/event-requests", tags=["event requests"])
-ORGANISER_ROLE = "organiser"
+EVENT_ORGANISER_ROLE = "event_organiser"
+EVENT_COORDINATOR_ROLE = "event_coordinator"
+
+
+@dataclass(frozen=True)
+class AuthenticatedCaller:
+    id: str
+    roles: tuple[str, ...]
 
 
 def get_event_request_service(request: Request) -> EventRequestService:
@@ -38,10 +46,9 @@ def get_event_request_service(request: Request) -> EventRequestService:
     return service
 
 
-def get_organiser_id(
+def get_authenticated_caller(
     authorization: Annotated[str | None, Header()] = None,
-) -> str:
-    """Resolve an authorised organiser from a validated Supabase session."""
+) -> AuthenticatedCaller:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
     token = authorization.removeprefix("Bearer ").strip()
@@ -71,18 +78,41 @@ def get_organiser_id(
             status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
         )
     try:
-        authenticated_user = response.json()
-        organiser_id = str(UUID(authenticated_user["id"]))
+        user = response.json()
+        roles = user.get("roles") or [user["role"]]
+        if not isinstance(roles, list) or not all(
+            isinstance(role, str) for role in roles
+        ):
+            raise TypeError
+        return AuthenticatedCaller(str(UUID(user["id"])), tuple(roles))
     except (ValueError, KeyError, TypeError) as error:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Authentication service returned no user"
         ) from error
-    if authenticated_user.get("role") != ORGANISER_ROLE:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Event Organiser role required",
-        )
-    return organiser_id
+
+
+def get_authenticated_user_id(
+    authorization: Annotated[str | None, Header()] = None,
+) -> str:
+    return get_authenticated_caller(authorization).id
+
+
+def get_organiser_id(
+    authorization: Annotated[str | None, Header()] = None,
+) -> str:
+    caller = get_authenticated_caller(authorization)
+    if EVENT_ORGANISER_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return caller.id
+
+
+def get_coordinator_id(
+    authorization: Annotated[str | None, Header()] = None,
+) -> str:
+    caller = get_authenticated_caller(authorization)
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return caller.id
 
 
 ServiceDependency = Annotated[EventRequestService, Depends(get_event_request_service)]

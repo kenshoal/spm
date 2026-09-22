@@ -74,8 +74,13 @@ services:
   venue-service:
     build:
       context: ./backend/venueService
+    depends_on:
+      auth-service:
+        condition: service_healthy
     ports:
       - "8004:8000"
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8000
     healthcheck:
       test:
         - CMD

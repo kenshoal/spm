@@ -14,7 +14,7 @@ TECHNICAL_SUPPORT_ROLE = "technical_support"
 
 class User(BaseModel):
     id: str
-    role: str
+    roles: list[str]
 
 
 def get_current_user(authorization: Annotated[str | None, Header()] = None) -> User:
@@ -49,7 +49,7 @@ def get_current_user(authorization: Annotated[str | None, Header()] = None) -> U
     try:
         return User(
             id=str(UUID(response.json()["id"])),
-            role=response.json()["role"],
+            roles=response.json().get("roles") or [response.json()["role"]],
         )
     except (ValueError, KeyError, TypeError) as error:
         raise HTTPException(
@@ -59,7 +59,7 @@ def get_current_user(authorization: Annotated[str | None, Header()] = None) -> U
 
 def require_role(*allowed: str):
     def dependency(user: Annotated[User, Depends(get_current_user)]) -> User:
-        if user.role not in allowed:
+        if not set(user.roles).intersection(allowed):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
         return user
 

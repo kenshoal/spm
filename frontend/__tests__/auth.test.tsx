@@ -23,10 +23,15 @@ test("allows an authenticated Event Organiser into the event-request workspace",
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
-    json: async () => ({ id: "user-id", email: "organiser@example.com", role: "organiser" }),
+    json: async () => ({
+      id: "user-id",
+      email: "organiser@example.com",
+      role: "attendee",
+      roles: ["attendee", "event_organiser"],
+    }),
   }));
 
-  await expect(requireEventOrganiser()).resolves.toMatchObject({ role: "organiser" });
+  await expect(requireEventOrganiser()).resolves.toMatchObject({ roles: ["attendee", "event_organiser"] });
   expect(session.redirect).not.toHaveBeenCalled();
 });
 

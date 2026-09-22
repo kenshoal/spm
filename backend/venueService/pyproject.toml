@@ -9,6 +9,7 @@ description = "Venue catalogue and search microservice for SPM"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115,<1.0",
+    "httpx>=0.28,<1.0",
     "uvicorn[standard]>=0.34,<1.0",
 ]
 

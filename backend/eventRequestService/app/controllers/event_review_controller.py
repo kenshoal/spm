@@ -6,8 +6,8 @@ from app.controllers.coordinator_assignment_controller import (
     get_coordinator_assignment_service,
 )
 from app.controllers.event_request_controller import (
+    get_coordinator_id,
     get_event_request_service,
-    get_organiser_id,
 )
 from app.models.event_request import EventRequestResponse
 from app.services.event_review_service import EventReviewService
@@ -30,10 +30,7 @@ def get_event_review_service(request: Request) -> EventReviewService:
 
 
 ServiceDependency = Annotated[EventReviewService, Depends(get_event_review_service)]
-# Reused as-is: any verified caller may call this — the real check is that
-# they're the assigned Coordinator, done inside EventReviewService itself,
-# not a role gate at this layer.
-CallerDependency = Annotated[str, Depends(get_organiser_id)]
+CallerDependency = Annotated[str, Depends(get_coordinator_id)]
 
 
 @router.post("/{event_request_id}/review", response_model=EventRequestResponse)

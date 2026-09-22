@@ -283,7 +283,11 @@ def test_verified_identity_overrides_spoofed_header(
         "get",
         lambda *args, **kwargs: httpx.Response(
             200,
-            json={"id": ORGANISER_ID, "role": "organiser"},
+            json={
+                "id": ORGANISER_ID,
+                "role": "event_operations_manager",
+                "roles": ["event_operations_manager", "event_organiser"],
+            },
         ),
     )
     get_settings.cache_clear()
@@ -304,11 +308,14 @@ def test_verified_identity_overrides_spoofed_header(
     assert created.json()["organiser_id"] == ORGANISER_ID
 
 
-@pytest.mark.parametrize("role", [None, "admin", "operations_manager"])
+@pytest.mark.parametrize(
+    "roles",
+    [["attendee"], ["admin"], ["event_operations_manager"]],
+)
 # Purpose: Prevents authenticated non-organisers from accessing organiser requests.
 def test_event_request_operations_require_organiser_role(
     monkeypatch: pytest.MonkeyPatch,
-    role: str | None,
+    roles: list[str],
 ) -> None:
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
@@ -317,7 +324,7 @@ def test_event_request_operations_require_organiser_role(
         "get",
         lambda *args, **kwargs: httpx.Response(
             200,
-            json={"id": ORGANISER_ID, "role": role},
+            json={"id": ORGANISER_ID, "role": roles[0], "roles": roles},
         ),
     )
     get_settings.cache_clear()
@@ -332,7 +339,7 @@ def test_event_request_operations_require_organiser_role(
         get_settings.cache_clear()
 
     assert response.status_code == 403
-    assert response.json() == {"detail": "Event Organiser role required"}
+    assert response.json() == {"detail": "Insufficient permissions"}
 
 
 # Purpose: Rejects invalid or expired sessions before protected data is accessed.

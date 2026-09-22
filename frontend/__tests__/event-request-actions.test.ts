@@ -7,7 +7,15 @@ const navigation = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ redirect: navigation.redirect }));
 vi.mock("next/cache", () => ({ revalidatePath: navigation.revalidatePath }));
-vi.mock("@/lib/auth", () => ({ requireAccessToken: async () => "valid-token" }));
+vi.mock("@/lib/auth", () => ({
+  requireAccessToken: async () => "valid-token",
+  requireRole: async () => ({
+    id: "organiser-1",
+    email: "person@example.com",
+    role: "event_organiser",
+    roles: ["event_organiser"],
+  }),
+}));
 
 import {
   createEventRequest,

@@ -7,7 +7,8 @@ const authServiceUrl = process.env.AUTH_SERVICE_URL ?? "http://127.0.0.1:8001";
 export interface AuthenticatedUser {
   id: string;
   email: string | null;
-  role: string | null;
+  role: string;
+  roles: string[];
 }
 
 export async function requireAccessToken(): Promise<string> {
@@ -24,11 +25,16 @@ export async function requireAuthenticatedUser(): Promise<AuthenticatedUser> {
   });
   if (response.status === 401) redirect("/auth");
   if (!response.ok) throw new Error("Authentication service unavailable");
-  return response.json() as Promise<AuthenticatedUser>;
+  const user = await response.json();
+  return { ...user, roles: user.roles ?? [user.role] };
 }
 
-export async function requireEventOrganiser(): Promise<AuthenticatedUser> {
+export async function requireRole(role: string): Promise<AuthenticatedUser> {
   const user = await requireAuthenticatedUser();
-  if (user.role !== "organiser") redirect("/unauthorised");
+  if (!user.roles.includes(role)) redirect("/unauthorised");
   return user;
+}
+
+export function requireEventOrganiser(): Promise<AuthenticatedUser> {
+  return requireRole("event_organiser");
 }
