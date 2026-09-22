@@ -5,7 +5,7 @@ Ports: authService 8001 | equipmentService 8002
 ## 0. Setup
 
 1. Root `.env` has SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY.
-2. Apply `database/migrations/0007_staff_roles.sql`, then bootstrap roles in the
+2. Apply `database/migrations/0010_staff_roles.sql`, then bootstrap roles in the
    Supabase SQL Editor:
 
    insert into public.staff_roles (user_id, role)
