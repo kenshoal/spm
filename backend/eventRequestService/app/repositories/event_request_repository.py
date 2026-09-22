@@ -12,6 +12,8 @@ class EventRequestRepository(Protocol):
         self, organiser_id: str
     ) -> list[dict[str, Any]]: ...
 
+    def list_by_status(self, status: str) -> list[dict[str, Any]]: ...
+
     def get_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> dict[str, Any] | None: ...
@@ -88,6 +90,16 @@ class SupabaseEventRequestRepository:
             "GET",
             params={
                 "organiser_id": f"eq.{organiser_id}",
+                "order": "created_at.desc",
+                "select": "*",
+            },
+        )
+
+    def list_by_status(self, status: str) -> list[dict[str, Any]]:
+        return self._request(
+            "GET",
+            params={
+                "status": f"eq.{status}",
                 "order": "created_at.desc",
                 "select": "*",
             },

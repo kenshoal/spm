@@ -13,6 +13,8 @@ class CoordinatorAssignmentRepository(Protocol):
         self, event_request_id: str
     ) -> dict[str, Any] | None: ...
 
+    def assigned_event_request_ids(self, event_request_ids: list[str]) -> set[str]: ...
+
 
 class SupabaseCoordinatorAssignmentRepository:
     """Persists Coordinator assignments through Supabase's Data API.
@@ -72,6 +74,18 @@ class SupabaseCoordinatorAssignmentRepository:
             },
         )
         return rows[0] if rows else None
+
+    def assigned_event_request_ids(self, event_request_ids: list[str]) -> set[str]:
+        if not event_request_ids:
+            return set()
+        rows = self._request(
+            "GET",
+            params={
+                "event_request_id": f"in.({','.join(event_request_ids)})",
+                "select": "event_request_id",
+            },
+        )
+        return {row["event_request_id"] for row in rows}
 
     def _request(self, method: str, **kwargs: Any) -> list[dict[str, Any]]:
         try:

@@ -54,8 +54,11 @@ def create_app(
         and coordinator_assignment_service is not None
         else None
     )
-    application.include_router(event_request_router)
+    # Before event_request_router: routes match in registration order, and its
+    # /event-requests/{event_request_id} would otherwise swallow the literal
+    # /event-requests/awaiting-assignment and reject it as a malformed UUID.
     application.include_router(coordinator_assignment_router)
+    application.include_router(event_request_router)
     application.include_router(event_review_router)
 
     @application.exception_handler(EventRequestNotFoundError)

@@ -2,7 +2,7 @@ from app.models.coordinator_assignment import (
     CoordinatorAssignmentResponse,
     CoordinatorAssignRequest,
 )
-from app.models.event_request import EventRequestStatus
+from app.models.event_request import EventRequestResponse, EventRequestStatus
 from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
 )
@@ -77,6 +77,21 @@ class CoordinatorAssignmentService:
             assigned_by=assigned_by,
         )
         return CoordinatorAssignmentResponse.model_validate(row)
+
+    def list_awaiting_assignment(self) -> list[EventRequestResponse]:
+        """Submitted requests nobody is responsible for yet. Assignments are
+        append-only and there is no unassign operation, so "has any assignment
+        row" is exactly "has a current Coordinator".
+        """
+        submitted = self.event_request_service.list_by_status(
+            EventRequestStatus.SUBMITTED
+        )
+        if not submitted:
+            return []
+        assigned = self.repository.assigned_event_request_ids(
+            [request.id for request in submitted]
+        )
+        return [request for request in submitted if request.id not in assigned]
 
     def get_current(self, event_request_id: str) -> CoordinatorAssignmentResponse:
         self.event_request_service.get_by_id(event_request_id)

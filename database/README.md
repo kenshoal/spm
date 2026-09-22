@@ -26,6 +26,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0008_event_request_submission_outbox.sql` | Private transactional outbox and triggers that record one `event_request.submitted` event for a direct submission or Draft-to-Submitted transition |
 | `migrations/0009_event_request_outbox_organiser_index.sql` | Covering index for the outbox organiser foreign key and future notification-recipient lookups |
 | `migrations/0010_staff_roles.sql` | `staff_roles` role-assignment table keyed by `(user_id, role)`, RLS enabled, service-role access only |
+| `migrations/0011_event_coordinator_assignments.sql` | `event_coordinator_assignments` append-only table backing Coordinator assignment and the awaiting-assignment queue. **Reference snapshot / fresh environments only** — this table was created by hand in the dashboard and already exists live; do not re-run it there |
 
 `0001_baseline.sql` was derived from what `equipmentService` implies, then reconciled against the live database (columns, types, nullability, defaults, constraints, indexes) using the export queries below. One thing is deliberately absent:
 

@@ -37,6 +37,13 @@ class FakeEventRequestRepository(_BaseFakeEventRequestRepository):
         row["status"] = to_status
         return dict(row)
 
+    def list_by_status(self, status: str) -> list[dict[str, Any]]:
+        return [
+            dict(row)
+            for row in reversed(list(self.rows.values()))
+            if row["status"] == status
+        ]
+
 
 class FakeCoordinatorAssignmentRepository:
     def __init__(self) -> None:
@@ -56,6 +63,10 @@ class FakeCoordinatorAssignmentRepository:
     ) -> dict[str, Any] | None:
         matches = [r for r in self.rows if r["event_request_id"] == event_request_id]
         return dict(matches[-1]) if matches else None
+
+    def assigned_event_request_ids(self, event_request_ids: list[str]) -> set[str]:
+        wanted = set(event_request_ids)
+        return {r["event_request_id"] for r in self.rows} & wanted
 
 
 def make_client(
@@ -304,3 +315,87 @@ def test_assign_coordinator_allows_event_operations_manager_role(
 
     assert response.status_code == 201
     assert response.json()["assigned_by"] == caller_id
+
+
+# Purpose: Gives the Operations Manager the queue of Submitted requests that still
+# need a Coordinator — without it the role can only assign a request whose id it
+# already knows (SCRUM-14 AC1).
+def test_awaiting_assignment_lists_submitted_requests_without_a_coordinator() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        event_request_id = submit_event_request(event_requests)
+        response = client.get("/event-requests/awaiting-assignment", headers=headers())
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [event_request_id]
+
+
+# Purpose: A request drops out of the queue once it has a Coordinator, so the
+# Operations Manager isn't offered work that is already owned.
+def test_awaiting_assignment_excludes_requests_that_have_a_coordinator() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        assigned_id = submit_event_request(event_requests)
+        unassigned_id = submit_event_request(event_requests)
+        client.post(
+            f"/event-requests/{assigned_id}/coordinator",
+            headers=headers(),
+            json={"coordinator_id": "coord-1"},
+        )
+        response = client.get("/event-requests/awaiting-assignment", headers=headers())
+
+    assert [row["id"] for row in response.json()] == [unassigned_id]
+
+
+# Purpose: A Draft has not been submitted, so it is not yet the Operations Manager's
+# to assign — only Submitted requests belong in the queue.
+def test_awaiting_assignment_excludes_drafts() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        client.post(
+            "/event-requests",
+            headers={"Authorization": "Bearer organiser-1"},
+            json={"event_name": "Still a draft"},
+        )
+        response = client.get("/event-requests/awaiting-assignment", headers=headers())
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# Purpose: Confirms the queue is closed to callers who aren't an Operations Manager
+# (exercising the real get_operations_manager_id, not the test override).
+def test_awaiting_assignment_requires_operations_manager_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "id": str(uuid4()),
+                "email": None,
+                "role": "event_coordinator",
+                "roles": ["event_coordinator"],
+            },
+        ),
+    )
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        app = create_app(
+            FakeEventRequestRepository(), FakeCoordinatorAssignmentRepository()
+        )
+        with TestClient(app) as client:
+            response = client.get(
+                "/event-requests/awaiting-assignment",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 403
