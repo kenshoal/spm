@@ -31,9 +31,17 @@ changes-requested resubmission (SCRUM-35), Planning and Confirmed transitions
 reconciled with the manual completion command above. Notifications for these
 transitions belong to SCRUM-36/37.
 
-Still unverified for this story: a live signed-in coordinator performing each transition through
-the running API. Known residual risk: a reassignment committed concurrently
-with a transition is not blocked by the row lock (documented in `0012`).
+Live API verification on 24 September 2026: all 39 cases in
+`docs/postman/scrum_28.postman_collection.json` passed against the running
+authService and eventRequestService on the shared Supabase project, using real
+signed-in accounts for each role (`docs/authentication.txt`, "Test accounts").
+This covers submission, assignment, coordinator discovery and access, start
+review, reassignment, cancellation and completion, including every 401, 403,
+404 and 409 path. `Confirmed` was set by SQL for the completion cases, since its
+owning story is not implemented.
+
+Known residual risk: a reassignment committed concurrently with a transition is
+not blocked by the row lock (documented in `0012`).
 
 Runtime smoke check on 22 September 2026: the standard rebuilt event-request
 container and authService were healthy; missing and invalid sessions received

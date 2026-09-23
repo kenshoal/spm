@@ -73,6 +73,13 @@ leave the status unchanged, and checks the `EXECUTE` grants. It prints
 `ALL EVENT-REQUEST STATUS TRANSITION VERIFICATIONS PASSED` and rolls back.
 Requires at least one Supabase Auth user (used as the organiser).
 
+## Test accounts
+
+[`seed_test_accounts.sql`](seed_test_accounts.sql) confirms the shared dev test
+accounts (one per role, two coordinators, password `12345678`) and assigns
+their roles. Register the accounts first; see "Test accounts" in
+`docs/authentication.txt`. Dev only; never run it on production.
+
 ## Verification queries
 
 Re-run these in the SQL Editor if you suspect the migration file has drifted from the live schema:

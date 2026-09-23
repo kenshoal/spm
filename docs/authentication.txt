@@ -17,6 +17,39 @@ Ports: authService 8001 | equipmentService 8002
 
 3. Start the stack and wait for healthy:  docker compose up --build -d
 
+## Test accounts (shared dev project)
+
+One account per role, all with password: 12345678
+
+  admin@example.com                     admin
+  attendee@example.com                  attendee
+  event_organiser@example.com           event_organiser
+  event_operations_manager@example.com  event_operations_manager
+  event_coordinator1@example.com        event_coordinator
+  event_coordinator2@example.com        event_coordinator  (second, unrelated coordinator)
+  technical_support@example.com         technical_support
+  venue_staff@example.com               venue_staff
+
+To (re)create them:
+
+1. Register any missing accounts through authService (stack running):
+
+   for email in admin attendee event_organiser event_operations_manager \
+                event_coordinator1 event_coordinator2 technical_support venue_staff; do
+     curl -s -X POST localhost:8001/auth/register \
+       -H "Content-Type: application/json" \
+       -d "{\"email\":\"$email@example.com\",\"password\":\"12345678\"}"
+     echo
+   done
+
+   An account that already exists is left unchanged. If Supabase answers
+   "email rate limit exceeded", add the remaining users in the dashboard
+   instead (Authentication > Users > Add user > Create new user, tick
+   "Auto Confirm User").
+
+2. Run database/seed_test_accounts.sql in the Supabase SQL Editor. It confirms
+   the emails, assigns the roles and lists the result (expect 8 rows).
+
 ## 1. Get bearer tokens (one per role)
 
 docker compose exec auth-service curl -s -X POST localhost:8000/auth/login \
