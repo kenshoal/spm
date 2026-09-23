@@ -1,0 +1,30 @@
+- generic [active] [ref=f3e1]:
+  - alert [ref=f3e29]: Your event requests
+  - generic [ref=f3e31]:
+    - banner [ref=f3e32]:
+      - generic [ref=f3e33]:
+        - link "CS ConnectSphere" [ref=f3e34] [cursor=pointer]:
+          - /url: /event-requests
+          - generic [ref=f3e35]: CS
+          - generic [ref=f3e36]: ConnectSphere
+        - generic [ref=f3e37]:
+          - link "Account" [ref=f3e38] [cursor=pointer]:
+            - /url: /auth
+          - button "Log out" [ref=f3e40]
+          - generic [ref=f3e41]:
+            - paragraph [ref=f3e42]: Event organiser
+            - paragraph [ref=f3e43]: Organiser workspace
+          - generic [ref=f3e44]: EO
+    - main [ref=f3e45]:
+      - generic [ref=f3e46]:
+        - generic [ref=f3e47]:
+          - paragraph [ref=f3e48]: Organiser workspace
+          - heading "Your event requests" [level=1] [ref=f3e49]
+          - paragraph [ref=f3e50]: Start a request, save incomplete details and return to finish the draft later.
+        - link "Create new" [ref=f3e51] [cursor=pointer]:
+          - /url: /event-requests/new
+          - generic [aria-hidden] [ref=f3e52]: +
+          - text: Create new
+      - generic [ref=f3e53]:
+        - paragraph [ref=f3e54]: No event requests yet
+        - paragraph [ref=f3e55]: Your saved drafts will appear here.

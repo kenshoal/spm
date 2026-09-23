@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -14,6 +14,8 @@ from app.controllers.coordinator_assignment_controller import (
     get_operations_manager_id,
 )
 from app.controllers.event_request_controller import (
+    AuthenticatedCaller,
+    get_authenticated_caller,
     get_authenticated_user_id,
     get_organiser_id,
 )
@@ -53,7 +55,7 @@ class FakeCoordinatorAssignmentRepository:
         row = {
             **values,
             "id": len(self.rows) + 1,
-            "assigned_at": datetime.now(UTC).isoformat(),
+            "assigned_at": datetime.now(timezone.utc).isoformat(),
         }
         self.rows.append(row)
         return dict(row)
@@ -87,6 +89,9 @@ def make_client(
     app.dependency_overrides[get_organiser_id] = fake_caller_id
     app.dependency_overrides[get_authenticated_user_id] = fake_caller_id
     app.dependency_overrides[get_operations_manager_id] = fake_caller_id
+    app.dependency_overrides[get_authenticated_caller] = lambda: AuthenticatedCaller(
+        id="ops-1", roles=("event_operations_manager",)
+    )
     return TestClient(app)
 
 
@@ -318,8 +323,7 @@ def test_assign_coordinator_allows_event_operations_manager_role(
 
 
 # Purpose: Gives the Operations Manager the queue of Submitted requests that still
-# need a Coordinator — without it the role can only assign a request whose id it
-# already knows (SCRUM-14 AC1).
+# need a Coordinator.
 def test_awaiting_assignment_lists_submitted_requests_without_a_coordinator() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -330,8 +334,7 @@ def test_awaiting_assignment_lists_submitted_requests_without_a_coordinator() ->
     assert [row["id"] for row in response.json()] == [event_request_id]
 
 
-# Purpose: A request drops out of the queue once it has a Coordinator, so the
-# Operations Manager isn't offered work that is already owned.
+# Purpose: A request drops out of the queue once it has a Coordinator.
 def test_awaiting_assignment_excludes_requests_that_have_a_coordinator() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -347,8 +350,7 @@ def test_awaiting_assignment_excludes_requests_that_have_a_coordinator() -> None
     assert [row["id"] for row in response.json()] == [unassigned_id]
 
 
-# Purpose: A Draft has not been submitted, so it is not yet the Operations Manager's
-# to assign — only Submitted requests belong in the queue.
+# Purpose: Only Submitted requests belong in the Operations Manager queue.
 def test_awaiting_assignment_excludes_drafts() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -363,8 +365,7 @@ def test_awaiting_assignment_excludes_drafts() -> None:
     assert response.json() == []
 
 
-# Purpose: Confirms the queue is closed to callers who aren't an Operations Manager
-# (exercising the real get_operations_manager_id, not the test override).
+# Purpose: Confirms the queue is closed to callers who aren't an Operations Manager.
 def test_awaiting_assignment_requires_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -399,3 +400,52 @@ def test_awaiting_assignment_requires_operations_manager_role(
         get_settings.cache_clear()
 
     assert response.status_code == 403
+
+
+# Purpose: Assignment details must not leak to authenticated users without a
+# request relationship, while any qualifying role in a multi-role account works.
+@pytest.mark.parametrize(
+    ("roles", "relationship", "expected_status"),
+    [
+        (("event_organiser",), "owner", 200),
+        (("event_organiser",), "other", 404),
+        (("event_operations_manager",), "other", 200),
+        (("event_coordinator",), "assigned", 200),
+        (("event_coordinator",), "other", 404),
+        (("venue_staff",), "other", 403),
+        (("venue_staff", "event_coordinator"), "assigned", 200),
+    ],
+)
+def test_get_coordinator_is_scoped_to_request_access(
+    roles: tuple[str, ...],
+    relationship: str,
+    expected_status: int,
+) -> None:
+    caller_id = str(uuid4())
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    app = create_app(event_requests, coordinators)
+    app.dependency_overrides[get_authenticated_caller] = lambda: AuthenticatedCaller(
+        id=caller_id, roles=roles
+    )
+
+    event_request_id = submit_event_request(event_requests)
+    if relationship == "owner":
+        event_requests.rows[event_request_id]["organiser_id"] = caller_id
+    coordinators.create(
+        {
+            "event_request_id": event_request_id,
+            "coordinator_id": (
+                caller_id if relationship == "assigned" else str(uuid4())
+            ),
+            "assigned_by": str(uuid4()),
+        }
+    )
+
+    with TestClient(app) as client:
+        response = client.get(
+            f"/event-requests/{event_request_id}/coordinator",
+            headers=headers("valid-token"),
+        )
+
+    assert response.status_code == expected_status

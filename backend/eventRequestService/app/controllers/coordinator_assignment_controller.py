@@ -5,8 +5,8 @@ from pydantic import ValidationError
 
 from app.config import get_settings
 from app.controllers.event_request_controller import (
+    AuthenticatedCaller,
     get_authenticated_caller,
-    get_authenticated_user_id,
     get_event_request_service,
 )
 from app.models.coordinator_assignment import (
@@ -65,7 +65,7 @@ def get_operations_manager_id(
 ServiceDependency = Annotated[
     CoordinatorAssignmentService, Depends(get_coordinator_assignment_service)
 ]
-CallerDependency = Annotated[str, Depends(get_authenticated_user_id)]
+CallerDependency = Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)]
 OperationsManagerDependency = Annotated[str, Depends(get_operations_manager_id)]
 
 
@@ -100,7 +100,27 @@ def assign_coordinator(
 )
 def get_coordinator(
     event_request_id: str,
-    _caller: CallerDependency,
+    caller: CallerDependency,
     service: ServiceDependency,
 ) -> CoordinatorAssignmentResponse:
-    return service.get_current(event_request_id)
+    roles = set(caller.roles)
+    if "event_operations_manager" in roles:
+        return service.get_current(event_request_id)
+
+    event_request = service.event_request_service.get_by_id(event_request_id)
+    if (
+        "event_organiser" in roles
+        and event_request.organiser_id == caller.id
+    ):
+        return service.get_current(event_request_id)
+
+    assignment = service.get_current(event_request_id)
+    if (
+        "event_coordinator" in roles
+        and assignment.coordinator_id == caller.id
+    ):
+        return assignment
+
+    if roles.isdisjoint({"event_organiser", "event_coordinator"}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
