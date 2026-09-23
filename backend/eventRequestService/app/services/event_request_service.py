@@ -88,6 +88,12 @@ class EventRequestService:
             raise EventRequestNotFoundError(event_request_id)
         return self._row_to_response(row)
 
+    def get_by_ids(
+        self, event_request_ids: list[str]
+    ) -> list[EventRequestResponse]:
+        rows = self.repository.get_by_ids(event_request_ids)
+        return [self._row_to_response(row) for row in rows]
+
     def transition_status(
         self,
         event_request_id: str,

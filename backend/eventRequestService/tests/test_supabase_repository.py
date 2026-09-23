@@ -148,8 +148,7 @@ def test_submit_atomically_scopes_and_changes_status() -> None:
     assert submitted["status"] == "Submitted"
 
 
-# Purpose: Confirms a status transition is scoped to the expected current status,
-# so a concurrent change makes it a no-op rather than clobbering the row.
+# Purpose: Confirms a status transition is scoped to the expected current status.
 def test_update_status_scopes_query_to_from_status() -> None:
     captured: dict[str, object] = {}
 
@@ -177,7 +176,7 @@ def test_update_status_scopes_query_to_from_status() -> None:
     assert row["status"] == "Under Review"
 
 
-# Purpose: A row not currently in from_status means no rows match — a no-op, not an error.
+# Purpose: A row not currently in from_status means no rows match.
 def test_update_status_returns_none_when_not_in_from_status() -> None:
     repository = SupabaseEventRequestRepository(
         "https://project.supabase.co",
@@ -188,7 +187,7 @@ def test_update_status_returns_none_when_not_in_from_status() -> None:
     assert repository.update_status("request-1", "Submitted", "Under Review") is None
 
 
-# Purpose: Prevents deletion of a request unless its ID, owner, and Draft status all match.
+# Purpose: Prevents deletion unless ID, owner, and Draft status all match.
 def test_delete_scopes_query_to_owner_and_draft_status() -> None:
     captured: dict[str, object] = {}
 
@@ -214,8 +213,7 @@ def test_delete_scopes_query_to_owner_and_draft_status() -> None:
     assert deleted is True
 
 
-# Purpose: The status lookup spans every organiser — the Operations Manager's queue
-# is not scoped to one owner, unlike every other read in this repository.
+# Purpose: The status lookup spans every organiser for the Operations Manager queue.
 def test_list_by_status_queries_across_organisers() -> None:
     captured_query: dict[str, str] = {}
 
@@ -238,7 +236,40 @@ def test_list_by_status_queries_across_organisers() -> None:
     assert "organiser_id" not in captured_query
 
 
-# Purpose: Converts upstream Supabase failures into the service's stable repository error.
+# Purpose: Confirms batch lookups query the exact ID list, newest first.
+def test_get_by_ids_queries_id_list_ordered_newest_first() -> None:
+    captured_query: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_query.update(dict(request.url.params))
+        return httpx.Response(200, json=[response_row()])
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    repository.get_by_ids(["request-1", "request-2"])
+
+    assert captured_query["id"] == "in.(request-1,request-2)"
+    assert captured_query["order"] == "created_at.desc"
+
+
+# Purpose: An empty ID list skips Supabase.
+def test_get_by_ids_returns_empty_list_without_querying() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("Supabase should not be called for an empty ID list")
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert repository.get_by_ids([]) == []
+
+
+# Purpose: Converts upstream Supabase failures into the service's repository error.
 def test_supabase_failure_raises_repository_error() -> None:
     repository = SupabaseEventRequestRepository(
         "https://project.supabase.co",

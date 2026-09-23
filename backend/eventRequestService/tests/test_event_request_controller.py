@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.controllers import event_request_controller
 from app.main import create_app
+from app.repositories import SupabaseRepositoryError
 
 
 class FakeEventRequestRepository:
@@ -31,6 +32,13 @@ class FakeEventRequestRepository:
             dict(row)
             for row in reversed(list(self.rows.values()))
             if row["organiser_id"] == organiser_id
+        ]
+
+    def list_by_status(self, status: str) -> list[dict[str, Any]]:
+        return [
+            dict(row)
+            for row in reversed(list(self.rows.values()))
+            if row["status"] == status
         ]
 
     def get_for_organiser(
@@ -87,6 +95,73 @@ class FakeEventRequestRepository:
         del self.rows[event_request_id]
         return True
 
+    def get_by_id(self, event_request_id: str) -> dict[str, Any] | None:
+        row = self.rows.get(event_request_id)
+        return dict(row) if row is not None else None
+
+    def get_by_ids(self, event_request_ids: list[str]) -> list[dict[str, Any]]:
+        wanted = set(event_request_ids)
+        rows = [row for row in self.rows.values() if row["id"] in wanted]
+        return [
+            dict(row)
+            for row in sorted(rows, key=lambda r: r["created_at"], reverse=True)
+        ]
+
+    def update_status(
+        self, event_request_id: str, from_status: str, to_status: str
+    ) -> dict[str, Any] | None:
+        row = self.rows.get(event_request_id)
+        if row is None or row["status"] != from_status:
+            return None
+        row["status"] = to_status
+        return dict(row)
+
+
+class FakeCoordinatorAssignmentRepository:
+    def __init__(self) -> None:
+        self.rows: list[dict[str, Any]] = []
+
+    def create(self, values: dict[str, Any]) -> dict[str, Any]:
+        row = {
+            **values,
+            "id": len(self.rows) + 1,
+            "assigned_at": datetime.now(UTC).isoformat(),
+        }
+        self.rows.append(row)
+        return dict(row)
+
+    def latest_for_event_request(
+        self, event_request_id: str
+    ) -> dict[str, Any] | None:
+        matches = [r for r in self.rows if r["event_request_id"] == event_request_id]
+        return dict(matches[-1]) if matches else None
+
+    def assigned_event_request_ids(self, event_request_ids: list[str]) -> set[str]:
+        wanted = set(event_request_ids)
+        return {r["event_request_id"] for r in self.rows} & wanted
+
+    def list_for_coordinator(self, coordinator_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(row) for row in self.rows if row["coordinator_id"] == coordinator_id
+        ]
+
+    def list_for_event_requests(
+        self, event_request_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        wanted = set(event_request_ids)
+        return [dict(row) for row in self.rows if row["event_request_id"] in wanted]
+
+
+def submit_event_request(repository: FakeEventRequestRepository) -> str:
+    row = repository.create(
+        {
+            "organiser_id": "organiser-1",
+            "status": "Submitted",
+            "event_name": "Community Dinner",
+        }
+    )
+    return row["id"]
+
 
 ORGANISER_ID = "11111111-1111-4111-8111-111111111111"
 OTHER_ORGANISER_ID = "22222222-2222-4222-8222-222222222222"
@@ -99,6 +174,26 @@ def make_client(
     application = create_app(repository or FakeEventRequestRepository())
     application.dependency_overrides[event_request_controller.get_organiser_id] = (
         lambda: organiser_id
+    )
+    application.dependency_overrides[event_request_controller.get_coordinator_id] = (
+        lambda: organiser_id
+    )
+    application.dependency_overrides[
+        event_request_controller.get_authenticated_caller
+    ] = lambda: event_request_controller.AuthenticatedCaller(
+        id=organiser_id, roles=("event_organiser",)
+    )
+    return TestClient(application)
+
+
+def make_coordinator_client(
+    event_requests: FakeEventRequestRepository,
+    coordinators: FakeCoordinatorAssignmentRepository,
+    coordinator_id: str,
+) -> TestClient:
+    application = create_app(event_requests, coordinators)
+    application.dependency_overrides[event_request_controller.get_coordinator_id] = (
+        lambda: coordinator_id
     )
     return TestClient(application)
 
@@ -239,6 +334,7 @@ def test_other_organiser_cannot_read_update_or_delete() -> None:
     ("method", "path"),
     [
         ("GET", "/event-requests"),
+        ("GET", "/event-requests/assigned-to-me"),
         ("POST", "/event-requests"),
         ("POST", "/event-requests/submissions"),
         ("GET", "/event-requests/00000000-0000-0000-0000-000000000001"),
@@ -491,3 +587,248 @@ def test_submitted_request_is_read_only() -> None:
     assert fetched.status_code == 200
     assert fetched.json()["status"] == "Submitted"
     assert fetched.json()["event_name"] == complete_payload()["event_name"]
+
+
+def assign(
+    coordinators: FakeCoordinatorAssignmentRepository,
+    event_request_id: str,
+    coordinator_id: str,
+) -> None:
+    coordinators.create(
+        {
+            "event_request_id": event_request_id,
+            "coordinator_id": coordinator_id,
+            "assigned_by": "ops-1",
+        }
+    )
+
+
+# Purpose: A coordinator's assigned-to-me queue lists the requests assigned to them.
+def test_assigned_to_me_lists_currently_assigned_requests() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    first = submit_event_request(event_requests)
+    second = submit_event_request(event_requests)
+    assign(coordinators, first, "coord-1")
+    assign(coordinators, second, "coord-1")
+
+    with make_coordinator_client(event_requests, coordinators, "coord-1") as client:
+        response = client.get("/event-requests/assigned-to-me")
+
+    assert response.status_code == 200
+    assert {item["id"] for item in response.json()} == {first, second}
+
+
+# Purpose: A reassigned-away coordinator no longer sees the request in their queue.
+def test_assigned_to_me_excludes_requests_reassigned_to_someone_else() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    event_request_id = submit_event_request(event_requests)
+    assign(coordinators, event_request_id, "coord-1")
+    assign(coordinators, event_request_id, "coord-2")
+
+    with make_coordinator_client(event_requests, coordinators, "coord-1") as client:
+        response = client.get("/event-requests/assigned-to-me")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# Purpose: The new coordinator after a reassignment sees the request in their queue.
+def test_assigned_to_me_shows_request_to_the_latest_coordinator() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    event_request_id = submit_event_request(event_requests)
+    assign(coordinators, event_request_id, "coord-1")
+    assign(coordinators, event_request_id, "coord-2")
+
+    with make_coordinator_client(event_requests, coordinators, "coord-2") as client:
+        response = client.get("/event-requests/assigned-to-me")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [event_request_id]
+
+
+# Purpose: A coordinator with nothing assigned gets an empty queue, not an error.
+def test_assigned_to_me_is_empty_when_nothing_is_assigned() -> None:
+    with make_coordinator_client(
+        FakeEventRequestRepository(), FakeCoordinatorAssignmentRepository(), "coord-1"
+    ) as client:
+        response = client.get("/event-requests/assigned-to-me")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# Purpose: Queue results are ordered newest-first like the organiser list.
+def test_assigned_to_me_orders_requests_newest_first() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    older = submit_event_request(event_requests)
+    newer = submit_event_request(event_requests)
+    assign(coordinators, older, "coord-1")
+    assign(coordinators, newer, "coord-1")
+
+    with make_coordinator_client(event_requests, coordinators, "coord-1") as client:
+        response = client.get("/event-requests/assigned-to-me")
+
+    assert [item["id"] for item in response.json()] == [newer, older]
+
+
+# Purpose: Queue reads surface a Supabase outage as 502 rather than crashing.
+def test_assigned_to_me_maps_repository_failure_to_bad_gateway() -> None:
+    class FailingCoordinatorRepository(FakeCoordinatorAssignmentRepository):
+        def list_for_coordinator(self, coordinator_id: str) -> list[dict[str, Any]]:
+            raise SupabaseRepositoryError("Supabase is down")
+
+    event_requests = FakeEventRequestRepository()
+    with make_coordinator_client(
+        event_requests, FailingCoordinatorRepository(), "coord-1"
+    ) as client:
+        response = client.get("/event-requests/assigned-to-me")
+
+    assert response.status_code == 502
+
+
+@pytest.mark.parametrize(
+    "roles",
+    [["event_organiser"], ["event_operations_manager"]],
+)
+# Purpose: Only coordinators may read the assigned-to-me queue (multi-role accepted).
+def test_assigned_to_me_requires_coordinator_role(
+    monkeypatch: pytest.MonkeyPatch,
+    roles: list[str],
+) -> None:
+    caller_id = str(uuid4())
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={"id": caller_id, "role": roles[0], "roles": roles},
+        ),
+    )
+    get_settings.cache_clear()
+    try:
+        application = create_app(
+            FakeEventRequestRepository(), FakeCoordinatorAssignmentRepository()
+        )
+        with TestClient(application) as client:
+            response = client.get(
+                "/event-requests/assigned-to-me",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 403
+
+
+# Purpose: A multi-role account whose roles include Event Coordinator keeps queue access.
+def test_assigned_to_me_accepts_multi_role_coordinator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    caller_id = str(uuid4())
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "id": caller_id,
+                "role": "venue_staff",
+                "roles": ["venue_staff", "event_coordinator"],
+            },
+        ),
+    )
+    get_settings.cache_clear()
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    try:
+        application = create_app(event_requests, coordinators)
+        event_request_id = submit_event_request(event_requests)
+        assign(coordinators, event_request_id, caller_id)
+        with TestClient(application) as client:
+            response = client.get(
+                "/event-requests/assigned-to-me",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [event_request_id]
+
+
+@pytest.mark.parametrize(
+    ("roles", "relationship", "expected_status"),
+    [
+        (("event_organiser",), "owner", 200),
+        (("event_organiser",), "other", 404),
+        (("event_coordinator",), "assigned", 200),
+        (("event_coordinator",), "other", 404),
+        (("event_operations_manager",), "other", 403),
+        (("venue_staff",), "other", 403),
+        (("venue_staff", "event_coordinator"), "assigned", 200),
+        (("event_organiser", "event_coordinator"), "owner", 200),
+        (("event_organiser", "event_coordinator"), "other", 404),
+    ],
+)
+# Purpose: Request details are visible only to the owner organiser or the assigned
+# coordinator; related-but-unauthorised callers get 404, unrelated roles 403.
+def test_get_event_request_is_scoped_to_request_access(
+    roles: tuple[str, ...],
+    relationship: str,
+    expected_status: int,
+) -> None:
+    caller_id = str(uuid4())
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    application = create_app(event_requests, coordinators)
+    application.dependency_overrides[
+        event_request_controller.get_authenticated_caller
+    ] = lambda: event_request_controller.AuthenticatedCaller(
+        id=caller_id, roles=roles
+    )
+
+    event_request_id = submit_event_request(event_requests)
+    if relationship == "owner":
+        event_requests.rows[event_request_id]["organiser_id"] = caller_id
+    assign(
+        coordinators,
+        event_request_id,
+        caller_id if relationship == "assigned" else str(uuid4()),
+    )
+
+    with TestClient(application) as client:
+        response = client.get(
+            f"/event-requests/{event_request_id}",
+            headers={"Authorization": f"Bearer {caller_id}"},
+        )
+
+    assert response.status_code == expected_status
+
+
+# Purpose: Coordinators cannot confirm the existence of unassigned requests by id.
+def test_coordinator_gets_not_found_for_unassigned_request() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository()
+    application = create_app(event_requests, coordinators)
+    application.dependency_overrides[
+        event_request_controller.get_authenticated_caller
+    ] = lambda: event_request_controller.AuthenticatedCaller(
+        id="coord-1", roles=("event_coordinator",)
+    )
+    event_request_id = submit_event_request(event_requests)
+
+    with TestClient(application) as client:
+        response = client.get(
+            f"/event-requests/{event_request_id}",
+            headers={"Authorization": "Bearer coord-1"},
+        )
+
+    assert response.status_code == 404

@@ -1,3 +1,5 @@
+from typing import Any
+
 from app.models.coordinator_assignment import (
     CoordinatorAssignmentResponse,
     CoordinatorAssignRequest,
@@ -99,3 +101,29 @@ class CoordinatorAssignmentService:
         if row is None:
             raise CoordinatorAssignmentNotFoundError(event_request_id)
         return CoordinatorAssignmentResponse.model_validate(row)
+
+    def list_requests_for_coordinator(
+        self, coordinator_id: str
+    ) -> list[EventRequestResponse]:
+        """The requests whose latest assignment is this coordinator — a
+        reassigned-away coordinator must not keep seeing the request, so
+        "ever assigned" isn't enough; the highest-id assignment decides."""
+        mine = self.repository.list_for_coordinator(coordinator_id)
+        if not mine:
+            return []
+
+        candidates = {row["event_request_id"] for row in mine}
+        latest: dict[str, dict[str, Any]] = {}
+        for row in self.repository.list_for_event_requests(sorted(candidates)):
+            request_id = row["event_request_id"]
+            if request_id not in latest or int(row["id"]) > int(
+                latest[request_id]["id"]
+            ):
+                latest[request_id] = row
+
+        assigned_ids = sorted(
+            request_id
+            for request_id, row in latest.items()
+            if row["coordinator_id"] == coordinator_id
+        )
+        return self.event_request_service.get_by_ids(assigned_ids)

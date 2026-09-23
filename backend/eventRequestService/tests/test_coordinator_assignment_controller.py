@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -7,7 +5,9 @@ import pytest
 from fastapi import Header
 from fastapi.testclient import TestClient
 from test_event_request_controller import (
-    FakeEventRequestRepository as _BaseFakeEventRequestRepository,
+    FakeCoordinatorAssignmentRepository,
+    FakeEventRequestRepository,
+    submit_event_request,
 )
 
 from app.controllers.coordinator_assignment_controller import (
@@ -22,55 +22,6 @@ from app.controllers.event_request_controller import (
 from app.main import create_app
 
 
-class FakeEventRequestRepository(_BaseFakeEventRequestRepository):
-    """Adds the unscoped lookup a non-organiser caller (Operations Manager)
-    needs — his fake only implements the organiser-scoped methods."""
-
-    def get_by_id(self, event_request_id: str) -> dict[str, Any] | None:
-        row = self.rows.get(event_request_id)
-        return dict(row) if row is not None else None
-
-    def update_status(
-        self, event_request_id: str, from_status: str, to_status: str
-    ) -> dict[str, Any] | None:
-        row = self.rows.get(event_request_id)
-        if row is None or row["status"] != from_status:
-            return None
-        row["status"] = to_status
-        return dict(row)
-
-    def list_by_status(self, status: str) -> list[dict[str, Any]]:
-        return [
-            dict(row)
-            for row in reversed(list(self.rows.values()))
-            if row["status"] == status
-        ]
-
-
-class FakeCoordinatorAssignmentRepository:
-    def __init__(self) -> None:
-        self.rows: list[dict[str, Any]] = []
-
-    def create(self, values: dict[str, Any]) -> dict[str, Any]:
-        row = {
-            **values,
-            "id": len(self.rows) + 1,
-            "assigned_at": datetime.now(timezone.utc).isoformat(),
-        }
-        self.rows.append(row)
-        return dict(row)
-
-    def latest_for_event_request(
-        self, event_request_id: str
-    ) -> dict[str, Any] | None:
-        matches = [r for r in self.rows if r["event_request_id"] == event_request_id]
-        return dict(matches[-1]) if matches else None
-
-    def assigned_event_request_ids(self, event_request_ids: list[str]) -> set[str]:
-        wanted = set(event_request_ids)
-        return {r["event_request_id"] for r in self.rows} & wanted
-
-
 def make_client(
     event_request_repository: FakeEventRequestRepository | None = None,
     coordinator_repository: FakeCoordinatorAssignmentRepository | None = None,
@@ -83,9 +34,6 @@ def make_client(
     def fake_caller_id(authorization: str = Header()) -> str:
         return authorization.removeprefix("Bearer ")
 
-    # These tests aren't about authorization, so both dependencies just trust
-    # the bearer value as the caller id. The role gate itself is tested
-    # separately below, against the real get_operations_manager_id.
     app.dependency_overrides[get_organiser_id] = fake_caller_id
     app.dependency_overrides[get_authenticated_user_id] = fake_caller_id
     app.dependency_overrides[get_operations_manager_id] = fake_caller_id
@@ -99,18 +47,7 @@ def headers(caller_id: str = "ops-1") -> dict[str, str]:
     return {"Authorization": f"Bearer {caller_id}"}
 
 
-def submit_event_request(repository: FakeEventRequestRepository) -> str:
-    row = repository.create(
-        {
-            "organiser_id": "organiser-1",
-            "status": "Submitted",
-            "event_name": "Community Dinner",
-        }
-    )
-    return row["id"]
-
-
-# Purpose: Confirms an Operations Manager can assign a Coordinator to a submitted request.
+# Purpose: Confirms an Operations Manager can assign a Coordinator.
 def test_assign_coordinator_to_submitted_request() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -127,8 +64,7 @@ def test_assign_coordinator_to_submitted_request() -> None:
     assert response.json()["assigned_by"] == "ops-1"
 
 
-# Purpose: Confirms assignment alone doesn't change the event request's status (AC:
-# "remains Submitted") — assignment and status are owned by separate tables/services.
+# Purpose: Assignment alone does not change the event request status.
 def test_assign_coordinator_does_not_change_event_request_status() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -176,7 +112,7 @@ def test_assign_coordinator_refused_once_terminal(status: str) -> None:
     assert response.status_code == 409
 
 
-# Purpose: 404s rather than assigning a Coordinator to a request that doesn't exist.
+# Purpose: 404s rather than assigning a Coordinator to a missing request.
 def test_assign_coordinator_to_missing_request() -> None:
     with make_client() as client:
         response = client.post(
@@ -188,7 +124,7 @@ def test_assign_coordinator_to_missing_request() -> None:
     assert response.status_code == 404
 
 
-# Purpose: Reassignment inserts a new row rather than overwriting, preserving history.
+# Purpose: Reassignment inserts a new row and get returns the latest.
 def test_reassignment_preserves_history_and_get_returns_latest() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -212,7 +148,7 @@ def test_reassignment_preserves_history_and_get_returns_latest() -> None:
     assert current.json()["coordinator_id"] == "coord-2"
 
 
-# Purpose: 404s when no Coordinator has been assigned yet, distinct from a missing request.
+# Purpose: 404s when no Coordinator has been assigned yet.
 def test_get_coordinator_when_none_assigned() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -225,8 +161,7 @@ def test_get_coordinator_when_none_assigned() -> None:
     assert response.status_code == 404
 
 
-# Purpose: Ensures both endpoints reject requests without a verified session
-# (exercising the real authentication dependencies, not the test overrides).
+# Purpose: Ensures both endpoints reject requests without a verified session.
 def test_requires_bearer_session() -> None:
     app = create_app(FakeEventRequestRepository(), FakeCoordinatorAssignmentRepository())
     with TestClient(app) as client:
@@ -242,8 +177,7 @@ def test_requires_bearer_session() -> None:
     assert get.status_code == 401
 
 
-# Purpose: Refuses assignment for an authenticated caller who isn't an Operations Manager
-# (exercising the real get_operations_manager_id against all assigned roles).
+# Purpose: Refuses assignment for a caller who is not an Operations Manager.
 def test_assign_coordinator_requires_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -282,7 +216,7 @@ def test_assign_coordinator_requires_operations_manager_role(
     assert response.status_code == 403
 
 
-# Purpose: Allows assignment when one of the caller's roles is Event Operations Manager.
+# Purpose: Allows assignment when any caller role is Event Operations Manager.
 def test_assign_coordinator_allows_event_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -322,8 +256,7 @@ def test_assign_coordinator_allows_event_operations_manager_role(
     assert response.json()["assigned_by"] == caller_id
 
 
-# Purpose: Gives the Operations Manager the queue of Submitted requests that still
-# need a Coordinator.
+# Purpose: Lists submitted requests that still need a Coordinator.
 def test_awaiting_assignment_lists_submitted_requests_without_a_coordinator() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -365,7 +298,7 @@ def test_awaiting_assignment_excludes_drafts() -> None:
     assert response.json() == []
 
 
-# Purpose: Confirms the queue is closed to callers who aren't an Operations Manager.
+# Purpose: Confirms the queue is closed to non-Operations Manager callers.
 def test_awaiting_assignment_requires_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -402,8 +335,7 @@ def test_awaiting_assignment_requires_operations_manager_role(
     assert response.status_code == 403
 
 
-# Purpose: Assignment details must not leak to authenticated users without a
-# request relationship, while any qualifying role in a multi-role account works.
+# Purpose: Assignment details are scoped to users with a request relationship.
 @pytest.mark.parametrize(
     ("roles", "relationship", "expected_status"),
     [

@@ -20,6 +20,10 @@ class EventRequestRepository(Protocol):
 
     def get_by_id(self, event_request_id: str) -> dict[str, Any] | None: ...
 
+    def get_by_ids(
+        self, event_request_ids: list[str]
+    ) -> list[dict[str, Any]]: ...
+
     def update_status(
         self, event_request_id: str, from_status: str, to_status: str
     ) -> dict[str, Any] | None: ...
@@ -130,6 +134,18 @@ class SupabaseEventRequestRepository:
             },
         )
         return rows[0] if rows else None
+
+    def get_by_ids(self, event_request_ids: list[str]) -> list[dict[str, Any]]:
+        if not event_request_ids:
+            return []
+        return self._request(
+            "GET",
+            params={
+                "id": f"in.({','.join(event_request_ids)})",
+                "order": "created_at.desc",
+                "select": "*",
+            },
+        )
 
     def update_status(
         self, event_request_id: str, from_status: str, to_status: str

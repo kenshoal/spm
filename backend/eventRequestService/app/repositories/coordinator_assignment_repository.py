@@ -15,6 +15,12 @@ class CoordinatorAssignmentRepository(Protocol):
 
     def assigned_event_request_ids(self, event_request_ids: list[str]) -> set[str]: ...
 
+    def list_for_coordinator(self, coordinator_id: str) -> list[dict[str, Any]]: ...
+
+    def list_for_event_requests(
+        self, event_request_ids: list[str]
+    ) -> list[dict[str, Any]]: ...
+
 
 class SupabaseCoordinatorAssignmentRepository:
     """Persists Coordinator assignments through Supabase's Data API.
@@ -86,6 +92,29 @@ class SupabaseCoordinatorAssignmentRepository:
             },
         )
         return {row["event_request_id"] for row in rows}
+
+    def list_for_coordinator(self, coordinator_id: str) -> list[dict[str, Any]]:
+        return self._request(
+            "GET",
+            params={
+                "coordinator_id": f"eq.{coordinator_id}",
+                "order": "id.asc",
+                "select": "*",
+            },
+        )
+
+    def list_for_event_requests(
+        self, event_request_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        if not event_request_ids:
+            return []
+        return self._request(
+            "GET",
+            params={
+                "event_request_id": f"in.({','.join(event_request_ids)})",
+                "select": "*",
+            },
+        )
 
     def _request(self, method: str, **kwargs: Any) -> list[dict[str, Any]]:
         try:
