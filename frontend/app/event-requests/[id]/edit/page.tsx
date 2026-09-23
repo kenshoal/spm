@@ -5,7 +5,7 @@ import { getEventRequest } from "@/lib/event-requests";
 import { AppShell } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { EventRequestForm } from "../../new/event-request-form";
-import { RequestDetails } from "../../request-details";
+import { RequestDetails } from "../../../components/request-details";
 
 async function EditDraft({ id }: { id: string }) {
   const result = await getEventRequest(id)

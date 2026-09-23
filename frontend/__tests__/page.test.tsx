@@ -115,12 +115,13 @@ test("shows all request tracking tabs with counts", () => {
   render(
     <RequestTabs
       selected="submitted"
-      counts={{ all: 3, draft: 1, submitted: 2, completed: 0 }}
+      counts={{ all: 3, draft: 1, submitted: 2, "in-progress": 1, completed: 0 }}
     />,
   );
 
   expect(screen.getByRole("link", { name: "All (3)" })).toBeDefined();
   expect(screen.getByRole("link", { name: "Draft (1)" })).toBeDefined();
   expect(screen.getByRole("link", { name: "Submitted (2)" }).getAttribute("aria-current")).toBe("page");
+  expect(screen.getByRole("link", { name: "In Progress (1)" })).toBeDefined();
   expect(screen.getByRole("link", { name: "Completed (0)" })).toBeDefined();
 });
