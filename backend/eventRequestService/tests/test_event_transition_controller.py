@@ -183,6 +183,8 @@ def test_start_review_for_missing_request() -> None:
     assert response.status_code == 404
 
 
+# Purpose: Rejects a caller without the event_coordinator role, even when
+# their user ID matches the latest assignment.
 def test_start_review_requires_event_coordinator_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

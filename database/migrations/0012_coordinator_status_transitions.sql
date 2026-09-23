@@ -69,9 +69,8 @@ BEGIN
             )
         )
     ) THEN
-        RAISE EXCEPTION 'transition not allowed from status %' USING
-            ERRCODE = 'P0004',
-            MESSAGE = 'transition not allowed from status ' || v_current.status;
+        RAISE EXCEPTION 'transition not allowed from status %', v_current.status
+            USING ERRCODE = 'P0004';
     END IF;
 
     UPDATE public.event_requests
