@@ -28,10 +28,25 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0010_staff_roles.sql` | `staff_roles` role-assignment table keyed by `(user_id, role)`, RLS enabled, service-role access only |
 | `migrations/0011_event_coordinator_assignments.sql` | `event_coordinator_assignments` append-only table backing Coordinator assignment and the awaiting-assignment queue. **Reference snapshot / fresh environments only** — this table was created by hand in the dashboard and already exists live; do not re-run it there |
 | `migrations/0011_event_request_review_status.sql` | Full event-request status constraint and server-only access to coordinator assignment history; API services enforce actor and transition rules |
+| `migrations/0012_coordinator_status_transitions.sql` | `advance_event_request_by_coordinator` RPC (SCRUM-28): locks the request row, re-checks the latest coordinator assignment and applies one coordinator transition atomically. ERRCODE `P0002` not found, `P0003` not the assigned coordinator, `P0004` transition not allowed. Revokes `EXECUTE` from `PUBLIC` only — see 0013 |
+| `migrations/0013_coordinator_transition_execute_grants.sql` | Revokes the direct `EXECUTE` grants Supabase's default privileges give `anon` and `authenticated` on the 0012 function, leaving `service_role` only (same fix as 0005 + 0006 for the equipment RPCs) |
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
 environments and schema review.
+
+`0012` was applied to the shared Supabase development project on 23 September
+2026 (the corrected version, with the fixed P0004 `RAISE`). Do not apply it
+again there. Fresh environments must apply it before running the SCRUM-28
+eventRequestService, otherwise `/review`, `/cancellation` and `/completion`
+return 502.
+
+`0013` was applied to the shared development project on 23 September 2026,
+after which `verify_event_request_status_transitions.sql` passed there. Do not
+apply either file again there.
+
+New RPCs should revoke `EXECUTE` from `PUBLIC, anon, authenticated` in the same
+migration that creates them. Supabase grants all three by default.
 
 `0001_baseline.sql` was derived from what `equipmentService` implies, then reconciled against the live database (columns, types, nullability, defaults, constraints, indexes) using the export queries below. One thing is deliberately absent:
 
@@ -48,6 +63,15 @@ The event-request submission outbox is verified by
 It proves that a Draft creates no event, each supported submission path creates
 exactly one event, and a repeated status write does not create a duplicate. The
 script rolls back all test rows.
+
+The coordinator transition function is verified by
+[`verify_event_request_status_transitions.sql`](verify_event_request_status_transitions.sql).
+Run it after `0012` and `0013`: it exercises Submitted → Under Review, non-terminal →
+Cancelled and Confirmed → Completed, every `P0002`/`P0003`/`P0004` failure
+path (including reassignment away and repeated actions), confirms refused calls
+leave the status unchanged, and checks the `EXECUTE` grants. It prints
+`ALL EVENT-REQUEST STATUS TRANSITION VERIFICATIONS PASSED` and rolls back.
+Requires at least one Supabase Auth user (used as the organiser).
 
 ## Verification queries
 

@@ -26,6 +26,14 @@ Before those branches are integrated, agree on an idempotent contract that:
 - preserves `organiser_id` as the authenticated owner;
 - leaves coordinator-only fields and status history in `eventService`.
 
-Until that contract is implemented, the organiser UI can accurately show
-`Draft` and `Submitted`. Later coordination and completion states must not be
-invented in `eventRequestService`.
+## Interim status tracking (SCRUM-28)
+
+Until `eventService` exists, `eventRequestService` stores the request status
+and coordinator assignment history, and the frontend displays all ten statuses.
+It writes only four transitions: `Draft` → `Submitted` (organiser),
+`Submitted` → `Under Review`, non-terminal → `Cancelled` and `Confirmed` →
+`Completed` (assigned coordinator, through the `0012` database function).
+Approval, rejection, changes requested, planning, confirmation and automatic
+completion must be written by their own stories, not invented in
+`eventRequestService`. When the coordination service is integrated, move these
+commands behind the hand-off contract above.

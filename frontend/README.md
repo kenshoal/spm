@@ -1,7 +1,17 @@
-This is the ConnectSphere organiser frontend. An authenticated organiser can
-save incomplete drafts, submit a complete new request or saved draft, and track
-requests using All, Draft, Submitted and Completed tabs. Submitted requests
-are read-only.
+This is the ConnectSphere frontend.
+
+- **Organisers** (`/event-requests`) save incomplete drafts, submit a complete
+  new request or saved draft, and track requests using All, Draft, Submitted,
+  In Progress and Completed tabs. In Progress groups Under Review, Changes
+  Requested, Approved, Planning and Confirmed; Cancelled and Rejected appear
+  under All. Submitted requests are read-only, and the detail view shows a
+  status progress display explaining the current stage.
+- **Coordinators** (`/coordination/requests`) see only the requests currently
+  assigned to them and open a read-only detail view. Actions depend on status:
+  **Start review** (Submitted), **Cancel event** (any non-terminal status,
+  confirmed first) and **Mark complete** (Confirmed, confirmed first).
+
+Users with both roles see links to both workspaces.
 
 ## Getting Started
 
@@ -49,7 +59,9 @@ npm run build
 
 The Playwright suite starts isolated auth and event-request APIs on ports `8104`
 and `8103`, plus a frontend on `3100`. It exercises the browser workflow without
-changing the shared Supabase project.
+changing the shared Supabase project. The mock API has organiser, coordinator,
+second-coordinator and operations-manager sessions; coordinator assignment is
+driven through the API because no Operations Manager frontend exists yet.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

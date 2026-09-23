@@ -10,7 +10,8 @@ drafts. Drafts are persisted in the shared Supabase project.
 | `POST` | `/event-requests` | Create a Draft |
 | `POST` | `/event-requests/submissions` | Submit a complete new request |
 | `GET` | `/event-requests` | List the current organiser's requests |
-| `GET` | `/event-requests/{id}` | Retrieve one request |
+| `GET` | `/event-requests/assigned-to-me` | List requests whose latest assignment is the calling Coordinator |
+| `GET` | `/event-requests/{id}` | Retrieve one request (owning Organiser or assigned Coordinator) |
 | `PATCH` | `/event-requests/{id}` | Update a Draft |
 | `POST` | `/event-requests/{id}/submit` | Submit a completed Draft |
 | `DELETE` | `/event-requests/{id}` | Delete a Draft |
@@ -18,17 +19,26 @@ drafts. Drafts are persisted in the shared Supabase project.
 | `POST` | `/event-requests/{id}/coordinator` | Assign or reassign a Coordinator |
 | `GET` | `/event-requests/{id}/coordinator` | Get the current Coordinator |
 | `POST` | `/event-requests/{id}/review` | Assigned Coordinator starts review (`Submitted` → `Under Review`) |
+| `POST` | `/event-requests/{id}/cancellation` | Assigned Coordinator cancels a non-terminal request (→ `Cancelled`) |
+| `POST` | `/event-requests/{id}/completion` | Assigned Coordinator marks a confirmed event complete (`Confirmed` → `Completed`) |
 | `GET` | `/health` | Service health check |
 
 Every event-request operation requires `Authorization: Bearer <access-token>`.
 Draft CRUD requires `event_organiser`, coordinator assignment and the
-awaiting-assignment queue require `event_operations_manager`, and starting
-review requires `event_coordinator`.
+awaiting-assignment queue require `event_operations_manager`, and the
+coordinator list and transition commands require `event_coordinator`.
 The service asks authService to verify that token with Supabase, then scopes
 drafts to the returned user ID. A current assignment may be read by the owning
 Event Organiser, an Event Operations Manager, or the currently assigned Event
 Coordinator. Multi-role users are authorised when any assigned role and the
-required request relationship match. The browser cannot choose the organiser ID.
+required request relationship match. The browser cannot choose the organiser or
+coordinator ID; both come from the verified session.
+
+`GET /event-requests/{id}` returns the request to its owning Organiser or to the
+Coordinator on its latest assignment. An unrelated Organiser or Coordinator gets
+404 (so request IDs cannot be probed); any other role gets 403.
+`GET /event-requests/assigned-to-me` returns `[]` when nothing is assigned and
+excludes requests that have since been reassigned to someone else.
 The non-null `organiser_id` column stores that verified UUID. This service no
 longer reads or writes `temporary_organiser_id`; the deployed Supabase table
 must match that contract before authenticated requests are tested.
@@ -38,10 +48,32 @@ event-request field, changes the status to `Submitted`, and makes the request
 read-only. Requirements that do not apply must still contain explicit text such
 as `None`.
 
+## Status transitions
+
 The database migration `0011_event_request_review_status.sql` permits the full
-agreed status vocabulary. This increment implements only Draft → Submitted and
-Submitted → Under Review; the remaining SCRUM-28 transition commands are still
-to be added.
+agreed status vocabulary. This service writes only the following transitions:
+
+| Transition | Actor | Endpoint |
+| --- | --- | --- |
+| `Draft` → `Submitted` | Owning Organiser | `POST /{id}/submit` (or direct `POST /submissions`) |
+| `Submitted` → `Under Review` | Assigned Coordinator | `POST /{id}/review` |
+| Any non-terminal status → `Cancelled` | Assigned Coordinator | `POST /{id}/cancellation` |
+| `Confirmed` → `Completed` | Assigned Coordinator | `POST /{id}/completion` |
+
+Owned by other stories and **not** implemented here: approval and rejection
+(SCRUM-17), changes requested and resubmission (SCRUM-35), Planning and
+Confirmed (venue/operations stories), and automatic completion (SCRUM-40, which
+must reconcile with manual completion above). `Completed`, `Cancelled` and
+`Rejected` are terminal.
+
+The three coordinator commands run through the database function
+`advance_event_request_by_coordinator` (migration
+`0012_coordinator_status_transitions.sql`). It locks the request row, re-checks
+the latest assignment and updates the status in one transaction, so a refused
+call never changes the status. The service maps its error codes, not message
+text: `P0002` → 404, `P0003` → 403, `P0004` → 409. Apply `0012` to the target
+Supabase project before deploying this service; see `database/README.md`.
+Notifications for these transitions belong to SCRUM-36/37.
 
 ## Run locally on macOS/Linux
 
