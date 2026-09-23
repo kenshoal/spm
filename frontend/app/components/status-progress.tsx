@@ -1,4 +1,4 @@
-import type { EventRequestStatus } from "@/lib/event-requests";
+import { statusBadgeClass, type EventRequestStatus } from "@/lib/event-requests";
 
 // Milestones an organiser can expect after submission. "Changes Requested"
 // isn't a milestone — it rewinds the flow to just after Under Review.
@@ -25,19 +25,6 @@ const STATUS_DESCRIPTIONS: Record<EventRequestStatus, string> = {
   Rejected: "This request was rejected after review.",
 };
 
-const BADGE_STYLES: Partial<Record<EventRequestStatus, string>> = {
-  Draft: "bg-[#eef4f1] text-[#315047]",
-  Cancelled: "bg-[#fdecea] text-[#8c3a2b]",
-  Rejected: "bg-[#fdecea] text-[#8c3a2b]",
-  Completed: "bg-[#e3f2ea] text-[#145c40]",
-};
-
-function badgeStyle(status: EventRequestStatus): string {
-  return (
-    BADGE_STYLES[status] ?? "bg-[#fff3dc] text-[#80520d]"
-  );
-}
-
 export function StatusProgress({ status }: { status: EventRequestStatus }) {
   const description = STATUS_DESCRIPTIONS[status];
 
@@ -52,7 +39,7 @@ export function StatusProgress({ status }: { status: EventRequestStatus }) {
   return (
     <section aria-label="Status progress" className="rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
       <div className="flex flex-wrap items-center gap-3">
-        <span className={`rounded-full px-3 py-1 text-xs font-bold ${badgeStyle(status)}`}>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusBadgeClass(status)}`}>
           {status}
         </span>
         <p className="text-sm leading-6 text-[#68776f]">{description}</p>

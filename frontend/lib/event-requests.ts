@@ -52,6 +52,31 @@ export function isTerminalStatus(status: EventRequestStatus): boolean {
   return (COORDINATOR_TERMINAL_STATUSES as readonly string[]).includes(status);
 }
 
+// One badge palette for every workspace so a status looks the same everywhere.
+export function statusBadgeClass(status: EventRequestStatus): string {
+  if (status === "Cancelled" || status === "Rejected") {
+    return "bg-[#fdecea] text-[#8c3a2b]";
+  }
+  if (status === "Completed") return "bg-[#e3f2ea] text-[#145c40]";
+  if (status === "Draft") return "bg-[#eef4f1] text-[#315047]";
+  return "bg-[#fff3dc] text-[#80520d]";
+}
+
+export type CoordinatorTransition = "review" | "cancellation" | "completion";
+
+// The actions a coordinator may take per status — mirrors the transition
+// windows the backend enforces, so the UI never offers an action that 409s.
+export function coordinatorActions(
+  status: EventRequestStatus,
+): CoordinatorTransition[] {
+  if (isTerminalStatus(status)) return [];
+  const actions: CoordinatorTransition[] = [];
+  if (status === "Submitted") actions.push("review");
+  if (status === "Confirmed") actions.push("completion");
+  actions.push("cancellation");
+  return actions;
+}
+
 export interface EventRequest {
   id: string;
   organiser_id: string;

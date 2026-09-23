@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { groupRequests, listEventRequests, type RequestFilter } from "@/lib/event-requests";
-import { AppShell } from "../components/app-shell";
+import { AppShell, workspaceLinks } from "../components/app-shell";
 import { RequestList } from "./request-list";
 import { RequestTabs } from "./request-tabs";
 
@@ -61,9 +61,9 @@ export default async function EventRequestsPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  await requireRole("event_organiser");
+  const user = await requireRole("event_organiser");
   return (
-    <AppShell signedIn>
+    <AppShell signedIn navLinks={workspaceLinks(user.roles)}>
       <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0f6b5b]">Organiser workspace</p>
