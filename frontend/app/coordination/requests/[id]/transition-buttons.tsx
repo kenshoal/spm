@@ -93,6 +93,15 @@ export function TransitionButton({
         submitButton
       )}
 
+      {state.message && !(dialog && isOpen) ? (
+        <p
+          role="alert"
+          className="mt-3 rounded-lg bg-[#fff0f0] px-3 py-2 text-sm text-[#a23939]"
+        >
+          {state.message}
+        </p>
+      ) : null}
+
       {dialog && isOpen ? (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-[#15241f]/45 p-4"

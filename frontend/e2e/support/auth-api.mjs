@@ -15,6 +15,18 @@ createServer(async (request, response) => {
       send(response, 200, { id: "playwright-user", email: "playwright@example.com", role: "event_organiser", roles: ["event_organiser"] });
       return;
     }
+    if (request.headers.authorization === "Bearer coordinator-session") {
+      send(response, 200, { id: "playwright-coordinator", email: "coordinator@example.com", role: "event_coordinator", roles: ["event_coordinator"] });
+      return;
+    }
+    if (request.headers.authorization === "Bearer other-coordinator-session") {
+      send(response, 200, { id: "other-coordinator", email: "other.coordinator@example.com", role: "event_coordinator", roles: ["event_coordinator"] });
+      return;
+    }
+    if (request.headers.authorization === "Bearer ops-session") {
+      send(response, 200, { id: "playwright-ops", email: "ops@example.com", role: "event_operations_manager", roles: ["event_operations_manager"] });
+      return;
+    }
     if (request.headers.authorization === "Bearer non-organiser-session") {
       send(response, 200, { id: "admin-user", email: "admin@example.com", role: "admin", roles: ["admin"] });
       return;

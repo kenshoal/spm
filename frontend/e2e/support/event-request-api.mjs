@@ -2,7 +2,27 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 
 const records = new Map();
+const assignments = [];
+let nextAssignmentId = 1;
 const port = 8103;
+
+// Mirrors the sessions defined in auth-api.mjs — one identity each, with the
+// role the authService would report for it.
+const SESSIONS = {
+  "test-session": { id: "playwright-user", role: "event_organiser" },
+  "coordinator-session": { id: "playwright-coordinator", role: "event_coordinator" },
+  "other-coordinator-session": { id: "other-coordinator", role: "event_coordinator" },
+  "ops-session": { id: "playwright-ops", role: "event_operations_manager" },
+};
+
+const CANCEL_SOURCES = new Set([
+  "Submitted",
+  "Under Review",
+  "Changes Requested",
+  "Approved",
+  "Planning",
+  "Confirmed",
+]);
 
 function send(response, status, body) {
   response.writeHead(status, body === undefined ? {} : { "Content-Type": "application/json" });
@@ -15,70 +35,229 @@ async function readJson(request) {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
 }
 
+function caller(request) {
+  const token = (request.headers.authorization ?? "").replace(/^Bearer /, "");
+  return SESSIONS[token] ?? null;
+}
+
+function latestAssignmentFor(eventRequestId) {
+  const matches = assignments.filter((row) => row.event_request_id === eventRequestId);
+  return matches.reduce(
+    (latest, row) => (latest === null || row.id > latest.id ? row : latest),
+    null,
+  );
+}
+
+function requestsAssignedTo(coordinatorId) {
+  return [...records.values()]
+    .filter((record) => latestAssignmentFor(record.id)?.coordinator_id === coordinatorId)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
+function recordFields(overrides = {}) {
+  const now = new Date().toISOString();
+  return {
+    event_name: null,
+    purpose: null,
+    description: null,
+    proposed_date_times: [],
+    expected_attendance: null,
+    venue_requirements: null,
+    accessibility_needs: null,
+    equipment_requirements: null,
+    registration_needs: null,
+    ...overrides,
+    id: overrides.id ?? randomUUID(),
+    created_at: overrides.created_at ?? now,
+    updated_at: overrides.updated_at ?? now,
+  };
+}
+
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
-  const organiserId = request.headers.authorization === "Bearer test-session" ? "playwright-user" : "";
+  const user = caller(request);
 
   if (request.method === "GET" && url.pathname === "/health") {
     send(response, 200, { status: "ok" });
     return;
   }
 
-  if (!organiserId) {
+  // Test-only seed for statuses no implemented story writes yet (e.g.
+  // Confirmed, which the venue/ops stories own on other branches).
+  if (url.pathname === "/__seed" && request.method === "POST") {
+    const body = await readJson(request);
+    const record = recordFields({ ...body, status: body.status ?? "Submitted" });
+    records.set(record.id, record);
+    if (body.coordinator_id) {
+      assignments.push({
+        id: nextAssignmentId++,
+        event_request_id: record.id,
+        coordinator_id: body.coordinator_id,
+        assigned_by: "seed",
+        assigned_at: new Date().toISOString(),
+      });
+    }
+    send(response, 201, record);
+    return;
+  }
+
+  if (!user) {
     send(response, 401, { detail: "Authentication required" });
     return;
   }
 
   if (url.pathname === "/event-requests" && request.method === "POST") {
-    const now = new Date().toISOString();
-    const record = {
+    if (user.role !== "event_organiser") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    const record = recordFields({
       ...(await readJson(request)),
-      id: randomUUID(),
-      organiser_id: organiserId,
+      organiser_id: user.id,
       status: "Draft",
-      created_at: now,
-      updated_at: now,
-    };
+    });
     records.set(record.id, record);
     send(response, 201, record);
     return;
   }
 
   if (url.pathname === "/event-requests/submissions" && request.method === "POST") {
-    const now = new Date().toISOString();
-    const record = {
+    if (user.role !== "event_organiser") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    const record = recordFields({
       ...(await readJson(request)),
-      id: randomUUID(),
-      organiser_id: organiserId,
+      organiser_id: user.id,
       status: "Submitted",
-      created_at: now,
-      updated_at: now,
-    };
+    });
     records.set(record.id, record);
     send(response, 201, record);
     return;
   }
 
   if (url.pathname === "/event-requests" && request.method === "GET") {
-    send(
-      response,
-      200,
-      [...records.values()].filter((record) => record.organiser_id === organiserId),
-    );
+    if (user.role === "event_organiser") {
+      send(
+        response,
+        200,
+        [...records.values()]
+          .filter((record) => record.organiser_id === user.id)
+          .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      );
+      return;
+    }
+    if (user.role === "event_coordinator") {
+      send(response, 200, requestsAssignedTo(user.id));
+      return;
+    }
+    send(response, 403, { detail: "Insufficient permissions" });
     return;
   }
 
+  if (url.pathname === "/event-requests/assigned-to-me" && request.method === "GET") {
+    if (user.role !== "event_coordinator") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    send(response, 200, requestsAssignedTo(user.id));
+    return;
+  }
+
+  const coordinatorMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/coordinator$/);
+  const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|cancellation|completion)$/);
   const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
   const match = url.pathname.match(/^\/event-requests\/([^/]+)$/);
-  const id = decodeURIComponent(submitMatch?.[1] ?? match?.[1] ?? "") || null;
-  const record = id ? records.get(id) : undefined;
-  if (!id || !record || record.organiser_id !== organiserId) {
-    send(response, 404, { detail: "Draft not found" });
+  const id = decodeURIComponent(
+    coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
+  );
+  const record = records.get(id);
+
+  if (coordinatorMatch) {
+    if (request.method === "POST") {
+      // Assignment is an Operations Manager command; the UI for it belongs to
+      // another story, so tests drive this endpoint directly.
+      if (user.role !== "event_operations_manager") {
+        send(response, 403, { detail: "Only an Event Operations Manager can assign a Coordinator" });
+        return;
+      }
+      if (!record) {
+        send(response, 404, { detail: "Event request not found" });
+        return;
+      }
+      const body = await readJson(request);
+      const row = {
+        id: nextAssignmentId++,
+        event_request_id: id,
+        coordinator_id: body.coordinator_id,
+        assigned_by: user.id,
+        assigned_at: new Date().toISOString(),
+      };
+      assignments.push(row);
+      send(response, 201, row);
+      return;
+    }
+  }
+
+  if (!id || !record) {
+    send(response, 404, { detail: "Event request not found" });
     return;
   }
 
-  if (request.method === "GET") {
-    send(response, 200, record);
+  if (request.method === "GET" && match) {
+    if (user.role === "event_organiser") {
+      send(
+        response,
+        record.organiser_id === user.id ? 200 : 404,
+        record.organiser_id === user.id ? record : { detail: "Event request not found" },
+      );
+      return;
+    }
+    if (user.role === "event_coordinator") {
+      const assigned = latestAssignmentFor(id)?.coordinator_id === user.id;
+      send(
+        response,
+        assigned ? 200 : 404,
+        assigned ? record : { detail: "Event request not found" },
+      );
+      return;
+    }
+    send(response, 403, { detail: "Insufficient permissions" });
+    return;
+  }
+
+  if (request.method === "POST" && transitionMatch) {
+    if (user.role !== "event_coordinator") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    if (latestAssignmentFor(id)?.coordinator_id !== user.id) {
+      send(response, 403, { detail: "Only the assigned Coordinator can change this request" });
+      return;
+    }
+    const [, , action] = transitionMatch;
+    const allowed =
+      (action === "review" && record.status === "Submitted") ||
+      (action === "completion" && record.status === "Confirmed") ||
+      (action === "cancellation" && CANCEL_SOURCES.has(record.status));
+    if (!allowed) {
+      send(response, 409, { detail: "Transition not allowed from the current status" });
+      return;
+    }
+    const updated = {
+      ...record,
+      status: action === "review" ? "Under Review" : action === "completion" ? "Completed" : "Cancelled",
+      updated_at: new Date().toISOString(),
+    };
+    records.set(id, updated);
+    send(response, 200, updated);
+    return;
+  }
+
+  if (user.role !== "event_organiser" || record.organiser_id !== user.id) {
+    send(response, record.organiser_id === user.id ? 403 : 404, {
+      detail: "Event request not found",
+    });
     return;
   }
 
@@ -90,10 +269,7 @@ createServer(async (request, response) => {
     const updated = {
       ...record,
       ...(await readJson(request)),
-      id: record.id,
-      organiser_id: record.organiser_id,
       status: "Submitted",
-      created_at: record.created_at,
       updated_at: new Date().toISOString(),
     };
     records.set(id, updated);
@@ -109,10 +285,7 @@ createServer(async (request, response) => {
     const updated = {
       ...record,
       ...(await readJson(request)),
-      id: record.id,
-      organiser_id: record.organiser_id,
       status: "Draft",
-      created_at: record.created_at,
       updated_at: new Date().toISOString(),
     };
     records.set(id, updated);
