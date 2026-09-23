@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -9,15 +9,27 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.controllers import event_request_controller
 from app.main import create_app
-from app.repositories import SupabaseRepositoryError
+from app.repositories import EventRequestRpcError, SupabaseRepositoryError
+
+# The statuses a coordinator may cancel from: every non-terminal status
+# except Draft, which carries no assignment (mirrors migration 0012).
+CANCEL_SOURCE_STATUSES = {
+    "Submitted",
+    "Under Review",
+    "Changes Requested",
+    "Approved",
+    "Planning",
+    "Confirmed",
+}
 
 
 class FakeEventRequestRepository:
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
+        self.coordinator_assignment_rows: list[dict[str, Any]] = []
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
-        now = datetime.now(UTC).isoformat()
+        now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()
         row = {
             **values,
             "id": str(uuid4()),
@@ -116,10 +128,52 @@ class FakeEventRequestRepository:
         row["status"] = to_status
         return dict(row)
 
+    def advance_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, to_status: str
+    ) -> dict[str, Any]:
+        """Mirrors the advance_event_request_by_coordinator RPC: not found,
+        latest-assignment and transition checks happen before any write, so
+        a refused transition leaves the row untouched."""
+        row = self.rows.get(event_request_id)
+        if row is None:
+            raise EventRequestRpcError("not found", errcode="P0002")
+
+        assignments = [
+            assignment
+            for assignment in self.coordinator_assignment_rows
+            if assignment["event_request_id"] == event_request_id
+        ]
+        latest = max(assignments, key=lambda assignment: assignment["id"], default=None)
+        if latest is None or latest["coordinator_id"] != coordinator_id:
+            raise EventRequestRpcError("not assigned", errcode="P0003")
+
+        allowed = (
+            (to_status == "Under Review" and row["status"] == "Submitted")
+            or (to_status == "Completed" and row["status"] == "Confirmed")
+            or (
+                to_status == "Cancelled"
+                and row["status"] in CANCEL_SOURCE_STATUSES
+            )
+        )
+        if not allowed:
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+
+        row["status"] = to_status
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
 
 class FakeCoordinatorAssignmentRepository:
-    def __init__(self) -> None:
-        self.rows: list[dict[str, Any]] = []
+    def __init__(
+        self, event_requests: FakeEventRequestRepository | None = None
+    ) -> None:
+        # Sharing the assignment rows with the event-request fake lets its
+        # advance_by_coordinator see the same assignments the RPC would.
+        self.rows: list[dict[str, Any]] = (
+            event_requests.coordinator_assignment_rows
+            if event_requests is not None
+            else []
+        )
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         row = {

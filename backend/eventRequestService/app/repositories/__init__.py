@@ -4,6 +4,7 @@ from app.repositories.coordinator_assignment_repository import (
 )
 from app.repositories.event_request_repository import (
     EventRequestRepository,
+    EventRequestRpcError,
     SupabaseEventRequestRepository,
     SupabaseRepositoryError,
 )
@@ -11,6 +12,7 @@ from app.repositories.event_request_repository import (
 __all__ = [
     "CoordinatorAssignmentRepository",
     "EventRequestRepository",
+    "EventRequestRpcError",
     "SupabaseCoordinatorAssignmentRepository",
     "SupabaseEventRequestRepository",
     "SupabaseRepositoryError",

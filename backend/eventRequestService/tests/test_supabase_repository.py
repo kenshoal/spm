@@ -3,7 +3,11 @@ import json
 import httpx
 import pytest
 
-from app.repositories import SupabaseEventRequestRepository, SupabaseRepositoryError
+from app.repositories import (
+    EventRequestRpcError,
+    SupabaseEventRequestRepository,
+    SupabaseRepositoryError,
+)
 
 
 def response_row(**overrides: object) -> dict[str, object]:
@@ -281,3 +285,89 @@ def test_supabase_failure_raises_repository_error() -> None:
 
     with pytest.raises(SupabaseRepositoryError):
         repository.list_for_organiser("organiser-1")
+
+
+# Purpose: Verifies the coordinator transition RPC call targets the database
+# function with the caller's identity and asks PostgREST for a single object.
+def test_advance_by_coordinator_posts_expected_rpc_request() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        captured["accept"] = request.headers.get("accept")
+        return httpx.Response(200, json=response_row(status="Under Review"))
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    row = repository.advance_by_coordinator("request-1", "coord-1", "Under Review")
+
+    assert captured["method"] == "/rest/v1/rpc/advance_event_request_by_coordinator"
+    assert captured["body"] == {
+        "p_event_request_id": "request-1",
+        "p_coordinator_id": "coord-1",
+        "p_to_status": "Under Review",
+    }
+    assert captured["accept"] == "application/vnd.pgrst.object+json"
+    assert row["status"] == "Under Review"
+
+
+@pytest.mark.parametrize(
+    ("errcode",),
+    [("P0002",), ("P0003",), ("P0004",)],
+)
+# Purpose: The RPC's Postgres errcodes surface on the raised error so services
+# can map not-found, forbidden and not-allowed without parsing message text.
+def test_rpc_rejection_carries_database_errcode(errcode: str) -> None:
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                400, json={"code": errcode, "message": "rejected"}
+            )
+        ),
+    )
+
+    with pytest.raises(EventRequestRpcError) as exc_info:
+        repository.advance_by_coordinator("request-1", "coord-1", "Cancelled")
+
+    assert exc_info.value.errcode == errcode
+
+
+# Purpose: An RPC rejection with no parseable error body still raises the RPC
+# error, with no errcode, rather than crashing on the malformed response.
+def test_rpc_rejection_with_unreadable_body_has_no_errcode() -> None:
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(500, text="gateway exploded")
+        ),
+    )
+
+    with pytest.raises(EventRequestRpcError) as exc_info:
+        repository.advance_by_coordinator("request-1", "coord-1", "Cancelled")
+
+    assert exc_info.value.errcode is None
+
+
+# Purpose: A transport-level failure on the RPC path stays a plain repository
+# error — only database rejections are RPC errors.
+def test_rpc_transport_failure_raises_repository_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(SupabaseRepositoryError) as exc_info:
+        repository.advance_by_coordinator("request-1", "coord-1", "Cancelled")
+
+    assert not isinstance(exc_info.value, EventRequestRpcError)

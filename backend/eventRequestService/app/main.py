@@ -5,7 +5,9 @@ from app.controllers.coordinator_assignment_controller import (
     router as coordinator_assignment_router,
 )
 from app.controllers.event_request_controller import router as event_request_router
-from app.controllers.event_review_controller import router as event_review_router
+from app.controllers.event_transition_controller import (
+    router as event_transition_router,
+)
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.repositories.coordinator_assignment_repository import (
@@ -22,10 +24,10 @@ from app.services.event_request_service import (
     EventRequestService,
     EventRequestTransitionConflictError,
 )
-from app.services.event_review_service import (
-    EventReviewService,
-    ReviewForbiddenError,
-    ReviewNotAllowedError,
+from app.services.event_transition_service import (
+    EventTransitionService,
+    TransitionForbiddenError,
+    TransitionNotAllowedError,
 )
 
 
@@ -48,18 +50,17 @@ def create_app(
     )
     application.state.event_request_service = event_request_service
     application.state.coordinator_assignment_service = coordinator_assignment_service
-    application.state.event_review_service = (
-        EventReviewService(event_request_service, coordinator_assignment_service)
+    application.state.event_transition_service = (
+        EventTransitionService(event_request_service)
         if event_request_service is not None
-        and coordinator_assignment_service is not None
         else None
     )
     # Before event_request_router: routes match in registration order, and its
     # /event-requests/{event_request_id} would otherwise swallow the literal
     # /event-requests/awaiting-assignment and reject it as a malformed UUID.
     application.include_router(coordinator_assignment_router)
+    application.include_router(event_transition_router)
     application.include_router(event_request_router)
-    application.include_router(event_review_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(
@@ -106,18 +107,18 @@ def create_app(
             content={"detail": str(error)},
         )
 
-    @application.exception_handler(ReviewNotAllowedError)
-    async def review_not_allowed(
-        request: Request, error: ReviewNotAllowedError
+    @application.exception_handler(TransitionNotAllowedError)
+    async def transition_not_allowed(
+        request: Request, error: TransitionNotAllowedError
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": str(error)},
         )
 
-    @application.exception_handler(ReviewForbiddenError)
-    async def review_forbidden(
-        request: Request, error: ReviewForbiddenError
+    @application.exception_handler(TransitionForbiddenError)
+    async def transition_forbidden(
+        request: Request, error: TransitionForbiddenError
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
