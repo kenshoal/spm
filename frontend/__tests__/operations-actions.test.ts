@@ -10,9 +10,10 @@ vi.mock("@/lib/auth", () => ({
 
 import { assignCoordinator } from "@/app/operations/actions";
 
-function form(coordinatorId: string): FormData {
+function form(coordinatorId: string, currentCoordinatorId?: string): FormData {
   const data = new FormData();
   data.set("coordinator_id", coordinatorId);
+  if (currentCoordinatorId) data.set("current_coordinator_id", currentCoordinatorId);
   return data;
 }
 
@@ -36,6 +37,16 @@ test("assigns the chosen coordinator through the event request API", async () =>
   });
   expect(state).toEqual({ assigned: true, message: "Coordinator assigned." });
   expect(navigation.revalidatePath).toHaveBeenCalledWith("/operations/assignments");
+});
+
+// Purpose: SCRUM-14 AC6 — reassigning an already-assigned request says "reassigned", not "assigned".
+test("reports a reassignment when the request already had a coordinator", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const state = await assignCoordinator("request-1", {}, form("coord-2", "coord-1"));
+
+  expect(state).toEqual({ assigned: true, message: "Coordinator reassigned." });
 });
 
 // Purpose: Submitting without a choice is caught before any request is sent.

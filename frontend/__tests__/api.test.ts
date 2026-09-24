@@ -34,6 +34,14 @@ test("getJson returns null for 404", async () => {
   await expect(getJson("http://svc", "/venues/x")).resolves.toBeNull();
 });
 
+// Purpose: A malformed id or query (e.g. a non-UUID equipment id, an invalid
+// date) is a normal "not found" outcome, not an outage.
+test("getJson returns null for 422", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 422 }));
+
+  await expect(getJson("http://svc", "/equipment/not-a-uuid")).resolves.toBeNull();
+});
+
 // Purpose: An expired session goes to sign-in rather than an error page.
 test("getJson redirects to sign-in on 401", async () => {
   navigation.redirect.mockImplementation(() => {

@@ -31,6 +31,7 @@ export function AssignCoordinatorForm({
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
+      {currentCoordinatorId ? <input type="hidden" name="current_coordinator_id" value={currentCoordinatorId} /> : null}
       <label className="text-sm font-semibold text-[#34463f]">
         Coordinator
         <select

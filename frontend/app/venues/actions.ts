@@ -11,10 +11,11 @@ export interface VenueFormState {
   message?: string;
   errors?: Record<string, string>;
   // Echoes the last submitted *raw* field text so the form can repopulate
-  // itself. React resets a <form>'s uncontrolled fields whenever its action
-  // promise settles, even when the action just returns validation errors
-  // instead of throwing — so without this, a corrected resubmission would
-  // fire with the *other* fields blanked back out. This must be the raw
+  // itself. React resets a <form>'s uncontrolled fields to their rendered
+  // defaultValue the moment the action is submitted (before it even
+  // resolves), even when the action just returns validation errors instead
+  // of throwing — so without this, a corrected resubmission would fire with
+  // the *other* fields blanked back out. This must be the raw
   // text, not the parsed payload: an invalid capacity parses to `null`,
   // which would let a field-by-field fallback silently revert to the
   // venue's stored value instead of showing what was actually typed.
@@ -47,7 +48,7 @@ async function saveVenue(
           : response.status === 404
             ? "This venue no longer exists."
             : response.status === 422
-              ? "Check the highlighted fields."
+              ? "The venue service rejected these details. Check them and try again."
               : "The venue could not be saved. Please try again.",
       values: readVenueFormValues(formData),
     };

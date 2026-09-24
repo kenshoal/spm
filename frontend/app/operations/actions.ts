@@ -20,6 +20,7 @@ export async function assignCoordinator(
   void previousState;
   const coordinatorId = String(formData.get("coordinator_id") ?? "").trim();
   if (!coordinatorId) return { message: "Choose a coordinator to assign." };
+  const currentCoordinatorId = String(formData.get("current_coordinator_id") ?? "").trim();
 
   await requireRole("event_operations_manager");
   let response: Response;
@@ -48,5 +49,5 @@ export async function assignCoordinator(
     };
   }
   revalidatePath("/operations/assignments");
-  return { assigned: true, message: "Coordinator assigned." };
+  return { assigned: true, message: currentCoordinatorId ? "Coordinator reassigned." : "Coordinator assigned." };
 }

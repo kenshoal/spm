@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { requireAccessToken } from "./auth";
 
 // Reads a JSON resource for a server component. A 404 is a normal "not found"
-// outcome (null); any other failure throws so the page can show an outage.
+// outcome (null), and so is a 422 — the backends use it for a malformed id or
+// query (e.g. a non-UUID equipment id, an invalid date) rather than a real
+// outage; any other failure throws so the page can show an outage.
 export async function getJson<T>(baseUrl: string, path: string): Promise<T | null> {
   const token = await requireAccessToken();
   const response = await fetch(`${baseUrl}${path}`, {
@@ -10,7 +12,7 @@ export async function getJson<T>(baseUrl: string, path: string): Promise<T | nul
     cache: "no-store",
   });
   if (response.status === 401) redirect("/auth");
-  if (response.status === 404) return null;
+  if (response.status === 404 || response.status === 422) return null;
   if (!response.ok) throw new Error(`${path} failed with status ${response.status}`);
   return response.json() as Promise<T>;
 }

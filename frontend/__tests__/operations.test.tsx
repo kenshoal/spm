@@ -98,6 +98,30 @@ test("explains when no other coordinator is available to reassign to", () => {
   expect(screen.getByText("No other Event Coordinator is available.")).toBeDefined();
 });
 
+// Purpose: SCRUM-14 AC6 — the reassign form tells the action who is being replaced.
+test("sends the current coordinator as a hidden field when reassigning", () => {
+  const { container } = render(
+    <AssignCoordinatorForm
+      eventRequestId="r2"
+      coordinators={coordinators}
+      currentCoordinatorId="coord-1"
+    />,
+  );
+
+  const hidden = container.querySelector('input[name="current_coordinator_id"]');
+  expect(hidden).not.toBeNull();
+  expect((hidden as HTMLInputElement).value).toBe("coord-1");
+});
+
+// Purpose: A fresh assignment has no prior coordinator to report, so no hidden field is sent.
+test("omits the hidden current-coordinator field for a fresh assignment", () => {
+  const { container } = render(
+    <AssignCoordinatorForm eventRequestId="r1" coordinators={coordinators} />,
+  );
+
+  expect(container.querySelector('input[name="current_coordinator_id"]')).toBeNull();
+});
+
 // Purpose: A coordinator missing from the directory still shows by id rather than blank.
 test("labels an unknown coordinator by id", () => {
   expect(coordinatorLabel("coord-9", coordinators)).toBe("coord-9");

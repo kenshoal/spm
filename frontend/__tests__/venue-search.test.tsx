@@ -44,6 +44,12 @@ test("drops unknown slot and layout values", () => {
   expect(buildVenueSearch({ slot: "MIDNIGHT", layout: "ballroom", location: "East" }).query).toBe("location=East");
 });
 
+// Purpose: A date that matches YYYY-MM-DD but isn't a real calendar date
+// (e.g. February 30) is dropped instead of causing a 422 from the venue service.
+test("drops a date that is not a real calendar date", () => {
+  expect(buildVenueSearch({ date: "2026-02-30", location: "East" }).query).toBe("location=East");
+});
+
 const venue: Venue = {
   id: "v1", name: "Riverside Hall", location: "East Wing", max_capacity: 120,
   facilities: ["Projector"], accessibility_features: ["Ramp access"], supported_layouts: ["theatre"],

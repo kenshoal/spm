@@ -116,6 +116,15 @@ export interface VenueSearchInput {
   accessibility?: string;
 }
 
+// Rejects a string that matches YYYY-MM-DD but isn't a real calendar date
+// (e.g. 2026-13-45 or 2026-02-30, which Date silently rolls over into March).
+function isRealCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.toISOString().slice(0, 10) === value;
+}
+
 // Builds the query string for GET /venues/search from raw form text. Unknown
 // slot/layout values are dropped (rather than 422ing the backend); an
 // invalid capacity is reported instead of sent; an empty result (nothing
@@ -131,7 +140,7 @@ export function buildVenueSearch(input: VenueSearchInput): { query: string | nul
   const location = (input.location ?? "").trim();
   if (location) params.set("location", location);
   const date = (input.date ?? "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) params.set("date", date);
+  if (isRealCalendarDate(date)) params.set("date", date);
   const slot = input.slot ?? "";
   if ((SLOTS as readonly string[]).includes(slot)) params.set("slot", slot);
   const layout = input.layout ?? "";
