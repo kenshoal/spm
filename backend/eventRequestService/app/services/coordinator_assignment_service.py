@@ -3,6 +3,7 @@ from typing import Any
 from app.models.coordinator_assignment import (
     CoordinatorAssignmentResponse,
     CoordinatorAssignRequest,
+    CurrentAssignmentResponse,
 )
 from app.models.event_request import EventRequestResponse, EventRequestStatus
 from app.repositories.coordinator_assignment_repository import (
@@ -20,6 +21,17 @@ _TERMINAL_STATUSES = {
     EventRequestStatus.CANCELLED,
     EventRequestStatus.REJECTED,
 }
+
+# Statuses in which a request has (or awaits) a responsible Coordinator and
+# can still be reassigned — everything after submission and before closure.
+_IN_FLIGHT_STATUSES = (
+    EventRequestStatus.SUBMITTED,
+    EventRequestStatus.UNDER_REVIEW,
+    EventRequestStatus.CHANGES_REQUESTED,
+    EventRequestStatus.APPROVED,
+    EventRequestStatus.PLANNING,
+    EventRequestStatus.CONFIRMED,
+)
 
 
 class CoordinatorAssignmentNotFoundError(Exception):
@@ -113,6 +125,41 @@ class CoordinatorAssignmentService:
             [request.id for request in submitted]
         )
         return [request for request in submitted if request.id not in assigned]
+
+    def list_current_assignments(self) -> list[CurrentAssignmentResponse]:
+        """In-flight requests that have a Coordinator, with the current one —
+        what an Operations Manager needs to find a request to reassign."""
+        in_flight = [
+            request
+            for status in _IN_FLIGHT_STATUSES
+            for request in self.event_request_service.list_by_status(status)
+        ]
+        if not in_flight:
+            return []
+
+        latest: dict[str, dict[str, Any]] = {}
+        for row in self.repository.list_for_event_requests(
+            [request.id for request in in_flight]
+        ):
+            request_id = row["event_request_id"]
+            if request_id not in latest or int(row["id"]) > int(
+                latest[request_id]["id"]
+            ):
+                latest[request_id] = row
+
+        current = [
+            CurrentAssignmentResponse(
+                event_request=request,
+                assignment=CoordinatorAssignmentResponse.model_validate(
+                    latest[request.id]
+                ),
+            )
+            for request in in_flight
+            if request.id in latest
+        ]
+        return sorted(
+            current, key=lambda item: item.event_request.created_at, reverse=True
+        )
 
     def get_current(self, event_request_id: str) -> CoordinatorAssignmentResponse:
         self.event_request_service.get_by_id(event_request_id)

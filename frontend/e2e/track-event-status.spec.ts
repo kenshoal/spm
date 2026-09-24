@@ -58,9 +58,9 @@ test.describe.serial("SCRUM-28 status tracking", () => {
     ).id;
     expect(eventId).toBeDefined();
 
-    // Boundary: no Ops Manager frontend exists on this branch (SCRUM-14 is
-    // API-only), so the assignment step is driven through the API the way
-    // the real ops workspace will.
+    // This spec tests SCRUM-28 (status tracking), not the assignment UI, so
+    // the assignment step is driven through the API directly; the Ops
+    // Manager's own assignment workspace is covered by assign-coordinator.spec.ts.
     const assigned = await request.post(
       `${EVENT_API}/event-requests/${eventId}/coordinator`,
       {

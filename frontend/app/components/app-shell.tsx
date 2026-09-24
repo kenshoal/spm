@@ -17,6 +17,18 @@ export function workspaceLinks(roles: string[]): NavLink[] {
   if (roles.includes("event_coordinator")) {
     links.push({ href: "/coordination/requests", label: "Coordination" });
   }
+  if (roles.includes("event_operations_manager")) {
+    links.push({ href: "/operations/assignments", label: "Assignments" });
+  }
+  if (roles.includes("venue_staff")) {
+    links.push({ href: "/venues", label: "Venues" });
+  }
+  if (roles.includes("event_coordinator") || roles.includes("venue_staff")) {
+    links.push({ href: "/venues/search", label: "Venue search" });
+  }
+  if (roles.includes("technical_support")) {
+    links.push({ href: "/equipment", label: "Equipment" });
+  }
   return links;
 }
 
@@ -34,7 +46,7 @@ export function AppShell({
       <header className="border-b border-[#dce4e0] bg-white">
         <div className="mx-auto flex h-17 max-w-7xl items-center justify-between px-5 sm:px-8">
           <div className="flex items-center gap-6">
-            <Link href={navLinks[0]?.href ?? "/event-requests"} className="flex items-center gap-3">
+            <Link href={navLinks[0]?.href ?? "/"} className="flex items-center gap-3">
               <span className="grid size-9 place-items-center rounded-xl bg-[#0f6b5b] text-sm font-bold text-white shadow-sm">CS</span>
               <span className="text-lg font-bold tracking-[-0.02em] text-[#17211d]">ConnectSphere</span>
             </Link>

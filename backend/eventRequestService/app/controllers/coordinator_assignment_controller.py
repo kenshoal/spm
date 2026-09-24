@@ -12,6 +12,7 @@ from app.controllers.event_request_controller import (
 from app.models.coordinator_assignment import (
     CoordinatorAssignmentResponse,
     CoordinatorAssignRequest,
+    CurrentAssignmentResponse,
 )
 from app.models.event_request import EventRequestResponse
 from app.repositories.coordinator_assignment_repository import (
@@ -78,6 +79,17 @@ def list_awaiting_assignment(
     service: ServiceDependency,
 ) -> list[EventRequestResponse]:
     return service.list_awaiting_assignment()
+
+
+@router.get(
+    "/assignments",
+    response_model=list[CurrentAssignmentResponse],
+)
+def list_current_assignments(
+    _assigned_by: OperationsManagerDependency,
+    service: ServiceDependency,
+) -> list[CurrentAssignmentResponse]:
+    return service.list_current_assignments()
 
 
 @router.post(

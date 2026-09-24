@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { requireRole, type AuthenticatedUser } from "@/lib/auth";
 import { coordinatorActions, getEventRequest } from "@/lib/event-requests";
@@ -10,7 +11,10 @@ import { TransitionButton } from "./transition-buttons";
 async function CoordinatorRequestView({ id }: { id: string }) {
   const result = await getEventRequest(id)
     .then((request) => ({ request, failed: false as const }))
-    .catch(() => ({ request: null, failed: true as const }));
+    .catch((error: unknown) => {
+      unstable_rethrow(error);
+      return { request: null, failed: true as const };
+    });
 
   if (result.failed) {
     return <div role="alert" className="rounded-2xl border border-[#eccdbe] bg-[#fff8f3] px-6 py-8 text-[#793f27]">The event request service is unavailable. Start the local API on port 8003, then refresh.</div>;
@@ -24,6 +28,12 @@ async function CoordinatorRequestView({ id }: { id: string }) {
     <div className="mx-auto max-w-4xl">
       <Link href="/coordination/requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to assigned requests</Link>
       <RequestDetails request={request} coordinatorAssigned />
+      <Link
+        href={`/venues/search${request.expected_attendance ? `?required_capacity=${request.expected_attendance}` : ""}`}
+        className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-[#cfd9d4] bg-white px-4 text-sm font-semibold text-[#0f6b5b] hover:bg-[#f4f7f5]"
+      >
+        Find venues for this event
+      </Link>
       <section aria-label="Coordinator actions" className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
         <h2 className="text-lg font-bold text-[#17211d]">Actions</h2>
         {coordinatorActions(request.status).length === 0 ? (

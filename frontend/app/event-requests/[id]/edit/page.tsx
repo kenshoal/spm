@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/auth";
 import {
@@ -13,7 +14,10 @@ import { RequestDetails } from "../../../components/request-details";
 async function EditDraft({ id }: { id: string }) {
   const result = await getEventRequest(id)
     .then((request) => ({ request, failed: false as const }))
-    .catch(() => ({ request: null, failed: true as const }));
+    .catch((error: unknown) => {
+      unstable_rethrow(error);
+      return { request: null, failed: true as const };
+    });
 
   if (result.failed) {
     return <div role="alert" className="rounded-2xl border border-[#eccdbe] bg-[#fff8f3] px-6 py-8 text-[#793f27]">The event request service is unavailable. Start the local API on port 8003, then refresh.</div>;

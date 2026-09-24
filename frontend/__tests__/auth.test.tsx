@@ -118,6 +118,9 @@ test("redirects a coordinator to assigned event requests after login", async () 
 test("selects the default workspace from verified roles", () => {
   expect(workspaceForRoles(["event_coordinator", "event_organiser"])).toBe("/event-requests");
   expect(workspaceForRoles(["event_coordinator"])).toBe("/coordination/requests");
+  expect(workspaceForRoles(["event_operations_manager"])).toBe("/operations/assignments");
+  expect(workspaceForRoles(["venue_staff"])).toBe("/venues");
+  expect(workspaceForRoles(["technical_support"])).toBe("/equipment");
   expect(workspaceForRoles(["attendee"])).toBe("/unauthorised");
 });
 

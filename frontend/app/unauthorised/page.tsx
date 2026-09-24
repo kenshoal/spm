@@ -11,11 +11,11 @@ export default function UnauthorisedPage() {
           Access unavailable
         </p>
         <h1 className="mt-3 text-3xl font-bold tracking-[-0.03em] text-[#17211d]">
-          Event Organiser access required
+          Your role can&apos;t use this page
         </h1>
         <p className="mt-4 leading-7 text-[#52635c]">
-          Your account is signed in, but it has not been assigned the Event Organiser role.
-          Contact an administrator if you should be able to create and submit event requests.
+          Your account is signed in, but none of its roles give access to this page.
+          Contact an administrator if you need access.
         </p>
       </section>
     </AppShell>

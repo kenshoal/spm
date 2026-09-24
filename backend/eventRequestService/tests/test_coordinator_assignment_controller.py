@@ -423,3 +423,94 @@ def test_get_coordinator_is_scoped_to_request_access(
         )
 
     assert response.status_code == expected_status
+
+
+# Purpose: SCRUM-14 AC6 — a manager can find assigned requests to reassign them,
+# and sees the latest Coordinator rather than the first.
+def test_current_assignments_list_the_latest_coordinator_per_request() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        assigned_id = submit_event_request(event_requests)
+        submit_event_request(event_requests)  # never assigned
+        for coordinator_id in ("coord-1", "coord-2"):
+            client.post(
+                f"/event-requests/{assigned_id}/coordinator",
+                headers=headers(),
+                json={"coordinator_id": coordinator_id},
+            )
+        response = client.get("/event-requests/assignments", headers=headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["event_request"]["id"] for row in body] == [assigned_id]
+    assert body[0]["assignment"]["coordinator_id"] == "coord-2"
+
+
+# Purpose: Closed requests cannot be reassigned, so they are not offered.
+def test_current_assignments_exclude_terminal_requests() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        closed_id = submit_event_request(event_requests)
+        client.post(
+            f"/event-requests/{closed_id}/coordinator",
+            headers=headers(),
+            json={"coordinator_id": "coord-1"},
+        )
+        event_requests.rows[closed_id]["status"] = "Cancelled"
+        response = client.get("/event-requests/assignments", headers=headers())
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# Purpose: Requests keep appearing once review has started, so they stay reassignable.
+def test_current_assignments_include_requests_under_review() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        request_id = submit_event_request(event_requests)
+        client.post(
+            f"/event-requests/{request_id}/coordinator",
+            headers=headers(),
+            json={"coordinator_id": "coord-1"},
+        )
+        event_requests.rows[request_id]["status"] = "Under Review"
+        response = client.get("/event-requests/assignments", headers=headers())
+
+    assert [row["event_request"]["id"] for row in response.json()] == [request_id]
+
+
+# Purpose: The assignment overview is closed to non-Operations Manager callers.
+def test_current_assignments_require_operations_manager_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "id": str(uuid4()),
+                "email": None,
+                "role": "event_coordinator",
+                "roles": ["event_coordinator"],
+            },
+        ),
+    )
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        app = create_app(
+            FakeEventRequestRepository(), FakeCoordinatorAssignmentRepository()
+        )
+        with TestClient(app) as client:
+            response = client.get(
+                "/event-requests/assignments",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 403

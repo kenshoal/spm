@@ -24,6 +24,9 @@ const CANCEL_SOURCES = new Set([
   "Confirmed",
 ]);
 
+const COORDINATOR_IDS = new Set(["playwright-coordinator", "other-coordinator", "reassign-coordinator"]);
+const TERMINAL = new Set(["Completed", "Cancelled", "Rejected"]);
+
 function send(response, status, body) {
   response.writeHead(status, body === undefined ? {} : { "Content-Type": "application/json" });
   response.end(body === undefined ? undefined : JSON.stringify(body));
@@ -164,6 +167,29 @@ createServer(async (request, response) => {
     return;
   }
 
+  if (url.pathname === "/event-requests/awaiting-assignment" && request.method === "GET") {
+    if (user.role !== "event_operations_manager") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    send(response, 200, [...records.values()]
+      .filter((record) => record.status === "Submitted" && latestAssignmentFor(record.id) === null)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at)));
+    return;
+  }
+
+  if (url.pathname === "/event-requests/assignments" && request.method === "GET") {
+    if (user.role !== "event_operations_manager") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    send(response, 200, [...records.values()]
+      .filter((record) => record.status !== "Draft" && !TERMINAL.has(record.status) && latestAssignmentFor(record.id) !== null)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map((record) => ({ event_request: record, assignment: latestAssignmentFor(record.id) })));
+    return;
+  }
+
   const coordinatorMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/coordinator$/);
   const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|cancellation|completion)$/);
   const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
@@ -175,8 +201,7 @@ createServer(async (request, response) => {
 
   if (coordinatorMatch) {
     if (request.method === "POST") {
-      // Assignment is an Operations Manager command; the UI for it belongs to
-      // another story, so tests drive this endpoint directly.
+      // Assignment is an Operations Manager command.
       if (user.role !== "event_operations_manager") {
         send(response, 403, { detail: "Only an Event Operations Manager can assign a Coordinator" });
         return;
@@ -186,6 +211,14 @@ createServer(async (request, response) => {
         return;
       }
       const body = await readJson(request);
+      if (record.status === "Draft" || TERMINAL.has(record.status)) {
+        send(response, 409, { detail: `Cannot assign a Coordinator to a ${record.status} request` });
+        return;
+      }
+      if (!COORDINATOR_IDS.has(body.coordinator_id)) {
+        send(response, 409, { detail: "The selected user is not an Event Coordinator" });
+        return;
+      }
       const row = {
         id: nextAssignmentId++,
         event_request_id: id,

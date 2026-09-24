@@ -10,6 +10,19 @@ createServer(async (request, response) => {
     send(response, 200, { status: "ok" });
     return;
   }
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  if (request.method === "GET" && url.pathname === "/auth/users") {
+    if (request.headers.authorization !== "Bearer ops-session" || url.searchParams.get("role") !== "event_coordinator") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    send(response, 200, [
+      { id: "playwright-coordinator", email: "coordinator@example.com" },
+      { id: "other-coordinator", email: "other.coordinator@example.com" },
+      { id: "reassign-coordinator", email: "reassign.coordinator@example.com" },
+    ]);
+    return;
+  }
   if (request.method === "GET" && request.url === "/auth/me") {
     if (request.headers.authorization === "Bearer test-session") {
       send(response, 200, { id: "playwright-user", email: "playwright@example.com", role: "event_organiser", roles: ["event_organiser"] });
@@ -31,6 +44,14 @@ createServer(async (request, response) => {
       send(response, 200, { id: "admin-user", email: "admin@example.com", role: "admin", roles: ["admin"] });
       return;
     }
+    if (request.headers.authorization === "Bearer venue-session") {
+      send(response, 200, { id: "playwright-venue", email: "venue@example.com", role: "venue_staff", roles: ["venue_staff"] });
+      return;
+    }
+    if (request.headers.authorization === "Bearer tech-session") {
+      send(response, 200, { id: "playwright-tech", email: "tech@example.com", role: "technical_support", roles: ["technical_support"] });
+      return;
+    }
     send(response, 401, { detail: "Invalid session" });
     return;
   }
@@ -38,13 +59,14 @@ createServer(async (request, response) => {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const credentials = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    const token = credentials.password === "test-password-123"
-      ? credentials.email === "playwright@example.com"
-        ? "test-session"
-        : credentials.email === "coordinator@example.com"
-          ? "coordinator-session"
-          : null
-      : null;
+    const LOGINS = {
+      "playwright@example.com": "test-session",
+      "coordinator@example.com": "coordinator-session",
+      "ops@example.com": "ops-session",
+      "venue@example.com": "venue-session",
+      "tech@example.com": "tech-session",
+    };
+    const token = credentials.password === "test-password-123" ? LOGINS[credentials.email] ?? null : null;
     send(response, token ? 200 : 401, token ? { access_token: token, refresh_token: "unused", expires_in: 3600, token_type: "bearer" } : { detail: "Invalid email or password" });
     return;
   }
