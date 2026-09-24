@@ -55,6 +55,23 @@ createServer(async (request, response) => {
     return send(response, 201, venue);
   }
 
+  if (url.pathname === "/venues/search" && request.method === "GET") {
+    const capacity = url.searchParams.get("required_capacity");
+    const location = url.searchParams.get("location");
+    const slot = url.searchParams.get("slot");
+    const layout = url.searchParams.get("layout");
+    const facilities = url.searchParams.getAll("facility").map((f) => f.toLowerCase());
+    const access = url.searchParams.getAll("accessibility").map((a) => a.toLowerCase());
+    return send(response, 200, [...venues.values()].filter((v) =>
+      v.status === "available"
+      && (!capacity || v.max_capacity >= Number(capacity))
+      && (!location || v.location.toLowerCase().includes(location.toLowerCase()))
+      && (!slot || v.operating_slots.includes(slot))
+      && (!layout || v.supported_layouts.includes(layout))
+      && facilities.every((f) => v.facilities.map((x) => x.toLowerCase()).includes(f))
+      && access.every((a) => v.accessibility_features.map((x) => x.toLowerCase()).includes(a))));
+  }
+
   const match = url.pathname.match(/^\/venues\/([^/]+)$/);
   const venue = match ? venues.get(decodeURIComponent(match[1])) : undefined;
   if (match && request.method === "GET") return venue ? send(response, 200, venue) : send(response, 404, { detail: "Venue not found" });

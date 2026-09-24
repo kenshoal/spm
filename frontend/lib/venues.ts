@@ -27,3 +27,7 @@ export async function listVenues(): Promise<Venue[]> {
 export async function getVenue(id: string): Promise<Venue | null> {
   return getJson<Venue>(venueApiUrl, `/venues/${encodeURIComponent(id)}`);
 }
+
+export async function searchVenues(query: string): Promise<Venue[]> {
+  return (await getJson<Venue[]>(venueApiUrl, `/venues/search?${query}`)) ?? [];
+}

@@ -24,6 +24,12 @@ async function CoordinatorRequestView({ id }: { id: string }) {
     <div className="mx-auto max-w-4xl">
       <Link href="/coordination/requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to assigned requests</Link>
       <RequestDetails request={request} />
+      <Link
+        href={`/venues/search${request.expected_attendance ? `?required_capacity=${request.expected_attendance}` : ""}`}
+        className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-[#cfd9d4] bg-white px-4 text-sm font-semibold text-[#0f6b5b] hover:bg-[#f4f7f5]"
+      >
+        Find venues for this event
+      </Link>
       <section aria-label="Coordinator actions" className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
         <h2 className="text-lg font-bold text-[#17211d]">Actions</h2>
         {coordinatorActions(request.status).length === 0 ? (

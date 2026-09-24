@@ -105,3 +105,41 @@ export function parseVenueForm(
   if (payload.operating_slots.length === 0) errors.operating_slots = "Choose at least one operating slot.";
   return { payload, errors };
 }
+
+export interface VenueSearchInput {
+  required_capacity?: string;
+  location?: string;
+  date?: string;
+  slot?: string;
+  layout?: string;
+  facility?: string;
+  accessibility?: string;
+}
+
+// Builds the query string for GET /venues/search from raw form text. Unknown
+// slot/layout values are dropped (rather than 422ing the backend); an
+// invalid capacity is reported instead of sent; an empty result (nothing
+// filled in, or an error) yields a null query so the page knows not to search.
+export function buildVenueSearch(input: VenueSearchInput): { query: string | null; errors: Record<string, string> } {
+  const params = new URLSearchParams();
+  const errors: Record<string, string> = {};
+  const capacity = (input.required_capacity ?? "").trim();
+  if (capacity) {
+    if (/^\d+$/.test(capacity) && Number(capacity) > 0) params.set("required_capacity", String(Number(capacity)));
+    else errors.required_capacity = "Enter a whole number greater than zero.";
+  }
+  const location = (input.location ?? "").trim();
+  if (location) params.set("location", location);
+  const date = (input.date ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) params.set("date", date);
+  const slot = input.slot ?? "";
+  if ((SLOTS as readonly string[]).includes(slot)) params.set("slot", slot);
+  const layout = input.layout ?? "";
+  if ((ROOM_LAYOUTS as readonly string[]).includes(layout)) params.set("layout", layout);
+  for (const item of splitList(input.facility ?? "")) params.append("facility", item);
+  for (const item of splitList(input.accessibility ?? "")) params.append("accessibility", item);
+
+  if (Object.keys(errors).length) return { query: null, errors };
+  const query = params.toString();
+  return { query: query || null, errors };
+}
