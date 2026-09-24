@@ -83,6 +83,21 @@ test("explains when no coordinator is available", () => {
   expect(screen.getByText("No Event Coordinator is available to assign.")).toBeDefined();
 });
 
+// Purpose: When the current coordinator is the only one on file, reassignment
+// has no one else to offer, so the form says so instead of showing an empty picker.
+test("explains when no other coordinator is available to reassign to", () => {
+  render(
+    <AssignCoordinatorForm
+      eventRequestId="r1"
+      coordinators={[{ id: "coord-1", email: "alex@example.com" }]}
+      currentCoordinatorId="coord-1"
+    />,
+  );
+
+  expect(screen.queryByRole("combobox")).toBeNull();
+  expect(screen.getByText("No other Event Coordinator is available.")).toBeDefined();
+});
+
 // Purpose: A coordinator missing from the directory still shows by id rather than blank.
 test("labels an unknown coordinator by id", () => {
   expect(coordinatorLabel("coord-9", coordinators)).toBe("coord-9");

@@ -24,7 +24,7 @@ const CANCEL_SOURCES = new Set([
   "Confirmed",
 ]);
 
-const COORDINATOR_IDS = new Set(["playwright-coordinator", "other-coordinator"]);
+const COORDINATOR_IDS = new Set(["playwright-coordinator", "other-coordinator", "reassign-coordinator"]);
 const TERMINAL = new Set(["Completed", "Cancelled", "Rejected"]);
 
 function send(response, status, body) {

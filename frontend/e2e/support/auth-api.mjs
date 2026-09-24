@@ -19,6 +19,7 @@ createServer(async (request, response) => {
     send(response, 200, [
       { id: "playwright-coordinator", email: "coordinator@example.com" },
       { id: "other-coordinator", email: "other.coordinator@example.com" },
+      { id: "reassign-coordinator", email: "reassign.coordinator@example.com" },
     ]);
     return;
   }

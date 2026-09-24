@@ -47,9 +47,9 @@ test.describe.serial("SCRUM-14 coordinator assignment", () => {
       .getByRole("article", { name: "Harbour Lights Gala" });
     const picker = card.getByLabel("Coordinator");
     await expect(picker.getByRole("option", { name: "coordinator@example.com", exact: true })).toHaveCount(0);
-    await picker.selectOption({ label: "other.coordinator@example.com" });
+    await picker.selectOption({ label: "reassign.coordinator@example.com" });
     await card.getByRole("button", { name: "Reassign" }).click();
-    await expect(card).toContainText("other.coordinator@example.com");
+    await expect(card).toContainText("reassign.coordinator@example.com");
 
     await page.context().clearCookies();
     await page.context().addCookies(sessionCookie("coordinator-session"));
