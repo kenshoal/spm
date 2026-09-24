@@ -71,6 +71,10 @@ test.describe.serial("SCRUM-28 status tracking", () => {
     expect(assigned.status()).toBe(201);
 
     // Assignment alone must not move the status out of Submitted.
+    await page.goto(`/event-requests/${eventId}/edit`);
+    await expect(page.getByText(/coordinator has been assigned/i)).toBeVisible();
+    await expect(page.locator('[aria-current="step"]')).toContainText("Submitted");
+
     await page.goto("/event-requests?status=in-progress");
     await expect(
       page.getByText("Requests being coordinated will appear here."),
@@ -86,6 +90,7 @@ test.describe.serial("SCRUM-28 status tracking", () => {
     await expect(
       page.getByRole("heading", { name: "Anniversary Fun Run" }),
     ).toBeVisible();
+    await expect(page.getByText(/coordinator has been assigned/i)).toBeVisible();
     await page.getByRole("button", { name: "Start review" }).click();
     await expect(
       page

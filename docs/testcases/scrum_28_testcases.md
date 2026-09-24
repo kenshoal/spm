@@ -1,61 +1,75 @@
 # SCRUM-28: Track Event Status
 
-Covers status tracking for organisers and coordinators, coordinator discovery,
-and the coordinator transitions SCRUM-28 owns (start review, cancel, complete).
-Transitions owned by other stories are listed under remaining coverage.
+This story provides the shared event-request status model, authorised transitions, atomic database updates and frontend status visibility. Business transitions owned by later stories remain outside this story.
 
-| Criterion / risk | Purpose (one line) | Setup and action | Expected evidence | Status |
-| --- | --- | --- | --- | --- |
-| Submitted → Under Review | A verified assigned Coordinator must be able to begin review. | Submit a request, assign a coordinator, authenticate with that coordinator role, then POST `/event-requests/{id}/review`. | 200 and status `Under Review`; assignment alone leaves `Submitted`. | Automated service and role tests pass; included in the 24 Sep live Postman run. |
-| Review actor | An Organiser or Operations Manager must not impersonate the assigned Coordinator. | Give the same user ID an assignment but authenticate with either other role; POST review. | 403 and status remains `Submitted`. | Automated tests pass. |
-| Review ownership | A different Coordinator must not change a request assigned to someone else. | Authenticate as an unassigned Coordinator; POST review. | 403 and no status change. | Automated service test passes. |
-| Assignment visibility | An unrelated Event Organiser or Event Coordinator must not read assignment details by guessing a request ID. | Authenticate with single-role and multi-role identities and GET `/event-requests/{id}/coordinator`. | 404 for unrelated eligible roles; 403 for other roles; owner, Event Operations Manager and current Coordinator get 200. | Automated tests cover the merged multi-role model. |
-| Stored status | The database must accept the agreed status set. | Inspect the live `event_requests_status_check`, update one Submitted row to Under Review inside a transaction, then roll back. | All ten statuses are present; the update succeeds; existing rows retain their original status. | Shared Supabase schema query, rollback verification and live transition path passed. |
-| Assignment table isolation | Direct browser keys must not bypass the API's role and ownership checks. | Inspect RLS and table grants for `event_coordinator_assignments`. | RLS enabled; `anon` and `authenticated` have no table SELECT; server role retains SELECT/INSERT. | Live grants query passed. |
-| Coordinator discovery | A Coordinator must find their assigned requests without knowing the UUID. | GET `/event-requests/assigned-to-me` as the assigned, reassigned-away, unrelated and multi-role coordinator; as Organiser / Ops Manager; with no session; with a repository failure. | Only latest-assigned requests; reassigned-away excluded; empty → 200 `[]`; multi-role accepted; other roles 403; no session 401; failure 502. | Automated controller, service and repository tests pass. |
-| Coordinator request detail | Only the owner or assigned Coordinator may open a request. | GET `/event-requests/{id}` across the role/relationship matrix. | Owner 200, other organiser 404; assigned coordinator 200, unrelated coordinator 404; Ops Manager 403; multi-role 200. | Automated tests pass. |
-| Cancellation (AC 4) | Only the coordinator in charge may cancel, from any non-terminal status. | POST `/{id}/cancellation` from Submitted, Under Review and Confirmed; as unassigned, reassigned-away, Organiser and Ops Manager; on Draft and terminal statuses. | 200 `Cancelled` for the assigned coordinator; 403 for other actors and Drafts; 409 from Completed/Cancelled/Rejected with no mutation; 401 without a session. | Automated tests pass. |
-| Completion (AC 5) | The coordinator marks a confirmed event complete, once. | POST `/{id}/completion` from Confirmed and every other status; repeat; as a non-assigned caller. | 200 `Completed` from Confirmed; 409 elsewhere and on repeat with no mutation; 403 for non-assigned. | Automated tests pass. |
-| Stale or repeated review | A double click or stale page must not mutate twice. | POST review twice; POST review after the status moved on. | Second call 409; status unchanged. | Automated tests pass. |
-| Atomic transition function | Authorisation and status write must commit together in the database. | Run `database/verify_event_request_status_transitions.sql` after migration `0012`. | Every allowed transition succeeds; `P0002`/`P0003`/`P0004` raised on each failure path; refused calls leave the status unchanged; `EXECUTE` granted to `service_role` only. | Passed on a local Postgres 16 replay of migrations 0007–0012 (23 Sep 2026). **Passed on the shared Supabase project (23 Sep 2026)** after 0012 and 0013 were applied. The first run failed check 13 because Supabase's default privileges gave `anon` a direct `EXECUTE` grant; `0013` closed it. |
-| Atomic assignment integration | Assignment and status transitions must not authorize against different assignment snapshots. | Apply `0014`, then run `database/verify_atomic_coordinator_assignment.sql`. | Assignment locks the same request row, rejects Draft/terminal requests and non-coordinator targets, preserves reassignment history and exposes the RPC only to `service_role`. | Repository and HTTP mapping tests pass; rollback rehearsal and deployed verification completed on shared Supabase on 24 Sep 2026. |
-| RPC error mapping | The service must map database errcodes, not message text. | Repository tests feed PostgREST 4xx bodies with `P0002`/`P0003`/`P0004`/`P0005` and another error. | Transition errors map to 404 / 403 / 409; assignment errors map to 404 / 409; other errors → 502. | Automated repository and controller tests pass. |
-| Login workspace routing | A verified user must land in a workspace allowed by their roles. | Log in as organiser-only, coordinator-only, multi-role and unsupported-role users; simulate a failed role lookup. | Organiser and multi-role users reach `/event-requests`; coordinator-only reaches `/coordination/requests`; unsupported users reach `/unauthorised`; lookup failure creates no cookie. | Automated frontend tests pass (24 Sep 2026). |
-| Frontend status model | Every backend status must be representable and appear in exactly one tab. | Vitest over `EVENT_REQUEST_STATUSES` and `groupRequests`. | All ten statuses covered; Completed under Completed; in-progress statuses stay visible after Submitted; Cancelled/Rejected only under All. | Automated (`event-request-status.test.tsx`). |
-| Status progress display | Organisers must see the current stage without implying later stages happened. | Render `StatusProgress` for each status. | Correct `aria-current` step; Draft description only; Changes Requested stops at Under Review with a notice; Rejected/Cancelled show a notice and no stepper; Completed is the final reached stage. | Automated (`event-request-status.test.tsx`). |
-| Coordinator workspace | Coordinators get status-appropriate actions and actionable failure states. | Vitest over the list, detail actions and server actions. | Empty state; links to detail; actions offered only in their status window; cancel/complete need confirmation; 403, 409, network and expired-session responses mapped to messages or sign-in redirect. | Automated (`coordination.test.tsx`, `coordination-actions.test.ts`). |
-| Critical journey (Playwright) | End-to-end handoff from organiser to coordinator and back. | Organiser submits → assignment made **through the mock API** as Ops Manager (no Ops Manager frontend on this branch) → assigned coordinator sees it and starts review → organiser sees Under Review → unrelated coordinator sees an empty queue and not-found on the direct URL. | Each step visible in the browser; assignment alone leaves Submitted. | Passed locally on 24 Sep 2026 (`e2e/track-event-status.spec.ts`). |
-| Transition journey (Playwright) | Cancel and complete are reflected in the organiser's tabs. | Coordinator cancels the under-review request; a seeded Confirmed request is marked complete. | Organiser sees Cancelled under All and the completed request under Completed. | Passed locally on 24 Sep 2026. Confirmed is seeded because its owning story is not on this branch. |
-| Status-history dependency | Keep historical transition tracking separate from SCRUM-28's current-status scope. | See the acceptance criteria and future test evidence in SCRUM-48. | SCRUM-28 exposes the current status; SCRUM-48 owns immutable transition history and timeline visibility. | Out of scope for SCRUM-28; tracked in [SCRUM-48](https://is212g9t4.atlassian.net/browse/SCRUM-48). |
+## Acceptance-criteria test matrix
 
-Remaining coverage owned by other stories: approval and rejection (SCRUM-17),
-changes-requested resubmission (SCRUM-35), Planning and Confirmed transitions
-(venue/operations stories), and automatic completion of Confirmed requests more
-than seven days after their event (SCRUM-40). SCRUM-28 retains the coordinator's
-manual Confirmed-to-Completed action. Notifications for these transitions belong
-to SCRUM-36/37, while immutable status history belongs to SCRUM-48.
+| ID | Acceptance criterion | Test purpose | Scenario and action | Expected result | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| AC1 | Each request has exactly one valid status. | Verifies that stored and displayed statuses use the agreed vocabulary. | Create a request and exercise all supported status values. | The request starts as `Draft`; all ten approved statuses are accepted; unknown values are rejected. | Supabase schema verification and `event-request-status.test.tsx`. |
+| AC2 | Only valid status transitions are allowed. | Prevents requests from skipping or reversing workflow stages. | Exercise submission, review, cancellation and completion from valid and invalid starting states. | Valid transitions succeed; invalid transitions return a conflict and do not change the request. | Backend transition tests, SQL verification and Postman cases. |
+| AC3 | Status changes are atomic. | Ensures authorisation, status validation and persistence cannot become inconsistent. | Run the status-transition verification script against the deployed database functions. | The request row is locked before validation; failed transitions leave the stored status unchanged; only the server role can execute the RPC. | `verify_event_request_status_transitions.sql` passed on shared Supabase. |
+| AC4 | Coordinator assignment and status changes use the same request-row lock. | Prevents a reassignment race from authorising the wrong coordinator. | Assign or reassign a coordinator while attempting a status transition. | Both operations serialize on the same request row; invalid targets are rejected without creating an assignment. | `verify_atomic_coordinator_assignment.sql` and live TC-04A verification passed. |
+| AC5 | Role and ownership rules are enforced. | Ensures only authorised users can view or change requests. | Test the owning organiser, assigned coordinator, reassigned coordinator, unrelated coordinator, operations manager and unsupported roles. | Valid users succeed; unauthorised users receive the expected `401`, `403` or `404`; rejected actions do not mutate data. | Backend controller/service tests and live Postman cases. |
+| AC6 | Users with access can see the current status. | Ensures the current stage is understandable in the organiser and coordinator workspaces. | Render all statuses, request tabs and the coordinator detail page. | The correct tab, progress stage, available action and assignment message are displayed without implying future stages. | Frontend unit tests and the SCRUM-28 Playwright journey. |
+| AC7 | Repeated or stale actions are rejected safely. | Prevents double clicks and stale pages from applying a transition twice. | Repeat review, cancellation or completion, or retry after reassignment or another status change. | The API returns a conflict and the stored status remains unchanged. | Backend tests and Postman negative cases. |
 
-Live API verification on 24 September 2026: the original 39 cases in
-`docs/postman/scrum_28.postman_collection.json` passed against the running
-authService and eventRequestService on the shared Supabase project, using real
-signed-in accounts for each role (`docs/authentication.txt`, "Test accounts").
-This covers submission, assignment, coordinator discovery and access, start
-review, reassignment, cancellation and completion, including every 401, 403,
-404 and 409 path. `Confirmed` was set by SQL for the completion cases, since its
-owning story is not implemented.
+## Supported transitions
 
-TC-04A was added after that collection run. Its live API equivalent passed
-against the rebuilt service on 24 September 2026: the API returned 409 and a
-database query confirmed there were zero assignments to users without the
-Event Coordinator role. A complete 40-case Postman rerun remains pending.
+SCRUM-28 currently provides these transitions:
 
-Migration `0014` closes the previously documented reassignment/status-transition
-race by making both operations lock the same event-request row. Shared-database
-verification completed on 24 September 2026.
+| Transition | Authorised actor |
+| --- | --- |
+| `Draft → Submitted` | Owning Event Organiser |
+| `Submitted → Under Review` | Assigned Event Coordinator |
+| Any non-terminal status → `Cancelled` | Assigned Event Coordinator |
+| `Confirmed → Completed` | Assigned Event Coordinator |
 
-Local verification on 24 September 2026: eventRequestService passed 148 tests
-and Ruff; authService passed 38 tests; the frontend passed 53 unit tests, lint
-and TypeScript checking; all seven Playwright tests passed. A production build
-completed with Next.js's webpack builder. The default Turbopack build could not
-be verified on the reviewing host because its helper process was not permitted
-to bind an internal port; CI must run the standard `npm run build` command.
+The database stores the complete status vocabulary so later stories can add their own authorised transitions without changing the core status model.
+
+## Out of scope
+
+The following transitions and behaviours belong to other stories:
+
+- Approval and rejection — SCRUM-17
+- Changes requested and resubmission — SCRUM-35
+- Planning and confirmation — venue and operations stories
+- Automatic completion of overdue confirmed events — SCRUM-40
+- Immutable status history and timeline display — SCRUM-48
+- Notifications — SCRUM-36 and SCRUM-37
+
+Those stories must reuse the SCRUM-28 status model and atomic transition boundary.
+
+## Security and data isolation
+
+- Draft operations are scoped to the authenticated organiser.
+- Coordinator details are visible only to the owning organiser, the current coordinator and authorised operations managers.
+- The coordinator assignment table is protected from direct browser access.
+- Assignment and status-transition RPCs are available only through the server role.
+- Reassigned coordinators cannot continue acting on a request.
+
+## Verification evidence
+
+- `eventRequestService`: 157 tests passed and Ruff passed.
+- `authService`: 38 tests passed.
+- Frontend: 55 unit tests passed.
+- Frontend lint passed.
+- Frontend TypeScript checking passed.
+- Frontend production build passed with Next.js Turbopack.
+- Database status-transition verification passed on the shared Supabase project.
+- Atomic coordinator-assignment verification passed on the shared Supabase project.
+- The complete seven-test Playwright suite passed after the coordinator-assignment
+  message fix, including the organiser-to-coordinator status journey.
+- PR #29 frontend unit, lint, typecheck, build, end-to-end and conventional-commit
+  checks passed after commit `4c1b743`.
+
+## Definition of done
+
+SCRUM-28 is ready to close when:
+
+- The Jira acceptance criteria match this document.
+- The latest frontend status-message changes are committed and pushed.
+- The pull request includes the updated implementation and tests.
+- CI passes the backend, frontend, database-related and Playwright checks.
+- The linked stories and their ownership boundaries are recorded in Jira.
+- The pull request is reviewed and merged into `dev`.

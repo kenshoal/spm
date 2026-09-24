@@ -230,6 +230,35 @@ createServer(async (request, response) => {
       send(response, 201, row);
       return;
     }
+
+    if (request.method === "GET") {
+      if (!record) {
+        send(response, 404, { detail: "Event request not found" });
+        return;
+      }
+
+      const assignment = latestAssignmentFor(id);
+      const canRead =
+        user.role === "event_operations_manager" ||
+        (user.role === "event_organiser" && record.organiser_id === user.id) ||
+        (user.role === "event_coordinator" && assignment?.coordinator_id === user.id);
+
+      if (!canRead) {
+        const eligibleRole =
+          user.role === "event_organiser" || user.role === "event_coordinator";
+        send(response, eligibleRole ? 404 : 403, {
+          detail: eligibleRole ? "Event request not found" : "Insufficient permissions",
+        });
+        return;
+      }
+
+      send(
+        response,
+        assignment ? 200 : 404,
+        assignment ?? { detail: "Coordinator assignment not found" },
+      );
+      return;
+    }
   }
 
   if (!id || !record) {

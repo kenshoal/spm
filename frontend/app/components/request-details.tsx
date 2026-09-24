@@ -9,10 +9,19 @@ const requirementFields = [
   ["registration_needs", "Registration needs"],
 ] as const;
 
-export function RequestDetails({ request }: { request: EventRequest }) {
+export function RequestDetails({
+  request,
+  coordinatorAssigned,
+}: {
+  request: EventRequest;
+  coordinatorAssigned?: boolean;
+}) {
   return (
     <div className="space-y-5">
-      <StatusProgress status={request.status} />
+      <StatusProgress
+        status={request.status}
+        coordinatorAssigned={coordinatorAssigned}
+      />
       <section className="rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
         <h1 className="text-2xl font-bold text-[#17211d]">{request.event_name}</h1>
         <dl className="mt-6 grid gap-5 sm:grid-cols-2">
