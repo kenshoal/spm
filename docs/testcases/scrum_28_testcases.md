@@ -24,13 +24,14 @@ Transitions owned by other stories are listed under remaining coverage.
 | Coordinator workspace | Coordinators get status-appropriate actions and actionable failure states. | Vitest over the list, detail actions and server actions. | Empty state; links to detail; actions offered only in their status window; cancel/complete need confirmation; 403, 409, network and expired-session responses mapped to messages or sign-in redirect. | Automated (`coordination.test.tsx`, `coordination-actions.test.ts`). |
 | Critical journey (Playwright) | End-to-end handoff from organiser to coordinator and back. | Organiser submits → assignment made **through the mock API** as Ops Manager (no Ops Manager frontend on this branch) → assigned coordinator sees it and starts review → organiser sees Under Review → unrelated coordinator sees an empty queue and not-found on the direct URL. | Each step visible in the browser; assignment alone leaves Submitted. | Passed locally on 24 Sep 2026 (`e2e/track-event-status.spec.ts`). |
 | Transition journey (Playwright) | Cancel and complete are reflected in the organiser's tabs. | Coordinator cancels the under-review request; a seeded Confirmed request is marked complete. | Organiser sees Cancelled under All and the completed request under Completed. | Passed locally on 24 Sep 2026. Confirmed is seeded because its owning story is not on this branch. |
-| Proposed AC6: status history | An Organiser and the currently assigned Coordinator must be able to see how the request reached its current status. | Perform successful and refused transitions, including a repeated request, then retrieve the request history as the owner, assigned Coordinator and unrelated user. | Every successful change creates exactly one immutable, chronologically ordered entry containing previous status, new status, actor and timestamp; refused or repeated changes create none; unrelated users cannot read the history. | **Proposed — Jira approval, implementation and tests are still required.** Current code stores only the latest status. |
+| Status-history dependency | Keep historical transition tracking separate from SCRUM-28's current-status scope. | See the acceptance criteria and future test evidence in SCRUM-48. | SCRUM-28 exposes the current status; SCRUM-48 owns immutable transition history and timeline visibility. | Out of scope for SCRUM-28; tracked in [SCRUM-48](https://is212g9t4.atlassian.net/browse/SCRUM-48). |
 
 Remaining coverage owned by other stories: approval and rejection (SCRUM-17),
 changes-requested resubmission (SCRUM-35), Planning and Confirmed transitions
-(venue/operations stories), and automatic completion (SCRUM-40), which must be
-reconciled with the manual completion command above. Notifications for these
-transitions belong to SCRUM-36/37.
+(venue/operations stories), and automatic completion of Confirmed requests more
+than seven days after their event (SCRUM-40). SCRUM-28 retains the coordinator's
+manual Confirmed-to-Completed action. Notifications for these transitions belong
+to SCRUM-36/37, while immutable status history belongs to SCRUM-48.
 
 Live API verification on 24 September 2026: all 39 cases in
 `docs/postman/scrum_28.postman_collection.json` passed against the running
