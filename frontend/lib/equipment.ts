@@ -26,3 +26,28 @@ export async function listEquipment(status?: OperationalStatus): Promise<Equipme
 export async function getEquipment(id: string): Promise<Equipment | null> {
   return getJson<Equipment>(equipmentApiUrl, `/equipment/${encodeURIComponent(id)}`);
 }
+
+export interface EquipmentStatus {
+  equipment_id: string;
+  operational_status: OperationalStatus;
+  available: boolean;
+  available_quantity: number;
+}
+
+export interface StatusHistoryEntry {
+  id: number;
+  equipment_id: string;
+  old_status: OperationalStatus | null;
+  new_status: OperationalStatus;
+  reason: string | null;
+  changed_by: string;
+  changed_at: string;
+}
+
+export async function getEquipmentStatus(id: string): Promise<EquipmentStatus | null> {
+  return getJson<EquipmentStatus>(equipmentApiUrl, `/equipment/${encodeURIComponent(id)}/status`);
+}
+
+export async function getStatusHistory(id: string): Promise<StatusHistoryEntry[]> {
+  return (await getJson<StatusHistoryEntry[]>(equipmentApiUrl, `/equipment/${encodeURIComponent(id)}/status/history`)) ?? [];
+}

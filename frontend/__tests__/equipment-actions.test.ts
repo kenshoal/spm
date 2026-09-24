@@ -8,7 +8,7 @@ vi.mock("@/lib/auth", () => ({
   requireRole: async () => ({ id: "tech-1", email: "tech@example.com", role: "technical_support", roles: ["technical_support"] }),
 }));
 
-import { createEquipment, updateEquipmentQuantity } from "@/app/equipment/actions";
+import { changeEquipmentStatus, createEquipment, updateEquipmentQuantity } from "@/app/equipment/actions";
 
 function form(fields: Record<string, string>): FormData {
   const data = new FormData();
@@ -101,4 +101,57 @@ test("explains missing equipment", async () => {
   const state = await updateEquipmentQuantity("eq-1", {}, form({ total_owned_quantity: "4" }));
 
   expect(state).toEqual({ message: "This equipment record no longer exists.", values: { total_owned_quantity: "4" } });
+});
+
+// Purpose: SCRUM-16 AC1 — marking equipment damaged sends the status and reason.
+test("changes the operational status with a reason", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const state = await changeEquipmentStatus("eq-1", "AVAILABLE", {}, form({ new_status: "DAMAGED", reason: "  Cracked lens " }));
+
+  expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8002/equipment/eq-1/status");
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "PATCH", body: JSON.stringify({ new_status: "DAMAGED", reason: "Cracked lens" }) });
+  expect(state).toEqual({ saved: true, message: "Status changed to Damaged." });
+});
+
+// Purpose: A status change must actually change something, and use a known status.
+test("refuses an unchanged or unknown status", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  expect(await changeEquipmentStatus("eq-1", "DAMAGED", {}, form({ new_status: "DAMAGED" }))).toEqual({
+    message: "Choose a different status.",
+    values: { new_status: "DAMAGED", reason: "" },
+  });
+  expect(await changeEquipmentStatus("eq-1", "DAMAGED", {}, form({ new_status: "LOST" }))).toEqual({
+    message: "Choose a different status.",
+    values: { new_status: "LOST", reason: "" },
+  });
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+// Purpose: The backend's 255-character reason limit is enforced before sending.
+test("rejects an overlong reason", async () => {
+  vi.stubGlobal("fetch", vi.fn());
+
+  const state = await changeEquipmentStatus("eq-1", "AVAILABLE", {}, form({ new_status: "DAMAGED", reason: "x".repeat(256) }));
+
+  expect(state).toEqual({
+    message: "Keep the reason to 255 characters or fewer.",
+    values: { new_status: "DAMAGED", reason: "x".repeat(256) },
+  });
+});
+
+// Purpose: Ruling 4 — an overlong reason must echo the raw (trimmed) reason back
+// so a corrected resubmission doesn't lose what the user typed.
+test("echoes the raw reason back when it is too long", async () => {
+  vi.stubGlobal("fetch", vi.fn());
+
+  const state = await changeEquipmentStatus("eq-1", "AVAILABLE", {}, form({ new_status: "DAMAGED", reason: `  ${"y".repeat(260)}  ` }));
+
+  expect(state).toEqual({
+    message: "Keep the reason to 255 characters or fewer.",
+    values: { new_status: "DAMAGED", reason: "y".repeat(260) },
+  });
 });

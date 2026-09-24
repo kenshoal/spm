@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sendJson } from "@/lib/api";
 import { requireRole } from "@/lib/auth";
-import { equipmentApiUrl } from "@/lib/equipment";
+import { equipmentApiUrl, isOperationalStatus, statusLabel, type OperationalStatus } from "@/lib/equipment";
 import { parseEquipmentForm, parseQuantity, readEquipmentFormValues } from "@/lib/equipment-form";
 
 export interface EquipmentFormState {
@@ -74,4 +74,31 @@ export async function updateEquipmentQuantity(
   revalidatePath("/equipment");
   revalidatePath(`/equipment/${equipmentId}`);
   return { saved: true, message: "Quantity updated." };
+}
+
+export async function changeEquipmentStatus(
+  equipmentId: string,
+  currentStatus: OperationalStatus,
+  previousState: EquipmentFormState,
+  formData: FormData,
+): Promise<EquipmentFormState> {
+  void previousState;
+  const newStatus = String(formData.get("new_status") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  const values = { new_status: newStatus, reason };
+  if (!isOperationalStatus(newStatus) || newStatus === currentStatus) return { message: "Choose a different status.", values };
+  if (reason.length > 255) return { message: "Keep the reason to 255 characters or fewer.", values };
+
+  await requireRole("technical_support");
+  let response: Response;
+  try {
+    response = await sendJson(equipmentApiUrl, `/equipment/${encodeURIComponent(equipmentId)}/status`, "PATCH", { new_status: newStatus, reason: reason || null });
+  } catch {
+    return { message: "The status could not be changed. Please try again.", values };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) return { ...failure(response.status, "The status could not be changed. Please try again."), values };
+  revalidatePath("/equipment");
+  revalidatePath(`/equipment/${equipmentId}`);
+  return { saved: true, message: `Status changed to ${statusLabel(newStatus)}.` };
 }

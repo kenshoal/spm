@@ -45,18 +45,39 @@ createServer(async (request, response) => {
   }
 
   const match = url.pathname.match(/^\/equipment\/([^/]+)(\/quantity|\/status|\/status\/history)?$/);
-  const item = match ? items.get(decodeURIComponent(match[1])) : undefined;
   if (!match) return send(response, 404, { detail: "Not found" });
-  if (!item) return send(response, 404, { detail: "Equipment not found" });
+  const item = items.get(decodeURIComponent(match[1]));
   const suffix = match[2] ?? "";
+  // A mutating route (PATCH /quantity, PATCH /status) checks the caller's role
+  // before looking up the id, mirroring the real backend: FastAPI's `StaffDep`
+  // dependency runs before the handler ever queries for the record, so a
+  // non-technical_support caller gets 403 even for an id that doesn't exist.
+  // GET routes stay id-first, so any authenticated caller gets 404 for a
+  // missing item.
+  const isMutating = request.method === "PATCH" && (suffix === "/quantity" || suffix === "/status");
+  if (isMutating && staffOnly()) return;
+  if (!item) return send(response, 404, { detail: "Equipment not found" });
 
   if (suffix === "" && request.method === "GET") return send(response, 200, item);
   if (suffix === "/quantity" && request.method === "PATCH") {
-    if (staffOnly()) return;
     const body = await readJson(request);
     const updated = { ...item, total_owned_quantity: body.total_owned_quantity, updated_at: new Date().toISOString() };
     items.set(item.id, updated);
     return send(response, 200, updated);
+  }
+  if (suffix === "/status" && request.method === "GET") {
+    const available = item.operational_status === "AVAILABLE";
+    return send(response, 200, { equipment_id: item.id, operational_status: item.operational_status, available, available_quantity: available ? item.total_owned_quantity : 0 });
+  }
+  if (suffix === "/status" && request.method === "PATCH") {
+    const body = await readJson(request);
+    const now = new Date().toISOString();
+    history.push({ id: nextHistoryId++, equipment_id: item.id, old_status: item.operational_status, new_status: body.new_status, reason: body.reason ?? null, changed_by: user.id, changed_at: now });
+    items.set(item.id, { ...item, operational_status: body.new_status, updated_at: now });
+    return send(response, 200, { equipment_id: item.id, new_status: body.new_status, changed_by: user.id, reason: body.reason ?? null });
+  }
+  if (suffix === "/status/history" && request.method === "GET") {
+    return send(response, 200, history.filter((entry) => entry.equipment_id === item.id).sort((a, b) => b.id - a.id));
   }
   send(response, 405, { detail: "Method not allowed" });
 }).listen(8106, "127.0.0.1");
