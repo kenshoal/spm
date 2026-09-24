@@ -114,6 +114,24 @@ test("marks the current stage for an in-flight request", () => {
   expect(current.textContent).toContain("Under Review");
 });
 
+// Purpose: Submitted copy reflects a known assignment without changing workflow status.
+test("shows that a submitted request has an assigned coordinator", () => {
+  render(<StatusProgress status="Submitted" coordinatorAssigned />);
+
+  expect(screen.getByText(/coordinator has been assigned/i)).toBeDefined();
+  expect(screen.queryByText(/waiting for an Event Operations Manager/i)).toBeNull();
+  expect(screen.getByRole("listitem", { current: "step" }).textContent).toContain(
+    "Submitted",
+  );
+});
+
+// Purpose: An unassigned submission still tells the organiser what it is waiting for.
+test("shows that a submitted request is waiting when no coordinator is assigned", () => {
+  render(<StatusProgress status="Submitted" coordinatorAssigned={false} />);
+
+  expect(screen.getByText(/waiting for an Event Operations Manager/i)).toBeDefined();
+});
+
 // Purpose: Approval and completion stages are announced as done as the event advances.
 test("marks Confirmed as current with earlier stages done", () => {
   render(<StatusProgress status="Confirmed" />);

@@ -13,7 +13,7 @@ const MILESTONES = [
 
 const STATUS_DESCRIPTIONS: Record<EventRequestStatus, string> = {
   Draft: "Not submitted yet — you can keep editing this draft.",
-  Submitted: "Waiting for an Event Operations Manager to assign a coordinator.",
+  Submitted: "Submitted for coordination.",
   "Under Review": "A coordinator is reviewing this request.",
   "Changes Requested":
     "The coordinator requested changes. Update the request and resubmit it.",
@@ -25,8 +25,21 @@ const STATUS_DESCRIPTIONS: Record<EventRequestStatus, string> = {
   Rejected: "This request was rejected after review.",
 };
 
-export function StatusProgress({ status }: { status: EventRequestStatus }) {
-  const description = STATUS_DESCRIPTIONS[status];
+export function StatusProgress({
+  status,
+  coordinatorAssigned,
+}: {
+  status: EventRequestStatus;
+  coordinatorAssigned?: boolean;
+}) {
+  const description =
+    status === "Submitted"
+      ? coordinatorAssigned === true
+        ? "A coordinator has been assigned and can begin review."
+        : coordinatorAssigned === false
+          ? "Waiting for an Event Operations Manager to assign a coordinator."
+          : STATUS_DESCRIPTIONS.Submitted
+      : STATUS_DESCRIPTIONS[status];
 
   // Cancelled and Rejected get no stepper: later stages are unreachable and
   // showing them would imply the event could still proceed.

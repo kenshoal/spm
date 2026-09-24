@@ -94,6 +94,14 @@ export interface EventRequest {
   updated_at: string;
 }
 
+export interface CoordinatorAssignment {
+  id: number;
+  event_request_id: string;
+  coordinator_id: string;
+  assigned_by: string;
+  assigned_at: string;
+}
+
 const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
 async function request(path: string): Promise<Response> {
@@ -122,6 +130,17 @@ export async function listAssignedEventRequests(): Promise<EventRequest[]> {
 export async function getEventRequest(id: string): Promise<EventRequest | null> {
   const response = await request(`/event-requests/${encodeURIComponent(id)}`);
   return response.status === 404 ? null : response.json() as Promise<EventRequest>;
+}
+
+export async function getCoordinatorAssignment(
+  eventRequestId: string,
+): Promise<CoordinatorAssignment | null> {
+  const response = await request(
+    `/event-requests/${encodeURIComponent(eventRequestId)}/coordinator`,
+  );
+  return response.status === 404
+    ? null
+    : response.json() as Promise<CoordinatorAssignment>;
 }
 
 export function groupRequests(

@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/auth";
-import { getEventRequest } from "@/lib/event-requests";
+import {
+  getCoordinatorAssignment,
+  getEventRequest,
+} from "@/lib/event-requests";
 import { AppShell, workspaceLinks } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { EventRequestForm } from "../../new/event-request-form";
@@ -19,7 +22,11 @@ async function EditDraft({ id }: { id: string }) {
     return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">Draft not found</h1><p className="mt-2 text-sm text-[#718078]">It may belong to another organiser or have been deleted.</p></div>;
   }
   if (result.request.status !== "Draft") {
-    return <div className="mx-auto max-w-4xl"><Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link><div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div><RequestDetails request={result.request} /></div>;
+    const coordinatorAssigned = await getCoordinatorAssignment(id)
+      .then((assignment) => assignment !== null)
+      // Keep the status view available if assignment lookup is temporarily unavailable.
+      .catch(() => undefined);
+    return <div className="mx-auto max-w-4xl"><Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link><div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div><RequestDetails request={result.request} coordinatorAssigned={coordinatorAssigned} /></div>;
   }
 
   return (
