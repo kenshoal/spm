@@ -14,14 +14,16 @@ drafts. Drafts are persisted in the shared Supabase project.
 | `PATCH` | `/event-requests/{id}` | Update a Draft |
 | `POST` | `/event-requests/{id}/submit` | Submit a completed Draft |
 | `DELETE` | `/event-requests/{id}` | Delete a Draft |
+| `GET` | `/event-requests/awaiting-assignment` | List Submitted requests with no Coordinator |
 | `POST` | `/event-requests/{id}/coordinator` | Assign or reassign a Coordinator |
 | `GET` | `/event-requests/{id}/coordinator` | Get the current Coordinator |
 | `POST` | `/event-requests/{id}/review` | Start Coordinator review |
 | `GET` | `/health` | Service health check |
 
 Every event-request operation requires `Authorization: Bearer <access-token>`.
-Draft CRUD requires `event_organiser`, coordinator assignment requires
-`event_operations_manager`, and starting review requires `event_coordinator`.
+Draft CRUD requires `event_organiser`, coordinator assignment and the
+awaiting-assignment queue require `event_operations_manager`, and starting
+review requires `event_coordinator`.
 The service asks authService to verify that token with Supabase, then scopes
 drafts to the returned user ID. It also requires the established
 `app_metadata.role` value `organiser`; authenticated users with any other or no

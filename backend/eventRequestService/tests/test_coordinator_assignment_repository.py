@@ -90,6 +90,42 @@ def test_latest_returns_none_when_never_assigned() -> None:
     assert repository.latest_for_event_request("missing") is None
 
 
+# Purpose: Confirms the awaiting-assignment lookup asks Supabase only about the
+# candidate requests, and reduces the answer to the set of ids already assigned.
+def test_assigned_event_request_ids_filters_to_the_given_requests() -> None:
+    captured_query: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_query.update(dict(request.url.params))
+        return httpx.Response(200, json=[{"event_request_id": "request-1"}])
+
+    repository = SupabaseCoordinatorAssignmentRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    assigned = repository.assigned_event_request_ids(["request-1", "request-2"])
+
+    assert captured_query["event_request_id"] == "in.(request-1,request-2)"
+    assert captured_query["select"] == "event_request_id"
+    assert assigned == {"request-1"}
+
+
+# Purpose: With no candidate requests there is nothing to ask about — an empty
+# `in.()` filter is not valid PostgREST, so the call must be skipped entirely.
+def test_assigned_event_request_ids_skips_supabase_when_given_no_ids() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("Supabase should not be called for an empty id list")
+
+    repository = SupabaseCoordinatorAssignmentRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert repository.assigned_event_request_ids([]) == set()
+
+
 # Purpose: Converts upstream Supabase failures into the shared repository error.
 def test_supabase_failure_raises_repository_error() -> None:
     repository = SupabaseCoordinatorAssignmentRepository(

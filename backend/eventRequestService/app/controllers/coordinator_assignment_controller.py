@@ -13,6 +13,7 @@ from app.models.coordinator_assignment import (
     CoordinatorAssignmentResponse,
     CoordinatorAssignRequest,
 )
+from app.models.event_request import EventRequestResponse
 from app.repositories.coordinator_assignment_repository import (
     SupabaseCoordinatorAssignmentRepository,
 )
@@ -66,6 +67,17 @@ ServiceDependency = Annotated[
 ]
 CallerDependency = Annotated[str, Depends(get_authenticated_user_id)]
 OperationsManagerDependency = Annotated[str, Depends(get_operations_manager_id)]
+
+
+@router.get(
+    "/awaiting-assignment",
+    response_model=list[EventRequestResponse],
+)
+def list_awaiting_assignment(
+    _assigned_by: OperationsManagerDependency,
+    service: ServiceDependency,
+) -> list[EventRequestResponse]:
+    return service.list_awaiting_assignment()
 
 
 @router.post(

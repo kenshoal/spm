@@ -68,6 +68,13 @@ class EventRequestService:
         rows = self.repository.list_for_organiser(organiser_id)
         return [self._row_to_response(row) for row in rows]
 
+    def list_by_status(self, status: EventRequestStatus) -> list[EventRequestResponse]:
+        """Unscoped lookup across every organiser, for a caller whose remit is
+        the whole queue rather than one organiser's own requests.
+        """
+        rows = self.repository.list_by_status(status.value)
+        return [self._row_to_response(row) for row in rows]
+
     def get(self, event_request_id: str, organiser_id: str) -> EventRequestResponse:
         row = self.repository.get_for_organiser(event_request_id, organiser_id)
         if row is None:

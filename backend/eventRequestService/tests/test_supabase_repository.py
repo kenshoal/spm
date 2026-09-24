@@ -214,6 +214,30 @@ def test_delete_scopes_query_to_owner_and_draft_status() -> None:
     assert deleted is True
 
 
+# Purpose: The status lookup spans every organiser — the Operations Manager's queue
+# is not scoped to one owner, unlike every other read in this repository.
+def test_list_by_status_queries_across_organisers() -> None:
+    captured_query: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_query.update(dict(request.url.params))
+        return httpx.Response(200, json=[])
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    repository.list_by_status("Submitted")
+
+    assert captured_query == {
+        "status": "eq.Submitted",
+        "order": "created_at.desc",
+        "select": "*",
+    }
+    assert "organiser_id" not in captured_query
+
+
 # Purpose: Converts upstream Supabase failures into the service's stable repository error.
 def test_supabase_failure_raises_repository_error() -> None:
     repository = SupabaseEventRequestRepository(
