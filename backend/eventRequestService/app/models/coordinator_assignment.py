@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.event_request import EventRequestResponse
+
 
 class CoordinatorAssignRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -15,3 +17,8 @@ class CoordinatorAssignmentResponse(BaseModel):
     coordinator_id: str
     assigned_by: str
     assigned_at: datetime
+
+
+class CurrentAssignmentResponse(BaseModel):
+    event_request: EventRequestResponse
+    assignment: CoordinatorAssignmentResponse

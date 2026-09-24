@@ -97,3 +97,19 @@ def test_reassigned_request_stays_out_of_the_awaiting_queue() -> None:
         )
 
     assert service.list_awaiting_assignment() == []
+
+
+# Purpose: With no in-flight requests there is nothing to look up in the assignments table.
+def test_current_assignments_skip_the_assignment_lookup_when_nothing_in_flight() -> None:
+    class ExplodingAssignmentRepository(FakeCoordinatorAssignmentRepository):
+        def list_for_event_requests(
+            self, event_request_ids: list[str]
+        ) -> list[dict[str, Any]]:
+            raise AssertionError("no in-flight requests means nothing to look up")
+
+    service = CoordinatorAssignmentService(
+        ExplodingAssignmentRepository(),
+        EventRequestService(FakeEventRequestRepository()),
+    )
+
+    assert service.list_current_assignments() == []
