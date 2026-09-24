@@ -40,7 +40,7 @@ test("event-request pages require the Event Organiser role", async ({ page }) =>
   await page.goto("/event-requests");
 
   await expect(page).toHaveURL(/\/unauthorised$/);
-  await expect(page.getByRole("heading", { name: "Event Organiser access required" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your role can't use this page" })).toBeVisible();
 });
 
 // Purpose: A coordinator must reach the coordination workspace without knowing its URL.

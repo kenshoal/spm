@@ -14,6 +14,9 @@ export interface AuthenticatedUser {
 export function workspaceForRoles(roles: string[]): string {
   if (roles.includes("event_organiser")) return "/event-requests";
   if (roles.includes("event_coordinator")) return "/coordination/requests";
+  if (roles.includes("event_operations_manager")) return "/operations/assignments";
+  if (roles.includes("venue_staff")) return "/venues";
+  if (roles.includes("technical_support")) return "/equipment";
   return "/unauthorised";
 }
 
@@ -43,4 +46,10 @@ export async function requireRole(role: string): Promise<AuthenticatedUser> {
 
 export function requireEventOrganiser(): Promise<AuthenticatedUser> {
   return requireRole("event_organiser");
+}
+
+export async function requireAnyRole(roles: readonly string[]): Promise<AuthenticatedUser> {
+  const user = await requireAuthenticatedUser();
+  if (!roles.some((role) => user.roles.includes(role))) redirect("/unauthorised");
+  return user;
 }

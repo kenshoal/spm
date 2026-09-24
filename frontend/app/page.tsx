@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { requireAuthenticatedUser, workspaceForRoles } from "@/lib/auth";
 
-export default function HomePage() {
-  redirect("/event-requests");
+export default async function HomePage() {
+  const user = await requireAuthenticatedUser();
+  redirect(workspaceForRoles(user.roles));
 }
