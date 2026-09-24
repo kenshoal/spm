@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { getVenue } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../../../components/app-shell";
@@ -7,7 +8,10 @@ import { VenueForm } from "../../venue-form";
 export default async function EditVenuePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireRole("venue_staff");
   const { id } = await params;
-  const result = await getVenue(id).then((venue) => ({ venue, failed: false as const })).catch(() => ({ venue: null, failed: true as const }));
+  const result = await getVenue(id).then((venue) => ({ venue, failed: false as const })).catch((error: unknown) => {
+    unstable_rethrow(error);
+    return { venue: null, failed: true as const };
+  });
   return (
     <AppShell signedIn navLinks={workspaceLinks(user.roles)}>
       <div className="mx-auto max-w-3xl">

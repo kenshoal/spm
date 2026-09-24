@@ -1,11 +1,15 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/auth";
 import { layoutLabel, listVenues } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../components/app-shell";
 
 async function VenueData() {
-  const result = await listVenues().then((venues) => ({ venues, failed: false as const })).catch(() => ({ venues: [], failed: true as const }));
+  const result = await listVenues().then((venues) => ({ venues, failed: false as const })).catch((error: unknown) => {
+    unstable_rethrow(error);
+    return { venues: [], failed: true as const };
+  });
   if (result.failed) {
     return <div role="alert" className="rounded-2xl border border-[#eccdbe] bg-[#fff8f3] px-6 py-8 text-[#793f27]">The venue service is unavailable. Start the local API on port 8004, then refresh.</div>;
   }

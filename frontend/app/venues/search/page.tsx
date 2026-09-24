@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { requireAnyRole } from "@/lib/auth";
 import { buildVenueSearch, type VenueSearchInput } from "@/lib/venue-form";
 import { layoutLabel, ROOM_LAYOUTS, searchVenues, SLOTS } from "@/lib/venues";
@@ -26,7 +27,10 @@ export default async function VenueSearchPage({ searchParams }: { searchParams: 
   const { query, errors } = buildVenueSearch(input);
   const outcome = query === null
     ? null
-    : await searchVenues(query).then((venues) => ({ venues, failed: false as const })).catch(() => ({ venues: [], failed: true as const }));
+    : await searchVenues(query).then((venues) => ({ venues, failed: false as const })).catch((error: unknown) => {
+        unstable_rethrow(error);
+        return { venues: [], failed: true as const };
+      });
 
   return (
     <AppShell signedIn navLinks={workspaceLinks(user.roles)}>

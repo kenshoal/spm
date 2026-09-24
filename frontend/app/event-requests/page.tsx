@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { groupRequests, listEventRequests, type RequestFilter } from "@/lib/event-requests";
 import { AppShell, workspaceLinks } from "../components/app-shell";
@@ -19,7 +20,10 @@ async function RequestData({
     : "all";
   const result = await listEventRequests()
     .then((requests) => ({ requests, failed: false as const }))
-    .catch(() => ({ requests: [], failed: true as const }));
+    .catch((error: unknown) => {
+      unstable_rethrow(error);
+      return { requests: [], failed: true as const };
+    });
 
   if (result.failed) {
     return (

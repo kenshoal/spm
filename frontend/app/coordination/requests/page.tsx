@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { requireRole, type AuthenticatedUser } from "@/lib/auth";
 import { listAssignedEventRequests } from "@/lib/event-requests";
@@ -7,7 +8,10 @@ import { CoordinationRequestList } from "./coordination-request-list";
 async function AssignedRequestData() {
   const result = await listAssignedEventRequests()
     .then((requests) => ({ requests, failed: false as const }))
-    .catch(() => ({ requests: [], failed: true as const }));
+    .catch((error: unknown) => {
+      unstable_rethrow(error);
+      return { requests: [], failed: true as const };
+    });
 
   if (result.failed) {
     return (

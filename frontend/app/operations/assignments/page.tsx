@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/auth";
 import { listAwaitingAssignment, listCoordinators, listCurrentAssignments } from "@/lib/operations";
@@ -10,6 +11,9 @@ async function AssignmentData() {
     listCurrentAssignments(),
     listCoordinators(),
   ]);
+  for (const result of [awaiting, assigned, coordinators]) {
+    if (result.status === "rejected") unstable_rethrow(result.reason);
+  }
   if (awaiting.status === "rejected" || assigned.status === "rejected") {
     return (
       <div role="alert" className="rounded-2xl border border-[#eccdbe] bg-[#fff8f3] px-6 py-8">

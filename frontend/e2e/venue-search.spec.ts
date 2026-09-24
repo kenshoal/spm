@@ -33,3 +33,10 @@ test("organisers cannot open venue search", async ({ page }) => {
   await page.goto("/venues/search");
   await expect(page).toHaveURL(/\/unauthorised$/);
 });
+
+// Purpose: An expired venue-service session goes to sign-in, not an outage banner.
+test("an expired venue-service session redirects to sign-in", async ({ page }) => {
+  await page.context().addCookies([{ name: "cs_access_token", value: "other-coordinator-session", url: "http://127.0.0.1:3100" }]);
+  await page.goto("/venues/search?required_capacity=10");
+  await expect(page).toHaveURL(/\/auth$/);
+});
