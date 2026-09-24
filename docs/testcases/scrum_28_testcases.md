@@ -50,15 +50,18 @@ Those stories must reuse the SCRUM-28 status model and atomic transition boundar
 
 ## Verification evidence
 
-- `eventRequestService`: 148 tests passed and Ruff passed.
+- `eventRequestService`: 157 tests passed and Ruff passed.
 - `authService`: 38 tests passed.
-- Frontend focused status suite: 15 tests passed.
+- Frontend: 55 unit tests passed.
 - Frontend lint passed.
 - Frontend TypeScript checking passed.
+- Frontend production build passed with Next.js Turbopack.
 - Database status-transition verification passed on the shared Supabase project.
 - Atomic coordinator-assignment verification passed on the shared Supabase project.
-- The baseline seven-test Playwright suite passed before the latest status-message-only UI change.
-- The latest Playwright rerun should be completed in CI after the final commit because the local runner could not bind its test-server port.
+- The complete seven-test Playwright suite passed after the coordinator-assignment
+  message fix, including the organiser-to-coordinator status journey.
+- PR #29 frontend unit, lint, typecheck, build, end-to-end and conventional-commit
+  checks passed after commit `4c1b743`.
 
 ## Definition of done
 
