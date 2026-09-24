@@ -567,3 +567,149 @@ def test_current_user_maps_provider_failure(client: TestClient, supabase: Mock) 
     response = client.get("/auth/me", headers={"Authorization": "Bearer token"})
 
     assert response.status_code == 502
+
+
+def _caller(supabase: Mock, roles: list[str]) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="caller-id", email="caller@example.com", app_metadata={"roles": roles}
+        )
+    )
+
+
+COORDINATOR_EMAILS = {"coord-a": "alex@example.com", "coord-b": "blair@example.com"}
+
+
+# Purpose: SCRUM-14 — an Operations Manager can list coordinators to choose from.
+def test_operations_manager_lists_event_coordinators(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    _caller(supabase, ["event_operations_manager"])
+    admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        SimpleNamespace(data=[{"role": "event_operations_manager"}]),
+        SimpleNamespace(data=[{"user_id": "coord-b"}, {"user_id": "coord-a"}]),
+    ]
+    admin.auth.admin.get_user_by_id.side_effect = lambda user_id: SimpleNamespace(
+        user=SimpleNamespace(id=user_id, email=COORDINATOR_EMAILS[user_id])
+    )
+
+    response = client.get(
+        "/auth/users?role=event_coordinator",
+        headers={"Authorization": "Bearer manager-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": "coord-a", "email": "alex@example.com"},
+        {"id": "coord-b", "email": "blair@example.com"},
+    ]
+    admin.table.return_value.select.return_value.eq.assert_called_with(
+        "role", "event_coordinator"
+    )
+
+
+# Purpose: An Operations Manager may list coordinators only, not other staff roles.
+def test_operations_manager_cannot_list_other_roles(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    _caller(supabase, ["event_operations_manager"])
+    admin.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+        SimpleNamespace(data=[{"role": "event_operations_manager"}])
+    )
+
+    response = client.get(
+        "/auth/users?role=venue_staff",
+        headers={"Authorization": "Bearer manager-token"},
+    )
+
+    assert response.status_code == 403
+
+
+# Purpose: An admin may list the holders of any role.
+def test_admin_lists_any_role(client: TestClient, supabase: Mock, admin: Mock) -> None:
+    _caller(supabase, ["admin"])
+    admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        SimpleNamespace(data=[{"role": "admin"}]),
+        SimpleNamespace(data=[{"user_id": "venue-1"}]),
+    ]
+    admin.auth.admin.get_user_by_id.return_value = SimpleNamespace(
+        user=SimpleNamespace(id="venue-1", email="venue@example.com")
+    )
+
+    response = client.get(
+        "/auth/users?role=venue_staff", headers={"Authorization": "Bearer admin-token"}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [{"id": "venue-1", "email": "venue@example.com"}]
+
+
+# Purpose: Roles without assignment duties cannot enumerate staff.
+def test_organiser_cannot_list_users(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    _caller(supabase, ["event_organiser"])
+    admin.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+        SimpleNamespace(data=[{"role": "event_organiser"}])
+    )
+
+    response = client.get(
+        "/auth/users?role=event_coordinator",
+        headers={"Authorization": "Bearer organiser-token"},
+    )
+
+    assert response.status_code == 403
+
+
+# Purpose: Listing staff requires a session.
+def test_list_users_requires_authentication(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    response = client.get("/auth/users?role=event_coordinator")
+
+    assert response.status_code == 401
+
+
+# Purpose: A role row left behind by a deleted account does not break the picker.
+def test_list_users_skips_deleted_accounts(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    _caller(supabase, ["event_operations_manager"])
+    admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        SimpleNamespace(data=[{"role": "event_operations_manager"}]),
+        SimpleNamespace(data=[{"user_id": "gone"}, {"user_id": "coord-a"}]),
+    ]
+
+    def get_user(user_id: str) -> SimpleNamespace:
+        if user_id == "gone":
+            raise AuthApiError("user not found", 404, "user_not_found")
+        return SimpleNamespace(user=SimpleNamespace(id=user_id, email="alex@example.com"))
+
+    admin.auth.admin.get_user_by_id.side_effect = get_user
+
+    response = client.get(
+        "/auth/users?role=event_coordinator",
+        headers={"Authorization": "Bearer manager-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [{"id": "coord-a", "email": "alex@example.com"}]
+
+
+# Purpose: A role-store outage is reported as a gateway failure, not an empty list.
+def test_list_users_maps_role_store_failure(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    _caller(supabase, ["event_operations_manager"])
+    admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        SimpleNamespace(data=[{"role": "event_operations_manager"}]),
+        APIError({"message": "offline", "code": "PGRST000", "hint": None, "details": None}),
+    ]
+
+    response = client.get(
+        "/auth/users?role=event_coordinator",
+        headers={"Authorization": "Bearer manager-token"},
+    )
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Role store unavailable"}

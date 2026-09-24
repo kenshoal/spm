@@ -74,6 +74,11 @@ class RoleUpdateResponse(BaseModel):
     role: str
 
 
+class UserSummary(BaseModel):
+    id: str
+    email: str | None
+
+
 app = FastAPI(
     title="authService",
     description="Supabase-backed authentication microservice for SPM.",
@@ -322,3 +327,54 @@ def update_user_role(
         email=response.user.email,
         role=roles[0],
     )
+
+
+@app.get("/auth/users", response_model=list[UserSummary], tags=["auth"])
+def list_users_by_role(
+    role: Role,
+    supabase: Annotated[Client, Depends(get_supabase_client)],
+    admin_client: Annotated[Client, Depends(get_admin_client)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> list[UserSummary]:
+    caller = _verify_bearer(supabase, authorization)
+    caller_roles = _staff_roles_of(caller, admin_client)
+    can_list_any = ADMIN_ROLE in caller_roles
+    can_list_coordinators = EVENT_OPERATIONS_MANAGER_ROLE in caller_roles
+    if not can_list_any and not (
+        can_list_coordinators and role == "event_coordinator"
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+
+    try:
+        rows = (
+            admin_client.table("staff_roles")
+            .select("user_id")
+            .eq("role", role)
+            .execute()
+            .data
+        )
+    except APIError as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Role store unavailable"
+        ) from error
+
+    user_ids = sorted(
+        {row["user_id"] for row in rows if isinstance(row.get("user_id"), str)}
+    )
+    users: list[UserSummary] = []
+    for user_id in user_ids:
+        try:
+            found = admin_client.auth.admin.get_user_by_id(user_id).user
+        except AuthApiError as error:
+            if error.status == status.HTTP_404_NOT_FOUND:
+                continue  # A role row outlived its account; nothing to offer.
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
+            ) from error
+        except AuthError as error:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
+            ) from error
+        if found is not None:
+            users.append(UserSummary(id=found.id, email=found.email))
+    return sorted(users, key=lambda user: (user.email or "", user.id))
