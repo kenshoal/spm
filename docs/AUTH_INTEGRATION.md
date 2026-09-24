@@ -37,7 +37,11 @@ Roles are read per request from the `staff_roles` table, with Supabase `app_meta
 | equipmentService | `GET /equipment/{id}/status`, `GET /equipment/{id}/status/history` | any authenticated user |
 | eventRequestService | Draft CRUD under `/event-requests` | `event_organiser` |
 | eventRequestService | `POST /event-requests/{id}/coordinator` | `event_operations_manager` |
+| eventRequestService | `GET /event-requests/assigned-to-me` | `event_coordinator`; results are limited to requests where the caller is the latest assigned Coordinator |
+| eventRequestService | `GET /event-requests/{id}` | owning `event_organiser` or currently assigned `event_coordinator`; unrelated eligible users receive `404` |
 | eventRequestService | `POST /event-requests/{id}/review` | `event_coordinator` and current assignment |
+| eventRequestService | `POST /event-requests/{id}/cancellation` | currently assigned `event_coordinator`; allowed only from a non-terminal, non-Draft status |
+| eventRequestService | `POST /event-requests/{id}/completion` | currently assigned `event_coordinator`; allowed only from `Confirmed` |
 | eventRequestService | `GET /event-requests/{id}/coordinator` | owning `event_organiser`, `event_operations_manager`, or currently assigned `event_coordinator` |
 | venueService | `POST /venues`, `PATCH /venues/{id}` | `venue_staff` |
 | venueService | venue reads and search | any authenticated user |

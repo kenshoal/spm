@@ -1,3 +1,9 @@
+HISTORICAL HANDOFF — SUPERSEDED
+
+This prompt records the state before the implementation added by commits after
+f6d6e25. Use docs/testcases/scrum_28_testcases.md and the current PR description
+for the current implementation and remaining work.
+
 Continue SCRUM-28, “Track Event Status,” from the existing remote branch:
 
 - Repository: jarenlimhaan/spm
