@@ -10,6 +10,18 @@ createServer(async (request, response) => {
     send(response, 200, { status: "ok" });
     return;
   }
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  if (request.method === "GET" && url.pathname === "/auth/users") {
+    if (request.headers.authorization !== "Bearer ops-session" || url.searchParams.get("role") !== "event_coordinator") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    send(response, 200, [
+      { id: "playwright-coordinator", email: "coordinator@example.com" },
+      { id: "other-coordinator", email: "other.coordinator@example.com" },
+    ]);
+    return;
+  }
   if (request.method === "GET" && request.url === "/auth/me") {
     if (request.headers.authorization === "Bearer test-session") {
       send(response, 200, { id: "playwright-user", email: "playwright@example.com", role: "event_organiser", roles: ["event_organiser"] });

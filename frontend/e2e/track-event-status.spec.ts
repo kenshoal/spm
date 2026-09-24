@@ -105,7 +105,10 @@ test.describe.serial("SCRUM-28 status tracking", () => {
 
     await page.context().addCookies(sessionCookie("other-coordinator-session"));
     await page.goto("/coordination/requests");
-    await expect(page.getByText("No assigned requests")).toBeVisible();
+    // Scoped rather than an empty-queue assertion: SCRUM-14's own e2e spec
+    // shares this mock server and reassigns an unrelated request to this same
+    // coordinator id, so the queue is not guaranteed to be empty.
+    await expect(page.getByText("Anniversary Fun Run")).toHaveCount(0);
     await page.goto(`/coordination/requests/${eventId}`);
     await expect(page.getByText("Request not found")).toBeVisible();
   });
