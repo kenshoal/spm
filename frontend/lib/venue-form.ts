@@ -1,4 +1,4 @@
-import { ROOM_LAYOUTS, SLOTS, type RoomLayout, type Slot, type VenueStatus } from "./venues";
+import { ROOM_LAYOUTS, SLOTS, type RoomLayout, type Slot, type VenueStatus } from "./venue-options";
 
 export interface VenuePayload {
   name: string;
@@ -9,6 +9,21 @@ export interface VenuePayload {
   supported_layouts: RoomLayout[];
   operating_slots: Slot[];
   status?: VenueStatus;
+}
+
+// Raw text as typed/checked on the form — no parsing, no filtering against
+// the backend enums. Used to echo a failed submission back into the form so
+// an invalid field (e.g. a non-numeric capacity) shows exactly what the user
+// typed instead of silently reverting to a stale stored value.
+export interface VenueFormValues {
+  name: string;
+  location: string;
+  max_capacity: string;
+  facilities: string;
+  accessibility_features: string;
+  supported_layouts: string[];
+  operating_slots: string[];
+  status?: string;
 }
 
 // Comma-separated free text → trimmed, non-empty values, de-duplicated
@@ -44,6 +59,24 @@ function pick<T extends string>(formData: FormData, field: string, allowed: read
     }
   }
   return result;
+}
+
+// Reads the form's raw text/checkbox state, untouched by validation or the
+// backend enums — the counterpart to parseVenueForm's typed, filtered
+// payload. Status is included only when the field is actually present
+// (the create form never renders it).
+export function readVenueFormValues(formData: FormData): VenueFormValues {
+  const values: VenueFormValues = {
+    name: text(formData, "name"),
+    location: text(formData, "location"),
+    max_capacity: text(formData, "max_capacity"),
+    facilities: text(formData, "facilities"),
+    accessibility_features: text(formData, "accessibility_features"),
+    supported_layouts: formData.getAll("supported_layouts").map(String),
+    operating_slots: formData.getAll("operating_slots").map(String),
+  };
+  if (formData.has("status")) values.status = text(formData, "status");
+  return values;
 }
 
 export function parseVenueForm(

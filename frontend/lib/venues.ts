@@ -1,10 +1,8 @@
 import { getJson } from "./api";
+import type { RoomLayout, Slot, VenueStatus } from "./venue-options";
 
-export const ROOM_LAYOUTS = ["classroom", "theatre", "boardroom", "banquet", "exhibition"] as const;
-export const SLOTS = ["AM", "PM", "NIGHT"] as const;
-export type RoomLayout = (typeof ROOM_LAYOUTS)[number];
-export type Slot = (typeof SLOTS)[number];
-export type VenueStatus = "available" | "blocked";
+export { ROOM_LAYOUTS, SLOTS, layoutLabel } from "./venue-options";
+export type { RoomLayout, Slot, VenueStatus } from "./venue-options";
 
 export interface Venue {
   id: string;
@@ -28,8 +26,4 @@ export async function listVenues(): Promise<Venue[]> {
 
 export async function getVenue(id: string): Promise<Venue | null> {
   return getJson<Venue>(venueApiUrl, `/venues/${encodeURIComponent(id)}`);
-}
-
-export function layoutLabel(layout: RoomLayout): string {
-  return layout.charAt(0).toUpperCase() + layout.slice(1);
 }

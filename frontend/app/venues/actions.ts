@@ -4,18 +4,21 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sendJson } from "@/lib/api";
 import { requireRole } from "@/lib/auth";
-import { parseVenueForm, type VenuePayload } from "@/lib/venue-form";
+import { parseVenueForm, readVenueFormValues, type VenueFormValues } from "@/lib/venue-form";
 import { venueApiUrl } from "@/lib/venues";
 
 export interface VenueFormState {
   message?: string;
   errors?: Record<string, string>;
-  // Echoes the last submitted payload so the form can repopulate itself.
-  // React resets a <form>'s uncontrolled fields whenever its action promise
-  // settles, even when the action just returns validation errors instead of
-  // throwing — so without this, a corrected resubmission would fire with the
-  // *other* fields blanked back out. See __tests__ note in venue-form.tsx.
-  values?: VenuePayload;
+  // Echoes the last submitted *raw* field text so the form can repopulate
+  // itself. React resets a <form>'s uncontrolled fields whenever its action
+  // promise settles, even when the action just returns validation errors
+  // instead of throwing — so without this, a corrected resubmission would
+  // fire with the *other* fields blanked back out. This must be the raw
+  // text, not the parsed payload: an invalid capacity parses to `null`,
+  // which would let a field-by-field fallback silently revert to the
+  // venue's stored value instead of showing what was actually typed.
+  values?: VenueFormValues;
 }
 
 async function saveVenue(
@@ -24,14 +27,16 @@ async function saveVenue(
   formData: FormData,
 ): Promise<VenueFormState> {
   const { payload, errors } = parseVenueForm(formData, { includeStatus: method === "PATCH" });
-  if (Object.keys(errors).length) return { message: "Check the highlighted fields.", errors, values: payload };
+  if (Object.keys(errors).length) {
+    return { message: "Check the highlighted fields.", errors, values: readVenueFormValues(formData) };
+  }
 
   await requireRole("venue_staff");
   let response: Response;
   try {
     response = await sendJson(venueApiUrl, path, method, payload);
   } catch {
-    return { message: "The venue could not be saved. Please try again.", values: payload };
+    return { message: "The venue could not be saved. Please try again.", values: readVenueFormValues(formData) };
   }
   if (response.status === 401) redirect("/auth");
   if (!response.ok) {
@@ -44,7 +49,7 @@ async function saveVenue(
             : response.status === 422
               ? "Check the highlighted fields."
               : "The venue could not be saved. Please try again.",
-      values: payload,
+      values: readVenueFormValues(formData),
     };
   }
   revalidatePath("/venues");

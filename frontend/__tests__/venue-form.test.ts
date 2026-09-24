@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseVenueForm, splitList } from "@/lib/venue-form";
+import { parseVenueForm, readVenueFormValues, splitList } from "@/lib/venue-form";
 
 function venueForm(fields: Record<string, string | string[]>): FormData {
   const data = new FormData();
@@ -75,4 +75,21 @@ test("ignores unknown layouts, slots and statuses", () => {
 test("includes status only when editing", () => {
   expect(parseVenueForm(venueForm({ ...valid, status: "blocked" }), { includeStatus: true }).payload.status).toBe("blocked");
   expect("status" in parseVenueForm(venueForm({ ...valid, status: "blocked" }), { includeStatus: false }).payload).toBe(false);
+});
+
+// Purpose: Review finding 2 — an invalid capacity must echo back verbatim, not the
+// null parseVenueForm produces for it, so a corrected resubmission never loses it.
+test("readVenueFormValues keeps an invalid capacity and the raw comma text untouched", () => {
+  const values = readVenueFormValues(venueForm({ ...valid, max_capacity: "abc" }));
+
+  expect(values.max_capacity).toBe("abc");
+  expect(values.facilities).toBe("Projector, WiFi");
+  expect(values.supported_layouts).toEqual(["theatre", "classroom"]);
+  expect(values.operating_slots).toEqual(["AM", "PM"]);
+});
+
+// Purpose: The create form never submits a status field, so nothing should echo one.
+test("readVenueFormValues omits status when the field is absent", () => {
+  expect("status" in readVenueFormValues(venueForm(valid))).toBe(false);
+  expect(readVenueFormValues(venueForm({ ...valid, status: "blocked" })).status).toBe("blocked");
 });
