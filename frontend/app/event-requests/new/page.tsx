@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { AppShell } from "../../components/app-shell";
+import { AppShell, workspaceLinks } from "../../components/app-shell";
 import { ArrowIcon } from "../../components/icons";
 import { EventRequestForm } from "./event-request-form";
 
 export default async function NewEventRequestPage() {
-  await requireRole("event_organiser");
+  const user = await requireRole("event_organiser");
 
   return (
-    <AppShell signedIn>
+    <AppShell signedIn navLinks={workspaceLinks(user.roles)}>
       <div className="mx-auto max-w-4xl">
         <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline">
           <ArrowIcon className="size-4 rotate-180" /> Back to event requests

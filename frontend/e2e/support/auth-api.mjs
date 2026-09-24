@@ -15,6 +15,18 @@ createServer(async (request, response) => {
       send(response, 200, { id: "playwright-user", email: "playwright@example.com", role: "event_organiser", roles: ["event_organiser"] });
       return;
     }
+    if (request.headers.authorization === "Bearer coordinator-session") {
+      send(response, 200, { id: "playwright-coordinator", email: "coordinator@example.com", role: "event_coordinator", roles: ["event_coordinator"] });
+      return;
+    }
+    if (request.headers.authorization === "Bearer other-coordinator-session") {
+      send(response, 200, { id: "other-coordinator", email: "other.coordinator@example.com", role: "event_coordinator", roles: ["event_coordinator"] });
+      return;
+    }
+    if (request.headers.authorization === "Bearer ops-session") {
+      send(response, 200, { id: "playwright-ops", email: "ops@example.com", role: "event_operations_manager", roles: ["event_operations_manager"] });
+      return;
+    }
     if (request.headers.authorization === "Bearer non-organiser-session") {
       send(response, 200, { id: "admin-user", email: "admin@example.com", role: "admin", roles: ["admin"] });
       return;
@@ -26,8 +38,14 @@ createServer(async (request, response) => {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const credentials = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    const valid = credentials.email === "playwright@example.com" && credentials.password === "test-password-123";
-    send(response, valid ? 200 : 401, valid ? { access_token: "test-session", refresh_token: "unused", expires_in: 3600, token_type: "bearer" } : { detail: "Invalid email or password" });
+    const token = credentials.password === "test-password-123"
+      ? credentials.email === "playwright@example.com"
+        ? "test-session"
+        : credentials.email === "coordinator@example.com"
+          ? "coordinator-session"
+          : null
+      : null;
+    send(response, token ? 200 : 401, token ? { access_token: token, refresh_token: "unused", expires_in: 3600, token_type: "bearer" } : { detail: "Invalid email or password" });
     return;
   }
   send(response, 404, { detail: "Not found" });

@@ -88,6 +88,12 @@ class EventRequestService:
             raise EventRequestNotFoundError(event_request_id)
         return self._row_to_response(row)
 
+    def get_by_ids(
+        self, event_request_ids: list[str]
+    ) -> list[EventRequestResponse]:
+        rows = self.repository.get_by_ids(event_request_ids)
+        return [self._row_to_response(row) for row in rows]
+
     def transition_status(
         self,
         event_request_id: str,
@@ -101,6 +107,20 @@ class EventRequestService:
             raise EventRequestTransitionConflictError(
                 event_request_id, from_status.value, to_status.value
             )
+        return self._row_to_response(row)
+
+    def advance_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        to_status: EventRequestStatus,
+    ) -> EventRequestResponse:
+        """Coordinator transitions run through one database function, which
+        re-checks the assignment under a row lock; the RPC errcodes stay in
+        the repo layer and are mapped by the caller."""
+        row = self.repository.advance_by_coordinator(
+            event_request_id, coordinator_id, to_status.value
+        )
         return self._row_to_response(row)
 
     def update(

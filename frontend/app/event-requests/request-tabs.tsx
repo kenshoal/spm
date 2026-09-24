@@ -1,11 +1,11 @@
 import Link from "next/link";
-
-export type RequestFilter = "all" | "draft" | "submitted" | "completed";
+import type { RequestFilter } from "@/lib/event-requests";
 
 const tabs: Array<{ value: RequestFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "draft", label: "Draft" },
   { value: "submitted", label: "Submitted" },
+  { value: "in-progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
 ];
 

@@ -11,6 +11,12 @@ export interface AuthenticatedUser {
   roles: string[];
 }
 
+export function workspaceForRoles(roles: string[]): string {
+  if (roles.includes("event_organiser")) return "/event-requests";
+  if (roles.includes("event_coordinator")) return "/coordination/requests";
+  return "/unauthorised";
+}
+
 export async function requireAccessToken(): Promise<string> {
   const token = (await cookies()).get(sessionCookie)?.value;
   if (!token) redirect("/auth");

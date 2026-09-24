@@ -1,3 +1,5 @@
+from typing import Any
+
 from app.models.coordinator_assignment import (
     CoordinatorAssignmentResponse,
     CoordinatorAssignRequest,
@@ -5,8 +7,12 @@ from app.models.coordinator_assignment import (
 from app.models.event_request import EventRequestResponse, EventRequestStatus
 from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
+    CoordinatorAssignmentRpcError,
 )
-from app.services.event_request_service import EventRequestService
+from app.services.event_request_service import (
+    EventRequestNotFoundError,
+    EventRequestService,
+)
 from app.services.notification_client import NotificationClient
 
 _TERMINAL_STATUSES = {
@@ -64,13 +70,28 @@ class CoordinatorAssignmentService:
                 f"Cannot assign a Coordinator to a {event_request.status.value} request",
             )
 
-        row = self.repository.create(
-            {
-                "event_request_id": event_request_id,
-                "coordinator_id": payload.coordinator_id,
-                "assigned_by": assigned_by,
-            }
-        )
+        try:
+            row = self.repository.create(
+                {
+                    "event_request_id": event_request_id,
+                    "coordinator_id": payload.coordinator_id,
+                    "assigned_by": assigned_by,
+                }
+            )
+        except CoordinatorAssignmentRpcError as error:
+            if error.errcode == "P0002":
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == "P0004":
+                raise CoordinatorAssignmentNotAllowedError(
+                    event_request_id,
+                    "The event request no longer accepts coordinator assignment",
+                ) from error
+            if error.errcode == "P0005":
+                raise CoordinatorAssignmentNotAllowedError(
+                    event_request_id,
+                    "The selected user is not an Event Coordinator",
+                ) from error
+            raise
         self.notification_client.notify_coordinator_assigned(
             event_request_id=event_request_id,
             coordinator_id=payload.coordinator_id,
@@ -99,3 +120,29 @@ class CoordinatorAssignmentService:
         if row is None:
             raise CoordinatorAssignmentNotFoundError(event_request_id)
         return CoordinatorAssignmentResponse.model_validate(row)
+
+    def list_requests_for_coordinator(
+        self, coordinator_id: str
+    ) -> list[EventRequestResponse]:
+        """The requests whose latest assignment is this coordinator — a
+        reassigned-away coordinator must not keep seeing the request, so
+        "ever assigned" isn't enough; the highest-id assignment decides."""
+        mine = self.repository.list_for_coordinator(coordinator_id)
+        if not mine:
+            return []
+
+        candidates = {row["event_request_id"] for row in mine}
+        latest: dict[str, dict[str, Any]] = {}
+        for row in self.repository.list_for_event_requests(sorted(candidates)):
+            request_id = row["event_request_id"]
+            if request_id not in latest or int(row["id"]) > int(
+                latest[request_id]["id"]
+            ):
+                latest[request_id] = row
+
+        assigned_ids = sorted(
+            request_id
+            for request_id, row in latest.items()
+            if row["coordinator_id"] == coordinator_id
+        )
+        return self.event_request_service.get_by_ids(assigned_ids)

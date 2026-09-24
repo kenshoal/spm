@@ -2,10 +2,10 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/auth";
 import { getEventRequest } from "@/lib/event-requests";
-import { AppShell } from "../../../components/app-shell";
+import { AppShell, workspaceLinks } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { EventRequestForm } from "../../new/event-request-form";
-import { RequestDetails } from "../../request-details";
+import { RequestDetails } from "../../../components/request-details";
 
 async function EditDraft({ id }: { id: string }) {
   const result = await getEventRequest(id)
@@ -40,6 +40,6 @@ function EditLoading() {
 }
 
 export default async function EditEventRequestPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireRole("event_organiser");
-  return <AppShell signedIn><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} />)}</Suspense></AppShell>;
+  const user = await requireRole("event_organiser");
+  return <AppShell signedIn navLinks={workspaceLinks(user.roles)}><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} />)}</Suspense></AppShell>;
 }

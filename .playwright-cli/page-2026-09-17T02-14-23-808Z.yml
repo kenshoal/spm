@@ -1,0 +1,33 @@
+- generic [active] [ref=f3e1]:
+  - alert [ref=f3e29]: Log in
+  - generic [ref=f3e56]:
+    - banner [ref=f3e57]:
+      - generic [ref=f3e58]:
+        - link "CS ConnectSphere" [ref=f3e59] [cursor=pointer]:
+          - /url: /event-requests
+          - generic [ref=f3e60]: CS
+          - generic [ref=f3e61]: ConnectSphere
+        - generic [ref=f3e62]:
+          - link "Account" [ref=f3e63] [cursor=pointer]:
+            - /url: /auth
+          - generic [ref=f3e64]:
+            - paragraph [ref=f3e65]: Event organiser
+            - paragraph [ref=f3e66]: Organiser workspace
+          - generic [ref=f3e67]: EO
+    - main [ref=f3e68]:
+      - generic [ref=f3e69]:
+        - paragraph [ref=f3e70]: ConnectSphere account
+        - heading "Log in" [level=1] [ref=f3e71]
+        - paragraph [ref=f3e72]: Verify your account credentials.
+        - generic "Account action" [ref=f3e73]:
+          - button "Log in" [pressed] [ref=f3e74]
+          - button "Sign up" [ref=f3e75]
+        - generic [ref=f3e76]:
+          - generic [ref=f3e77]:
+            - text: Email
+            - textbox "Email" [ref=f3e78]
+          - generic [ref=f3e79]:
+            - text: Password
+            - textbox "Password" [ref=f3e80]
+          - button "Log in" [ref=f3e81]
+        - paragraph [ref=f3e82]: Your session is kept in an HTTP-only browser cookie until it expires or you log out.

@@ -1,5 +1,6 @@
 import type { EventRequest } from "@/lib/event-requests";
 import { formatDateTime } from "@/lib/event-requests";
+import { StatusProgress } from "./status-progress";
 
 const requirementFields = [
   ["venue_requirements", "Venue requirements"],
@@ -11,11 +12,9 @@ const requirementFields = [
 export function RequestDetails({ request }: { request: EventRequest }) {
   return (
     <div className="space-y-5">
+      <StatusProgress status={request.status} />
       <section className="rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold text-[#17211d]">{request.event_name}</h1>
-          <span className="rounded-full bg-[#fff3dc] px-3 py-1 text-xs font-bold text-[#80520d]">{request.status}</span>
-        </div>
+        <h1 className="text-2xl font-bold text-[#17211d]">{request.event_name}</h1>
         <dl className="mt-6 grid gap-5 sm:grid-cols-2">
           <div><dt className="text-xs font-bold uppercase tracking-wide text-[#718078]">Purpose</dt><dd className="mt-1 text-sm leading-6 text-[#273832]">{request.purpose}</dd></div>
           <div><dt className="text-xs font-bold uppercase tracking-wide text-[#718078]">Expected attendance</dt><dd className="mt-1 text-sm leading-6 text-[#273832]">{request.expected_attendance}</dd></div>

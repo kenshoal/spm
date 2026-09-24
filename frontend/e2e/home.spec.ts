@@ -72,9 +72,20 @@ test("organiser can submit a complete new event request", async ({ page }) => {
   await dialog.getByRole("button", { name: "Submit request" }).click();
 
   await expect(page).toHaveURL(/\/event-requests\?status=submitted$/);
-  await expect(page.getByText("Submitted Community Workshop")).toBeVisible();
-  await expect(page.getByText("Submitted", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: /view request/i }).click();
+  const submittedCard = page.getByRole("link", {
+    name: /submitted community workshop/i,
+  });
+  await expect(submittedCard).toBeVisible();
+  await expect(
+    submittedCard.getByText("Submitted", { exact: true }),
+  ).toBeVisible();
+  // Scope to this request's card: specs share one mock API and run in
+  // parallel, so other submitted requests can be listed alongside it.
+  await page
+    .getByRole("article")
+    .filter({ has: page.getByRole("heading", { name: "Submitted Community Workshop" }) })
+    .getByRole("link", { name: /view request/i })
+    .click();
   await expect(page.getByText("This request is read-only after submission.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete draft" })).toHaveCount(0);
 });

@@ -1,0 +1,224 @@
+HISTORICAL HANDOFF — SUPERSEDED
+
+This prompt records the state before the implementation added by commits after
+f6d6e25. Use docs/testcases/scrum_28_testcases.md and the current PR description
+for the current implementation and remaining work.
+
+Continue SCRUM-28, “Track Event Status,” from the existing remote branch:
+
+- Repository: jarenlimhaan/spm
+- Branch: feat/track_event_status
+- Current commit: 08c60f0
+- Base: latest merged dev, including coordinator assignment and multi-role authentication
+
+First, pull the branch and inspect the current implementation before changing anything.
+
+CURRENT WORKFLOW
+
+1. An Event Organiser creates and submits an event request.
+2. Submission changes the status from Draft to Submitted.
+3. An Event Operations Manager assigns an Event Coordinator.
+4. Assignment alone leaves the request as Submitted.
+5. The assigned Event Coordinator can call POST /event-requests/{id}/review.
+6. Starting review changes the status from Submitted to Under Review.
+
+The official role is event_operations_manager.
+
+ALREADY IMPLEMENTED
+
+- Coordinator assignment integration from SCRUM-14.
+- Multi-role authentication from the latest dev.
+- Submitted to Under Review backend transition.
+- Assigned-coordinator ownership enforcement.
+- Conditional status update using the expected previous status.
+- Database support for ten event-request statuses.
+- Assignment visibility restrictions.
+- Backend tests for assignment, review, authentication and authorization.
+- SCRUM-28 test documentation at docs/testcases/scrum_28_testcases.md.
+
+Previous validation results:
+
+- Event-request backend: 84 tests passed.
+- Authentication backend: 38 tests passed.
+- Frontend: 24 tests passed.
+- Frontend TypeScript checking passed.
+- Python linting passed.
+- Docker auth and event-request services started successfully.
+
+Please rerun the relevant checks after making changes rather than relying only on these earlier results.
+
+MAIN MISSING INCREMENT
+
+Implement the user-facing status-tracking workflow without taking ownership of unrelated approval, planning or completion stories.
+
+1. CORRECT THE FRONTEND STATUS MODEL
+
+frontend/lib/event-requests.ts currently accepts only Draft and Submitted.
+
+Align it with the backend statuses:
+
+- Draft
+- Submitted
+- Under Review
+- Changes Requested
+- Approved
+- Planning
+- Confirmed
+- Completed
+- Cancelled
+- Rejected
+
+Prefer one shared frontend status type or constant mapping to avoid duplicated string logic.
+
+2. CORRECT THE ORGANISER TRACKING TABS
+
+The organiser page currently has All, Draft, Submitted and Completed tabs, but:
+
+- Submitted matches only the exact Submitted value.
+- Later active statuses are not grouped properly.
+- Completed is hardcoded as empty.
+
+Recommended tabs:
+
+- All
+- Draft
+- Submitted
+- In Progress
+- Completed
+
+Recommended grouping:
+
+- Draft: Draft
+- Submitted: Submitted
+- In Progress: Under Review, Changes Requested, Approved, Planning, Confirmed
+- Completed: Completed
+- Keep Cancelled and Rejected visible in All, or add a clearly labelled Closed tab only if Jira requires it.
+
+Confirm the expected grouping against SCRUM-28's Jira acceptance criteria before finalising it.
+
+3. ADD AN ORGANISER PROGRESS DISPLAY
+
+Add a reusable status-progress component to the organiser's request card or read-only request detail view.
+
+It should:
+
+- Clearly display the current status.
+- Explain the current stage in plain language.
+- Avoid suggesting that later stages have occurred.
+- Handle rejected, cancelled and changes-requested states explicitly.
+- Be accessible on keyboard and screen readers.
+- Work on smaller screens.
+
+A full comments or activity timeline is outside this increment unless SCRUM-28 explicitly requires status history.
+
+4. ADD COORDINATOR REQUEST DISCOVERY
+
+The current API lists requests only for the owning organiser. Coordinators cannot discover their assigned requests unless they already know the request UUID.
+
+Add a scoped endpoint such as:
+
+GET /event-requests/assigned-to-me
+
+Requirements:
+
+- Requires an authenticated event_coordinator.
+- Returns only requests for which the caller is the latest assigned coordinator.
+- Does not expose other coordinators' assignments.
+- Supports multi-role users.
+- Returns predictable empty and service-error responses.
+- Does not allow the browser to supply a coordinator ID.
+
+If the coordinator queue belongs to a different Jira story, document it as a dependency instead of silently adding it to SCRUM-28.
+
+5. ADD A MINIMAL COORDINATOR FRONTEND
+
+Provide a coordinator workspace that:
+
+- Lists requests assigned to the authenticated coordinator.
+- Opens a read-only request detail view.
+- Shows the current status.
+- Offers “Start review” only when the request is Submitted.
+- Hides or disables the action after the request leaves Submitted.
+- Handles empty, loading, forbidden and unavailable-service states.
+
+Prefer a separate route such as /coordination/requests, while reusing shared request-detail and status components.
+
+6. REVIEW ATOMIC AUTHORIZATION
+
+The existing review service checks the latest assignment and changes the status in separate database requests. A reassignment could theoretically happen between those operations.
+
+Assess whether the assignment check and Submitted to Under Review update should be moved into one server-side database function or transaction that verifies:
+
+- The current status is Submitted.
+- The caller is the latest assigned coordinator.
+- The status is changed exactly once.
+- A failed check causes no status change.
+
+Document the trade-off if this cannot be completed in the current increment.
+
+REQUIRED TESTS
+
+Add one-line purpose comments for every test.
+
+Cover at least:
+
+- All backend statuses can be represented by the frontend.
+- Every status is assigned to the correct organiser tab.
+- Completed requests appear under Completed.
+- In-progress requests do not disappear after leaving Submitted.
+- The status-progress component highlights the correct stage.
+- Rejected, cancelled and changes-requested states display correctly.
+- Only the assigned coordinator can list or open an assigned request.
+- An unrelated coordinator cannot view or update the request.
+- An Operations Manager or Organiser cannot impersonate the assigned coordinator.
+- Starting review changes only Submitted to Under Review.
+- Repeated or stale review actions return a conflict without another mutation.
+- Missing and invalid sessions are rejected.
+- Multi-role coordinator accounts are accepted when one role qualifies.
+- Database or API failures produce an actionable UI state.
+
+Add one critical Playwright journey:
+
+1. Organiser submits a request.
+2. Operations Manager assigns a coordinator.
+3. Assigned coordinator sees the request.
+4. Assigned coordinator starts review.
+5. Organiser sees Under Review.
+6. Unrelated coordinator cannot access or change it.
+
+If the Operations Manager frontend is outside this branch, seed or perform the assignment through the API and document that boundary in the Playwright test.
+
+SCOPE BOUNDARIES
+
+Do not implement every transition through Completed unless SCRUM-28 explicitly owns those commands.
+
+Approval, rejection, planning, confirmation, cancellation and completion may belong to other stories. SCRUM-28 should track and display statuses written by those workflows without claiming to implement them.
+
+Do not replace or recreate Supabase Auth. Use the merged multi-role authentication implementation.
+
+Do not expose the Supabase secret key to the frontend.
+
+Do not allow clients to submit an organiser ID or coordinator ID as their authenticated identity.
+
+Preserve the existing SCRUM-8, SCRUM-11 and SCRUM-14 behavior.
+
+DOCUMENTATION AND VALIDATION
+
+Update:
+
+- docs/testcases/scrum_28_testcases.md
+- Backend API documentation if endpoints change.
+- Frontend README if routes or startup requirements change.
+- Database migration documentation if a database function is introduced.
+
+Before pushing:
+
+- Run backend tests and linting.
+- Run auth tests if authorization integration changes.
+- Run frontend tests, lint, type checking and build.
+- Run the SCRUM-28 Playwright journey.
+- Rebuild the relevant Docker services.
+- Report local results separately from GitHub PR CI.
+- List anything that remains unverified.
+
+Keep changes small and reviewable. Commit to feat/track_event_status and push the same branch so work remains available to the team.

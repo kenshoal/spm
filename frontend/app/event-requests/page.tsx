@@ -1,12 +1,12 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { listEventRequests } from "@/lib/event-requests";
-import { AppShell } from "../components/app-shell";
+import { groupRequests, listEventRequests, type RequestFilter } from "@/lib/event-requests";
+import { AppShell, workspaceLinks } from "../components/app-shell";
 import { RequestList } from "./request-list";
-import { RequestTabs, type RequestFilter } from "./request-tabs";
+import { RequestTabs } from "./request-tabs";
 
-const validFilters = new Set<RequestFilter>(["all", "draft", "submitted", "completed"]);
+const validFilters = new Set<RequestFilter>(["all", "draft", "submitted", "in-progress", "completed"]);
 
 async function RequestData({
   searchParams,
@@ -29,27 +29,20 @@ async function RequestData({
       </div>
     );
   }
-  const drafts = result.requests.filter((request) => request.status === "Draft");
-  // Completion is owned by eventService and stays empty until that integration exists.
-  const completed: typeof result.requests = [];
-  const submitted = result.requests.filter((request) => request.status === "Submitted");
-  const groups = {
-    all: result.requests,
-    draft: drafts,
-    submitted,
-    completed,
+  const groups = groupRequests(result.requests);
+  const counts = {
+    all: groups.all.length,
+    draft: groups.draft.length,
+    submitted: groups.submitted.length,
+    "in-progress": groups["in-progress"].length,
+    completed: groups.completed.length,
   };
   const emptyMessages: Record<RequestFilter, string> = {
     all: "Create an event request to get started.",
     draft: "Your saved drafts will appear here.",
     submitted: "Submitted requests will appear here.",
+    "in-progress": "Requests being coordinated will appear here.",
     completed: "Completed events will appear here after coordination finishes.",
-  };
-  const counts = {
-    all: result.requests.length,
-    draft: drafts.length,
-    submitted: submitted.length,
-    completed: completed.length,
   };
   return (
     <>
@@ -68,9 +61,9 @@ export default async function EventRequestsPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  await requireRole("event_organiser");
+  const user = await requireRole("event_organiser");
   return (
-    <AppShell signedIn>
+    <AppShell signedIn navLinks={workspaceLinks(user.roles)}>
       <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0f6b5b]">Organiser workspace</p>
