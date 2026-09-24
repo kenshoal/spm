@@ -20,6 +20,7 @@ from app.controllers.event_request_controller import (
     get_organiser_id,
 )
 from app.main import create_app
+from app.repositories import CoordinatorAssignmentRpcError
 
 
 def make_client(
@@ -124,7 +125,48 @@ def test_assign_coordinator_to_missing_request() -> None:
     assert response.status_code == 404
 
 
-# Purpose: Reassignment inserts a new row and get returns the latest.
+# Purpose: A concurrent state change rejected by the database must remain a conflict.
+def test_atomic_assignment_status_rejection_returns_conflict() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository(event_requests)
+
+    def reject_after_precheck(values: dict[str, object]) -> dict[str, object]:
+        raise CoordinatorAssignmentRpcError("state changed", errcode="P0004")
+
+    coordinators.create = reject_after_precheck  # type: ignore[method-assign]
+    with make_client(event_requests, coordinators) as client:
+        event_request_id = submit_event_request(event_requests)
+        response = client.post(
+            f"/event-requests/{event_request_id}/coordinator",
+            headers=headers(),
+            json={"coordinator_id": "coord-1"},
+        )
+
+    assert response.status_code == 409
+
+
+# Purpose: The database role check prevents assigning a non-coordinator identity.
+def test_atomic_assignment_target_role_rejection_returns_conflict() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository(event_requests)
+
+    def reject_non_coordinator(values: dict[str, object]) -> dict[str, object]:
+        raise CoordinatorAssignmentRpcError("wrong role", errcode="P0005")
+
+    coordinators.create = reject_non_coordinator  # type: ignore[method-assign]
+    with make_client(event_requests, coordinators) as client:
+        event_request_id = submit_event_request(event_requests)
+        response = client.post(
+            f"/event-requests/{event_request_id}/coordinator",
+            headers=headers(),
+            json={"coordinator_id": "attendee-1"},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "The selected user is not an Event Coordinator"
+
+
+# Purpose: Reassignment inserts a new row rather than overwriting, preserving history.
 def test_reassignment_preserves_history_and_get_returns_latest() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:

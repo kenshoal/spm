@@ -19,22 +19,21 @@
 -- requested, planning, confirmation, auto-complete) are deliberately not
 -- accepted here.
 --
--- Residual write-skew: a coordinator (re)assignment INSERT does not take
--- the event_requests row lock, so a reassignment committed between the
--- latest-assignment check and this transaction's commit could leave the
--- status change attributed to a coordinator who is no longer the latest.
--- Closing that fully would need the assignment path to lock the same row.
+-- Migration 0014 closes the original assignment write-skew by making the
+-- assignment path lock this same event_requests row before inserting.
 
 CREATE FUNCTION advance_event_request_by_coordinator(
     p_event_request_id uuid,
     p_coordinator_id varchar,
     p_to_status varchar
 )
-RETURNS event_requests
+RETURNS public.event_requests
 LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
 AS $$
 DECLARE
-    v_current event_requests;
+    v_current public.event_requests;
     v_latest_coordinator varchar;
 BEGIN
     SELECT * INTO v_current

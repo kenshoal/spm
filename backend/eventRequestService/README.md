@@ -34,6 +34,14 @@ Coordinator. Multi-role users are authorised when any assigned role and the
 required request relationship match. The browser cannot choose the organiser or
 coordinator ID; both come from the verified session.
 
+Assignment uses the server-only `assign_event_request_coordinator` database
+function. It locks the request row shared with status transitions, rechecks the
+request state and verifies that the selected user has `event_coordinator` in
+`staff_roles` before inserting the assignment. Error codes `P0002`, `P0004`
+and `P0005` map to 404 or 409 responses without creating an assignment. Apply
+migration `0014_atomic_coordinator_assignment.sql` before deploying this
+service version.
+
 `GET /event-requests/{id}` returns the request to its owning Organiser or to the
 Coordinator on its latest assignment. An unrelated Organiser or Coordinator gets
 404 (so request IDs cannot be probed); any other role gets 403.
@@ -62,8 +70,8 @@ agreed status vocabulary. This service writes only the following transitions:
 
 Owned by other stories and **not** implemented here: approval and rejection
 (SCRUM-17), changes requested and resubmission (SCRUM-35), Planning and
-Confirmed (venue/operations stories), and automatic completion (SCRUM-40, which
-must reconcile with manual completion above). `Completed`, `Cancelled` and
+Confirmed (venue/operations stories), and automatic completion of Confirmed
+events more than seven days overdue (SCRUM-40). `Completed`, `Cancelled` and
 `Rejected` are terminal.
 
 The three coordinator commands run through the database function

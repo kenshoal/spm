@@ -6,6 +6,14 @@ from app.config import Settings
 from app.repositories.event_request_repository import SupabaseRepositoryError
 
 
+class CoordinatorAssignmentRpcError(SupabaseRepositoryError):
+    """The atomic assignment function rejected the requested assignment."""
+
+    def __init__(self, message: str, errcode: str | None = None) -> None:
+        super().__init__(message)
+        self.errcode = errcode
+
+
 class CoordinatorAssignmentRepository(Protocol):
     def create(self, values: dict[str, Any]) -> dict[str, Any]: ...
 
@@ -59,13 +67,31 @@ class SupabaseCoordinatorAssignmentRepository:
         )
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
-        rows = self._request(
-            "POST",
-            json=values,
-            params={"select": "*"},
-            headers={"Prefer": "return=representation"},
-        )
-        return rows[0]
+        try:
+            response = self._client.post(
+                "/rpc/assign_event_request_coordinator",
+                json={
+                    "p_event_request_id": values["event_request_id"],
+                    "p_coordinator_id": values["coordinator_id"],
+                    "p_assigned_by": values["assigned_by"],
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            try:
+                errcode = error.response.json().get("code")
+            except ValueError:
+                errcode = None
+            raise CoordinatorAssignmentRpcError(
+                "Supabase rejected the coordinator assignment",
+                errcode=errcode,
+            ) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the coordinator assignment operation"
+            ) from error
+        return response.json()
 
     def latest_for_event_request(
         self, event_request_id: str

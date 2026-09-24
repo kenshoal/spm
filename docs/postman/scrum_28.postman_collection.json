@@ -362,6 +362,40 @@
           ]
         },
         {
+          "name": "TC-04A Ops Manager cannot assign a non-Coordinator",
+          "description": "Purpose: Prevents an arbitrary authenticated user ID from receiving coordinator access.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/coordinator",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinator_id\": \"{{organiser_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"No assignment was created\", () => pm.expect(pm.response.json().detail).to.include(\"not an Event Coordinator\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "TC-05 Ops Manager assigns Coordinator A",
           "request": {
             "method": "POST",

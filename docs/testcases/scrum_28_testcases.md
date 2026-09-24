@@ -18,7 +18,9 @@ Transitions owned by other stories are listed under remaining coverage.
 | Completion (AC 5) | The coordinator marks a confirmed event complete, once. | POST `/{id}/completion` from Confirmed and every other status; repeat; as a non-assigned caller. | 200 `Completed` from Confirmed; 409 elsewhere and on repeat with no mutation; 403 for non-assigned. | Automated tests pass. |
 | Stale or repeated review | A double click or stale page must not mutate twice. | POST review twice; POST review after the status moved on. | Second call 409; status unchanged. | Automated tests pass. |
 | Atomic transition function | Authorisation and status write must commit together in the database. | Run `database/verify_event_request_status_transitions.sql` after migration `0012`. | Every allowed transition succeeds; `P0002`/`P0003`/`P0004` raised on each failure path; refused calls leave the status unchanged; `EXECUTE` granted to `service_role` only. | Passed on a local Postgres 16 replay of migrations 0007–0012 (23 Sep 2026). **Passed on the shared Supabase project (23 Sep 2026)** after 0012 and 0013 were applied. The first run failed check 13 because Supabase's default privileges gave `anon` a direct `EXECUTE` grant; `0013` closed it. |
-| RPC error mapping | The service must map database errcodes, not message text. | Repository test feeds PostgREST 4xx bodies with `P0002`/`P0003`/`P0004` and another error. | 404 / 403 / 409 respectively; other errors → 502. | Automated repository tests pass. |
+| Atomic assignment integration | Assignment and status transitions must not authorize against different assignment snapshots. | Apply `0014`, then run `database/verify_atomic_coordinator_assignment.sql`. | Assignment locks the same request row, rejects Draft/terminal requests and non-coordinator targets, preserves reassignment history and exposes the RPC only to `service_role`. | Repository and HTTP mapping tests pass; rollback rehearsal and deployed verification completed on shared Supabase on 24 Sep 2026. |
+| RPC error mapping | The service must map database errcodes, not message text. | Repository tests feed PostgREST 4xx bodies with `P0002`/`P0003`/`P0004`/`P0005` and another error. | Transition errors map to 404 / 403 / 409; assignment errors map to 404 / 409; other errors → 502. | Automated repository and controller tests pass. |
+| Login workspace routing | A verified user must land in a workspace allowed by their roles. | Log in as organiser-only, coordinator-only, multi-role and unsupported-role users; simulate a failed role lookup. | Organiser and multi-role users reach `/event-requests`; coordinator-only reaches `/coordination/requests`; unsupported users reach `/unauthorised`; lookup failure creates no cookie. | Automated frontend tests pass (24 Sep 2026). |
 | Frontend status model | Every backend status must be representable and appear in exactly one tab. | Vitest over `EVENT_REQUEST_STATUSES` and `groupRequests`. | All ten statuses covered; Completed under Completed; in-progress statuses stay visible after Submitted; Cancelled/Rejected only under All. | Automated (`event-request-status.test.tsx`). |
 | Status progress display | Organisers must see the current stage without implying later stages happened. | Render `StatusProgress` for each status. | Correct `aria-current` step; Draft description only; Changes Requested stops at Under Review with a notice; Rejected/Cancelled show a notice and no stepper; Completed is the final reached stage. | Automated (`event-request-status.test.tsx`). |
 | Coordinator workspace | Coordinators get status-appropriate actions and actionable failure states. | Vitest over the list, detail actions and server actions. | Empty state; links to detail; actions offered only in their status window; cancel/complete need confirmation; 403, 409, network and expired-session responses mapped to messages or sign-in redirect. | Automated (`coordination.test.tsx`, `coordination-actions.test.ts`). |
@@ -33,7 +35,7 @@ than seven days after their event (SCRUM-40). SCRUM-28 retains the coordinator's
 manual Confirmed-to-Completed action. Notifications for these transitions belong
 to SCRUM-36/37, while immutable status history belongs to SCRUM-48.
 
-Live API verification on 24 September 2026: all 39 cases in
+Live API verification on 24 September 2026: the original 39 cases in
 `docs/postman/scrum_28.postman_collection.json` passed against the running
 authService and eventRequestService on the shared Supabase project, using real
 signed-in accounts for each role (`docs/authentication.txt`, "Test accounts").
@@ -42,12 +44,18 @@ review, reassignment, cancellation and completion, including every 401, 403,
 404 and 409 path. `Confirmed` was set by SQL for the completion cases, since its
 owning story is not implemented.
 
-Known residual risk: a reassignment committed concurrently with a transition is
-not blocked by the row lock (documented in `0012`).
+TC-04A was added after that collection run. Its live API equivalent passed
+against the rebuilt service on 24 September 2026: the API returned 409 and a
+database query confirmed there were zero assignments to users without the
+Event Coordinator role. A complete 40-case Postman rerun remains pending.
 
-Local verification on 24 September 2026: eventRequestService passed 143 tests
-and Ruff; authService passed 38 tests; the frontend passed 50 unit tests, lint
-and TypeScript checking; all six Playwright tests passed. A production build
+Migration `0014` closes the previously documented reassignment/status-transition
+race by making both operations lock the same event-request row. Shared-database
+verification completed on 24 September 2026.
+
+Local verification on 24 September 2026: eventRequestService passed 148 tests
+and Ruff; authService passed 38 tests; the frontend passed 53 unit tests, lint
+and TypeScript checking; all seven Playwright tests passed. A production build
 completed with Next.js's webpack builder. The default Turbopack build could not
 be verified on the reviewing host because its helper process was not permitted
 to bind an internal port; CI must run the standard `npm run build` command.

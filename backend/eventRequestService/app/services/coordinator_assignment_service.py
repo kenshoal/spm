@@ -7,8 +7,12 @@ from app.models.coordinator_assignment import (
 from app.models.event_request import EventRequestResponse, EventRequestStatus
 from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
+    CoordinatorAssignmentRpcError,
 )
-from app.services.event_request_service import EventRequestService
+from app.services.event_request_service import (
+    EventRequestNotFoundError,
+    EventRequestService,
+)
 from app.services.notification_client import NotificationClient
 
 _TERMINAL_STATUSES = {
@@ -66,13 +70,28 @@ class CoordinatorAssignmentService:
                 f"Cannot assign a Coordinator to a {event_request.status.value} request",
             )
 
-        row = self.repository.create(
-            {
-                "event_request_id": event_request_id,
-                "coordinator_id": payload.coordinator_id,
-                "assigned_by": assigned_by,
-            }
-        )
+        try:
+            row = self.repository.create(
+                {
+                    "event_request_id": event_request_id,
+                    "coordinator_id": payload.coordinator_id,
+                    "assigned_by": assigned_by,
+                }
+            )
+        except CoordinatorAssignmentRpcError as error:
+            if error.errcode == "P0002":
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == "P0004":
+                raise CoordinatorAssignmentNotAllowedError(
+                    event_request_id,
+                    "The event request no longer accepts coordinator assignment",
+                ) from error
+            if error.errcode == "P0005":
+                raise CoordinatorAssignmentNotAllowedError(
+                    event_request_id,
+                    "The selected user is not an Event Coordinator",
+                ) from error
+            raise
         self.notification_client.notify_coordinator_assigned(
             event_request_id=event_request_id,
             coordinator_id=payload.coordinator_id,

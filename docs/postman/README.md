@@ -1,6 +1,9 @@
 # SCRUM-28 manual API tests (Postman)
 
-`scrum_28.postman_collection.json` holds 39 test cases (TC-01 to TC-39) plus 8 setup requests. Each request has Postman test assertions, so the result shows as pass or fail.
+`scrum_28.postman_collection.json` holds 40 test cases (TC-01 to TC-39 plus
+TC-04A) and 8 setup requests. Each request has Postman test assertions, so the
+result shows as pass or fail. TC-04A proves that an Operations Manager cannot
+assign an authenticated user who lacks the Event Coordinator role.
 
 ## Before you start
 

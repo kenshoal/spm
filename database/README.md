@@ -30,6 +30,8 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0011_event_request_review_status.sql` | Full event-request status constraint and server-only access to coordinator assignment history; API services enforce actor and transition rules |
 | `migrations/0012_coordinator_status_transitions.sql` | `advance_event_request_by_coordinator` RPC (SCRUM-28): locks the request row, re-checks the latest coordinator assignment and applies one coordinator transition atomically. ERRCODE `P0002` not found, `P0003` not the assigned coordinator, `P0004` transition not allowed. Revokes `EXECUTE` from `PUBLIC` only — see 0013 |
 | `migrations/0013_coordinator_transition_execute_grants.sql` | Revokes the direct `EXECUTE` grants Supabase's default privileges give `anon` and `authenticated` on the 0012 function, leaving `service_role` only (same fix as 0005 + 0006 for the equipment RPCs) |
+| `migrations/0014_atomic_coordinator_assignment.sql` | `assign_event_request_coordinator` RPC: locks the event request, validates its state and the target coordinator role, then inserts assignment history atomically. Server role only |
+| `migrations/0015_harden_coordinator_transition_search_path.sql` | Pins the SCRUM-28 transition RPC to an empty search path, clearing the Supabase mutable-search-path warning without changing behavior |
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
@@ -44,6 +46,15 @@ return 502.
 `0013` was applied to the shared development project on 23 September 2026,
 after which `verify_event_request_status_transitions.sql` passed there. Do not
 apply either file again there.
+
+`0014` was applied to the shared development project on 24 September 2026 and
+`verify_atomic_coordinator_assignment.sql` completed there without error. Do
+not apply it again there; retain it for fresh environments.
+
+`0015` was applied to shared development on 24 September 2026. The full status
+transition verification passed afterward, and the Supabase security advisor no
+longer reports `advance_event_request_by_coordinator` as having a mutable search
+path.
 
 New RPCs should revoke `EXECUTE` from `PUBLIC, anon, authenticated` in the same
 migration that creates them. Supabase grants all three by default.
@@ -72,6 +83,12 @@ path (including reassignment away and repeated actions), confirms refused calls
 leave the status unchanged, and checks the `EXECUTE` grants. It prints
 `ALL EVENT-REQUEST STATUS TRANSITION VERIFICATIONS PASSED` and rolls back.
 Requires at least one Supabase Auth user (used as the organiser).
+
+Atomic assignment is verified by
+[`verify_atomic_coordinator_assignment.sql`](verify_atomic_coordinator_assignment.sql).
+After `0014`, it exercises missing, Draft, terminal and wrong-role failures,
+successful assignment and reassignment history, the shared row-lock contract
+and server-only execution grants. It rolls back all verification data.
 
 ## Test accounts
 

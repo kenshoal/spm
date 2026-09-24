@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from app.repositories import (
+    CoordinatorAssignmentRpcError,
     SupabaseCoordinatorAssignmentRepository,
     SupabaseRepositoryError,
 )
@@ -20,7 +21,7 @@ def response_row(**overrides: object) -> dict[str, object]:
     }
 
 
-# Purpose: Verifies assignment creation posts to the coordinator-assignments table.
+# Purpose: Assignment must use the row-locking RPC instead of a race-prone direct insert.
 def test_create_sends_expected_supabase_request() -> None:
     captured: dict[str, object] = {}
 
@@ -29,7 +30,7 @@ def test_create_sends_expected_supabase_request() -> None:
         captured["path"] = request.url.path
         captured["apikey"] = request.headers.get("apikey")
         captured["body"] = json.loads(request.content)
-        return httpx.Response(201, json=[response_row()])
+        return httpx.Response(200, json=response_row())
 
     repository = SupabaseCoordinatorAssignmentRepository(
         "https://project.supabase.co",
@@ -46,18 +47,41 @@ def test_create_sends_expected_supabase_request() -> None:
 
     assert captured == {
         "method": "POST",
-        "path": "/rest/v1/event_coordinator_assignments",
+        "path": "/rest/v1/rpc/assign_event_request_coordinator",
         "apikey": "sb_secret_test",
         "body": {
-            "event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
-            "coordinator_id": "coord-1",
-            "assigned_by": "ops-1",
+            "p_event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
+            "p_coordinator_id": "coord-1",
+            "p_assigned_by": "ops-1",
         },
     }
     assert created["coordinator_id"] == "coord-1"
 
 
-# Purpose: Confirms "current assignment" is the most recent row by id.
+# Purpose: Database rule failures retain their stable error code for HTTP mapping.
+@pytest.mark.parametrize("errcode", ["P0002", "P0004", "P0005"])
+def test_create_preserves_assignment_rpc_error_code(errcode: str) -> None:
+    repository = SupabaseCoordinatorAssignmentRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(400, json={"code": errcode})
+        ),
+    )
+
+    with pytest.raises(CoordinatorAssignmentRpcError) as exc_info:
+        repository.create(
+            {
+                "event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
+                "coordinator_id": "coord-1",
+                "assigned_by": "ops-1",
+            }
+        )
+
+    assert exc_info.value.errcode == errcode
+
+
+# Purpose: Confirms "current assignment" is the most recent row by id, not by timestamp.
 def test_latest_orders_by_id_descending() -> None:
     captured_query: dict[str, str] = {}
 
