@@ -42,3 +42,14 @@ test("event-request pages require the Event Organiser role", async ({ page }) =>
   await expect(page).toHaveURL(/\/unauthorised$/);
   await expect(page.getByRole("heading", { name: "Event Organiser access required" })).toBeVisible();
 });
+
+// Purpose: A coordinator must reach the coordination workspace without knowing its URL.
+test("coordinator login opens assigned event requests", async ({ page }) => {
+  await page.goto("/auth");
+  await page.getByLabel("Email").fill("coordinator@example.com");
+  await page.getByLabel("Password").fill("test-password-123");
+  await page.getByRole("button", { name: "Log in", exact: true }).last().click();
+
+  await expect(page).toHaveURL(/\/coordination\/requests$/);
+  await expect(page.getByRole("heading", { name: "Requests assigned to you" })).toBeVisible();
+});

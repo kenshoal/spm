@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({ redirect: session.redirect }));
 
 import { AuthForm } from "@/app/auth/auth-form";
 import { login, logout, register } from "@/app/auth/actions";
-import { requireEventOrganiser } from "@/lib/auth";
+import { requireEventOrganiser, workspaceForRoles } from "@/lib/auth";
 
 afterEach(() => {
   cleanup();
@@ -78,13 +78,63 @@ test("registers through authService and handles confirmation", async () => {
 });
 
 test("stores a verified login in an HTTP-only cookie", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ access_token: "secret-token", expires_in: 3600 }),
-  }));
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: "secret-token", expires_in: 3600 }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ role: "event_organiser", roles: ["event_organiser"] }),
+    });
+  vi.stubGlobal("fetch", fetchMock);
   await login({}, credentials());
   expect(session.set).toHaveBeenCalledWith("cs_access_token", "secret-token", expect.objectContaining({ httpOnly: true, sameSite: "lax", maxAge: 3600 }));
   expect(session.redirect).toHaveBeenCalledWith("/event-requests");
+  expect(fetchMock.mock.calls[1]).toEqual([
+    "http://127.0.0.1:8001/auth/me",
+    expect.objectContaining({ headers: { Authorization: "Bearer secret-token" } }),
+  ]);
+});
+
+// Purpose: A coordinator-only account must land in the workspace it can actually access.
+test("redirects a coordinator to assigned event requests after login", async () => {
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: "coordinator-token", expires_in: 3600 }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ role: "event_coordinator", roles: ["event_coordinator"] }),
+    }));
+
+  await login({}, credentials());
+
+  expect(session.redirect).toHaveBeenCalledWith("/coordination/requests");
+});
+
+// Purpose: Multi-role and unsupported accounts receive a deterministic safe destination.
+test("selects the default workspace from verified roles", () => {
+  expect(workspaceForRoles(["event_coordinator", "event_organiser"])).toBe("/event-requests");
+  expect(workspaceForRoles(["event_coordinator"])).toBe("/coordination/requests");
+  expect(workspaceForRoles(["attendee"])).toBe("/unauthorised");
+});
+
+// Purpose: A role lookup failure must not create a session whose destination is unknown.
+test("does not store the session when workspace access cannot be verified", async () => {
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ access_token: "secret-token", expires_in: 3600 }),
+    })
+    .mockResolvedValueOnce({ ok: false, status: 503 }));
+
+  expect(await login({}, credentials())).toEqual({
+    message: "The authentication service could not verify your workspace access.",
+  });
+  expect(session.set).not.toHaveBeenCalled();
+  expect(session.redirect).not.toHaveBeenCalled();
 });
 
 test("logout clears the session cookie", async () => {
