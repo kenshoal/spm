@@ -4,6 +4,49 @@ FastAPI microservice for the venue catalogue and venue search / filtering.
 
 ## Scope
 
+### SCRUM-15 decision rules (integration pending)
+
+`app/booking_decisions.py` contains the pure `assess_booking_decision` function.
+This work is on `feat/venue-booking-decision`, based on `feat/venue-blocking` to
+reuse SCRUM-23's availability checks. The internal input projections are not a
+database schema or an agreed booking/event API.
+
+- Only a request whose normalized status is `pending` can receive a decision.
+- Explicit rejection preserves an optional reason and suggested alternative.
+  It does not require availability lookups to succeed. Blank details are absent;
+  nonempty rejection details on an approval are rejected as invalid input.
+- Approval checks current whole-venue status, operating slots and active blocks
+  using SCRUM-23's existing logic, plus overlapping confirmed venue bookings.
+- Dates are inclusive and a shared slot is required for overlap. Other venues,
+  disjoint periods/slots and lifted blocks do not conflict.
+- `None` for either lookup means it has not succeeded and prevents approval;
+  an empty list means a successful lookup found no rows.
+- Refused approval returns machine-readable reasons and block/booking conflict
+  evidence, with no target status. The request remains pending until a separate
+  explicit decision is saved. The future handler must record refusal evidence.
+
+`ConfirmedVenueBooking` represents an actual reserved venue period, not proposed
+event timing. The future adapter must supply all relevant current confirmed
+reservations and omit cancelled/unconfirmed ones. A venue reservation must count
+even if the overall event has not yet reached `Confirmed`; do not reuse the
+affected-event notification filter for booking conflict checks.
+
+The evaluator performs no authorization, writes, allocation creation, event
+changes or notifications. No endpoint has been added. Integration still needs
+the shared booking schema and allocation ownership/API. The handler must verify
+Venue Staff permission, read current data, and coordinate its final check and
+save with both competing approvals and venue-block writes. A successful rule
+assessment alone does not lock or reserve a slot. Notify the requesting
+Coordinator only after a decision is committed, leaving any event changes to
+the Coordinator. Notification delivery is not implemented by these rules.
+
+Tests: `pytest tests/test_booking_decisions.py`. These cover decision eligibility,
+rejection details, availability/conflict refusals, inclusive boundaries, failed
+lookups, invalid inputs and absence of mutation. They do not claim end-to-end
+coverage of booking persistence, concurrency or notification acceptance criteria.
+
+### Existing endpoints
+
 | Capability | Endpoints |
 | --- | --- |
 | Maintain the venue catalogue | `POST /venues`, `GET /venues/{id}`, `PATCH /venues/{id}`, `GET /venues` |
