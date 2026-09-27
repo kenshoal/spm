@@ -9,6 +9,8 @@ services:
       - "8003:8000"
     environment:
       AUTH_SERVICE_URL: http://auth-service:8000
+      # No depends_on: a notification failure must never block assignment.
+      NOTIFICATION_SERVICE_URL: http://notification-service:8000/notifications/events
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
     healthcheck:
@@ -81,6 +83,24 @@ services:
       - "8004:8000"
     environment:
       AUTH_SERVICE_URL: http://auth-service:8000
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health').read()
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  notification-service:
+    build:
+      context: ./backend/notificationService
+    ports:
+      - "8005:8000"
     healthcheck:
       test:
         - CMD
