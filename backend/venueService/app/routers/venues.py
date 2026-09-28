@@ -25,18 +25,12 @@ from app.models import (
     VenueStatus,
     VenueUpdate,
 )
-from app.repository import VenueRepository, repository
+from app.repository import VenueStore, get_repository
 
 router = APIRouter(prefix="/venues", tags=["venues"])
 
 
-def get_repository() -> VenueRepository:
-    """Dependency seam so tests can override the store."""
-
-    return repository
-
-
-RepoDep = Annotated[VenueRepository, Depends(get_repository)]
+RepoDep = Annotated[VenueStore, Depends(get_repository)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
 AuthenticatedDep = Annotated[Principal, Depends(require_authenticated)]
 

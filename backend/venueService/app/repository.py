@@ -1,16 +1,32 @@
-"""In-memory venue store.
+"""Venue stores and storage selection.
 
-Scaffold only. The router depends on this interface, not on the storage
-mechanism, so this can be swapped for a persistent backend (e.g. SQLAlchemy
-against Postgres) once the project's database infrastructure lands.
+The routers depend on the ``VenueStore`` interface, not on a storage
+mechanism. ``VENUE_STORAGE_BACKEND`` selects the implementation:
+
+* ``memory`` (default) — ``VenueRepository`` below; used by unit tests and
+  standalone development. Data is lost when the process stops.
+* ``supabase`` — ``SupabaseVenueRepository``, persisting to ``public.venues``.
 """
 
 from __future__ import annotations
 
+from functools import lru_cache
+from typing import Protocol
+
+from app.config import get_settings
 from app.models import Venue, VenueCreate, VenueUpdate, _now
 
 
+class VenueStore(Protocol):
+    def create(self, data: VenueCreate) -> Venue: ...
+    def get(self, venue_id: str) -> Venue | None: ...
+    def list(self) -> list[Venue]: ...
+    def update(self, venue_id: str, data: VenueUpdate) -> Venue | None: ...
+
+
 class VenueRepository:
+    """In-memory venue store."""
+
     def __init__(self) -> None:
         self._venues: dict[str, Venue] = {}
 
@@ -38,5 +54,24 @@ class VenueRepository:
         self._venues.clear()
 
 
-# Module-level singleton used by the default dependency wiring.
+# Module-level singleton used when VENUE_STORAGE_BACKEND=memory.
 repository = VenueRepository()
+
+
+@lru_cache
+def _supabase_repository() -> VenueStore:
+    from app.supabase_repository import SupabaseVenueRepository
+
+    settings = get_settings()
+    return SupabaseVenueRepository(
+        str(settings.supabase_url),
+        settings.supabase_secret_key.get_secret_value(),
+    )
+
+
+def get_repository() -> VenueStore:
+    """FastAPI dependency returning the configured venue store."""
+
+    if get_settings().venue_storage_backend == "supabase":
+        return _supabase_repository()
+    return repository
