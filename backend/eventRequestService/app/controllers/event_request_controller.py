@@ -8,10 +8,12 @@ from pydantic import ValidationError
 
 from app.config import get_settings
 from app.models.event_request import (
+    EventClarificationResponse,
     EventRequestCreate,
     EventRequestResponse,
     EventRequestSubmission,
     EventRequestUpdate,
+    EventReviewDecisionResponse,
 )
 from app.repositories import SupabaseEventRequestRepository
 from app.services.coordinator_assignment_service import (
@@ -216,6 +218,44 @@ def get_event_request(
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
 
 
+@router.get(
+    "/{event_request_id}/decisions",
+    response_model=list[EventReviewDecisionResponse],
+)
+def list_review_decisions(
+    event_request_id: UUID,
+    caller: CallerDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> list[EventReviewDecisionResponse]:
+    """Expose decisions only to the owning organiser or assigned coordinator."""
+    request_id = str(event_request_id)
+    roles = set(caller.roles)
+
+    if "event_organiser" in roles:
+        try:
+            service.get(request_id, caller.id)
+            return service.list_review_decisions(request_id)
+        except EventRequestNotFoundError:
+            pass
+
+    if "event_coordinator" in roles:
+        try:
+            assignment = _coordinator_assignment_service(request).get_current(
+                request_id
+            )
+        except CoordinatorAssignmentNotFoundError as error:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Event request not found"
+            ) from error
+        if assignment.coordinator_id == caller.id:
+            return service.list_review_decisions(request_id)
+
+    if roles.isdisjoint({"event_organiser", "event_coordinator"}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
+
+
 @router.patch("/{event_request_id}", response_model=EventRequestResponse)
 def update_event_request(
     event_request_id: UUID,
@@ -234,6 +274,21 @@ def submit_draft_event_request(
     service: ServiceDependency,
 ) -> EventRequestResponse:
     return service.submit(str(event_request_id), organiser_id, payload)
+
+
+@router.post(
+    "/{event_request_id}/clarification-response",
+    response_model=EventReviewDecisionResponse,
+)
+def respond_to_clarification(
+    event_request_id: UUID,
+    payload: EventClarificationResponse,
+    organiser_id: OrganiserDependency,
+    service: ServiceDependency,
+) -> EventReviewDecisionResponse:
+    return service.respond_to_clarification(
+        str(event_request_id), organiser_id, payload
+    )
 
 
 @router.delete("/{event_request_id}", status_code=status.HTTP_204_NO_CONTENT)

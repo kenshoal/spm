@@ -2,10 +2,16 @@ import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { requireRole, type AuthenticatedUser } from "@/lib/auth";
-import { coordinatorActions, getEventRequest } from "@/lib/event-requests";
+import {
+  coordinatorActions,
+  getEventRequest,
+  listReviewDecisions,
+} from "@/lib/event-requests";
 import { AppShell, workspaceLinks } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { RequestDetails } from "../../../components/request-details";
+import { ReviewDecisionHistory } from "../../../components/review-decision-history";
+import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
 
 async function CoordinatorRequestView({ id }: { id: string }) {
@@ -24,10 +30,29 @@ async function CoordinatorRequestView({ id }: { id: string }) {
   }
 
   const request = result.request;
+  const decisionResult = await listReviewDecisions(id)
+    .then((decisions) => ({ decisions, failed: false as const }))
+    .catch(() => ({ decisions: [], failed: true as const }));
+  const decisions = decisionResult.decisions;
+  const latestClarification = decisions.find(
+    (decision) => decision.decision_status === "Changes Requested",
+  );
+  const canResumeReview =
+    !decisionResult.failed &&
+    request.status === "Changes Requested" &&
+    Boolean(latestClarification?.organiser_response);
+  const awaitingClarification =
+    !decisionResult.failed &&
+    request.status === "Changes Requested" &&
+    Boolean(latestClarification) &&
+    !latestClarification?.organiser_response;
   return (
     <div className="mx-auto max-w-4xl">
       <Link href="/coordination/requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to assigned requests</Link>
       <RequestDetails request={request} coordinatorAssigned />
+      <div className="mt-5">
+        <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
+      </div>
       <Link
         href={`/venues/search${request.expected_attendance ? `?required_capacity=${request.expected_attendance}` : ""}`}
         className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-[#cfd9d4] bg-white px-4 text-sm font-semibold text-[#0f6b5b] hover:bg-[#f4f7f5]"
@@ -36,7 +61,19 @@ async function CoordinatorRequestView({ id }: { id: string }) {
       </Link>
       <section aria-label="Coordinator actions" className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
         <h2 className="text-lg font-bold text-[#17211d]">Actions</h2>
-        {coordinatorActions(request.status).length === 0 ? (
+        {request.status === "Under Review" && !decisionResult.failed ? (
+          <ReviewDecisionPanel eventRequestId={request.id} />
+        ) : null}
+        {awaitingClarification ? (
+          <p className="mt-3 text-sm leading-6 text-[#526159]">Waiting for the organiser to send a clarification response.</p>
+        ) : null}
+        {canResumeReview ? (
+          <div className="mt-4">
+            <p className="mb-3 text-sm leading-6 text-[#526159]">The organiser has responded. Continue the review to make a new decision.</p>
+            <TransitionButton eventRequestId={request.id} kind="resume-review" />
+          </div>
+        ) : null}
+        {coordinatorActions(request.status).length === 0 && !canResumeReview ? (
           <p className="mt-3 text-sm leading-6 text-[#718078]">This request is {request.status.toLowerCase()} — no further actions are available.</p>
         ) : (
           <div className="mt-4 flex flex-wrap gap-3">

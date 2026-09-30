@@ -19,12 +19,14 @@ from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentService,
 )
 from app.services.event_request_service import (
+    ClarificationResponseNotAllowedError,
     EventRequestNotDraftError,
     EventRequestNotFoundError,
     EventRequestService,
     EventRequestTransitionConflictError,
 )
 from app.services.event_transition_service import (
+    DecisionReasonRequiredError,
     EventTransitionService,
     TransitionForbiddenError,
     TransitionNotAllowedError,
@@ -80,6 +82,15 @@ def create_app(
             content={"detail": str(error)},
         )
 
+    @application.exception_handler(ClarificationResponseNotAllowedError)
+    async def clarification_response_not_allowed(
+        request: Request, error: ClarificationResponseNotAllowedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error)},
+        )
+
     @application.exception_handler(CoordinatorAssignmentNotFoundError)
     async def coordinator_assignment_not_found(
         request: Request, error: CoordinatorAssignmentNotFoundError
@@ -122,6 +133,15 @@ def create_app(
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(DecisionReasonRequiredError)
+    async def decision_reason_required(
+        request: Request, error: DecisionReasonRequiredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": str(error)},
         )
 

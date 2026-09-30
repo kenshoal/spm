@@ -32,6 +32,26 @@ class EventRequestRepository(Protocol):
         self, event_request_id: str, coordinator_id: str, to_status: str
     ) -> dict[str, Any]: ...
 
+    def decide_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> dict[str, Any]: ...
+
+    def list_review_decisions(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]: ...
+
+    def respond_to_clarification(
+        self, event_request_id: str, organiser_id: str, response: str
+    ) -> dict[str, Any]: ...
+
+    def resume_review_by_coordinator(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]: ...
+
     def update_for_organiser(
         self,
         event_request_id: str,
@@ -205,6 +225,92 @@ class SupabaseEventRequestRepository:
             ) from error
         return response.json()
 
+    def decide_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> dict[str, Any]:
+        """Persist the review decision and status through one database RPC."""
+        try:
+            response = self._client.post(
+                "/rpc/decide_event_request_by_coordinator",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_coordinator_id": coordinator_id,
+                    "p_decision_status": decision,
+                    "p_reason": reason,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
+
+    def list_review_decisions(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]:
+        return self._request_table(
+            "GET",
+            "/event_request_review_decisions",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "decided_at.desc,id.desc",
+                "select": "*",
+            },
+        )
+
+    def respond_to_clarification(
+        self, event_request_id: str, organiser_id: str, response: str
+    ) -> dict[str, Any]:
+        """Attach one organiser response to the latest clarification request."""
+        try:
+            result = self._client.post(
+                "/rpc/respond_to_event_request_clarification",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_organiser_id": organiser_id,
+                    "p_response": response,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            result.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return result.json()
+
+    def resume_review_by_coordinator(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]:
+        """Resume a returned review only after the organiser has responded."""
+        try:
+            result = self._client.post(
+                "/rpc/resume_event_request_review_by_coordinator",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_coordinator_id": coordinator_id,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            result.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return result.json()
+
     @staticmethod
     def _rpc_rejection(response: httpx.Response) -> EventRequestRpcError:
         try:
@@ -270,8 +376,13 @@ class SupabaseEventRequestRepository:
         return bool(rows)
 
     def _request(self, method: str, **kwargs: Any) -> list[dict[str, Any]]:
+        return self._request_table(method, "/event_requests", **kwargs)
+
+    def _request_table(
+        self, method: str, path: str, **kwargs: Any
+    ) -> list[dict[str, Any]]:
         try:
-            response = self._client.request(method, "/event_requests", **kwargs)
+            response = self._client.request(method, path, **kwargs)
             response.raise_for_status()
         except httpx.HTTPError as error:
             raise SupabaseRepositoryError(
