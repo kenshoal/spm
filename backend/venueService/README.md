@@ -8,6 +8,7 @@ FastAPI microservice for the venue catalogue and venue search / filtering.
 | --- | --- |
 | Maintain the venue catalogue | `POST /venues`, `GET /venues/{id}`, `PATCH /venues/{id}`, `GET /venues` |
 | Search and filter venues | `GET /venues/search` |
+| Check venue suitability | `POST /venues/{id}/suitability` |
 
 Venues are stored in the Supabase `public.venues` table
 (`database/migrations/0016_venues.sql`) when `VENUE_STORAGE_BACKEND=supabase`,
@@ -20,6 +21,12 @@ operations require the `venue_staff` role.
 per-date availability; a venue is excluded only when its whole-venue `status`
 is not `available`. Per-date-slot blocking belongs to the venue availability
 calendar / venue-blocking stories.
+
+`POST /venues/{id}/suitability` compares an event's stated requirements
+(expected attendance, layout, operating slot, facilities, accessibility)
+against a venue's recorded attributes and lists any attribute that doesn't
+match. It is advisory only — a `suitable: false` result never books, holds,
+or changes the venue.
 
 ## Run locally
 
