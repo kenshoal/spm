@@ -1,5 +1,7 @@
 """Temporary in-memory block storage, following the venue repository pattern."""
 
+from __future__ import annotations
+
 from app.block_models import VenueBlock, VenueBlockCreate
 
 

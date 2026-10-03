@@ -4,6 +4,8 @@ Venue storage is selected by ``app.repository``; this module selects where
 venue blocks are stored using the same ``VENUE_STORAGE_BACKEND`` setting.
 """
 
+from __future__ import annotations
+
 from collections.abc import Iterator
 from typing import Annotated, Protocol
 
