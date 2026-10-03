@@ -5,6 +5,8 @@ IDs/timestamps on insert. No schema changes or user creation are performed
 here. Errors expose neither credentials nor raw database details.
 """
 
+from __future__ import annotations
+
 from typing import Any, TypeVar
 from uuid import UUID
 
