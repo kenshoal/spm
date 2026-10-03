@@ -27,6 +27,7 @@ class FakeEventRequestRepository:
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
         self.coordinator_assignment_rows: list[dict[str, Any]] = []
+        self.review_decision_rows: list[dict[str, Any]] = []
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()
@@ -161,6 +162,111 @@ class FakeEventRequestRepository:
         row["status"] = to_status
         row["updated_at"] = datetime.now(UTC).isoformat()
         return dict(row)
+
+    def decide_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> dict[str, Any]:
+        """Mirror the atomic review-decision RPC for API behavior tests."""
+        row = self.rows.get(event_request_id)
+        if row is None:
+            raise EventRequestRpcError("not found", errcode="P0002")
+
+        assignments = [
+            assignment
+            for assignment in self.coordinator_assignment_rows
+            if assignment["event_request_id"] == event_request_id
+        ]
+        latest = max(assignments, key=lambda assignment: assignment["id"], default=None)
+        if latest is None or latest["coordinator_id"] != coordinator_id:
+            raise EventRequestRpcError("not assigned", errcode="P0003")
+        if row["status"] != "Under Review" or decision not in {
+            "Changes Requested",
+            "Approved",
+            "Rejected",
+        }:
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+
+        self.review_decision_rows.append(
+            {
+                "id": len(self.review_decision_rows) + 1,
+                "event_request_id": event_request_id,
+                "coordinator_id": coordinator_id,
+                "decision_status": decision,
+                "reason": reason,
+                "decided_at": datetime.now(UTC).isoformat(),
+                "organiser_response": None,
+                "responded_at": None,
+            }
+        )
+        row["status"] = decision
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
+    def list_review_decisions(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]:
+        return [
+            dict(row)
+            for row in reversed(self.review_decision_rows)
+            if row["event_request_id"] == event_request_id
+        ]
+
+    def respond_to_clarification(
+        self, event_request_id: str, organiser_id: str, response: str
+    ) -> dict[str, Any]:
+        request = self.rows.get(event_request_id)
+        if request is None or request["organiser_id"] != organiser_id:
+            raise EventRequestRpcError("not found", errcode="P0002")
+        decisions = [
+            row
+            for row in self.review_decision_rows
+            if row["event_request_id"] == event_request_id
+            and row["decision_status"] == "Changes Requested"
+        ]
+        latest = decisions[-1] if decisions else None
+        if (
+            request["status"] != "Changes Requested"
+            or latest is None
+            or latest["organiser_response"] is not None
+            or not response.strip()
+        ):
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+        latest["organiser_response"] = response.strip()
+        latest["responded_at"] = datetime.now(UTC).isoformat()
+        return dict(latest)
+
+    def resume_review_by_coordinator(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]:
+        request = self.rows.get(event_request_id)
+        if request is None:
+            raise EventRequestRpcError("not found", errcode="P0002")
+        assignments = [
+            row for row in self.coordinator_assignment_rows
+            if row["event_request_id"] == event_request_id
+        ]
+        latest_assignment = assignments[-1] if assignments else None
+        if latest_assignment is None or latest_assignment["coordinator_id"] != coordinator_id:
+            raise EventRequestRpcError("not assigned", errcode="P0003")
+        decisions = [
+            row for row in self.review_decision_rows
+            if row["event_request_id"] == event_request_id
+            and row["decision_status"] == "Changes Requested"
+        ]
+        latest_decision = decisions[-1] if decisions else None
+        if (
+            request["status"] != "Changes Requested"
+            or latest_decision is None
+            or latest_decision["organiser_response"] is None
+        ):
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+        request["status"] = "Under Review"
+        request["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(request)
 
 
 class FakeCoordinatorAssignmentRepository:

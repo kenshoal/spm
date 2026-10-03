@@ -20,6 +20,7 @@ vi.mock("@/lib/auth", () => ({
 import {
   createEventRequest,
   deleteEventRequest,
+  respondToClarification,
   submitDraftEventRequest,
   submitNewEventRequest,
   updateEventRequest,
@@ -122,6 +123,25 @@ test("submits a completed existing draft", async () => {
   expect(navigation.redirect).toHaveBeenCalledWith(
     "/event-requests?status=submitted",
   );
+});
+
+// Purpose: The organiser responds to clarification without resubmitting or editing event fields.
+test("responds to a clarification request", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+  vi.stubGlobal("fetch", fetchMock);
+  const formData = new FormData();
+  formData.set("response", "A wireless microphone is required.");
+
+  const state = await respondToClarification("request/1", {}, formData);
+
+  expect(fetchMock.mock.calls[0][0]).toBe(
+    "http://127.0.0.1:8003/event-requests/request%2F1/clarification-response",
+  );
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+    response: "A wireless microphone is required.",
+  });
+  expect(state).toEqual({ submitted: true });
+  expect(navigation.redirect).not.toHaveBeenCalled();
 });
 
 // Purpose: Keeps a submitted request visible as read-only when a duplicate submission is attempted.

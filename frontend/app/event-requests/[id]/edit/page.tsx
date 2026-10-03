@@ -5,11 +5,14 @@ import { requireRole } from "@/lib/auth";
 import {
   getCoordinatorAssignment,
   getEventRequest,
+  listReviewDecisions,
 } from "@/lib/event-requests";
 import { AppShell, workspaceLinks } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { EventRequestForm } from "../../new/event-request-form";
 import { RequestDetails } from "../../../components/request-details";
+import { ReviewDecisionHistory } from "../../../components/review-decision-history";
+import { ClarificationResponseForm } from "../clarification-response-form";
 
 async function EditDraft({ id }: { id: string }) {
   const result = await getEventRequest(id)
@@ -25,12 +28,41 @@ async function EditDraft({ id }: { id: string }) {
   if (!result.request) {
     return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">Draft not found</h1><p className="mt-2 text-sm text-[#718078]">It may belong to another organiser or have been deleted.</p></div>;
   }
+  if (result.request.status === "Changes Requested") {
+    const decisionResult = await listReviewDecisions(id)
+      .then((decisions) => ({ decisions, failed: false as const }))
+      .catch(() => ({ decisions: [], failed: true as const }));
+    const decisions = decisionResult.decisions;
+    const latestClarification = decisions.find(
+      (decision) => decision.decision_status === "Changes Requested",
+    );
+    return (
+      <div className="mx-auto max-w-4xl">
+        <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link>
+        <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">Your coordinator requested clarification. The submitted request remains read-only; respond below so review can continue.</div>
+        <RequestDetails request={result.request} coordinatorAssigned />
+        <div className="mt-5"><ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} /></div>
+        <div className="mt-5">
+          {decisionResult.failed ? null : latestClarification?.organiser_response ? (
+            <div role="status" className="rounded-xl border border-[#bcd9ce] bg-[#edf7f3] px-4 py-3 text-sm text-[#145c40]">Your response was sent. The assigned coordinator can now continue the review.</div>
+          ) : (
+            <ClarificationResponseForm eventRequestId={id} />
+          )}
+        </div>
+      </div>
+    );
+  }
   if (result.request.status !== "Draft") {
-    const coordinatorAssigned = await getCoordinatorAssignment(id)
-      .then((assignment) => assignment !== null)
-      // Keep the status view available if assignment lookup is temporarily unavailable.
-      .catch(() => undefined);
-    return <div className="mx-auto max-w-4xl"><Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link><div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div><RequestDetails request={result.request} coordinatorAssigned={coordinatorAssigned} /></div>;
+    const [coordinatorAssigned, decisionResult] = await Promise.all([
+      getCoordinatorAssignment(id)
+        .then((assignment) => assignment !== null)
+        // Keep the status view available if assignment lookup is temporarily unavailable.
+        .catch(() => undefined),
+      listReviewDecisions(id)
+        .then((decisions) => ({ decisions, failed: false as const }))
+        .catch(() => ({ decisions: [], failed: true as const })),
+    ]);
+    return <div className="mx-auto max-w-4xl"><Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link><div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div><RequestDetails request={result.request} coordinatorAssigned={coordinatorAssigned} /><div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div></div>;
   }
 
   return (
