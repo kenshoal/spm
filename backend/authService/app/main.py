@@ -1,6 +1,7 @@
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
+from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field
 from supabase import Client
 from supabase_auth.errors import AuthApiError, AuthError
@@ -45,14 +46,22 @@ class AuthenticatedUser(BaseModel):
     id: str
     email: str | None
     role: str
+    roles: list[str]
 
 
 Role = Literal[
-    "admin", "technical_support", "event_coordinator", "venue_staff", "operations_manager"
+    "admin",
+    "attendee",
+    "event_coordinator",
+    "event_operations_manager",
+    "event_organiser",
+    "technical_support",
+    "venue_staff",
 ]
 
-DEFAULT_ROLE = "event_coordinator"
+DEFAULT_ROLE = "attendee"
 ADMIN_ROLE = "admin"
+EVENT_OPERATIONS_MANAGER_ROLE = "event_operations_manager"
 
 
 class RoleUpdateRequest(BaseModel):
@@ -63,6 +72,11 @@ class RoleUpdateResponse(BaseModel):
     id: str
     email: str | None
     role: str
+
+
+class UserSummary(BaseModel):
+    id: str
+    email: str | None
 
 
 app = FastAPI(
@@ -186,8 +200,36 @@ def _verify_bearer(supabase: Client, authorization: str | None):
     return auth_response.user
 
 
-def _role_of(user) -> str:
-    return (user.app_metadata or {}).get("role", DEFAULT_ROLE)
+def _roles_of(user) -> list[str]:
+    metadata = user.app_metadata or {}
+    roles = metadata.get("roles")
+    if isinstance(roles, list):
+        clean_roles = [role for role in roles if isinstance(role, str)]
+        if clean_roles:
+            return clean_roles
+    role = metadata.get("role")
+    return [role] if isinstance(role, str) and role else [DEFAULT_ROLE]
+
+
+def _staff_roles_of(user, admin_client: Client | None = None) -> list[str]:
+    if admin_client is None:
+        return _roles_of(user)
+
+    try:
+        response = (
+            admin_client.table("staff_roles")
+            .select("role")
+            .eq("user_id", user.id)
+            .execute()
+        )
+    except APIError as error:
+        if error.code == "PGRST205":
+            return _roles_of(user)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Role store unavailable"
+        ) from error
+    roles = [row["role"] for row in response.data if isinstance(row.get("role"), str)]
+    return roles or _roles_of(user)
 
 
 def get_admin_client() -> Client:
@@ -199,16 +241,25 @@ def get_admin_client() -> Client:
         ) from error
 
 
+def get_optional_admin_client() -> Client | None:
+    try:
+        return get_supabase_admin_client()
+    except ValueError:
+        return None
+
+
 @app.get("/auth/me", response_model=AuthenticatedUser, tags=["auth"])
 def current_user(
     supabase: Annotated[Client, Depends(get_supabase_client)],
     response: Response,
+    admin_client: Annotated[Client | None, Depends(get_optional_admin_client)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> AuthenticatedUser:
     user = _verify_bearer(supabase, authorization)
     response.headers["Cache-Control"] = "no-store"
+    roles = _staff_roles_of(user, admin_client)
     return AuthenticatedUser(
-        id=user.id, email=user.email, role=_role_of(user)
+        id=user.id, email=user.email, role=roles[0], roles=roles
     )
 
 
@@ -225,15 +276,38 @@ def update_user_role(
     authorization: Annotated[str | None, Header()] = None,
 ) -> RoleUpdateResponse:
     caller = _verify_bearer(supabase, authorization)
-    if _role_of(caller) != ADMIN_ROLE:
+    caller_roles = _staff_roles_of(caller, admin_client)
+    can_assign_any = ADMIN_ROLE in caller_roles
+    can_assign_coordinator = EVENT_OPERATIONS_MANAGER_ROLE in caller_roles
+    if not can_assign_any and not (
+        can_assign_coordinator and payload.role == "event_coordinator"
+    ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "Insufficient permissions"
         )
 
     try:
-        response = admin_client.auth.admin.update_user_by_id(
-            user_id, {"app_metadata": {"role": payload.role}}
+        response = admin_client.auth.admin.get_user_by_id(user_id)
+        if response.user is None:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "Authentication provider returned no user",
+            )
+        admin_client.table("staff_roles").upsert(
+            {
+                "user_id": user_id,
+                "role": payload.role,
+                "assigned_by": caller.id,
+            }
+        ).execute()
+        roles = _staff_roles_of(response.user, admin_client)
+        admin_client.auth.admin.update_user_by_id(
+            user_id, {"app_metadata": {"role": roles[0], "roles": roles}}
         )
+    except APIError as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Role store unavailable"
+        ) from error
     except AuthApiError as error:
         if error.status == status.HTTP_404_NOT_FOUND:
             raise HTTPException(
@@ -248,14 +322,59 @@ def update_user_role(
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
         ) from error
-    if response.user is None:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            "Authentication provider returned no user",
-        )
-
     return RoleUpdateResponse(
         id=response.user.id,
         email=response.user.email,
-        role=(response.user.app_metadata or {}).get("role", payload.role),
+        role=roles[0],
     )
+
+
+@app.get("/auth/users", response_model=list[UserSummary], tags=["auth"])
+def list_users_by_role(
+    role: Role,
+    supabase: Annotated[Client, Depends(get_supabase_client)],
+    admin_client: Annotated[Client, Depends(get_admin_client)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> list[UserSummary]:
+    caller = _verify_bearer(supabase, authorization)
+    caller_roles = _staff_roles_of(caller, admin_client)
+    can_list_any = ADMIN_ROLE in caller_roles
+    can_list_coordinators = EVENT_OPERATIONS_MANAGER_ROLE in caller_roles
+    if not can_list_any and not (
+        can_list_coordinators and role == "event_coordinator"
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+
+    try:
+        rows = (
+            admin_client.table("staff_roles")
+            .select("user_id")
+            .eq("role", role)
+            .execute()
+            .data
+        )
+    except APIError as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Role store unavailable"
+        ) from error
+
+    user_ids = sorted(
+        {row["user_id"] for row in rows if isinstance(row.get("user_id"), str)}
+    )
+    users: list[UserSummary] = []
+    for user_id in user_ids:
+        try:
+            found = admin_client.auth.admin.get_user_by_id(user_id).user
+        except AuthApiError as error:
+            if error.status == status.HTTP_404_NOT_FOUND:
+                continue  # A role row outlived its account; nothing to offer.
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
+            ) from error
+        except AuthError as error:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, "Authentication provider unavailable"
+            ) from error
+        if found is not None:
+            users.append(UserSummary(id=found.id, email=found.email))
+    return sorted(users, key=lambda user: (user.email or "", user.id))

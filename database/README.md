@@ -22,6 +22,50 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0004_quantity_history.sql` | `equipment_quantity_history` audit table + `update_equipment_quantity` RPC (row lock, ERRCODE `P0002`) |
 | `migrations/0005_rls_and_function_access.sql` | RLS enabled on the three equipment tables (default-deny for anon/authenticated). Its function revokes were a no-op — see 0006 |
 | `migrations/0006_rpc_execute_grants.sql` | RPC `EXECUTE` revoked from `PUBLIC` (which anon/authenticated inherit through) and granted explicitly to `service_role` |
+| `migrations/0007_event_requests.sql` | Event-request table, validation constraints, update timestamp trigger and organiser-only RLS policies. The shared development project already matched this schema on 20 September 2026 |
+| `migrations/0008_event_request_submission_outbox.sql` | Private transactional outbox and triggers that record one `event_request.submitted` event for a direct submission or Draft-to-Submitted transition |
+| `migrations/0009_event_request_outbox_organiser_index.sql` | Covering index for the outbox organiser foreign key and future notification-recipient lookups |
+| `migrations/0010_staff_roles.sql` | `staff_roles` role-assignment table keyed by `(user_id, role)`, RLS enabled, service-role access only |
+| `migrations/0011_event_coordinator_assignments.sql` | `event_coordinator_assignments` append-only table backing Coordinator assignment and the awaiting-assignment queue. **Reference snapshot / fresh environments only** — this table was created by hand in the dashboard and already exists live; do not re-run it there |
+| `migrations/0011_event_request_review_status.sql` | Full event-request status constraint and server-only access to coordinator assignment history; API services enforce actor and transition rules |
+| `migrations/0012_coordinator_status_transitions.sql` | `advance_event_request_by_coordinator` RPC (SCRUM-28): locks the request row, re-checks the latest coordinator assignment and applies one coordinator transition atomically. ERRCODE `P0002` not found, `P0003` not the assigned coordinator, `P0004` transition not allowed. Revokes `EXECUTE` from `PUBLIC` only — see 0013 |
+| `migrations/0013_coordinator_transition_execute_grants.sql` | Revokes the direct `EXECUTE` grants Supabase's default privileges give `anon` and `authenticated` on the 0012 function, leaving `service_role` only (same fix as 0005 + 0006 for the equipment RPCs) |
+| `migrations/0014_atomic_coordinator_assignment.sql` | `assign_event_request_coordinator` RPC: locks the event request, validates its state and the target coordinator role, then inserts assignment history atomically. Server role only |
+| `migrations/0015_harden_coordinator_transition_search_path.sql` | Pins the SCRUM-28 transition RPC to an empty search path, clearing the Supabase mutable-search-path warning without changing behavior |
+| `migrations/0017_notifications.sql` | `notifications` table for SCRUM-37: one row per recipient per event, unique `(recipient_id, event_id)` so a retried event is stored once, newest-first inbox index, RLS on with service-role access only |
+
+`0011` was applied to the shared Supabase development project via MCP on 22
+September 2026. Do not apply it again there; retain the file for fresh
+environments and schema review.
+
+`0012` was applied to the shared Supabase development project on 23 September
+2026 (the corrected version, with the fixed P0004 `RAISE`). Do not apply it
+again there. Fresh environments must apply it before running the SCRUM-28
+eventRequestService, otherwise `/review`, `/cancellation` and `/completion`
+return 502.
+
+`0013` was applied to the shared development project on 23 September 2026,
+after which `verify_event_request_status_transitions.sql` passed there. Do not
+apply either file again there.
+
+`0014` was applied to the shared development project on 24 September 2026 and
+`verify_atomic_coordinator_assignment.sql` completed there without error. Do
+not apply it again there; retain it for fresh environments.
+
+`0015` was applied to shared development on 24 September 2026. The full status
+transition verification passed afterward, and the Supabase security advisor no
+longer reports `advance_event_request_by_coordinator` as having a mutable search
+path.
+
+`0017` was applied to shared development via the Supabase MCP on 29 September
+2026. Do not apply it again there (it is safe to re-run, but there is no need).
+Read-only checks afterwards confirmed RLS on, all five constraints and both
+indexes present, no `anon`/`authenticated` access, and `service_role` insert and
+update. `verify_notifications.sql` was run against a local Postgres, not shared
+development, because it writes rows (they are rolled back).
+
+New RPCs should revoke `EXECUTE` from `PUBLIC, anon, authenticated` in the same
+migration that creates them. Supabase grants all three by default.
 
 `0001_baseline.sql` was derived from what `equipmentService` implies, then reconciled against the live database (columns, types, nullability, defaults, constraints, indexes) using the export queries below. One thing is deliberately absent:
 
@@ -32,6 +76,40 @@ Note: `transition_equipment_status` did **not** exist in the live database (veri
 ## Verifying the SQL functions
 
 The service's pytest suite fakes the database, so the functions' real behaviour (atomicity, `P0002` contract, audit logging, the quantity CHECK) is verified by [verify_equipment_functions.sql](verify_equipment_functions.sql). Run it in the SQL Editor after applying the migrations: it exercises every function including failure paths, prints `ALL EQUIPMENT FUNCTION VERIFICATIONS PASSED` on success, and `ROLLBACK`s — leaving no data behind. RLS behaviour is verified separately with the publishable key over the REST API (see `docs/`).
+
+The event-request submission outbox is verified by
+[`verify_event_request_submission_outbox.sql`](verify_event_request_submission_outbox.sql).
+It proves that a Draft creates no event, each supported submission path creates
+exactly one event, and a repeated status write does not create a duplicate. The
+script rolls back all test rows.
+
+The notifications table is verified by
+[`verify_notifications.sql`](verify_notifications.sql). Run it after `0017`:
+it proves a retried event is stored once, one event can notify several
+recipients, a non-object payload is refused and browser roles cannot read the
+table. The script rolls back all test rows.
+
+The coordinator transition function is verified by
+[`verify_event_request_status_transitions.sql`](verify_event_request_status_transitions.sql).
+Run it after `0012` and `0013`: it exercises Submitted → Under Review, non-terminal →
+Cancelled and Confirmed → Completed, every `P0002`/`P0003`/`P0004` failure
+path (including reassignment away and repeated actions), confirms refused calls
+leave the status unchanged, and checks the `EXECUTE` grants. It prints
+`ALL EVENT-REQUEST STATUS TRANSITION VERIFICATIONS PASSED` and rolls back.
+Requires at least one Supabase Auth user (used as the organiser).
+
+Atomic assignment is verified by
+[`verify_atomic_coordinator_assignment.sql`](verify_atomic_coordinator_assignment.sql).
+After `0014`, it exercises missing, Draft, terminal and wrong-role failures,
+successful assignment and reassignment history, the shared row-lock contract
+and server-only execution grants. It rolls back all verification data.
+
+## Test accounts
+
+[`seed_test_accounts.sql`](seed_test_accounts.sql) confirms the shared dev test
+accounts (one per role, two coordinators, password `12345678`) and assigns
+their roles. Register the accounts first; see "Test accounts" in
+`docs/authentication.txt`. Dev only; never run it on production.
 
 ## Verification queries
 

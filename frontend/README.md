@@ -1,4 +1,35 @@
-This is the ConnectSphere organiser frontend. Its current increment lets an organiser create, list and continue event-request drafts backed by the event request service.
+This is the ConnectSphere frontend.
+
+- **Organisers** (`/event-requests`) save incomplete drafts, submit a complete
+  new request or saved draft, and track requests using All, Draft, Submitted,
+  In Progress and Completed tabs. In Progress groups Under Review, Changes
+  Requested, Approved, Planning and Confirmed; Cancelled and Rejected appear
+  under All. Submitted requests are read-only, and the detail view shows a
+  status progress display explaining the current stage.
+- **Coordinators** (`/coordination/requests`) see only the requests currently
+  assigned to them and open a read-only detail view. Actions depend on status:
+  **Start review** (Submitted), **Cancel event** (any non-terminal status,
+  confirmed first) and **Mark complete** (Confirmed, confirmed first).
+
+Users with both roles see links to both workspaces.
+
+## Workspaces
+
+| Role | Lands on | Pages |
+| --- | --- | --- |
+| Event Organiser | `/event-requests` | create, edit, submit and track requests |
+| Event Coordinator | `/coordination/requests` | assigned requests, status transitions, `/venues/search` |
+| Event Operations Manager | `/operations/assignments` | assign and reassign coordinators (SCRUM-14) |
+| Venue Staff | `/venues` | venue catalogue (SCRUM-30), `/venues/search` (SCRUM-9) |
+| Technical Support | `/equipment` | equipment catalogue (SCRUM-45) and status (SCRUM-16) |
+
+Venue search (`/venues/search`) is open to both Event Coordinators and Venue
+Staff. A page-level fetch failure shows an "unavailable" banner instead of a
+blank page, and an expired session redirects to sign-in rather than erroring.
+
+Server-side environment variables: `AUTH_SERVICE_URL` (default `http://127.0.0.1:8001`),
+`EVENT_REQUEST_API_URL` (8003), `VENUE_API_URL` (8004), `EQUIPMENT_API_URL` (8002).
+Venues are held in memory by `venueService` and are lost when it restarts.
 
 ## Getting Started
 
@@ -46,7 +77,9 @@ npm run build
 
 The Playwright suite starts isolated auth and event-request APIs on ports `8104`
 and `8103`, plus a frontend on `3100`. It exercises the browser workflow without
-changing the shared Supabase project.
+changing the shared Supabase project. The mock API has organiser, coordinator,
+second-coordinator and operations-manager sessions; coordinator assignment is
+driven through the API because no Operations Manager frontend exists yet.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

@@ -1,13 +1,29 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { listEventRequests } from "@/lib/event-requests";
-import { AppShell } from "../components/app-shell";
+import { unstable_rethrow } from "next/navigation";
+import { requireRole } from "@/lib/auth";
+import { groupRequests, listEventRequests, type RequestFilter } from "@/lib/event-requests";
+import { AppShell, workspaceLinks } from "../components/app-shell";
 import { RequestList } from "./request-list";
+import { RequestTabs } from "./request-tabs";
 
-async function RequestData() {
+const validFilters = new Set<RequestFilter>(["all", "draft", "submitted", "in-progress", "completed"]);
+
+async function RequestData({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const requestedFilter = (await searchParams).status;
+  const filter: RequestFilter = validFilters.has(requestedFilter as RequestFilter)
+    ? requestedFilter as RequestFilter
+    : "all";
   const result = await listEventRequests()
     .then((requests) => ({ requests, failed: false as const }))
-    .catch(() => ({ requests: [], failed: true as const }));
+    .catch((error: unknown) => {
+      unstable_rethrow(error);
+      return { requests: [], failed: true as const };
+    });
 
   if (result.failed) {
     return (
@@ -17,17 +33,41 @@ async function RequestData() {
       </div>
     );
   }
-  const drafts = result.requests.filter((request) => request.status === "Draft");
-  return <RequestList requests={drafts} />;
+  const groups = groupRequests(result.requests);
+  const counts = {
+    all: groups.all.length,
+    draft: groups.draft.length,
+    submitted: groups.submitted.length,
+    "in-progress": groups["in-progress"].length,
+    completed: groups.completed.length,
+  };
+  const emptyMessages: Record<RequestFilter, string> = {
+    all: "Create an event request to get started.",
+    draft: "Your saved drafts will appear here.",
+    submitted: "Submitted requests will appear here.",
+    "in-progress": "Requests being coordinated will appear here.",
+    completed: "Completed events will appear here after coordination finishes.",
+  };
+  return (
+    <>
+      <RequestTabs selected={filter} counts={counts} />
+      <RequestList requests={groups[filter]} emptyMessage={emptyMessages[filter]} />
+    </>
+  );
 }
 
 function ListLoading() {
   return <div aria-label="Loading event requests" className="space-y-3">{[1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" />)}</div>;
 }
 
-export default function EventRequestsPage() {
+export default async function EventRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const user = await requireRole("event_organiser");
   return (
-    <AppShell signedIn>
+    <AppShell signedIn navLinks={workspaceLinks(user.roles)}>
       <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0f6b5b]">Organiser workspace</p>
@@ -40,7 +80,7 @@ export default function EventRequestsPage() {
         </Link>
       </div>
       <Suspense fallback={<ListLoading />}>
-        <RequestData />
+        <RequestData searchParams={searchParams} />
       </Suspense>
     </AppShell>
   );

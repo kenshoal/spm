@@ -28,10 +28,8 @@ def settings(url=None):
     return Settings(
         _env_file=None,
         venue_storage_backend="memory",
-        venue_environment="development",
         supabase_url=None,
         supabase_secret_key=None,
-        venue_dev_staff_user_id=None,
         notification_service_url=url,
     )
 

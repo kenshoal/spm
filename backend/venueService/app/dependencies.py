@@ -1,67 +1,65 @@
-"""Authorisation dependencies.
-
-These are placeholders. The briefing requires role-based access (Venue Staff
-maintain the catalogue; authorised internal users may read it), but the auth
-service is a separate scaffold and no shared token verification exists yet.
-Memory mode returns a stub principal. Database mode requires explicit local
-development opt-in and uses a configured existing test user as the staff
-principal. Neither path verifies tokens or roles yet.
-
-TODO: replace with real verification against authService — validate the bearer
-token and confirm the caller's role.
-"""
+"""Authentication and role checks delegated to authService."""
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import Depends, HTTPException
-
-from app.config import Settings, get_settings
+import httpx
+from fastapi import Depends, Header, HTTPException, status
 
 
 @dataclass(frozen=True)
 class Principal:
     user_id: str
-    role: str
-
-
-def _check_development_access(settings: Settings) -> None:
-    if (
-        settings.venue_storage_backend == "supabase"
-        and not settings.venue_allow_stub_auth
-    ):
-        raise HTTPException(
-            503,
-            "Authentication is not integrated. Local testing requires "
-            "VENUE_ALLOW_STUB_AUTH=true; do not expose this development server.",
-        )
-
-
-def require_venue_staff(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> Principal:
-    """Caller must be Venue Staff (create / update catalogue records)."""
-
-    _check_development_access(settings)
-    if settings.venue_storage_backend == "supabase":
-        if settings.venue_dev_staff_user_id is None:
-            raise HTTPException(
-                503,
-                "Set VENUE_DEV_STAFF_USER_ID to an existing test user's UUID "
-                "until real staff authentication is integrated",
-            )
-        return Principal(
-            user_id=str(settings.venue_dev_staff_user_id), role="venue_staff"
-        )
-    return Principal(user_id="stub-venue-staff", role="venue_staff")
+    roles: tuple[str, ...]
 
 
 def require_authenticated(
-    settings: Annotated[Settings, Depends(get_settings)],
+    authorization: Annotated[str | None, Header()] = None,
 ) -> Principal:
-    """Caller must be an authenticated internal user (read / search)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token or " " in token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
 
-    _check_development_access(settings)
-    return Principal(user_id="stub-internal-user", role="event_coordinator")
+    try:
+        response = httpx.get(
+            f"{os.getenv('AUTH_SERVICE_URL', 'http://127.0.0.1:8001').rstrip('/')}/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+    except httpx.HTTPError as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
+        ) from error
+    if response.status_code == status.HTTP_401_UNAUTHORIZED:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
+    if not response.is_success:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Authentication service unavailable"
+        )
+    try:
+        user = response.json()
+        roles = user.get("roles") or [user["role"]]
+        if not isinstance(roles, list) or not all(
+            isinstance(role, str) for role in roles
+        ):
+            raise TypeError
+        return Principal(str(UUID(user["id"])), tuple(roles))
+    except (ValueError, KeyError, TypeError) as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Authentication service returned no user",
+        ) from error
+
+
+def require_venue_staff(
+    principal: Annotated[Principal, Depends(require_authenticated)],
+) -> Principal:
+    if "venue_staff" not in principal.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return principal

@@ -15,7 +15,7 @@ export function AuthForm() {
   const pending = mode === "login" ? loginPending : registerPending;
 
   return (
-    <div className="mx-auto max-w-md rounded-2xl border border-[#dce4e0] bg-white p-6 shadow-sm sm:p-8">
+    <div className="w-full max-w-md rounded-2xl border border-[#dce4e0] bg-white p-6 shadow-sm sm:p-8">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0f6b5b]">ConnectSphere account</p>
       <h1 className="mt-3 text-3xl font-bold tracking-tight text-[#17211d]">
         {mode === "login" ? "Log in" : "Create an account"}

@@ -34,7 +34,7 @@ in Jira story **SCRUM-8: Save a Draft Event Request**.
 | AC4 | Only the responsible organiser can modify the draft. | `test_other_organiser_cannot_read_update_or_delete`; token and spoofed-header tests; Supabase GET, PATCH and DELETE scoping tests | Covered with a verified Supabase user ID. |
 | AC5 | Drafts are absent from coordinator review and assignment work. | None | Pending because the coordinator review/assignment interface belongs to its separate story. It must receive a negative integration test when that interface exists. |
 | AC6 | Saving a draft does not submit, assign or notify. | Create tests assert `Draft`; frontend tests assert no submission action; repository create contract contains no assignment or notification operation. | Covered inside the current service boundary. Recheck when assignment and notification integrations are introduced. |
-| AC7 | Submission receives the saved values unchanged. | The all-fields round-trip test proves the stored draft can be retrieved unchanged. | Final hand-off verification remains pending SCRUM-11 because submission does not exist yet. |
+| AC7 | Submission receives the saved values unchanged. | `test_submit_completed_draft` | Covered by the SCRUM-11 Draft-to-Submitted hand-off. |
 
 SCRUM-8 should be closed only after the team accepts the
 coordinator-visibility and submission items as explicit cross-story dependencies,

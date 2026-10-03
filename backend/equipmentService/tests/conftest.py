@@ -75,14 +75,14 @@ def fake_client() -> FakeSupabase:
     return FakeSupabase()
 
 
-def _mock_auth(monkeypatch: pytest.MonkeyPatch, role: str) -> None:
+def _mock_auth(monkeypatch: pytest.MonkeyPatch, role: str, roles: list[str] | None = None) -> None:
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
     monkeypatch.setattr(
         httpx,
         "get",
         lambda *args, **kwargs: httpx.Response(
-            200, json={"id": USER_ID, "role": role}
+            200, json={"id": USER_ID, "role": role, "roles": roles or [role]}
         ),
     )
 
@@ -98,6 +98,18 @@ def auth(monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture
 def auth_staff(monkeypatch: pytest.MonkeyPatch):
     _mock_auth(monkeypatch, "technical_support")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def auth_manager_staff(monkeypatch: pytest.MonkeyPatch):
+    _mock_auth(
+        monkeypatch,
+        "event_operations_manager",
+        ["event_operations_manager", "technical_support"],
+    )
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

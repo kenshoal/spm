@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from app.dependencies import Principal, require_authenticated, require_venue_staff
 from app.main import app
 
 client = TestClient(app)
@@ -31,6 +32,34 @@ def test_create_venue_returns_stored_record() -> None:
     assert body["status"] == "available"
     assert body["created_at"]
     assert body["updated_at"]
+
+
+def test_non_venue_staff_cannot_create_venue() -> None:
+    def forbidden() -> Principal:
+        return Principal(
+            user_id="00000000-0000-0000-0000-000000000001",
+            roles=("event_operations_manager",),
+        )
+
+    app.dependency_overrides[require_authenticated] = forbidden
+    app.dependency_overrides.pop(require_venue_staff, None)
+    try:
+        response = client.post("/venues", json=_sample_payload())
+    finally:
+        app.dependency_overrides[require_venue_staff] = lambda: Principal(
+            user_id="00000000-0000-0000-0000-000000000001",
+            roles=("venue_staff",),
+        )
+
+    assert response.status_code == 403
+
+
+def test_venue_routes_require_authentication() -> None:
+    app.dependency_overrides.clear()
+
+    response = client.get("/venues")
+
+    assert response.status_code == 401
 
 
 def test_create_venue_rejects_non_positive_capacity() -> None:

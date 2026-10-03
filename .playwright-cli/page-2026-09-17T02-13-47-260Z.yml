@@ -1,0 +1,34 @@
+- generic [ref=f3e1]:
+  - generic [ref=f3e2]:
+    - banner [ref=f3e3]:
+      - generic [ref=f3e4]:
+        - link "CS ConnectSphere" [ref=f3e5] [cursor=pointer]:
+          - /url: /event-requests
+          - generic [ref=f3e6]: CS
+          - generic [ref=f3e7]: ConnectSphere
+        - generic [ref=f3e8]:
+          - link "Account" [ref=f3e9] [cursor=pointer]:
+            - /url: /auth
+          - generic [ref=f3e10]:
+            - paragraph [ref=f3e11]: Event organiser
+            - paragraph [ref=f3e12]: Organiser workspace
+          - generic [ref=f3e13]: EO
+    - main [ref=f3e14]:
+      - generic [ref=f3e15]:
+        - paragraph [ref=f3e16]: ConnectSphere account
+        - heading "Log in" [level=1] [ref=f3e17]
+        - paragraph [ref=f3e18]: Verify your account credentials.
+        - generic "Account action" [ref=f3e19]:
+          - button "Log in" [pressed] [ref=f3e20]
+          - button "Sign up" [ref=f3e21]
+        - generic [ref=f3e22]:
+          - generic [ref=f3e23]:
+            - text: Email
+            - textbox "Email" [active] [ref=f3e24]
+          - generic [ref=f3e25]:
+            - text: Password
+            - textbox "Password" [ref=f3e26]: test-password-123
+          - alert [ref=f3e30]: Invalid credentials or email confirmation is required.
+          - button "Log in" [ref=f3e27]
+        - paragraph [ref=f3e28]: Your session is kept in an HTTP-only browser cookie until it expires or you log out.
+  - alert [ref=f3e29]
