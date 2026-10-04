@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Purpose: SCRUM-16 AC1–AC3 — marking equipment damaged removes it from
-// availability and records who changed it and why.
+// AC1-H3, AC2, AC3 (happy path): marking equipment damaged removes it from availability and records who changed it and why
 test("technical support mark equipment damaged and see the history", async ({ page }) => {
   await page.context().addCookies([{ name: "cs_access_token", value: "tech-session", url: "http://127.0.0.1:3100" }]);
   await page.goto("/equipment/new");
