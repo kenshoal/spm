@@ -20,7 +20,7 @@ test.describe.serial("SCRUM-28 status tracking", () => {
   // Purpose: Covers the critical handoff journey — an organiser-submitted
   // request becomes visible to the assigned coordinator, who starts review;
   // the organiser sees the tracked status; an unrelated coordinator sees
-  // nothing (empty queue and not-found on the direct URL).
+  // not this request (and receives not-found on the direct URL).
   test("organiser submits, assigned coordinator starts review, others see nothing", async ({
     page,
     request,
@@ -76,9 +76,7 @@ test.describe.serial("SCRUM-28 status tracking", () => {
     await expect(page.locator('[aria-current="step"]')).toContainText("Submitted");
 
     await page.goto("/event-requests?status=in-progress");
-    await expect(
-      page.getByText("Requests being coordinated will appear here."),
-    ).toBeVisible();
+    await expect(page.getByText("Anniversary Fun Run")).toHaveCount(0);
 
     await page.context().addCookies(sessionCookie("coordinator-session"));
     await page.goto("/coordination/requests");
@@ -110,7 +108,7 @@ test.describe.serial("SCRUM-28 status tracking", () => {
 
     await page.context().addCookies(sessionCookie("other-coordinator-session"));
     await page.goto("/coordination/requests");
-    await expect(page.getByText("No assigned requests")).toBeVisible();
+    await expect(page.getByText("Anniversary Fun Run")).toHaveCount(0);
     await page.goto(`/coordination/requests/${eventId}`);
     await expect(page.getByText("Request not found")).toBeVisible();
   });

@@ -1,13 +1,16 @@
 from typing import Any, NoReturn
 
 from app.models.event_request import (
+    EventClarificationResponse,
     EventRequestCreate,
     EventRequestResponse,
     EventRequestStatus,
     EventRequestSubmission,
     EventRequestUpdate,
+    EventReviewDecisionResponse,
 )
 from app.repositories import EventRequestRepository
+from app.repositories.event_request_repository import EventRequestRpcError
 
 
 class EventRequestNotFoundError(Exception):
@@ -19,6 +22,14 @@ class EventRequestNotFoundError(Exception):
 class EventRequestNotDraftError(Exception):
     def __init__(self, event_request_id: str) -> None:
         super().__init__(f"Event request {event_request_id} is no longer a Draft")
+        self.event_request_id = event_request_id
+
+
+class ClarificationResponseNotAllowedError(Exception):
+    def __init__(self, event_request_id: str) -> None:
+        super().__init__(
+            f"Event request {event_request_id} is not accepting a clarification response"
+        )
         self.event_request_id = event_request_id
 
 
@@ -123,6 +134,35 @@ class EventRequestService:
         )
         return self._row_to_response(row)
 
+    def decide_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        decision: EventRequestStatus,
+        reason: str | None,
+    ) -> EventRequestResponse:
+        row = self.repository.decide_by_coordinator(
+            event_request_id,
+            coordinator_id,
+            decision.value,
+            reason,
+        )
+        return self._row_to_response(row)
+
+    def resume_review_by_coordinator(
+        self, event_request_id: str, coordinator_id: str
+    ) -> EventRequestResponse:
+        row = self.repository.resume_review_by_coordinator(
+            event_request_id, coordinator_id
+        )
+        return self._row_to_response(row)
+
+    def list_review_decisions(
+        self, event_request_id: str
+    ) -> list[EventReviewDecisionResponse]:
+        rows = self.repository.list_review_decisions(event_request_id)
+        return [EventReviewDecisionResponse.model_validate(row) for row in rows]
+
     def update(
         self,
         event_request_id: str,
@@ -156,6 +196,24 @@ class EventRequestService:
         if row is None:
             self._raise_not_found_or_not_draft(event_request_id, organiser_id)
         return self._row_to_response(row)
+
+    def respond_to_clarification(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        payload: EventClarificationResponse,
+    ) -> EventReviewDecisionResponse:
+        try:
+            row = self.repository.respond_to_clarification(
+                event_request_id, organiser_id, payload.response
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == "P0002":
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == "P0004":
+                raise ClarificationResponseNotAllowedError(event_request_id) from error
+            raise
+        return EventReviewDecisionResponse.model_validate(row)
 
     def delete(self, event_request_id: str, organiser_id: str) -> None:
         deleted = self.repository.delete_for_organiser(event_request_id, organiser_id)

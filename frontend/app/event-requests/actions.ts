@@ -14,6 +14,12 @@ export interface DeleteEventRequestState {
   message?: string;
 }
 
+export interface ClarificationResponseState {
+  submitted?: boolean;
+  message?: string;
+  errors?: { response?: string };
+}
+
 const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
 function optionalText(formData: FormData, field: string): string | null {
@@ -203,6 +209,52 @@ export async function submitDraftEventRequest(
     `/event-requests/${encodeURIComponent(eventRequestId)}/submit`,
     formData,
   );
+}
+
+export async function respondToClarification(
+  eventRequestId: string,
+  _previousState: ClarificationResponseState,
+  formData: FormData,
+): Promise<ClarificationResponseState> {
+  await requireRole("event_organiser");
+  const responseText = String(formData.get("response") ?? "").trim();
+  if (!responseText) {
+    return {
+      message: "Enter a response before sending it.",
+      errors: { response: "Explain the clarification for your coordinator." },
+    };
+  }
+
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/clarification-response`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ response: responseText }),
+      },
+    );
+  } catch {
+    return { message: "The clarification could not be sent. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    return {
+      message:
+        response.status === 409
+          ? "This clarification has already been answered or review has continued."
+          : "The clarification could not be sent. Please try again.",
+    };
+  }
+
+  revalidatePath("/event-requests");
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  return { submitted: true };
 }
 
 export async function deleteEventRequest(
