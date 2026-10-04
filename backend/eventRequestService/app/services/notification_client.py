@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import httpx
 
@@ -8,11 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationClient:
-    """Hook for a future Notification System — no such service exists yet,
-    so without notification_service_url configured this is a no-op. A
-    failed or unreachable notification is logged, never raised: notifying
-    is a side effect of assignment, not part of its contract, and must
-    never be the reason an assignment fails.
+    """Sends domain events to notificationService (SCRUM-37); without
+    notification_service_url configured nothing is sent. A failed or
+    unreachable notification is logged, never raised: notifying is a side
+    effect of assignment, not part of its contract, and must never be the
+    reason an assignment fails.
     """
 
     def __init__(self, notification_service_url: str | None) -> None:
@@ -54,3 +55,35 @@ class NotificationClient:
                 event_request_id,
                 exc_info=True,
             )
+
+    def notify_event_request_submitted(
+        self, *, event_id: str, organiser_id: str, payload: dict[str, Any]
+    ) -> bool:
+        """Send the Organiser's submission confirmation (SCRUM-37 AC1).
+
+        Returns whether it was delivered, so the outbox relay marks an event as
+        published only once notificationService has accepted it.
+        """
+        if self._url is None:
+            return False
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": "event_request_submitted",
+                    "recipient_id": organiser_id,
+                    "event_id": event_id,
+                    "payload": payload,
+                },
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to send submission confirmation %s to organiser %s",
+                event_id,
+                organiser_id,
+                exc_info=True,
+            )
+            return False
+        return True

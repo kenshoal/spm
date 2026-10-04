@@ -83,6 +83,25 @@ text: `P0002` → 404, `P0003` → 403, `P0004` → 409. Apply `0012` to the tar
 Supabase project before deploying this service; see `database/README.md`.
 Notifications for these transitions belong to SCRUM-36/37.
 
+## Submission confirmations
+
+When an event request becomes `Submitted`, the database records one
+`event_request.submitted` row in `event_request_outbox` (migration `0008`).
+While the service runs, a background relay checks that table every 10 seconds
+and sends each unpublished row to notificationService as an
+`event_request_submitted` notification for the Organiser (SCRUM-37 AC1), then
+sets `published_at`.
+
+- A row is marked published only after notificationService accepts it, so an
+  unreachable notification service delays confirmations instead of losing
+  them.
+- The outbox row id is sent as `event_id`, and notificationService stores a
+  repeated `event_id` once, so a re-sent row never notifies the Organiser
+  twice.
+- The relay runs only when `NOTIFICATION_SERVICE_URL` and Supabase are both
+  configured. Without them, rows stay unpublished until a relay can deliver
+  them.
+
 ## Run locally on macOS/Linux
 
 The standard project workflow is to run `docker compose up --build -d` from
