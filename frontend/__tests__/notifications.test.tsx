@@ -40,10 +40,64 @@ test("describes a coordinator assignment with a link to the coordination view", 
   });
 });
 
-// AC6-P4 (partition): A type this page doesn't know yet (e.g. clarification requests) still shows,
+// AC3-H1 (happy): SCRUM-37 AC3 — the Organiser is told a clarification was requested, is shown what
+// the Coordinator needs, and is linked to the request where they can respond.
+test("describes a clarification request with the reason and a link to the request", () => {
+  const notification = makeNotification({
+    event_type: "clarification_requested",
+    payload: { event_request_id: "req-3", reason: "Please clarify the accessibility plan." },
+  });
+
+  expect(describeNotification(notification)).toEqual({
+    message: "A coordinator has asked for clarification on your event request.",
+    href: "/event-requests/req-3/edit",
+    detail: "Please clarify the accessibility plan.",
+  });
+});
+
+// AC3-P3 (partition): A clarification notice with no usable reason still shows and links, without a
+// blank or "undefined" detail line.
+test.each([{}, { reason: "   " }, { reason: 42 }])(
+  "shows a clarification request without a detail line when the reason is %j",
+  (extra) => {
+    const notification = makeNotification({
+      event_type: "clarification_requested",
+      payload: { event_request_id: "req-3", ...extra },
+    });
+
+    const summary = describeNotification(notification);
+    expect(summary.message).toBe("A coordinator has asked for clarification on your event request.");
+    expect(summary.href).toBe("/event-requests/req-3/edit");
+    expect(summary.detail).toBeUndefined();
+  },
+);
+
+// AC3-H1 (happy): The inbox card for a clarification request shows the reason the Coordinator gave.
+test("shows the clarification the coordinator asked for on the notification", () => {
+  render(
+    <NotificationList
+      notifications={[
+        makeNotification({
+          event_type: "clarification_requested",
+          payload: { event_request_id: "req-3", reason: "Please clarify the accessibility plan." },
+        }),
+      ]}
+    />,
+  );
+
+  const card = screen.getByRole("article", {
+    name: "A coordinator has asked for clarification on your event request.",
+  });
+  expect(within(card).getByText("Please clarify the accessibility plan.")).toBeDefined();
+  expect(within(card).getByRole("link", { name: "View request" }).getAttribute("href")).toBe(
+    "/event-requests/req-3/edit",
+  );
+});
+
+// AC6-P4 (partition): A type this page doesn't know yet (e.g. a venue booking decision) still shows,
 // without guessing which view the recipient can open.
 test("falls back to a generic message without a link for an unknown type", () => {
-  expect(describeNotification(makeNotification({ event_type: "clarification_requested" }))).toEqual({
+  expect(describeNotification(makeNotification({ event_type: "venue_booking_decided" }))).toEqual({
     message: "There's an update on an event request.",
     href: null,
   });
@@ -94,7 +148,7 @@ test("shows when it happened and links to the request", () => {
 
 // AC6-P4 (partition): An unknown type is listed without a dead "View request" link.
 test("shows no link for a notification without a destination", () => {
-  render(<NotificationList notifications={[makeNotification({ event_type: "clarification_requested" })]} />);
+  render(<NotificationList notifications={[makeNotification({ event_type: "venue_booking_decided" })]} />);
 
   const card = screen.getByRole("article", { name: "There's an update on an event request." });
   expect(within(card).queryByRole("link", { name: "View request" })).toBeNull();

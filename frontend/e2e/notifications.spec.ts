@@ -52,4 +52,33 @@ test.describe.serial("SCRUM-37 notifications inbox", () => {
     const card = page.getByRole("article", { name: "You've been assigned an event request." });
     await expect(card.getByRole("link", { name: "View request" })).toHaveAttribute("href", "/coordination/requests/e2e-request-1");
   });
+
+  // AC3-H1 (happy): AC3 end to end — the Organiser sees what the Coordinator asked to have clarified,
+  // on the notification itself, linked to the request. The Coordinator is not the recipient and never
+  // sees it (relevance rule, C-1b).
+  test("organiser sees the clarification a coordinator asked for", async ({ page, request }) => {
+    const reason = "Please clarify the accessibility plan.";
+    const seed = await request.post(`${NOTIFICATION_API}/__seed`, {
+      data: {
+        recipient_id: "playwright-user",
+        event_type: "clarification_requested",
+        payload: { event_request_id: "e2e-request-1", reason },
+      },
+    });
+    expect(seed.ok()).toBeTruthy();
+
+    await page.context().addCookies(sessionCookie("test-session"));
+    await page.goto("/notifications");
+
+    const card = page.getByRole("article", { name: "A coordinator has asked for clarification on your event request." });
+    await expect(card.getByText(reason)).toBeVisible();
+    await expect(card.getByText("Unread")).toBeVisible();
+    await expect(card.getByRole("link", { name: "View request" })).toHaveAttribute("href", "/event-requests/e2e-request-1/edit");
+
+    await page.context().addCookies(sessionCookie("coordinator-session"));
+    await page.goto("/notifications");
+    await expect(
+      page.getByRole("article", { name: "A coordinator has asked for clarification on your event request." }),
+    ).toHaveCount(0);
+  });
 });

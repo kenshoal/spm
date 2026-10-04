@@ -11,6 +11,8 @@ export interface AppNotification {
 export interface NotificationSummary {
   message: string;
   href: string | null;
+  // A line under the message, e.g. what the Coordinator needs clarified.
+  detail?: string;
 }
 
 export const notificationApi = process.env.NOTIFICATION_API_URL ?? "http://127.0.0.1:8005";
@@ -30,6 +32,15 @@ export function describeNotification(notification: AppNotification): Notificatio
       return { message: "Your event request was submitted.", href: id && `/event-requests/${id}/edit` };
     case "coordinator_assigned":
       return { message: "You've been assigned an event request.", href: id && `/coordination/requests/${id}` };
+    case "clarification_requested": {
+      // The Organiser answers on the same page they edit and track the request from.
+      const reason = notification.payload.reason;
+      return {
+        message: "A coordinator has asked for clarification on your event request.",
+        href: id && `/event-requests/${id}/edit`,
+        ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
+      };
+    }
     default:
       return { message: "There's an update on an event request.", href: null };
   }

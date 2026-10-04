@@ -10,7 +10,7 @@ export function NotificationList({ notifications }: { notifications: AppNotifica
   return (
     <div className="space-y-3">
       {notifications.map((notification) => {
-        const { message, href } = describeNotification(notification);
+        const { message, href, detail } = describeNotification(notification);
         const unread = notification.read_at === null;
         const headingId = `notification-${notification.id}`;
         return (
@@ -23,6 +23,7 @@ export function NotificationList({ notifications }: { notifications: AppNotifica
               <h2 id={headingId} className={`text-base sm:text-lg ${unread ? "font-bold text-[#17211d]" : "font-semibold text-[#3c4d46]"}`}>{message}</h2>
               {unread ? <span className="rounded-full bg-[#0f6b5b] px-2.5 py-1 text-xs font-bold text-white">Unread</span> : null}
             </div>
+            {detail ? <p className="mt-2 whitespace-pre-line break-words text-sm text-[#3c4d46]">{detail}</p> : null}
             <p className="mt-2 text-xs font-medium text-[#718078]">
               <time dateTime={notification.created_at}>{formatDateTime(notification.created_at)}</time>
             </p>
