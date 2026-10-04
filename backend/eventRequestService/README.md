@@ -115,6 +115,22 @@ sets `published_at`.
   configured. Without them, rows stay unpublished until a relay can deliver
   them.
 
+## Clarification notices
+
+When the assigned Coordinator records a `Changes Requested` decision through
+`POST /event-requests/{id}/decision`, the service sends the owning Organiser a
+`clarification_requested` notification carrying the Coordinator's reason
+(SCRUM-37 AC3), after the decision has been written.
+
+- The notice is sent once and is not retried. If notificationService is
+  unreachable, the failure is logged and the decision still succeeds; the
+  Organiser can read the clarification on the request itself. Unlike the
+  submission confirmation, it does not go through the outbox.
+- Approved and Rejected decisions send nothing here; their notices belong to
+  SCRUM-36.
+- A refused decision (wrong Coordinator, wrong status, missing reason) sends
+  nothing.
+
 ## Run locally on macOS/Linux
 
 The standard project workflow is to run `docker compose up --build -d` from

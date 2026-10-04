@@ -12,8 +12,8 @@ class NotificationClient:
     """Sends domain events to notificationService (SCRUM-37); without
     notification_service_url configured nothing is sent. A failed or
     unreachable notification is logged, never raised: notifying is a side
-    effect of assignment, not part of its contract, and must never be the
-    reason an assignment fails.
+    effect of assignment or a review decision, not part of its contract, and
+    must never be the reason either fails.
     """
 
     def __init__(self, notification_service_url: str | None) -> None:
@@ -52,6 +52,40 @@ class NotificationClient:
             logger.warning(
                 "Failed to notify coordinator %s of assignment to event request %s",
                 coordinator_id,
+                event_request_id,
+                exc_info=True,
+            )
+
+    def notify_clarification_requested(
+        self, *, event_request_id: str, organiser_id: str, reason: str
+    ) -> None:
+        """Tell the Organiser what the Coordinator needs clarified (SCRUM-37 AC3).
+
+        Sent once, after the decision is recorded, with no retry: if
+        notificationService is down the Organiser still finds the clarification
+        on the request itself.
+        """
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": "clarification_requested",
+                    "recipient_id": organiser_id,
+                    "payload": {
+                        "event_request_id": event_request_id,
+                        "reason": reason,
+                    },
+                },
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify organiser %s of the clarification requested on "
+                "event request %s",
+                organiser_id,
                 event_request_id,
                 exc_info=True,
             )
