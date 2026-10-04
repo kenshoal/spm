@@ -37,3 +37,15 @@ Approval, rejection, changes requested, planning, confirmation and automatic
 completion must be written by their own stories, not invented in
 `eventRequestService`. When the coordination service is integrated, move these
 commands behind the hand-off contract above.
+
+## Access-control boundaries still awaiting domain models
+
+- Event Organisers are currently scoped to requests whose `organiser_id` is
+  their own user ID. Organisation-wide or same-client access stays denied until
+  organisation membership and the same-client rule are defined.
+- Attendees cannot read event requests. A public/registration-facing view needs
+  a published event model so internal request fields are never reused as public
+  content.
+- Venue and equipment catalogues are role-scoped, but booking and reservation
+  access cannot be relationship-scoped until those records identify their
+  event, venue or responsible staff relationship.
