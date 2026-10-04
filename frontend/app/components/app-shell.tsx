@@ -22,6 +22,7 @@ export function workspaceLinks(roles: string[]): NavLink[] {
   }
   if (roles.includes("venue_staff")) {
     links.push({ href: "/venues", label: "Venues" });
+    links.push({ href: "/venue-blocks", label: "Venue blocks" });
   }
   if (roles.includes("event_coordinator") || roles.includes("venue_staff")) {
     links.push({ href: "/venues/search", label: "Venue search" });
