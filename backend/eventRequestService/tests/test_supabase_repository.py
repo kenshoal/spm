@@ -315,6 +315,88 @@ def test_advance_by_coordinator_posts_expected_rpc_request() -> None:
     assert row["status"] == "Under Review"
 
 
+# Purpose: Review outcomes and reasons are sent to the atomic decision RPC unchanged.
+def test_decide_by_coordinator_posts_expected_rpc_request() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=response_row(status="Changes Requested"))
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    row = repository.decide_by_coordinator(
+        "request-1",
+        "coord-1",
+        "Changes Requested",
+        "Clarify the equipment plan.",
+    )
+
+    assert captured["path"] == "/rest/v1/rpc/decide_event_request_by_coordinator"
+    assert captured["body"] == {
+        "p_event_request_id": "request-1",
+        "p_coordinator_id": "coord-1",
+        "p_decision_status": "Changes Requested",
+        "p_reason": "Clarify the equipment plan.",
+    }
+    assert row["status"] == "Changes Requested"
+
+
+# Purpose: Decision history uses a stable newest-first order even when timestamps tie.
+def test_list_review_decisions_scopes_and_orders_query() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["query"] = dict(request.url.params)
+        return httpx.Response(200, json=[])
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    repository.list_review_decisions("request-1")
+
+    assert captured["path"] == "/rest/v1/event_request_review_decisions"
+    assert captured["query"] == {
+        "event_request_id": "eq.request-1",
+        "order": "decided_at.desc,id.desc",
+        "select": "*",
+    }
+
+
+# Purpose: Clarification responses use the owner-checking database RPC.
+def test_respond_to_clarification_calls_atomic_rpc() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"id": 1})
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    row = repository.respond_to_clarification(
+        "request-1", "organiser-1", "Microphone needed."
+    )
+
+    assert captured["path"] == "/rest/v1/rpc/respond_to_event_request_clarification"
+    assert captured["body"] == {
+        "p_event_request_id": "request-1",
+        "p_organiser_id": "organiser-1",
+        "p_response": "Microphone needed.",
+    }
+    assert row == {"id": 1}
+
+
 @pytest.mark.parametrize(
     ("errcode",),
     [("P0002",), ("P0003",), ("P0004",)],

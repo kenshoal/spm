@@ -110,12 +110,71 @@ class EventRequestSubmission(BaseModel):
     registration_needs: str = Field(min_length=1, max_length=2_000)
 
 
+class EventReviewDecision(BaseModel):
+    """A coordinator's outcome after reviewing a submitted request."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    decision: EventRequestStatus
+    reason: str | None = Field(default=None, max_length=2_000)
+
+    @field_validator("decision")
+    @classmethod
+    def decision_must_close_review(
+        cls, value: EventRequestStatus
+    ) -> EventRequestStatus:
+        allowed = {
+            EventRequestStatus.APPROVED,
+            EventRequestStatus.CHANGES_REQUESTED,
+            EventRequestStatus.REJECTED,
+        }
+        if value not in allowed:
+            raise ValueError("decision must be Approved, Changes Requested, or Rejected")
+        return value
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def blank_reason_is_missing(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    def requires_reason(self) -> bool:
+        return self.decision in {
+            EventRequestStatus.CHANGES_REQUESTED,
+            EventRequestStatus.REJECTED,
+        }
+
+
+class EventClarificationResponse(BaseModel):
+    """The organiser's response to the latest clarification request.
+
+    Submitted request fields remain immutable; this response tells the
+    coordinator what should be clarified or considered during the next review.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    response: str = Field(min_length=1, max_length=2_000)
+
+
 class EventRequestResponse(EventRequestFields):
     id: str
     organiser_id: str
     status: EventRequestStatus
     created_at: datetime
     updated_at: datetime
+
+
+class EventReviewDecisionResponse(BaseModel):
+    id: int
+    event_request_id: str
+    coordinator_id: str
+    decision_status: EventRequestStatus
+    reason: str | None
+    decided_at: datetime
+    organiser_response: str | None = None
+    responded_at: datetime | None = None
 
 
 class HealthResponse(BaseModel):

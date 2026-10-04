@@ -4,14 +4,16 @@ import { useActionState, useState } from "react";
 import {
   cancelEventRequest,
   completeEventRequest,
+  resumeEventRequestReview,
   startEventRequestReview,
   type TransitionState,
 } from "../../actions";
 
-type TransitionKind = "review" | "cancellation" | "completion";
+type TransitionKind = "review" | "resume-review" | "cancellation" | "completion";
 
 const actions = {
   review: startEventRequestReview,
+  "resume-review": resumeEventRequestReview,
   cancellation: cancelEventRequest,
   completion: completeEventRequest,
 } as const;
@@ -21,6 +23,7 @@ const buttons: Record<
   { label: string; pending: string; destructive?: boolean }
 > = {
   review: { label: "Start review", pending: "Starting review…" },
+  "resume-review": { label: "Continue review", pending: "Continuing review…" },
   cancellation: {
     label: "Cancel event",
     pending: "Cancelling…",

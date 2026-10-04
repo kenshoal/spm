@@ -43,7 +43,8 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: "npm run build && npm run start -- --hostname 127.0.0.1 --port 3100",
+      // Webpack avoids Turbopack's internal helper-port requirement in restricted CI runners.
+      command: "npm run build -- --webpack && npm run start -- --hostname 127.0.0.1 --port 3100",
       url: "http://127.0.0.1:3100",
       reuseExistingServer: false,
       timeout: 120_000,

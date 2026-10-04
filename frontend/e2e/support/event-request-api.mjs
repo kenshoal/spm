@@ -3,7 +3,9 @@ import { createServer } from "node:http";
 
 const records = new Map();
 const assignments = [];
+const reviewDecisions = [];
 let nextAssignmentId = 1;
+let nextDecisionId = 1;
 const port = 8103;
 
 // Mirrors the sessions defined in auth-api.mjs — one identity each, with the
@@ -89,15 +91,28 @@ createServer(async (request, response) => {
   // Confirmed, which the venue/ops stories own on other branches).
   if (url.pathname === "/__seed" && request.method === "POST") {
     const body = await readJson(request);
-    const record = recordFields({ ...body, status: body.status ?? "Submitted" });
+    const { coordinator_id, review_decision, ...recordOverrides } = body;
+    const record = recordFields({ ...recordOverrides, status: body.status ?? "Submitted" });
     records.set(record.id, record);
-    if (body.coordinator_id) {
+    if (coordinator_id) {
       assignments.push({
         id: nextAssignmentId++,
         event_request_id: record.id,
-        coordinator_id: body.coordinator_id,
+        coordinator_id,
         assigned_by: "seed",
         assigned_at: new Date().toISOString(),
+      });
+    }
+    if (review_decision) {
+      reviewDecisions.push({
+        id: nextDecisionId++,
+        event_request_id: record.id,
+        coordinator_id: review_decision.coordinator_id ?? coordinator_id,
+        decision_status: review_decision.decision_status,
+        reason: review_decision.reason ?? null,
+        decided_at: review_decision.decided_at ?? new Date().toISOString(),
+        organiser_response: review_decision.organiser_response ?? null,
+        responded_at: review_decision.responded_at ?? null,
       });
     }
     send(response, 201, record);
@@ -191,11 +206,15 @@ createServer(async (request, response) => {
   }
 
   const coordinatorMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/coordinator$/);
-  const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|cancellation|completion)$/);
+  const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|resume-review|cancellation|completion)$/);
+  const decisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decision$/);
+  const decisionsMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decisions$/);
+  const clarificationMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/clarification-response$/);
   const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
   const match = url.pathname.match(/^\/event-requests\/([^/]+)$/);
   const id = decodeURIComponent(
-    coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
+    coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? decisionMatch?.[1]
+      ?? decisionsMatch?.[1] ?? clarificationMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
   );
   const record = records.get(id);
 
@@ -300,6 +319,11 @@ createServer(async (request, response) => {
     const [, , action] = transitionMatch;
     const allowed =
       (action === "review" && record.status === "Submitted") ||
+      (action === "resume-review" && record.status === "Changes Requested"
+        && reviewDecisions.some((decision) =>
+          decision.event_request_id === id
+          && decision.decision_status === "Changes Requested"
+          && decision.organiser_response)) ||
       (action === "completion" && record.status === "Confirmed") ||
       (action === "cancellation" && CANCEL_SOURCES.has(record.status));
     if (!allowed) {
@@ -308,11 +332,74 @@ createServer(async (request, response) => {
     }
     const updated = {
       ...record,
-      status: action === "review" ? "Under Review" : action === "completion" ? "Completed" : "Cancelled",
+      status: action === "review" || action === "resume-review" ? "Under Review" : action === "completion" ? "Completed" : "Cancelled",
       updated_at: new Date().toISOString(),
     };
     records.set(id, updated);
     send(response, 200, updated);
+    return;
+  }
+
+  if (request.method === "POST" && decisionMatch) {
+    if (user.role !== "event_coordinator") {
+      send(response, 403, { detail: "Insufficient permissions" });
+      return;
+    }
+    if (latestAssignmentFor(id)?.coordinator_id !== user.id) {
+      send(response, 403, { detail: "Only the assigned Coordinator can decide this request" });
+      return;
+    }
+    if (record.status !== "Under Review") {
+      send(response, 409, { detail: "Request is not under review" });
+      return;
+    }
+    const body = await readJson(request);
+    if (!["Approved", "Changes Requested", "Rejected"].includes(body.decision)) {
+      send(response, 422, { detail: "Invalid decision" });
+      return;
+    }
+    if (["Changes Requested", "Rejected"].includes(body.decision) && !body.reason?.trim()) {
+      send(response, 422, { detail: "Reason required" });
+      return;
+    }
+    reviewDecisions.push({
+      id: nextDecisionId++,
+      event_request_id: id,
+      coordinator_id: user.id,
+      decision_status: body.decision,
+      reason: body.reason ?? null,
+      decided_at: new Date().toISOString(),
+      organiser_response: null,
+      responded_at: null,
+    });
+    const updated = {
+      ...record,
+      status: body.decision,
+      updated_at: new Date().toISOString(),
+    };
+    records.set(id, updated);
+    send(response, 200, updated);
+    return;
+  }
+
+  if (request.method === "GET" && decisionsMatch) {
+    if (record.review_history_unavailable) {
+      send(response, 503, { detail: "Review activity unavailable" });
+      return;
+    }
+    const assigned = latestAssignmentFor(id)?.coordinator_id === user.id;
+    const canRead =
+      (user.role === "event_organiser" && record.organiser_id === user.id)
+      || (user.role === "event_coordinator" && assigned);
+    if (!canRead) {
+      send(response, ["event_organiser", "event_coordinator"].includes(user.role) ? 404 : 403, {
+        detail: "Event request not found",
+      });
+      return;
+    }
+    send(response, 200, reviewDecisions
+      .filter((decision) => decision.event_request_id === id)
+      .sort((a, b) => b.decided_at.localeCompare(a.decided_at)));
     return;
   }
 
@@ -336,6 +423,25 @@ createServer(async (request, response) => {
     };
     records.set(id, updated);
     send(response, 200, updated);
+    return;
+  }
+
+  if (request.method === "POST" && clarificationMatch) {
+    if (record.status !== "Changes Requested") {
+      send(response, 409, { detail: "Request is not awaiting clarification" });
+      return;
+    }
+    const latest = reviewDecisions
+      .filter((decision) => decision.event_request_id === id && decision.decision_status === "Changes Requested")
+      .sort((a, b) => b.id - a.id)[0];
+    const body = await readJson(request);
+    if (!latest || latest.organiser_response || !body.response?.trim()) {
+      send(response, 409, { detail: "Clarification response not allowed" });
+      return;
+    }
+    latest.organiser_response = body.response.trim();
+    latest.responded_at = new Date().toISOString();
+    send(response, 200, latest);
     return;
   }
 
