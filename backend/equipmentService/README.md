@@ -4,6 +4,10 @@ Equipment catalogue & status microservice (SCRUM-16, SCRUM-45). Reads/writes the
 
 ## Run locally
 
+The standard project workflow is to run `docker compose up --build -d` from
+the repository root. This exposes equipmentService on `http://localhost:8002`.
+Use the commands below only when developing this service by itself.
+
 ```powershell
 python -m venv .venv
 ./.venv/Scripts/Activate.ps1

@@ -27,26 +27,15 @@ from app.models import (
     VenueStatus,
     VenueUpdate,
 )
-from app.storage import BlockStore, Stores, VenueStore, get_stores
+from app.repository import VenueStore, get_repository
+from app.storage import BlockStore, get_block_repository
 
 router = APIRouter(prefix="/venues", tags=["venues"])
-
-
-def get_repository(stores: Annotated[Stores, Depends(get_stores)]) -> VenueStore:
-    """Dependency seam so tests can override the store."""
-
-    return stores.venues
 
 
 RepoDep = Annotated[VenueStore, Depends(get_repository)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
 AuthenticatedDep = Annotated[Principal, Depends(require_authenticated)]
-
-
-def get_block_repository(stores: Annotated[Stores, Depends(get_stores)]) -> BlockStore:
-    return stores.blocks
-
-
 BlockRepoDep = Annotated[BlockStore, Depends(get_block_repository)]
 
 

@@ -37,7 +37,7 @@ def venue_id() -> str:
 def test_create_block_stores_normalized_record_and_server_metadata(venue_id):
     previous = app.dependency_overrides.copy()
     app.dependency_overrides[require_venue_staff] = lambda: Principal(
-        user_id="test-staff", role="venue_staff"
+        user_id="test-staff", roles=("venue_staff",)
     )
     try:
         response = client.post(f"/venues/{venue_id}/blocks", json=payload())

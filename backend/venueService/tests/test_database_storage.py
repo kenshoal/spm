@@ -5,7 +5,6 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -15,14 +14,16 @@ from app.block_repository import block_repository
 from app.config import Settings, get_settings
 from app.main import app
 from app.models import Venue
-from app.repository import repository
-from app.supabase_repository import (
+from app.repository import get_repository, repository
+from app.supabase_block_repository import (
     StorageError,
     SupabaseBlockRepository,
     SupabaseDataAPI,
 )
+from app.supabase_repository import SupabaseVenueRepository
 
-CREATOR = str(uuid4())
+# The verified caller set up in conftest.py.
+CREATOR = "00000000-0000-0000-0000-000000000001"
 
 
 def settings(**overrides):
@@ -33,9 +34,6 @@ def settings(**overrides):
                 "venue_storage_backend": "supabase",
                 "supabase_url": "https://database.example",
                 "supabase_secret_key": "sb_secret_test-only",
-                "venue_environment": "development",
-                "venue_allow_stub_auth": True,
-                "venue_dev_staff_user_id": CREATOR,
             }
             | overrides
         ),
@@ -51,12 +49,13 @@ def database(monkeypatch):
     def handle(request):
         calls.append(request)
         assert request.headers["apikey"] == "sb_secret_test-only"
-        assert "authorization" not in request.headers
         table = request.url.path.rsplit("/", 1)[-1]
         params = request.url.params
         if request.method == "POST":
             payload = json.loads(request.content)
-            assert "id" not in payload and "created_at" not in payload
+            if table == "venue_blocks":
+                assert "authorization" not in request.headers
+                assert "id" not in payload and "created_at" not in payload
             assert request.headers["prefer"] == "return=representation"
             model = Venue if table == "venues" else VenueBlock
             row = model(**payload).model_dump(mode="json")
@@ -74,11 +73,20 @@ def database(monkeypatch):
                 row.update(json.loads(request.content))
             return httpx.Response(200, json=rows)
         assert request.method == "GET"
+        if table == "venues":
+            return httpx.Response(200, json=rows)
         # Simulate a database row cap below the requested page size.
         rows = sorted(rows, key=lambda row: row["id"])
         offset = int(params.get("offset", "0"))
         return httpx.Response(200, json=rows[offset : offset + 1])
 
+    # Venues use the shared SupabaseVenueRepository; built before patching so
+    # its long-lived client is not counted among the per-request block clients.
+    venues = SupabaseVenueRepository(
+        "https://database.example",
+        "sb_secret_test-only",
+        transport=httpx.MockTransport(handle),
+    )
     original_client = httpx.Client
 
     def make_client(*args, **kwargs):
@@ -88,6 +96,7 @@ def database(monkeypatch):
 
     monkeypatch.setattr(storage.httpx, "Client", make_client)
     app.dependency_overrides[get_settings] = lambda: settings()
+    app.dependency_overrides[get_repository] = lambda: venues
     yield tables, calls
     assert all(client.is_closed for client in clients)
 
@@ -185,24 +194,6 @@ def test_database_blocks_are_scoped_to_venue(database):
 
 
 @pytest.mark.parametrize(
-    "options,path,method",
-    [
-        ({"venue_allow_stub_auth": False}, "/venues", "get"),
-        ({"venue_allow_stub_auth": False}, "/venues", "post"),
-        ({"venue_dev_staff_user_id": None}, "/venues", "post"),
-    ],
-)
-def test_unconfigured_development_identity_fails_before_database_request(
-    database, options, path, method
-):
-    app.dependency_overrides[get_settings] = lambda: settings(**options)
-    with TestClient(app) as client:
-        response = getattr(client, method)(path)
-    assert response.status_code == 503
-    assert database[1] == []
-
-
-@pytest.mark.parametrize(
     "code,expected", [("23503", 409), ("23514", 422), ("42501", 502)]
 )
 def test_database_errors_are_sanitized_and_mapped(code, expected):
@@ -213,8 +204,8 @@ def test_database_errors_are_sanitized_and_mapped(code, expected):
 
     with httpx.Client(transport=httpx.MockTransport(handle)) as client:
         api = SupabaseDataAPI(client, "https://database.example", "sb_secret_test")
-        app.dependency_overrides[storage.get_stores] = lambda: storage.Stores(
-            storage.repository, SupabaseBlockRepository(api)
+        app.dependency_overrides[storage.get_block_repository] = (
+            lambda: SupabaseBlockRepository(api)
         )
         with TestClient(app) as test_client:
             venue = create_venue(test_client)
@@ -259,24 +250,8 @@ def test_invalid_creator_is_not_sent_to_database():
         {"supabase_secret_key": None},
         {"supabase_url": None},
         {"supabase_secret_key": "sb_publishable_wrong"},
-        {"venue_dev_staff_user_id": "stub-venue-staff"},
-        {"venue_environment": "production"},
     ],
 )
 def test_invalid_settings_rejected(overrides):
     with pytest.raises(ValidationError):
         settings(**overrides)
-
-
-def test_settings_error_does_not_expose_credentials(monkeypatch):
-    get_settings.cache_clear()
-    monkeypatch.setenv("VENUE_STORAGE_BACKEND", "supabase")
-    monkeypatch.setenv("SUPABASE_URL", "not-a-url")
-    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_private")
-    try:
-        with pytest.raises(HTTPException) as exc:
-            get_settings()
-        assert exc.value.status_code == 503
-        assert "private" not in exc.value.detail
-    finally:
-        get_settings.cache_clear()

@@ -1,14 +1,26 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
-import { getEventRequest } from "@/lib/event-requests";
-import { AppShell } from "../../../components/app-shell";
+import { requireRole } from "@/lib/auth";
+import {
+  getCoordinatorAssignment,
+  getEventRequest,
+  listReviewDecisions,
+} from "@/lib/event-requests";
+import { AppShell, workspaceLinks } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { EventRequestForm } from "../../new/event-request-form";
+import { RequestDetails } from "../../../components/request-details";
+import { ReviewDecisionHistory } from "../../../components/review-decision-history";
+import { ClarificationResponseForm } from "../clarification-response-form";
 
 async function EditDraft({ id }: { id: string }) {
   const result = await getEventRequest(id)
     .then((request) => ({ request, failed: false as const }))
-    .catch(() => ({ request: null, failed: true as const }));
+    .catch((error: unknown) => {
+      unstable_rethrow(error);
+      return { request: null, failed: true as const };
+    });
 
   if (result.failed) {
     return <div role="alert" className="rounded-2xl border border-[#eccdbe] bg-[#fff8f3] px-6 py-8 text-[#793f27]">The event request service is unavailable. Start the local API on port 8003, then refresh.</div>;
@@ -16,8 +28,41 @@ async function EditDraft({ id }: { id: string }) {
   if (!result.request) {
     return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">Draft not found</h1><p className="mt-2 text-sm text-[#718078]">It may belong to another organiser or have been deleted.</p></div>;
   }
+  if (result.request.status === "Changes Requested") {
+    const decisionResult = await listReviewDecisions(id)
+      .then((decisions) => ({ decisions, failed: false as const }))
+      .catch(() => ({ decisions: [], failed: true as const }));
+    const decisions = decisionResult.decisions;
+    const latestClarification = decisions.find(
+      (decision) => decision.decision_status === "Changes Requested",
+    );
+    return (
+      <div className="mx-auto max-w-4xl">
+        <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link>
+        <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">Your coordinator requested clarification. The submitted request remains read-only; respond below so review can continue.</div>
+        <RequestDetails request={result.request} coordinatorAssigned />
+        <div className="mt-5"><ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} /></div>
+        <div className="mt-5">
+          {decisionResult.failed ? null : latestClarification?.organiser_response ? (
+            <div role="status" className="rounded-xl border border-[#bcd9ce] bg-[#edf7f3] px-4 py-3 text-sm text-[#145c40]">Your response was sent. The assigned coordinator can now continue the review.</div>
+          ) : (
+            <ClarificationResponseForm eventRequestId={id} />
+          )}
+        </div>
+      </div>
+    );
+  }
   if (result.request.status !== "Draft") {
-    return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">This request is read-only</h1><p className="mt-2 text-sm text-[#718078]">Only Draft requests can be updated.</p><Link href="/event-requests" className="mt-5 inline-flex rounded-xl bg-[#0f6b5b] px-5 py-3 text-sm font-bold text-white">Back to drafts</Link></div>;
+    const [coordinatorAssigned, decisionResult] = await Promise.all([
+      getCoordinatorAssignment(id)
+        .then((assignment) => assignment !== null)
+        // Keep the status view available if assignment lookup is temporarily unavailable.
+        .catch(() => undefined),
+      listReviewDecisions(id)
+        .then((decisions) => ({ decisions, failed: false as const }))
+        .catch(() => ({ decisions: [], failed: true as const })),
+    ]);
+    return <div className="mx-auto max-w-4xl"><Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link><div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div><RequestDetails request={result.request} coordinatorAssigned={coordinatorAssigned} /><div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div></div>;
   }
 
   return (
@@ -37,6 +82,7 @@ function EditLoading() {
   return <div aria-label="Loading draft" className="mx-auto h-[34rem] max-w-4xl animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" />;
 }
 
-export default function EditEventRequestPage({ params }: { params: Promise<{ id: string }> }) {
-  return <AppShell signedIn><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} />)}</Suspense></AppShell>;
+export default async function EditEventRequestPage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requireRole("event_organiser");
+  return <AppShell signedIn navLinks={workspaceLinks(user.roles)}><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} />)}</Suspense></AppShell>;
 }

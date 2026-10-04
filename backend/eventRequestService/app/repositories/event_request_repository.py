@@ -8,28 +8,65 @@ from app.config import Settings
 class EventRequestRepository(Protocol):
     def create(self, values: dict[str, Any]) -> dict[str, Any]: ...
 
-    def list_for_temporary_organiser(
+    def list_for_organiser(
         self, organiser_id: str
     ) -> list[dict[str, Any]]: ...
 
-    def get_for_temporary_organiser(
+    def list_by_status(self, status: str) -> list[dict[str, Any]]: ...
+
+    def get_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> dict[str, Any] | None: ...
 
     def get_by_id(self, event_request_id: str) -> dict[str, Any] | None: ...
 
+    def get_by_ids(
+        self, event_request_ids: list[str]
+    ) -> list[dict[str, Any]]: ...
+
     def update_status(
         self, event_request_id: str, from_status: str, to_status: str
     ) -> dict[str, Any] | None: ...
 
-    def update_for_temporary_organiser(
+    def advance_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, to_status: str
+    ) -> dict[str, Any]: ...
+
+    def decide_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> dict[str, Any]: ...
+
+    def list_review_decisions(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]: ...
+
+    def respond_to_clarification(
+        self, event_request_id: str, organiser_id: str, response: str
+    ) -> dict[str, Any]: ...
+
+    def resume_review_by_coordinator(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]: ...
+
+    def update_for_organiser(
         self,
         event_request_id: str,
         organiser_id: str,
         values: dict[str, Any],
     ) -> dict[str, Any] | None: ...
 
-    def delete_for_temporary_organiser(
+    def submit_for_organiser(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None: ...
+
+    def delete_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> bool: ...
 
@@ -38,8 +75,21 @@ class SupabaseRepositoryError(RuntimeError):
     """Raised when the Supabase Data API cannot complete an operation."""
 
 
+class EventRequestRpcError(SupabaseRepositoryError):
+    """The transition RPC was rejected by the database function.
+
+    errcode carries the Postgres ERRCODE the function raised (P0002 not
+    found, P0003 not the assigned coordinator, P0004 transition not
+    allowed) so callers can map failures without parsing message text.
+    """
+
+    def __init__(self, message: str, errcode: str | None = None) -> None:
+        super().__init__(message)
+        self.errcode = errcode
+
+
 class SupabaseEventRequestRepository:
-    """Persists temporary-organiser drafts through Supabase's Data API."""
+    """Persists organiser drafts through Supabase's Data API."""
 
     def __init__(
         self,
@@ -74,26 +124,36 @@ class SupabaseEventRequestRepository:
         )
         return rows[0]
 
-    def list_for_temporary_organiser(
+    def list_for_organiser(
         self, organiser_id: str
     ) -> list[dict[str, Any]]:
         return self._request(
             "GET",
             params={
-                "temporary_organiser_id": f"eq.{organiser_id}",
+                "organiser_id": f"eq.{organiser_id}",
                 "order": "created_at.desc",
                 "select": "*",
             },
         )
 
-    def get_for_temporary_organiser(
+    def list_by_status(self, status: str) -> list[dict[str, Any]]:
+        return self._request(
+            "GET",
+            params={
+                "status": f"eq.{status}",
+                "order": "created_at.desc",
+                "select": "*",
+            },
+        )
+
+    def get_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> dict[str, Any] | None:
         rows = self._request(
             "GET",
             params={
                 "id": f"eq.{event_request_id}",
-                "temporary_organiser_id": f"eq.{organiser_id}",
+                "organiser_id": f"eq.{organiser_id}",
                 "select": "*",
                 "limit": "1",
             },
@@ -101,9 +161,7 @@ class SupabaseEventRequestRepository:
         return rows[0] if rows else None
 
     def get_by_id(self, event_request_id: str) -> dict[str, Any] | None:
-        """Unscoped lookup, for a caller who isn't the owning organiser (e.g.
-        an Operations Manager assigning a Coordinator) — every other method
-        on this repository is deliberately scoped to the temporary organiser."""
+        """Look up a request for an authorised coordination workflow."""
         rows = self._request(
             "GET",
             params={
@@ -113,6 +171,18 @@ class SupabaseEventRequestRepository:
             },
         )
         return rows[0] if rows else None
+
+    def get_by_ids(self, event_request_ids: list[str]) -> list[dict[str, Any]]:
+        if not event_request_ids:
+            return []
+        return self._request(
+            "GET",
+            params={
+                "id": f"in.({','.join(event_request_ids)})",
+                "order": "created_at.desc",
+                "select": "*",
+            },
+        )
 
     def update_status(
         self, event_request_id: str, from_status: str, to_status: str
@@ -133,7 +203,126 @@ class SupabaseEventRequestRepository:
         )
         return rows[0] if rows else None
 
-    def update_for_temporary_organiser(
+    def advance_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, to_status: str
+    ) -> dict[str, Any]:
+        try:
+            response = self._client.post(
+                "/rpc/advance_event_request_by_coordinator",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_coordinator_id": coordinator_id,
+                    "p_to_status": to_status,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
+
+    def decide_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> dict[str, Any]:
+        """Persist the review decision and status through one database RPC."""
+        try:
+            response = self._client.post(
+                "/rpc/decide_event_request_by_coordinator",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_coordinator_id": coordinator_id,
+                    "p_decision_status": decision,
+                    "p_reason": reason,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
+
+    def list_review_decisions(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]:
+        return self._request_table(
+            "GET",
+            "/event_request_review_decisions",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "decided_at.desc,id.desc",
+                "select": "*",
+            },
+        )
+
+    def respond_to_clarification(
+        self, event_request_id: str, organiser_id: str, response: str
+    ) -> dict[str, Any]:
+        """Attach one organiser response to the latest clarification request."""
+        try:
+            result = self._client.post(
+                "/rpc/respond_to_event_request_clarification",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_organiser_id": organiser_id,
+                    "p_response": response,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            result.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return result.json()
+
+    def resume_review_by_coordinator(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]:
+        """Resume a returned review only after the organiser has responded."""
+        try:
+            result = self._client.post(
+                "/rpc/resume_event_request_review_by_coordinator",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_coordinator_id": coordinator_id,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            result.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return result.json()
+
+    @staticmethod
+    def _rpc_rejection(response: httpx.Response) -> EventRequestRpcError:
+        try:
+            errcode = response.json().get("code")
+        except ValueError:
+            errcode = None
+        return EventRequestRpcError(
+            "Supabase rejected the coordinator status transition",
+            errcode=errcode,
+        )
+
+    def update_for_organiser(
         self,
         event_request_id: str,
         organiser_id: str,
@@ -144,7 +333,7 @@ class SupabaseEventRequestRepository:
             json=values,
             params={
                 "id": f"eq.{event_request_id}",
-                "temporary_organiser_id": f"eq.{organiser_id}",
+                "organiser_id": f"eq.{organiser_id}",
                 "status": "eq.Draft",
                 "select": "*",
             },
@@ -152,14 +341,33 @@ class SupabaseEventRequestRepository:
         )
         return rows[0] if rows else None
 
-    def delete_for_temporary_organiser(
+    def submit_for_organiser(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        rows = self._request(
+            "PATCH",
+            json={**values, "status": "Submitted"},
+            params={
+                "id": f"eq.{event_request_id}",
+                "organiser_id": f"eq.{organiser_id}",
+                "status": "eq.Draft",
+                "select": "*",
+            },
+            headers={"Prefer": "return=representation"},
+        )
+        return rows[0] if rows else None
+
+    def delete_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> bool:
         rows = self._request(
             "DELETE",
             params={
                 "id": f"eq.{event_request_id}",
-                "temporary_organiser_id": f"eq.{organiser_id}",
+                "organiser_id": f"eq.{organiser_id}",
                 "status": "eq.Draft",
                 "select": "id",
             },
@@ -168,8 +376,13 @@ class SupabaseEventRequestRepository:
         return bool(rows)
 
     def _request(self, method: str, **kwargs: Any) -> list[dict[str, Any]]:
+        return self._request_table(method, "/event_requests", **kwargs)
+
+    def _request_table(
+        self, method: str, path: str, **kwargs: Any
+    ) -> list[dict[str, Any]]:
         try:
-            response = self._client.request(method, "/event_requests", **kwargs)
+            response = self._client.request(method, path, **kwargs)
             response.raise_for_status()
         except httpx.HTTPError as error:
             raise SupabaseRepositoryError(

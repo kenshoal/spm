@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { requireAuthenticatedUser } from "@/lib/auth";
+import { requireEventOrganiser } from "@/lib/auth";
 
 export default async function EventRequestsLayout({ children }: { children: ReactNode }) {
-  await requireAuthenticatedUser();
+  await requireEventOrganiser();
   return children;
 }

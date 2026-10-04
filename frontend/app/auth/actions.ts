@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { sessionCookie } from "@/lib/auth";
+import { sessionCookie, workspaceForRoles } from "@/lib/auth";
 
 export type AuthFormState = { message?: string; success?: boolean };
 
@@ -19,6 +19,7 @@ async function submitCredentials(
   }
 
   let response: Response;
+  let destination = "/unauthorised";
   try {
     response = await fetch(`${authServiceUrl}/auth/${path}`, {
       method: "POST",
@@ -54,6 +55,22 @@ async function submitCredentials(
     if (!session.access_token || !Number.isFinite(session.expires_in) || !session.expires_in) {
       return { message: "The authentication service returned an invalid session." };
     }
+
+    const userResponse = await fetch(`${authServiceUrl}/auth/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+      cache: "no-store",
+    });
+    if (!userResponse.ok) {
+      return { message: "The authentication service could not verify your workspace access." };
+    }
+    const user = (await userResponse.json()) as { role?: string; roles?: string[] };
+    const roles = Array.isArray(user.roles)
+      ? user.roles.filter((role): role is string => typeof role === "string")
+      : typeof user.role === "string"
+        ? [user.role]
+        : [];
+    destination = workspaceForRoles(roles);
+
     (await cookies()).set(sessionCookie, session.access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -64,7 +81,7 @@ async function submitCredentials(
   } catch {
     return { message: "The authentication service is unavailable. Please try again." };
   }
-  redirect("/event-requests");
+  redirect(destination);
 }
 
 export async function register(

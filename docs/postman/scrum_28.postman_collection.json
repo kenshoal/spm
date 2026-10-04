@@ -1,0 +1,1408 @@
+{
+  "info": {
+    "name": "SCRUM-28 Track Event Status",
+    "description": "Manual API tests for SCRUM-28 against the running Docker services. See README.md in this folder. Run folders in order; fill in the four accounts' emails and passwords in the collection variables first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Setup \u2014 log in all four accounts",
+      "item": [
+        {
+          "name": "Log in as organiser",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{organiser_email}}\",\n  \"password\": \"{{organiser_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"organiser_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in as ops",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{ops_email}}\",\n  \"password\": \"{{ops_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"ops_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in as coord_a",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{coord_a_email}}\",\n  \"password\": \"{{coord_a_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"coord_a_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in as coord_b",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{coord_b_email}}\",\n  \"password\": \"{{coord_b_password}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"coord_b_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (organiser)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{auth_url}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"organiser_id\", pm.response.json().id);",
+                  "pm.test(\"Has role event_organiser\", () => pm.expect(pm.response.json().roles).to.include(\"event_organiser\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (ops)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              }
+            ],
+            "url": "{{auth_url}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"ops_id\", pm.response.json().id);",
+                  "pm.test(\"Has role event_operations_manager\", () => pm.expect(pm.response.json().roles).to.include(\"event_operations_manager\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (coord_a)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{auth_url}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"coord_a_id\", pm.response.json().id);",
+                  "pm.test(\"Has role event_coordinator\", () => pm.expect(pm.response.json().roles).to.include(\"event_coordinator\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (coord_b)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{auth_url}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"coord_b_id\", pm.response.json().id);",
+                  "pm.test(\"Has role event_coordinator\", () => pm.expect(pm.response.json().roles).to.include(\"event_coordinator\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Organiser submits",
+      "item": [
+        {
+          "name": "TC-01 Submit a complete request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/submissions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_name\": \"Postman Charity Run\",\n  \"purpose\": \"Raise funds for the library\",\n  \"description\": \"A 5km community run with a breakfast afterwards.\",\n  \"proposed_date_times\": [\n    \"2026-11-14T08:00:00+08:00\"\n  ],\n  \"expected_attendance\": 120,\n  \"venue_requirements\": \"Park loop and start area\",\n  \"accessibility_needs\": \"Wheelchair-accessible route\",\n  \"equipment_requirements\": \"Water stations, PA system\",\n  \"registration_needs\": \"Online sign-up\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Request status is Submitted\", () => pm.expect(pm.response.json().status).to.eql(\"Submitted\"));",
+                  "pm.collectionVariables.set(\"request_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-02 Submission missing fields is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/submissions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_name\": \"Incomplete\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 422\", () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-03 Organiser lists own requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"List contains the request\", () => pm.expect(pm.response.json().map(r => r.id)).to.include(pm.collectionVariables.get(\"request_id\")));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Assignment (SCRUM-14 precondition)",
+      "item": [
+        {
+          "name": "TC-04 Organiser cannot assign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/coordinator",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinator_id\": \"{{coord_a_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-04A Ops Manager cannot assign a non-Coordinator",
+          "description": "Purpose: Prevents an arbitrary authenticated user ID from receiving coordinator access.",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/coordinator",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinator_id\": \"{{organiser_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"No assignment was created\", () => pm.expect(pm.response.json().detail).to.include(\"not an Event Coordinator\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-05 Ops Manager assigns Coordinator A",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/coordinator",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinator_id\": \"{{coord_a_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-06 Assignment alone leaves Submitted",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Submitted\", () => pm.expect(pm.response.json().status).to.eql(\"Submitted\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Coordinator discovery and access",
+      "item": [
+        {
+          "name": "TC-07 Coordinator A sees it in assigned-to-me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/assigned-to-me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"List contains the request\", () => pm.expect(pm.response.json().map(r => r.id)).to.include(pm.collectionVariables.get(\"request_id\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-08 Coordinator B does not see it",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/assigned-to-me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"List does not contain the request\", () => pm.expect(pm.response.json().map(r => r.id)).to.not.include(pm.collectionVariables.get(\"request_id\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-09 Organiser cannot call assigned-to-me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/assigned-to-me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-10 No session is rejected",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{event_url}}/event-requests/assigned-to-me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-11 Invalid token is rejected",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{invalid_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/assigned-to-me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-12 Coordinator A opens the request",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Submitted\", () => pm.expect(pm.response.json().status).to.eql(\"Submitted\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-13 Coordinator B gets not-found",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-14 Ops Manager cannot open request detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Start review (Submitted \u2192 Under Review)",
+      "item": [
+        {
+          "name": "TC-15 Coordinator B cannot start review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-16 Organiser cannot start review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-17 Ops Manager cannot start review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-18 Completion refused before Confirmed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/completion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-19 Coordinator A starts review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Under Review\", () => pm.expect(pm.response.json().status).to.eql(\"Under Review\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-20 Repeated review is a conflict",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-21 Organiser sees Under Review",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Under Review\", () => pm.expect(pm.response.json().status).to.eql(\"Under Review\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Reassignment and cancellation",
+      "item": [
+        {
+          "name": "TC-22 Ops Manager reassigns to Coordinator B",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/coordinator",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinator_id\": \"{{coord_b_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-23 Coordinator A no longer sees it",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/assigned-to-me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"List does not contain the request\", () => pm.expect(pm.response.json().map(r => r.id)).to.not.include(pm.collectionVariables.get(\"request_id\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-24 Coordinator A can no longer open it",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-25 Coordinator A cannot cancel after reassignment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/cancellation"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-26 Organiser cannot cancel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/cancellation"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-27 Coordinator B cancels",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/cancellation"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Cancelled\", () => pm.expect(pm.response.json().status).to.eql(\"Cancelled\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-28 Cancelling again is a conflict",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/cancellation"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-29 Review on a Cancelled request is a conflict",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-30 Assignment to a Cancelled request is refused",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}/coordinator",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinator_id\": \"{{coord_a_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-31 Organiser sees Cancelled",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Cancelled\", () => pm.expect(pm.response.json().status).to.eql(\"Cancelled\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6a. Completion setup (then run the manual SQL)",
+      "description": "Creates and assigns a second request. After this folder, run the UPDATE statement printed in the Postman console in the Supabase SQL Editor, then run folder 6b.",
+      "item": [
+        {
+          "name": "TC-32 Submit a second request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/submissions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_name\": \"Postman Gala Dinner\",\n  \"purpose\": \"Raise funds for the library\",\n  \"description\": \"A 5km community run with a breakfast afterwards.\",\n  \"proposed_date_times\": [\n    \"2026-11-14T08:00:00+08:00\"\n  ],\n  \"expected_attendance\": 120,\n  \"venue_requirements\": \"Park loop and start area\",\n  \"accessibility_needs\": \"Wheelchair-accessible route\",\n  \"equipment_requirements\": \"Water stations, PA system\",\n  \"registration_needs\": \"Online sign-up\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"request2_id\", pm.response.json().id);",
+                  "console.log(\"Before TC-34 run in the Supabase SQL Editor: UPDATE public.event_requests SET status = 'Confirmed' WHERE id = '\" + pm.response.json().id + \"';\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-33 Ops Manager assigns Coordinator A",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ops_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request2_id}}/coordinator",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"coordinator_id\": \"{{coord_a_id}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6b. Completion (after the manual SQL)",
+      "description": "Stops at TC-34 if the request is not Confirmed yet.",
+      "item": [
+        {
+          "name": "TC-34 Request is Confirmed (after manual SQL)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request2_id}}",
+            "description": "No implemented story writes Confirmed yet. Before this request, run in the Supabase SQL Editor (the ID is printed in the Postman console after TC-32):\n\nUPDATE public.event_requests SET status = 'Confirmed' WHERE id = '<request2_id>';"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Confirmed\", () => pm.expect(pm.response.json().status).to.eql(\"Confirmed\"));",
+                  "if (pm.response.json().status !== \"Confirmed\") {",
+                  "  console.log(\"STOPPED: request is not Confirmed. Run the UPDATE printed after TC-32 in the Supabase SQL Editor, then run folder 6b again.\");",
+                  "  pm.execution.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-35 Coordinator B cannot complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request2_id}}/completion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 403\", () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-36 Coordinator A marks complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request2_id}}/completion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Completed\", () => pm.expect(pm.response.json().status).to.eql(\"Completed\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-37 Completing again is a conflict",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request2_id}}/completion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-38 Cancelling a Completed request is a conflict",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request2_id}}/cancellation"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "TC-39 Organiser sees Completed",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{organiser_token}}"
+              }
+            ],
+            "url": "{{event_url}}/event-requests/{{request2_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Request status is Completed\", () => pm.expect(pm.response.json().status).to.eql(\"Completed\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "auth_url",
+      "value": "http://localhost:8001"
+    },
+    {
+      "key": "event_url",
+      "value": "http://localhost:8003"
+    },
+    {
+      "key": "invalid_token",
+      "value": "not-a-real-token"
+    },
+    {
+      "key": "organiser_email",
+      "value": "event_organiser@example.com"
+    },
+    {
+      "key": "organiser_password",
+      "value": "12345678"
+    },
+    {
+      "key": "organiser_token",
+      "value": ""
+    },
+    {
+      "key": "organiser_id",
+      "value": ""
+    },
+    {
+      "key": "ops_email",
+      "value": "event_operations_manager@example.com"
+    },
+    {
+      "key": "ops_password",
+      "value": "12345678"
+    },
+    {
+      "key": "ops_token",
+      "value": ""
+    },
+    {
+      "key": "ops_id",
+      "value": ""
+    },
+    {
+      "key": "coord_a_email",
+      "value": "event_coordinator1@example.com"
+    },
+    {
+      "key": "coord_a_password",
+      "value": "12345678"
+    },
+    {
+      "key": "coord_a_token",
+      "value": ""
+    },
+    {
+      "key": "coord_a_id",
+      "value": ""
+    },
+    {
+      "key": "coord_b_email",
+      "value": "event_coordinator2@example.com"
+    },
+    {
+      "key": "coord_b_password",
+      "value": "12345678"
+    },
+    {
+      "key": "coord_b_token",
+      "value": ""
+    },
+    {
+      "key": "coord_b_id",
+      "value": ""
+    },
+    {
+      "key": "request_id",
+      "value": ""
+    },
+    {
+      "key": "request2_id",
+      "value": ""
+    }
+  ]
+}

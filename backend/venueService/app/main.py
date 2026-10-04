@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.routers import block_checks, venues
-from app.supabase_repository import StorageError
+from app.routers import block_checks, suitability, venues
+from app.supabase_block_repository import StorageError
+from app.supabase_repository import SupabaseRepositoryError
 
 
 class ServiceResponse(BaseModel):
@@ -24,6 +25,17 @@ app = FastAPI(
 
 app.include_router(venues.router)
 app.include_router(block_checks.router)
+app.include_router(suitability.router)
+
+
+@app.exception_handler(SupabaseRepositoryError)
+async def venue_store_unavailable(
+    request: Request, error: SupabaseRepositoryError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": str(error)},
+    )
 
 
 @app.exception_handler(StorageError)

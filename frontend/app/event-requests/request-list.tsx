@@ -33,7 +33,7 @@ export function RequestList({
           >
             <div className="flex flex-wrap items-center gap-3">
               <h2 className="truncate text-base font-bold text-[#1b2b25] sm:text-lg">{request.event_name ?? "Untitled event request"}</h2>
-              <span className="rounded-full bg-[#eef4f1] px-2.5 py-1 text-xs font-bold text-[#315047]">Draft</span>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${request.status === "Draft" ? "bg-[#eef4f1] text-[#315047]" : "bg-[#fff3dc] text-[#80520d]"}`}>{request.status}</span>
             </div>
             <p className="mt-2 line-clamp-1 text-sm text-[#68776f]">{request.purpose ?? "Purpose not provided yet"}</p>
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-[#718078]">
@@ -53,7 +53,7 @@ export function RequestList({
               href={`/event-requests/${request.id}/edit`}
               className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-[#0f6b5b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0f6b5b]"
             >
-              Continue draft
+              {request.status === "Draft" ? "Continue draft" : "View request"}
               <ArrowIcon className="size-5 transition-transform group-hover:translate-x-1" />
             </Link>
           </div>

@@ -1,29 +1,30 @@
-# Auth Integration Contract (authService → equipment services)
+# Auth Integration Contract
 
-Implemented: `equipmentService` (SCRUM-16, SCRUM-45) verifies every caller with authService and enforces role-based authorisation. The stub that trusted the `X-User-Id` header is gone.
+Backend services verify callers with authService and enforce role-based authorisation.
 
 ## The Bearer contract
 
-The equipment service exposes a FastAPI dependency `get_current_user` in `app/deps.py`:
-
 - Callers send `Authorization: Bearer <supabase-access-token>` (the token issued by `POST /auth/login`).
 - Missing or malformed headers return `401 Authentication required`.
-- The service calls authService `GET /auth/me` with the token; authService verifies it against Supabase and returns `{id, email, role}`.
+- The service calls authService `GET /auth/me` with the token; authService verifies it against Supabase and returns `{id, email, role, roles}`.
 - authService `401` → `401 Invalid session`; any other non-2xx or network failure → `502 Authentication service unavailable`; an unusable payload → `502`.
 - Identity is resolved server-side only — no caller-supplied ID is trusted. `changed_by` (status transitions) and `created_by` (equipment creation) are derived from the verified `id`.
 
-On top of it, `require_role(*allowed)` returns `403 Insufficient permissions` for callers whose role is not allowed.
+On top of it, role checks return `403 Insufficient permissions` unless at least one assigned role is allowed.
 
 ## Role model
 
-Roles are read per request from Supabase **`app_metadata.role`** (never `user_metadata`, which users can self-edit). A user without a stored role is treated as `event_coordinator`. Role changes take effect immediately — no new token is needed.
+Roles are read per request from the `staff_roles` table, with Supabase `app_metadata.role(s)` as a migration fallback (never `user_metadata`, which users can self-edit). A user without a stored role is treated as `attendee`. Role changes take effect immediately — no new token is needed.
 
 | Role | Meaning |
 | --- | --- |
-| `event_coordinator` | Default for every authenticated user; read access |
+| `attendee` | Default for every authenticated user |
+| `event_organiser` | Event-request operations |
+| `event_coordinator` | Event coordination |
+| `event_operations_manager` | Assign Event Coordinators |
 | `technical_support` | Equipment mutations (SCRUM-16/SCRUM-45 actors) |
 | `admin` | Role assignment via the authService admin endpoint |
-| `venue_staff` | Reserved (matches the venueService stub) |
+| `venue_staff` | Venue catalogue mutations |
 
 ## Endpoint requirements
 
@@ -34,15 +35,25 @@ Roles are read per request from Supabase **`app_metadata.role`** (never `user_me
 | equipmentService | `PATCH /equipment/{id}/status` | `technical_support` |
 | equipmentService | `GET /equipment`, `GET /equipment/{id}` | any authenticated user |
 | equipmentService | `GET /equipment/{id}/status`, `GET /equipment/{id}/status/history` | any authenticated user |
+| eventRequestService | Draft CRUD under `/event-requests` | `event_organiser` |
+| eventRequestService | `POST /event-requests/{id}/coordinator` | `event_operations_manager` |
+| eventRequestService | `GET /event-requests/assigned-to-me` | `event_coordinator`; results are limited to requests where the caller is the latest assigned Coordinator |
+| eventRequestService | `GET /event-requests/{id}` | owning `event_organiser` or currently assigned `event_coordinator`; unrelated eligible users receive `404` |
+| eventRequestService | `POST /event-requests/{id}/review` | `event_coordinator` and current assignment |
+| eventRequestService | `POST /event-requests/{id}/cancellation` | currently assigned `event_coordinator`; allowed only from a non-terminal, non-Draft status |
+| eventRequestService | `POST /event-requests/{id}/completion` | currently assigned `event_coordinator`; allowed only from `Confirmed` |
+| eventRequestService | `GET /event-requests/{id}/coordinator` | owning `event_organiser`, `event_operations_manager`, or currently assigned `event_coordinator` |
+| venueService | `POST /venues`, `PATCH /venues/{id}` | `venue_staff` |
+| venueService | venue reads and search | any authenticated user |
 
 This covers SCRUM-45's "viewed by an authorised user" acceptance criterion: reads need any authenticated user; mutations need `technical_support`.
 
 ## Role assignment
 
-Two ways to set `app_metadata.role`:
+Two ways to assign roles:
 
-1. **Bootstrap (one-off)**: Supabase dashboard → Authentication → Users → user → *Edit* → **Raw App Meta Data** JSON, e.g. `{"role": "admin"}` for one lead account, `{"role": "technical_support"}` for staff.
-2. **Ongoing**: `PATCH /auth/users/{user_id}/role` on authService with an admin's Bearer token and body `{"role": ...}`. Requires authService to have `SUPABASE_SECRET_KEY` configured (server-side only); returns `503` when unset, `404` for unknown users, `403` for non-admin callers.
+1. **Bootstrap (one-off)**: add the initial admin role to `staff_roles` using the Supabase SQL Editor.
+2. **Ongoing**: `PATCH /auth/users/{user_id}/role` on authService with an admin's Bearer token and body `{"role": ...}`. An Event Operations Manager may assign only `event_coordinator`. The endpoint requires `SUPABASE_SECRET_KEY` and returns `503` when unset, `404` for unknown users, and `403` for disallowed assignments.
 
 Target `user_id` values come from that user's `/auth/me` response (or the Supabase dashboard user list).
 

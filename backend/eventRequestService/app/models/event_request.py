@@ -2,13 +2,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 
 class EventRequestStatus(str, Enum):
     """The full status set is the team's agreed design (backlog C-2, not yet
-    built here) — see spm-brain/backlog/user-stories.md. Only Draft and
-    Submitted have real transitions implemented so far; the rest are added
+    built here) — see spm-brain/backlog/user-stories.md. Draft → Submitted and
+    Submitted → Under Review are implemented so far; the rest are added
     so a row in any of these states can still be read back (EventRequestResponse
     would otherwise fail to validate it) and so terminal-status checks
     elsewhere (e.g. coordinator assignment) have real values to check against.
@@ -34,7 +34,7 @@ class EventRequestFields(BaseModel):
     event_name: str | None = Field(default=None, max_length=200)
     purpose: str | None = Field(default=None, max_length=1_000)
     description: str | None = Field(default=None, max_length=5_000)
-    proposed_date_times: list[datetime] = Field(default_factory=list)
+    proposed_date_times: list[AwareDatetime] = Field(default_factory=list)
     expected_attendance: int | None = Field(default=None, gt=0)
     venue_requirements: str | None = Field(default=None, max_length=2_000)
     accessibility_needs: str | None = Field(default=None, max_length=2_000)
@@ -70,7 +70,7 @@ class EventRequestUpdate(BaseModel):
     event_name: str | None = Field(default=None, max_length=200)
     purpose: str | None = Field(default=None, max_length=1_000)
     description: str | None = Field(default=None, max_length=5_000)
-    proposed_date_times: list[datetime] | None = None
+    proposed_date_times: list[AwareDatetime] | None = None
     expected_attendance: int | None = Field(default=None, gt=0)
     venue_requirements: str | None = Field(default=None, max_length=2_000)
     accessibility_needs: str | None = Field(default=None, max_length=2_000)
@@ -94,6 +94,70 @@ class EventRequestUpdate(BaseModel):
         return value
 
 
+class EventRequestSubmission(BaseModel):
+    """Complete form required to enter the coordination workflow."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    event_name: str = Field(min_length=1, max_length=200)
+    purpose: str = Field(min_length=1, max_length=1_000)
+    description: str = Field(min_length=1, max_length=5_000)
+    proposed_date_times: list[AwareDatetime] = Field(min_length=1)
+    expected_attendance: int = Field(gt=0)
+    venue_requirements: str = Field(min_length=1, max_length=2_000)
+    accessibility_needs: str = Field(min_length=1, max_length=2_000)
+    equipment_requirements: str = Field(min_length=1, max_length=2_000)
+    registration_needs: str = Field(min_length=1, max_length=2_000)
+
+
+class EventReviewDecision(BaseModel):
+    """A coordinator's outcome after reviewing a submitted request."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    decision: EventRequestStatus
+    reason: str | None = Field(default=None, max_length=2_000)
+
+    @field_validator("decision")
+    @classmethod
+    def decision_must_close_review(
+        cls, value: EventRequestStatus
+    ) -> EventRequestStatus:
+        allowed = {
+            EventRequestStatus.APPROVED,
+            EventRequestStatus.CHANGES_REQUESTED,
+            EventRequestStatus.REJECTED,
+        }
+        if value not in allowed:
+            raise ValueError("decision must be Approved, Changes Requested, or Rejected")
+        return value
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def blank_reason_is_missing(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    def requires_reason(self) -> bool:
+        return self.decision in {
+            EventRequestStatus.CHANGES_REQUESTED,
+            EventRequestStatus.REJECTED,
+        }
+
+
+class EventClarificationResponse(BaseModel):
+    """The organiser's response to the latest clarification request.
+
+    Submitted request fields remain immutable; this response tells the
+    coordinator what should be clarified or considered during the next review.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    response: str = Field(min_length=1, max_length=2_000)
+
+
 class EventRequestResponse(EventRequestFields):
     id: str
     organiser_id: str
@@ -102,7 +166,17 @@ class EventRequestResponse(EventRequestFields):
     updated_at: datetime
 
 
+class EventReviewDecisionResponse(BaseModel):
+    id: int
+    event_request_id: str
+    coordinator_id: str
+    decision_status: EventRequestStatus
+    reason: str | None
+    decided_at: datetime
+    organiser_response: str | None = None
+    responded_at: datetime | None = None
+
+
 class HealthResponse(BaseModel):
     service: str
     status: str
-
