@@ -495,6 +495,9 @@ def test_other_organiser_cannot_read_update_or_delete() -> None:
     [
         ("GET", "/event-requests"),
         ("GET", "/event-requests/assigned-to-me"),
+        ("GET", "/event-requests/public-events"),
+        ("GET", "/event-requests/venue-requirements"),
+        ("GET", "/event-requests/equipment-requirements"),
         ("POST", "/event-requests"),
         ("POST", "/event-requests/submissions"),
         ("GET", "/event-requests/00000000-0000-0000-0000-000000000001"),
@@ -932,7 +935,9 @@ def test_assigned_to_me_accepts_multi_role_coordinator(
         (("event_coordinator",), "assigned", 200),
         (("event_coordinator",), "other", 404),
         (("event_operations_manager",), "other", 403),
+        (("attendee",), "other", 403),
         (("venue_staff",), "other", 403),
+        (("technical_support",), "other", 403),
         (("venue_staff", "event_coordinator"), "assigned", 200),
         (("event_organiser", "event_coordinator"), "owner", 200),
         (("event_organiser", "event_coordinator"), "other", 404),
@@ -992,3 +997,106 @@ def test_coordinator_gets_not_found_for_unassigned_request() -> None:
         )
 
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("role", "path", "visible_statuses", "expected_fields"),
+    [
+        (
+            "attendee",
+            "public-events",
+            {"Confirmed", "Completed"},
+            {
+                "id",
+                "event_name",
+                "description",
+                "status",
+                "proposed_date_times",
+            },
+        ),
+        (
+            "venue_staff",
+            "venue-requirements",
+            {"Approved", "Planning", "Confirmed"},
+            {
+                "id",
+                "event_name",
+                "status",
+                "proposed_date_times",
+                "expected_attendance",
+                "venue_requirements",
+                "accessibility_needs",
+            },
+        ),
+        (
+            "technical_support",
+            "equipment-requirements",
+            {"Approved", "Planning", "Confirmed"},
+            {
+                "id",
+                "event_name",
+                "status",
+                "proposed_date_times",
+                "expected_attendance",
+                "equipment_requirements",
+            },
+        ),
+    ],
+)
+def test_role_views_expose_only_relevant_stages_and_fields(
+    role: str,
+    path: str,
+    visible_statuses: set[str],
+    expected_fields: set[str],
+) -> None:
+    repository = FakeEventRequestRepository()
+    for event_status in [
+        "Draft",
+        "Submitted",
+        "Under Review",
+        "Approved",
+        "Planning",
+        "Confirmed",
+        "Completed",
+        "Cancelled",
+        "Rejected",
+    ]:
+        repository.create(
+            {
+                "organiser_id": OTHER_ORGANISER_ID,
+                "status": event_status,
+                **complete_payload(),
+                "event_name": event_status,
+            }
+        )
+    application = create_app(repository)
+    application.dependency_overrides[
+        event_request_controller.get_authenticated_caller
+    ] = lambda: event_request_controller.AuthenticatedCaller(
+        id=str(uuid4()), roles=(role,)
+    )
+
+    with TestClient(application) as client:
+        response = client.get(f"/event-requests/{path}")
+
+    assert response.status_code == 200
+    assert {item["event_name"] for item in response.json()} == visible_statuses
+    assert all(set(item) == expected_fields for item in response.json())
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["public-events", "venue-requirements", "equipment-requirements"],
+)
+def test_role_views_reject_unrelated_roles(path: str) -> None:
+    application = create_app(FakeEventRequestRepository())
+    application.dependency_overrides[
+        event_request_controller.get_authenticated_caller
+    ] = lambda: event_request_controller.AuthenticatedCaller(
+        id=str(uuid4()), roles=("event_organiser",)
+    )
+
+    with TestClient(application) as client:
+        response = client.get(f"/event-requests/{path}")
+
+    assert response.status_code == 403

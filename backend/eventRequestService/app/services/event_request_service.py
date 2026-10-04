@@ -86,6 +86,15 @@ class EventRequestService:
         rows = self.repository.list_by_status(status.value)
         return [self._row_to_response(row) for row in rows]
 
+    def list_by_statuses(
+        self, statuses: set[EventRequestStatus]
+    ) -> list[EventRequestResponse]:
+        return sorted(
+            (request for status in statuses for request in self.list_by_status(status)),
+            key=lambda request: request.created_at,
+            reverse=True,
+        )
+
     def get(self, event_request_id: str, organiser_id: str) -> EventRequestResponse:
         row = self.repository.get_for_organiser(event_request_id, organiser_id)
         if row is None:

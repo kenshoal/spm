@@ -166,6 +166,33 @@ class EventRequestResponse(EventRequestFields):
     updated_at: datetime
 
 
+class AttendeeEventResponse(BaseModel):
+    id: str
+    event_name: str | None
+    description: str | None
+    status: EventRequestStatus
+    proposed_date_times: list[AwareDatetime]
+
+
+class VenueRequirementResponse(BaseModel):
+    id: str
+    event_name: str | None
+    status: EventRequestStatus
+    proposed_date_times: list[AwareDatetime]
+    expected_attendance: int | None
+    venue_requirements: str | None
+    accessibility_needs: str | None
+
+
+class EquipmentRequirementResponse(BaseModel):
+    id: str
+    event_name: str | None
+    status: EventRequestStatus
+    proposed_date_times: list[AwareDatetime]
+    expected_attendance: int | None
+    equipment_requirements: str | None
+
+
 class EventReviewDecisionResponse(BaseModel):
     id: int
     event_request_id: str

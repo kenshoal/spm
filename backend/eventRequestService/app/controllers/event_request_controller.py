@@ -8,12 +8,16 @@ from pydantic import ValidationError
 
 from app.config import get_settings
 from app.models.event_request import (
+    AttendeeEventResponse,
+    EquipmentRequirementResponse,
     EventClarificationResponse,
     EventRequestCreate,
     EventRequestResponse,
+    EventRequestStatus,
     EventRequestSubmission,
     EventRequestUpdate,
     EventReviewDecisionResponse,
+    VenueRequirementResponse,
 )
 from app.repositories import SupabaseEventRequestRepository
 from app.services.coordinator_assignment_service import (
@@ -27,6 +31,15 @@ from app.services.event_request_service import (
 router = APIRouter(prefix="/event-requests", tags=["event requests"])
 EVENT_ORGANISER_ROLE = "event_organiser"
 EVENT_COORDINATOR_ROLE = "event_coordinator"
+
+_PUBLIC_STATUSES = {EventRequestStatus.CONFIRMED, EventRequestStatus.COMPLETED}
+# ponytail: role + active stage is the staff relationship until booking and
+# reservation records exist; narrow these lists to assigned staff when they do.
+_ACTIVE_ARRANGEMENT_STATUSES = {
+    EventRequestStatus.APPROVED,
+    EventRequestStatus.PLANNING,
+    EventRequestStatus.CONFIRMED,
+}
 
 
 @dataclass(frozen=True)
@@ -139,6 +152,11 @@ def _coordinator_assignment_service(request: Request):
     return get_coordinator_assignment_service(request)
 
 
+def _require_role(caller: AuthenticatedCaller, role: str) -> None:
+    if role not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+
+
 @router.post(
     "",
     response_model=EventRequestResponse,
@@ -183,6 +201,45 @@ def list_requests_assigned_to_me(
     return _coordinator_assignment_service(request).list_requests_for_coordinator(
         coordinator_id
     )
+
+
+@router.get("/public-events", response_model=list[AttendeeEventResponse])
+def list_public_events(
+    caller: CallerDependency,
+    service: ServiceDependency,
+) -> list[AttendeeEventResponse]:
+    _require_role(caller, "attendee")
+    return [
+        AttendeeEventResponse.model_validate(request, from_attributes=True)
+        for request in service.list_by_statuses(_PUBLIC_STATUSES)
+    ]
+
+
+@router.get("/venue-requirements", response_model=list[VenueRequirementResponse])
+def list_venue_requirements(
+    caller: CallerDependency,
+    service: ServiceDependency,
+) -> list[VenueRequirementResponse]:
+    _require_role(caller, "venue_staff")
+    return [
+        VenueRequirementResponse.model_validate(request, from_attributes=True)
+        for request in service.list_by_statuses(_ACTIVE_ARRANGEMENT_STATUSES)
+    ]
+
+
+@router.get(
+    "/equipment-requirements",
+    response_model=list[EquipmentRequirementResponse],
+)
+def list_equipment_requirements(
+    caller: CallerDependency,
+    service: ServiceDependency,
+) -> list[EquipmentRequirementResponse]:
+    _require_role(caller, "technical_support")
+    return [
+        EquipmentRequirementResponse.model_validate(request, from_attributes=True)
+        for request in service.list_by_statuses(_ACTIVE_ARRANGEMENT_STATUSES)
+    ]
 
 
 @router.get("/{event_request_id}", response_model=EventRequestResponse)
