@@ -7,8 +7,9 @@ Night slots (GitHub discussion #50).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import Enum
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -84,3 +85,17 @@ class Venue(VenueBase):
     status: VenueStatus = VenueStatus.AVAILABLE
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
+
+
+class VenueBookingRequest(BaseModel):
+    id: str
+    event_request_id: str
+    venue_id: str
+    requested_date: date
+    slot: Slot
+    status: Literal["pending", "approved", "rejected", "cancelled"]
+    notes: str | None
+    requested_by: str
+    reviewed_by: str | None
+    created_at: datetime
+    reviewed_at: datetime | None

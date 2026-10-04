@@ -10,6 +10,7 @@ FastAPI microservice for the venue catalogue and venue search / filtering.
 | Search and filter venues | `GET /venues/search` |
 | Check venue suitability | `POST /venues/{id}/suitability` |
 | Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}` |
+| Review event booking details | `GET /venue-booking-requests` |
 
 Venues are stored in the Supabase `public.venues` table
 (`database/migrations/0016_venues.sql`) when `VENUE_STORAGE_BACKEND=supabase`,
@@ -17,7 +18,8 @@ which Docker Compose sets. The default, `memory`, keeps venues in process
 memory and is used by the unit tests and standalone development; that data is
 lost when the service stops. All routes verify the bearer token with `authService`;
 reads require `event_coordinator` or `venue_staff`, while create and update
-operations require `venue_staff`.
+operations require `venue_staff`. Booking requests are available only to
+`venue_staff` and expose concrete event, venue, date and slot relationships.
 
 `GET /venues/search` accepts a `date` parameter but does not yet evaluate
 per-date availability; a venue is excluded only when its whole-venue `status`

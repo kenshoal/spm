@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -33,6 +33,18 @@ class EquipmentOut(BaseModel):
     updated_at: datetime
 
 
+class EquipmentReservationOut(BaseModel):
+    id: UUID
+    event_request_id: UUID
+    equipment_id: UUID
+    quantity: int
+    status: Literal["pending", "reserved", "rejected", "cancelled"]
+    requirements: str | None
+    requested_by: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
 class EquipmentCreate(BaseModel):
     type: str = Field(max_length=120)
     description: str | None = None
@@ -59,6 +71,21 @@ def list_equipment(
         query = query.eq("operational_status", operational_status.value)
     response = query.execute()
     return [EquipmentOut.model_validate(row) for row in response.data]
+
+
+@router.get("/reservations", response_model=list[EquipmentReservationOut])
+def list_equipment_reservations(
+    client: ClientDep,
+    _user: StaffDep,
+) -> list[EquipmentReservationOut]:
+    # ponytail: this is a role-wide work queue until staff assignment exists.
+    response = (
+        client.table("equipment_reservations")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [EquipmentReservationOut.model_validate(row) for row in response.data]
 
 
 @router.get("/{equipment_id}", response_model=EquipmentOut)

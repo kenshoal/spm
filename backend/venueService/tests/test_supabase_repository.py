@@ -20,6 +20,7 @@ URL = "https://project.supabase.co"
 KEY = "sb_secret_test"
 VENUE_ID = "2a192261-5e90-4398-90ff-1a2d0eaaff00"
 OTHER_ID = "11111111-1111-1111-1111-111111111111"
+BOOKING_ID = "33333333-3333-3333-3333-333333333333"
 
 
 def _row(**overrides: object) -> dict:
@@ -35,6 +36,24 @@ def _row(**overrides: object) -> dict:
         "status": "available",
         "created_at": "2026-09-28T01:00:00+00:00",
         "updated_at": "2026-09-28T01:00:00+00:00",
+    }
+    row.update(overrides)
+    return row
+
+
+def _booking_row(**overrides: object) -> dict:
+    row = {
+        "id": BOOKING_ID,
+        "event_request_id": OTHER_ID,
+        "venue_id": VENUE_ID,
+        "requested_date": "2026-10-10",
+        "slot": "PM",
+        "status": "pending",
+        "notes": "Wheelchair access required",
+        "requested_by": OTHER_ID,
+        "reviewed_by": None,
+        "created_at": "2026-10-04T01:00:00+00:00",
+        "reviewed_at": None,
     }
     row.update(overrides)
     return row
@@ -118,6 +137,18 @@ def test_list_returns_every_row_in_creation_order() -> None:
 
     assert api.requests[0].url.params["order"] == "created_at.asc"
     assert [v.id for v in venues] == [VENUE_ID, OTHER_ID]
+
+
+def test_list_booking_requests_uses_relationship_table() -> None:
+    api = FakeDataAPI(200, [_booking_row()])
+
+    bookings = api.repo().list_booking_requests()
+
+    request = api.requests[0]
+    assert request.url.path == "/rest/v1/venue_booking_requests"
+    assert request.url.params["order"] == "created_at.desc"
+    assert bookings[0].id == BOOKING_ID
+    assert bookings[0].venue_id == VENUE_ID
 
 
 def test_update_sends_only_changed_fields_and_refreshes_timestamp() -> None:

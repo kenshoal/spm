@@ -14,7 +14,7 @@ from functools import lru_cache
 from typing import Protocol
 
 from app.config import get_settings
-from app.models import Venue, VenueCreate, VenueUpdate, _now
+from app.models import Venue, VenueBookingRequest, VenueCreate, VenueUpdate, _now
 
 
 class VenueStore(Protocol):
@@ -22,6 +22,7 @@ class VenueStore(Protocol):
     def get(self, venue_id: str) -> Venue | None: ...
     def list(self) -> list[Venue]: ...
     def update(self, venue_id: str, data: VenueUpdate) -> Venue | None: ...
+    def list_booking_requests(self) -> list[VenueBookingRequest]: ...
 
 
 class VenueRepository:
@@ -52,6 +53,9 @@ class VenueRepository:
 
     def clear(self) -> None:
         self._venues.clear()
+
+    def list_booking_requests(self) -> list[VenueBookingRequest]:
+        return []
 
 
 # Module-level singleton used when VENUE_STORAGE_BACKEND=memory.

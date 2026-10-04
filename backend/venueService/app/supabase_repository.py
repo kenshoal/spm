@@ -12,7 +12,7 @@ from uuid import UUID
 
 import httpx
 
-from app.models import Venue, VenueCreate, VenueUpdate, _now
+from app.models import Venue, VenueBookingRequest, VenueCreate, VenueUpdate, _now
 
 TABLE = "venues"
 
@@ -47,9 +47,11 @@ class SupabaseVenueRepository:
             transport=transport,
         )
 
-    def _request(self, method: str, **kwargs: Any) -> list[dict[str, Any]]:
+    def _request(
+        self, method: str, *, table: str = TABLE, **kwargs: Any
+    ) -> list[dict[str, Any]]:
         try:
-            response = self._client.request(method, f"/{TABLE}", **kwargs)
+            response = self._client.request(method, f"/{table}", **kwargs)
         except httpx.HTTPError as error:
             raise SupabaseRepositoryError("Venue store unavailable") from error
         if not response.is_success:
@@ -95,3 +97,11 @@ class SupabaseVenueRepository:
             headers={"Prefer": "return=representation"},
         )
         return Venue.model_validate(rows[0]) if rows else None
+
+    def list_booking_requests(self) -> list[VenueBookingRequest]:
+        rows = self._request(
+            "GET",
+            table="venue_booking_requests",
+            params={"select": "*", "order": "created_at.desc"},
+        )
+        return [VenueBookingRequest.model_validate(row) for row in rows]

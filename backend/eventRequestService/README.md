@@ -12,8 +12,6 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `GET` | `/event-requests` | List the current organiser's requests |
 | `GET` | `/event-requests/assigned-to-me` | List requests whose latest assignment is the calling Coordinator |
 | `GET` | `/event-requests/public-events` | Attendee-facing Confirmed and Completed events |
-| `GET` | `/event-requests/venue-requirements` | Venue fields for active arrangements (`venue_staff` only) |
-| `GET` | `/event-requests/equipment-requirements` | Equipment fields for active arrangements (`technical_support` only) |
 | `GET` | `/event-requests/{id}` | Retrieve one request (owning Organiser or assigned Coordinator) |
 | `PATCH` | `/event-requests/{id}` | Update a Draft |
 | `POST` | `/event-requests/{id}/submit` | Submit a completed Draft |

@@ -45,10 +45,12 @@ commands behind the hand-off contract above.
   organisation membership and the same-client rule are defined.
 - Attendees receive only the public projection of Confirmed or Completed
   events; requirements and other planning fields are never included.
-- Venue Staff receive only venue requirements for Approved, Planning or
-  Confirmed events.
-- Technical Support Staff receive only equipment requirements for Approved,
-  Planning or Confirmed events.
+- Venue Staff receive concrete venue booking requests through `venueService`;
+  the booking record contains the event, venue, date and slot relationship
+  needed for approval or rejection.
+- Technical Support Staff receive concrete equipment reservations through
+  `equipmentService`; the reservation record contains the event, equipment and
+  quantity relationship needed to support the arrangement.
 - The assigned Event Coordinator remains the only coordinator who can read the
-  full request. Venue booking and equipment reservation records can narrow the
-  staff projections further when those workflows are introduced.
+  full request. Venue and technical queues are role-wide until those domains
+  define individual staff assignment.
