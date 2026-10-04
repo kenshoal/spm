@@ -135,6 +135,10 @@ def test_venue_reads_forbidden_for_attendees() -> None:
         client.get("/venues"),
         client.get("/venues/search"),
         client.get(f"/venues/{venue_id}"),
+        client.post(
+            f"/venues/{venue_id}/suitability",
+            json={"expected_attendance": 10},
+        ),
     ]
 
     assert all(response.status_code == 403 for response in responses)
