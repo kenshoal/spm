@@ -85,3 +85,11 @@ def require_venue_staff(
     if "venue_staff" not in principal.roles:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     return principal
+
+
+def require_venue_viewer(
+    principal: Annotated[Principal, Depends(require_authenticated)],
+) -> Principal:
+    if set(principal.roles).isdisjoint({"event_coordinator", "venue_staff"}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return principal

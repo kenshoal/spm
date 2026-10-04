@@ -138,6 +138,15 @@ def test_get_equipment_invalid_id(client: TestClient, auth) -> None:
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize("path", ["/equipment", f"/equipment/{EQUIPMENT_ID}"])
+def test_equipment_reads_forbidden_for_attendees(
+    client: TestClient, auth_attendee, path: str
+) -> None:
+    response = client.get(path, headers=bearer())
+
+    assert response.status_code == 403
+
+
 # AC1-X1 (cross-cutting): creating requires an authenticated session
 def test_create_equipment_requires_authentication(client: TestClient) -> None:
     response = client.post(

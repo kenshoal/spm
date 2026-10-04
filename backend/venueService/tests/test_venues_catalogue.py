@@ -122,3 +122,19 @@ def test_list_venues_returns_all_created() -> None:
 
     assert response.status_code == 200
     assert {v["name"] for v in response.json()} == {"A", "B"}
+
+
+def test_venue_reads_forbidden_for_attendees() -> None:
+    venue_id = client.post("/venues", json=_sample_payload()).json()["id"]
+    app.dependency_overrides[require_authenticated] = lambda: Principal(
+        user_id="00000000-0000-0000-0000-000000000002",
+        roles=("attendee",),
+    )
+
+    responses = [
+        client.get("/venues"),
+        client.get("/venues/search"),
+        client.get(f"/venues/{venue_id}"),
+    ]
+
+    assert all(response.status_code == 403 for response in responses)
