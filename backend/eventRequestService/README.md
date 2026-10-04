@@ -25,6 +25,9 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `POST` | `/event-requests/{id}/resume-review` | Assigned Coordinator continues review after the Organiser responds |
 | `POST` | `/event-requests/{id}/cancellation` | Assigned Coordinator cancels a non-terminal request (→ `Cancelled`) |
 | `POST` | `/event-requests/{id}/completion` | Assigned Coordinator marks a confirmed event complete (`Confirmed` → `Completed`) |
+| `POST` | `/event-requests/{id}/change-requests` | Owning Organiser proposes structured changes to an Approved or Planning event |
+| `GET` | `/event-requests/{id}/change-requests` | Owning Organiser or assigned Coordinator reads the amendment history |
+| `POST` | `/event-requests/{id}/change-requests/{change_id}/decision` | Assigned Coordinator approves or rejects a pending amendment |
 | `GET` | `/health` | Service health check |
 
 Every event-request operation requires `Authorization: Bearer <access-token>`.
@@ -74,9 +77,9 @@ agreed status vocabulary. This service writes only the following transitions:
 | Any non-terminal status → `Cancelled` | Assigned Coordinator | `POST /{id}/cancellation` |
 | `Confirmed` → `Completed` | Assigned Coordinator | `POST /{id}/completion` |
 
-Owned by other stories and **not** implemented here: post-submission change
-requests raised by an Organiser after a decision (SCRUM-35), Planning and
-Confirmed (venue/operations stories), notification delivery (SCRUM-36), and
+Owned by other stories and **not** implemented here: Planning and Confirmed
+(venue/operations stories), downstream venue/equipment/registration conflict
+revalidation after an approved change, notification delivery (SCRUM-36), and
 automatic completion of Confirmed events more than seven days overdue
 (SCRUM-40). `Completed`, `Cancelled` and `Rejected` are terminal.
 
@@ -95,6 +98,14 @@ attach the owning Organiser's clarification response and return the request to
 `Under Review` only for the assigned Coordinator. Submitted request fields stay
 read-only throughout. Direct client roles cannot read the history table or
 execute these functions; authorised access goes through this API.
+
+SCRUM-35 uses migration `0018_event_change_requests.sql`. An owning Organiser
+may retain one pending structured amendment while an event is Approved or
+Planning. The current event stays unchanged until the latest assigned
+Coordinator approves; approval locks the event row, rejects a stale base plan
+and applies all proposed values in the same transaction as the retained
+decision. Rejection retains its reason without changing the event. Browser
+roles cannot read the change table or execute either workflow function.
 
 ## Run locally on macOS/Linux
 

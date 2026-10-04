@@ -19,6 +19,7 @@ vi.mock("@/lib/auth", () => ({
 
 import {
   createEventRequest,
+  createEventChangeRequest,
   deleteEventRequest,
   respondToClarification,
   submitDraftEventRequest,
@@ -233,4 +234,39 @@ test("returns an actionable error when the API rejects draft deletion", async ()
 
   expect(state).toEqual({ message: "Only draft requests can be deleted." });
   expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});
+
+// AC1-H1 (happy): the organiser action sends only completed proposed fields to the protected API
+test("creates a structured event change request", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+  vi.stubGlobal("fetch", fetchMock);
+  const formData = new FormData();
+  formData.set("explanation", "Registrations exceeded the original estimate.");
+  formData.set("expected_attendance", "90");
+  formData.set("venue_requirements", "Larger lecture theatre");
+
+  const state = await createEventChangeRequest("request/1", {}, formData);
+
+  expect(fetchMock.mock.calls[0][0]).toBe(
+    "http://127.0.0.1:8003/event-requests/request%2F1/change-requests",
+  );
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+    explanation: "Registrations exceeded the original estimate.",
+    expected_attendance: 90,
+    venue_requirements: "Larger lecture theatre",
+  });
+  expect(state).toEqual({ submitted: true });
+});
+
+// AC1-N1 (negative): an explanation alone cannot create an empty amendment
+test("requires a proposed event value before creating a change request", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const formData = new FormData();
+  formData.set("explanation", "Please change the event.");
+
+  const state = await createEventChangeRequest("request-1", {}, formData);
+
+  expect(state.errors?.proposed_changes).toBe("Complete at least one proposed value.");
+  expect(fetchMock).not.toHaveBeenCalled();
 });

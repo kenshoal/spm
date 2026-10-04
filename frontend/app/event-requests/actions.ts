@@ -14,6 +14,12 @@ export interface DeleteEventRequestState {
   message?: string;
 }
 
+export interface EventChangeRequestState {
+  message?: string;
+  submitted?: boolean;
+  errors?: { explanation?: string; proposed_changes?: string };
+}
+
 export interface ClarificationResponseState {
   submitted?: boolean;
   message?: string;
@@ -292,4 +298,70 @@ export async function deleteEventRequest(
   }
   revalidatePath("/event-requests");
   return { deleted: true };
+}
+
+export async function createEventChangeRequest(
+  eventRequestId: string,
+  previousState: EventChangeRequestState,
+  formData: FormData,
+): Promise<EventChangeRequestState> {
+  void previousState;
+  await requireRole("event_organiser");
+  const explanation = String(formData.get("explanation") ?? "").trim();
+  const payload: Record<string, unknown> = { explanation };
+  const attendance = String(formData.get("expected_attendance") ?? "").trim();
+  const dateTime = String(formData.get("proposed_date_time") ?? "").trim();
+  for (const field of [
+    "venue_requirements",
+    "equipment_requirements",
+    "registration_needs",
+  ]) {
+    const value = String(formData.get(field) ?? "").trim();
+    if (value) payload[field] = value;
+  }
+  if (attendance) {
+    const parsed = Number(attendance);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return { message: "Check the proposed values and try again.", errors: { proposed_changes: "Attendance must be a whole number greater than zero." } };
+    }
+    payload.expected_attendance = parsed;
+  }
+  if (dateTime) {
+    const parsedDateTime = singaporeDateTimeToIso(dateTime);
+    if (parsedDateTime) payload.proposed_date_times = [parsedDateTime];
+  }
+  if (!explanation) {
+    return { message: "Explain why the event plan should change.", errors: { explanation: "Enter a reason for the change." } };
+  }
+  if (Object.keys(payload).length === 1) {
+    return { message: "Propose at least one event detail to change.", errors: { proposed_changes: "Complete at least one proposed value." } };
+  }
+
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/change-requests`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      },
+    );
+  } catch {
+    return { message: "The change request could not be sent. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    return {
+      message: response.status === 409
+        ? "This event cannot accept that change. Refresh to see its current plan or pending request."
+        : response.status === 422
+          ? "Check the proposed values and try again."
+          : "The change request could not be sent. Please try again.",
+    };
+  }
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  return { submitted: true };
 }

@@ -20,6 +20,8 @@ from app.services.coordinator_assignment_service import (
 )
 from app.services.event_request_service import (
     ClarificationResponseNotAllowedError,
+    EventChangeRequestConflictError,
+    EventChangeRequestForbiddenError,
     EventRequestNotDraftError,
     EventRequestNotFoundError,
     EventRequestService,
@@ -88,6 +90,24 @@ def create_app(
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(EventChangeRequestConflictError)
+    async def event_change_request_conflict(
+        request: Request, error: EventChangeRequestConflictError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(EventChangeRequestForbiddenError)
+    async def event_change_request_forbidden(
+        request: Request, error: EventChangeRequestForbiddenError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": str(error)},
         )
 

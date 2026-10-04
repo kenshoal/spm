@@ -1,6 +1,9 @@
 from typing import Any, NoReturn
 
 from app.models.event_request import (
+    EventChangeDecision,
+    EventChangeRequestCreate,
+    EventChangeRequestResponse,
     EventClarificationResponse,
     EventRequestCreate,
     EventRequestResponse,
@@ -30,6 +33,18 @@ class ClarificationResponseNotAllowedError(Exception):
         super().__init__(
             f"Event request {event_request_id} is not accepting a clarification response"
         )
+        self.event_request_id = event_request_id
+
+
+class EventChangeRequestConflictError(Exception):
+    def __init__(self, event_request_id: str) -> None:
+        super().__init__(f"Event request {event_request_id} cannot accept that change action")
+        self.event_request_id = event_request_id
+
+
+class EventChangeRequestForbiddenError(Exception):
+    def __init__(self, event_request_id: str) -> None:
+        super().__init__("Only the currently assigned coordinator can decide this change request")
         self.event_request_id = event_request_id
 
 
@@ -162,6 +177,62 @@ class EventRequestService:
     ) -> list[EventReviewDecisionResponse]:
         rows = self.repository.list_review_decisions(event_request_id)
         return [EventReviewDecisionResponse.model_validate(row) for row in rows]
+
+    def create_change_request(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        payload: EventChangeRequestCreate,
+    ) -> EventChangeRequestResponse:
+        try:
+            row = self.repository.create_change_request(
+                event_request_id,
+                organiser_id,
+                payload.explanation,
+                payload.proposed_changes(),
+            )
+        except EventRequestRpcError as error:
+            self._raise_change_request_error(error, event_request_id)
+        return EventChangeRequestResponse.model_validate(row)
+
+    def list_change_requests(
+        self, event_request_id: str
+    ) -> list[EventChangeRequestResponse]:
+        return [
+            EventChangeRequestResponse.model_validate(row)
+            for row in self.repository.list_change_requests(event_request_id)
+        ]
+
+    def decide_change_request(
+        self,
+        event_request_id: str,
+        change_request_id: str,
+        coordinator_id: str,
+        payload: EventChangeDecision,
+    ) -> EventChangeRequestResponse:
+        try:
+            row = self.repository.decide_change_request(
+                event_request_id,
+                change_request_id,
+                coordinator_id,
+                payload.decision.value,
+                payload.reason,
+            )
+        except EventRequestRpcError as error:
+            self._raise_change_request_error(error, event_request_id)
+        return EventChangeRequestResponse.model_validate(row)
+
+    @staticmethod
+    def _raise_change_request_error(
+        error: EventRequestRpcError, event_request_id: str
+    ) -> NoReturn:
+        if error.errcode == "P0002":
+            raise EventRequestNotFoundError(event_request_id) from error
+        if error.errcode == "P0003":
+            raise EventChangeRequestForbiddenError(event_request_id) from error
+        if error.errcode == "P0004":
+            raise EventChangeRequestConflictError(event_request_id) from error
+        raise error
 
     def update(
         self,

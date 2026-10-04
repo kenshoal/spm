@@ -5,6 +5,7 @@ import { requireRole, type AuthenticatedUser } from "@/lib/auth";
 import {
   coordinatorActions,
   getEventRequest,
+  listEventChangeRequests,
   listReviewDecisions,
 } from "@/lib/event-requests";
 import { AppShell, workspaceLinks } from "../../../components/app-shell";
@@ -13,6 +14,7 @@ import { RequestDetails } from "../../../components/request-details";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
+import { ChangeRequestPanel } from "./change-request-panel";
 
 async function CoordinatorRequestView({ id }: { id: string }) {
   const result = await getEventRequest(id)
@@ -30,9 +32,14 @@ async function CoordinatorRequestView({ id }: { id: string }) {
   }
 
   const request = result.request;
-  const decisionResult = await listReviewDecisions(id)
-    .then((decisions) => ({ decisions, failed: false as const }))
-    .catch(() => ({ decisions: [], failed: true as const }));
+  const [decisionResult, changeResult] = await Promise.all([
+    listReviewDecisions(id)
+      .then((decisions) => ({ decisions, failed: false as const }))
+      .catch(() => ({ decisions: [], failed: true as const })),
+    listEventChangeRequests(id)
+      .then((requests) => ({ requests, failed: false as const }))
+      .catch(() => ({ requests: [], failed: true as const })),
+  ]);
   const decisions = decisionResult.decisions;
   const latestClarification = decisions.find(
     (decision) => decision.decision_status === "Changes Requested",
@@ -53,6 +60,7 @@ async function CoordinatorRequestView({ id }: { id: string }) {
       <div className="mt-5">
         <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
       </div>
+      {changeResult.failed ? <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">Change requests are temporarily unavailable. Decisions are disabled until they can be loaded.</div> : <ChangeRequestPanel eventRequestId={id} requests={changeResult.requests} />}
       <Link
         href={`/venues/search${request.expected_attendance ? `?required_capacity=${request.expected_attendance}` : ""}`}
         className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-[#cfd9d4] bg-white px-4 text-sm font-semibold text-[#0f6b5b] hover:bg-[#f4f7f5]"

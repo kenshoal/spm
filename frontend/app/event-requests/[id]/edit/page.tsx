@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import {
   getCoordinatorAssignment,
   getEventRequest,
+  listEventChangeRequests,
   listReviewDecisions,
 } from "@/lib/event-requests";
 import { AppShell, workspaceLinks } from "../../../components/app-shell";
@@ -13,6 +14,8 @@ import { EventRequestForm } from "../../new/event-request-form";
 import { RequestDetails } from "../../../components/request-details";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { ClarificationResponseForm } from "../clarification-response-form";
+import { ChangeRequestHistory } from "../../../components/change-request-history";
+import { ChangeRequestForm } from "../change-request-form";
 
 async function EditDraft({ id }: { id: string }) {
   const result = await getEventRequest(id)
@@ -53,7 +56,7 @@ async function EditDraft({ id }: { id: string }) {
     );
   }
   if (result.request.status !== "Draft") {
-    const [coordinatorAssigned, decisionResult] = await Promise.all([
+    const [coordinatorAssigned, decisionResult, changeResult] = await Promise.all([
       getCoordinatorAssignment(id)
         .then((assignment) => assignment !== null)
         // Keep the status view available if assignment lookup is temporarily unavailable.
@@ -61,8 +64,12 @@ async function EditDraft({ id }: { id: string }) {
       listReviewDecisions(id)
         .then((decisions) => ({ decisions, failed: false as const }))
         .catch(() => ({ decisions: [], failed: true as const })),
+      listEventChangeRequests(id)
+        .then((requests) => ({ requests, failed: false as const }))
+        .catch(() => ({ requests: [], failed: true as const })),
     ]);
-    return <div className="mx-auto max-w-4xl"><Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link><div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div><RequestDetails request={result.request} coordinatorAssigned={coordinatorAssigned} /><div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div></div>;
+    const hasPendingChange = changeResult.requests.some((change) => change.status === "Pending");
+    return <div className="mx-auto max-w-4xl"><Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link><div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div><RequestDetails request={result.request} coordinatorAssigned={coordinatorAssigned} /><div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div>{changeResult.failed ? <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">Change request history is temporarily unavailable.</div> : <div className="mt-5"><ChangeRequestHistory requests={changeResult.requests} /></div>}{(result.request.status === "Approved" || result.request.status === "Planning") && !hasPendingChange && !changeResult.failed ? <div className="mt-5"><ChangeRequestForm eventRequestId={id} /></div> : null}{hasPendingChange ? <div role="status" className="mt-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">A change request is waiting for the assigned coordinator.</div> : null}</div>;
   }
 
   return (
