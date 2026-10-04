@@ -1,4 +1,8 @@
-from app.models.event_request import EventRequestResponse, EventRequestStatus
+from app.models.event_request import (
+    EventRequestResponse,
+    EventRequestStatus,
+    EventReviewDecision,
+)
 from app.repositories.event_request_repository import EventRequestRpcError
 from app.services.event_request_service import (
     EventRequestNotFoundError,
@@ -28,16 +32,19 @@ class TransitionForbiddenError(Exception):
         self.event_request_id = event_request_id
 
 
+class DecisionReasonRequiredError(Exception):
+    """A returned or rejected request must explain what the organiser needs to know."""
+
+    def __init__(self, decision: EventRequestStatus) -> None:
+        super().__init__(f"A reason is required when the decision is {decision.value}")
+
+
 class EventTransitionService:
-    """Owns the coordinator status transitions: start review (Submitted ->
-    Under Review), cancel (any non-terminal status -> Cancelled) and
-    complete (Confirmed -> Completed). Each runs through the
-    advance_event_request_by_coordinator database function, which locks the
-    row and re-checks the latest assignment in the same transaction — the
-    authorization decision and the status write commit atomically.
-    Deliberately not a general state machine: approval, rejection and
-    changes-requested are owned by other stories (SCRUM-17, SCRUM-35), as
-    are planning/confirmation and auto-complete (SCRUM-40).
+    """Own coordinator transitions and SCRUM-17 review decisions.
+
+    Every operation uses a database function that locks the request and
+    re-checks the latest assignment before writing. Planning/confirmation and
+    post-submission change requests remain in their owning stories.
     """
 
     def __init__(self, event_request_service: EventRequestService) -> None:
@@ -50,6 +57,25 @@ class EventTransitionService:
             event_request_id, caller_id, EventRequestStatus.UNDER_REVIEW
         )
 
+    def resume_review(
+        self, event_request_id: str, caller_id: str
+    ) -> EventRequestResponse:
+        try:
+            return self.event_request_service.resume_review_by_coordinator(
+                event_request_id, caller_id
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == NOT_FOUND_ERRCODE:
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == NOT_ASSIGNED_ERRCODE:
+                raise TransitionForbiddenError(event_request_id) from error
+            if error.errcode == NOT_ALLOWED_ERRCODE:
+                raise TransitionNotAllowedError(
+                    event_request_id,
+                    "A clarification response is required before review can continue",
+                ) from error
+            raise
+
     def cancel(self, event_request_id: str, caller_id: str) -> EventRequestResponse:
         return self._advance(
             event_request_id, caller_id, EventRequestStatus.CANCELLED
@@ -59,6 +85,33 @@ class EventTransitionService:
         return self._advance(
             event_request_id, caller_id, EventRequestStatus.COMPLETED
         )
+
+    def decide(
+        self,
+        event_request_id: str,
+        caller_id: str,
+        payload: EventReviewDecision,
+    ) -> EventRequestResponse:
+        if payload.requires_reason() and payload.reason is None:
+            raise DecisionReasonRequiredError(payload.decision)
+        try:
+            return self.event_request_service.decide_by_coordinator(
+                event_request_id,
+                caller_id,
+                payload.decision,
+                payload.reason,
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == NOT_FOUND_ERRCODE:
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == NOT_ASSIGNED_ERRCODE:
+                raise TransitionForbiddenError(event_request_id) from error
+            if error.errcode == NOT_ALLOWED_ERRCODE:
+                raise TransitionNotAllowedError(
+                    event_request_id,
+                    f"Cannot decide event request {event_request_id} from its current status",
+                ) from error
+            raise
 
     def _advance(
         self,

@@ -32,6 +32,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0013_coordinator_transition_execute_grants.sql` | Revokes the direct `EXECUTE` grants Supabase's default privileges give `anon` and `authenticated` on the 0012 function, leaving `service_role` only (same fix as 0005 + 0006 for the equipment RPCs) |
 | `migrations/0014_atomic_coordinator_assignment.sql` | `assign_event_request_coordinator` RPC: locks the event request, validates its state and the target coordinator role, then inserts assignment history atomically. Server role only |
 | `migrations/0015_harden_coordinator_transition_search_path.sql` | Pins the SCRUM-28 transition RPC to an empty search path, clearing the Supabase mutable-search-path warning without changing behavior |
+| `migrations/0016_event_request_review_decisions.sql` | SCRUM-17 review history plus server-only atomic RPCs for decisions, organiser clarification responses and resuming review |
 | `migrations/0017_notifications.sql` | `notifications` table for SCRUM-37: one row per recipient per event, unique `(recipient_id, event_id)` so a retried event is stored once, newest-first inbox index, RLS on with service-role access only |
 
 `0011` was applied to the shared Supabase development project via MCP on 22
@@ -103,6 +104,11 @@ Atomic assignment is verified by
 After `0014`, it exercises missing, Draft, terminal and wrong-role failures,
 successful assignment and reassignment history, the shared row-lock contract
 and server-only execution grants. It rolls back all verification data.
+
+SCRUM-17 review decisions are verified by
+[`verify_event_request_review_decisions.sql`](verify_event_request_review_decisions.sql).
+After `0016`, it exercises every review outcome, reason and response retention, refused
+side effects and server-only permissions. It rolls back all verification data.
 
 ## Test accounts
 

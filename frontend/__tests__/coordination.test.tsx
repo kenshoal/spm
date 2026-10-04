@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { CoordinationRequestList } from "@/app/coordination/requests/coordination-request-list";
 import { TransitionButton } from "@/app/coordination/requests/[id]/transition-buttons";
+import { ReviewDecisionPanel } from "@/app/coordination/requests/[id]/review-decision-panel";
 import {
   coordinatorActions,
   EVENT_REQUEST_STATUSES,
@@ -16,11 +17,15 @@ vi.mock("@/app/coordination/actions", () => ({
   startEventRequestReview: vi.fn().mockResolvedValue({}),
   cancelEventRequest: vi.fn().mockResolvedValue({}),
   completeEventRequest: vi.fn().mockResolvedValue({}),
+  resumeEventRequestReview: vi.fn().mockResolvedValue({}),
+  decideEventRequest: vi.fn().mockResolvedValue({}),
 }));
 
 import {
   cancelEventRequest,
   completeEventRequest,
+  decideEventRequest,
+  resumeEventRequestReview,
   startEventRequestReview,
 } from "@/app/coordination/actions";
 
@@ -90,6 +95,17 @@ test("starts review immediately without a confirmation dialog", async () => {
   );
 });
 
+// Purpose: A returned request can re-enter review after the organiser has responded.
+test("continues review through the dedicated transition", async () => {
+  render(<TransitionButton eventRequestId="request-1" kind="resume-review" />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Continue review" }));
+
+  await waitFor(() =>
+    expect(resumeEventRequestReview).toHaveBeenCalledWith("request-1", {}, expect.anything()),
+  );
+});
+
 // Purpose: Cancelling an event always requires explicit confirmation first.
 test("asks for confirmation before cancelling and acts only once confirmed", async () => {
   render(<TransitionButton eventRequestId="request-2" kind="cancellation" />);
@@ -116,4 +132,36 @@ test("asks for confirmation before completing", async () => {
 
   fireEvent.click(within(dialog).getByRole("button", { name: "Mark complete" }));
   await waitFor(() => expect(completeEventRequest).toHaveBeenCalled());
+});
+
+// Purpose: Review controls expose every SCRUM-17 outcome without hiding rejection.
+test("offers approve, request clarification and reject decisions", () => {
+  render(<ReviewDecisionPanel eventRequestId="request-4" />);
+
+  expect(screen.getByRole("button", { name: "Approve request" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Request clarification" })).toBeDefined();
+  expect(screen.getByRole("button", { name: "Reject request" })).toBeDefined();
+});
+
+// Purpose: The clarification dialog collects guidance before sending the decision.
+test("submits the reason supplied for requested clarification", async () => {
+  render(<ReviewDecisionPanel eventRequestId="request-4" />);
+  fireEvent.click(screen.getByRole("button", { name: "Request clarification" }));
+
+  const dialog = screen.getByRole("dialog", {
+    name: "Request clarification from the organiser",
+  });
+  fireEvent.change(within(dialog).getByRole("textbox"), {
+    target: { value: "Clarify the equipment requirements." },
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Request clarification" }));
+
+  await waitFor(() =>
+    expect(decideEventRequest).toHaveBeenCalledWith(
+      "request-4",
+      "Changes Requested",
+      {},
+      expect.any(FormData),
+    ),
+  );
 });
