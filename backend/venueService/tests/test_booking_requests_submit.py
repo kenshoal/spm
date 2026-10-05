@@ -5,15 +5,7 @@ event service is faked at the HTTP boundary, so the real client runs.
 """
 
 import pytest
-from fastapi.testclient import TestClient
-
-from app.booking_repository import booking_repository, get_booking_repository
-from app.dependencies import require_authenticated, require_venue_staff
-from app.main import app
-from app.models import VenueStatus
-from app.repository import repository
-from app.supabase_repository import SupabaseRepositoryError
-from tests.booking_support import (
+from booking_support import (
     COORDINATOR,
     EVENT,
     OMIT,
@@ -25,6 +17,14 @@ from tests.booking_support import (
     make_venue,
     submit_body,
 )
+from fastapi.testclient import TestClient
+
+from app.booking_repository import booking_repository, get_booking_repository
+from app.dependencies import require_authenticated, require_venue_staff
+from app.main import app
+from app.models import VenueStatus
+from app.repository import repository
+from app.supabase_repository import SupabaseRepositoryError
 
 client = TestClient(app)
 AUTH = {"Authorization": "Bearer coordinator-token"}

@@ -7,14 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
-
-from app.booking_models import BookingRequest, BookingRequestStatus
-from app.booking_repository import booking_repository
-from app.dependencies import require_authenticated, require_venue_staff
-from app.main import app
-from app.models import Slot
-from tests.booking_support import (
+from booking_support import (
     COORDINATOR,
     EVENT,
     ORGANISER,
@@ -25,6 +18,13 @@ from tests.booking_support import (
     make_venue,
     submit_body,
 )
+from fastapi.testclient import TestClient
+
+from app.booking_models import BookingRequest, BookingRequestStatus
+from app.booking_repository import booking_repository
+from app.dependencies import require_authenticated, require_venue_staff
+from app.main import app
+from app.models import Slot
 
 client = TestClient(app)
 AUTH = {"Authorization": "Bearer token"}
