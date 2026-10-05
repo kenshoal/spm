@@ -6,8 +6,6 @@ from postgrest.exceptions import APIError
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
 EQUIPMENT_ID = "22222222-2222-2222-2222-222222222222"
-RESERVATION_ID = "33333333-3333-3333-3333-333333333333"
-EVENT_REQUEST_ID = "44444444-4444-4444-4444-444444444444"
 
 EQUIPMENT_ROW: dict[str, Any] = {
     "id": EQUIPMENT_ID,
@@ -20,19 +18,6 @@ EQUIPMENT_ROW: dict[str, Any] = {
     "created_at": "2026-09-15T09:00:00+00:00",
     "updated_at": "2026-09-15T09:00:00+00:00",
 }
-
-RESERVATION_ROW: dict[str, Any] = {
-    "id": RESERVATION_ID,
-    "event_request_id": EVENT_REQUEST_ID,
-    "equipment_id": EQUIPMENT_ID,
-    "quantity": 2,
-    "status": "pending",
-    "requirements": "Two PA speakers",
-    "requested_by": USER_ID,
-    "created_at": "2026-10-04T01:00:00+00:00",
-    "updated_at": "2026-10-04T01:00:00+00:00",
-}
-
 
 def bearer() -> dict[str, str]:
     return {"Authorization": "Bearer test-token"}
@@ -126,35 +111,6 @@ def test_list_equipment_invalid_status_filter(
     )
 
     assert response.status_code == 422
-
-
-# AC7-H1 (happy): Technical Support Staff list equipment reservations
-def test_technical_support_can_list_equipment_reservations(
-    client: TestClient, fake_client, auth_staff
-) -> None:
-    fake_client.table_data["equipment_reservations"] = [RESERVATION_ROW]
-
-    response = client.get("/equipment/reservations", headers=bearer())
-
-    assert response.status_code == 200
-    assert response.json()[0]["event_request_id"] == EVENT_REQUEST_ID
-    assert ("order", "created_at") in fake_client.filters
-
-
-# AC7-N1 (negative): the reservation queue requires a signed-in user (401)
-def test_equipment_reservations_require_authentication(client: TestClient) -> None:
-    response = client.get("/equipment/reservations")
-
-    assert response.status_code == 401
-
-
-# AC7-N2 (negative): roles other than Technical Support are refused (403)
-def test_equipment_reservations_forbidden_for_unrelated_roles(
-    client: TestClient, auth
-) -> None:
-    response = client.get("/equipment/reservations", headers=bearer())
-
-    assert response.status_code == 403
 
 
 # AC3-H2 (happy path): a single record shows its current attributes

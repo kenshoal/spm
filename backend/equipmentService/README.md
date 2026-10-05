@@ -22,7 +22,6 @@ The service is available at `http://localhost:8002`, its health check at `http:/
 ## Auth seam
 
 Endpoints require an `Authorization: Bearer <token>` header whose access token is verified with authService (see `app/deps.py` and `docs/AUTH_INTEGRATION.md`). Requests without a valid token return 401. Reads require `event_coordinator` or `technical_support`; mutations require `technical_support`.
-The reservation queue requires `technical_support`; coordinators cannot read it.
 
 ## Database & RPCs
 
@@ -43,7 +42,6 @@ Note: `transition_equipment_status` did not exist in the live database until mig
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/equipment` | List equipment, optional `type` and `operational_status` filters |
-| GET | `/equipment/reservations` | List concrete event/equipment reservations (`technical_support` only) |
 | GET | `/equipment/{id}` | Fetch one item (404 if missing) |
 | POST | `/equipment` | Create item (`technical_support` only); creator comes from the verified token; seeds first history row |
 | PATCH | `/equipment/{id}/quantity` | Update `total_owned_quantity` (must be >= 0; `technical_support` only) |

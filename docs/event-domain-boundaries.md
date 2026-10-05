@@ -51,9 +51,10 @@ commands behind the hand-off contract above.
   record is SCRUM-32's `venue_booking_requests` row: venue, event reference,
   date range, slots, and the event snapshot (name, attendance, requirements
   note) taken at submission, so Venue Staff never read the event request.
-- Technical Support Staff receive concrete equipment reservations through
-  `equipmentService`; the reservation record contains the event, equipment and
-  quantity relationship needed to support the arrangement.
+- Technical Support Staff will read equipment reservations once SCRUM-13
+  (Reserve Equipment for an Event) creates them; that story owns the
+  reservation table. Until then they can read the equipment catalogue and
+  status, which Attendees cannot.
 - The assigned Event Coordinator remains the only coordinator who can read the
   full request. Venue and technical queues are role-wide until those domains
   define individual staff assignment.
