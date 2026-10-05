@@ -214,6 +214,46 @@ Row `P10`, no reservations, event Wed 14, unless stated.
 
 ## Latest execution record
 
+**Run 6 October 2026: manual integration against the shared database (Pass).** Branch `feat/scrum-10-equipment-availability` at `f8e5d7d`. Environment: macOS, full stack from `docker compose up --build -d` (equipmentService, authService, venueService), the shared Supabase development project with migration `0020` applied by Yang. Dependencies **real**: real login through authService, real venue list from venueService, real `equipment` and `equipment_reservations` rows. Test data was seeded with SQL (all rows prefixed `MANUAL-`) and is removed with the cleanup SQL after the run. Seed SQL, commands and expected results for the POST cases are in `SCRUM-10-manual-post-test.md`, kept in the project folder outside the repo.
+
+`GET /equipment/{id}/status`: one 10-unit row per case, reservation dates relative to the Singapore date of the run, logged in as `technical_support@example.com`. **9 of 9 matched.** The first attempt returned `available_quantity: 10` for every working row because the equipmentService container was a stale image built before the change. After `docker compose up --build -d`, every case matched. The stale run is not counted as a code failure.
+
+| ID | Case | Expected | Actual | Execution status | Build or commit | Executed by and date |
+| --- | --- | --- | --- | --- | --- | --- |
+| SCRUM-16 regression | M1: no reservations | `true`, 10 | `true`, 10 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC3-H3 | M2: 4 reserved yesterday → tomorrow | `true`, 6 | `true`, 6 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC3-B3 | M3: returned yesterday | `true`, 10 | `true`, 10 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC3-B4 | M4: returning today | `true`, 6 | `true`, 6 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC3-B5 | M5: collecting today | `true`, 6 | `true`, 6 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC3-B6 | M6: collecting tomorrow | `true`, 10 | `true`, 10 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC3-P6 | M7: all 10 reserved today | `true`, 0 | `true`, 0 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC3-P7 | M8: `DAMAGED` row with a reservation | `false`, 0 | `false`, 0 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC3-P3 (status side) | M9: 3 + 4 reserved, both covering today | `true`, 3 | `true`, 3 | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+
+`POST /equipment/availability-check`: test venues `MANUAL-S10 Hall A` (location "MANUAL-S10 Wing North") and `MANUAL-S10 Hall B` ("MANUAL-S10 Wing South"). Rows: Projector ×10 `AVAILABLE` and ×4 `DAMAGED` in Store Room B (store stock), Speaker ×6 based at Hall B, Mic ×5 based at `"manual-s10  wing north "` (odd spacing). Event A on Mon 15 Mar 2027 at Hall A holds all of them: Projector and Mic Sun 14 → Mon 15, Speaker Sat 13 → Mon 15 (one transfer day). `{r, a, s}` = `{requested, available, shortfall}`. **9 of 9 matched.**
+
+| ID | Case | Expected | Actual | Execution status | Build or commit | Executed by and date |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC4-B1, AC5, AC1-H2 | C1: Tue 16 at Hall A; Projector 5, Speaker 2, Mic 1 | `200`; `{5,0,5}`, `{2,0,2}`, `{1,0,1}` | As expected | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC4-B2, AC2-H1, AC6-H1, AC5-B1, AC5-P2, AC5-P7 | C2: Wed 17 at Hall A; Projector 12, Speaker 2, Mic 5 | `200`; Projector `{12,10,2}` (damaged 4 excluded; shortfall reported, not 409), Speaker `{2,0,2}` (transfer day still clashes), Mic `{5,5,0}` (same building by location) | As expected | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC5-B2, AC1-P2, AC1-P4 | C3: Thu 18 at Hall A; `"  manual-post speaker "` 6, `MANUAL-POST Hologram` 1 | `200`; `"  manual-post speaker "` `{6,6,0}` (keyed as sent), Hologram `{1,0,1}` | As expected | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC5-H2, AC5-P3, AC5-P6 | C4: Wed 17 at **Hall B**; Projector 12, Speaker 2, Mic 5 | `200`; Projector `{12,10,2}`, Speaker `{2,6,0}` (now same building), Mic `{5,0,5}` (now another building) | As expected | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC1-N5 | N1: unknown `venue_id` | `404` "Venue not found" | As expected | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC1-B2 | N2: end Tue 16 before start Wed 17 | `422` | `422` "end_date must not be before start_date" | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC1-N3 | N3: `"MANUAL-POST Mic"` and `" manual-post mic"` | `422` | `422` "each equipment type may be listed once" | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC1-X2 | N4: `event_coordinator1@example.com` | `403` | `403` "Insufficient permissions" | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+| AC1-X1 | N5: no session | `401` | `401` "Authentication required" | Pass | `f8e5d7d` | Yang, 6 Oct 2026 |
+
+Still outstanding after this run:
+
+| ID | Execution status | Remarks |
+| --- | --- | --- |
+| AC1-N7 (real venueService down) | Not executed | Optional: `docker compose stop venue-service`, expect `502` "Venue service unavailable". Covered by the mocked API test |
+| AC3-H4, AC3-N1–N3 | Not executed | `0020` is applied, but `verify_equipment_reservations.sql` has not been run yet |
+| AC3-X2 | Not executed | REST check with the publishable key |
+
+The integration check (`testing.md` §5) previously recorded as Blocked is now covered by this run for both endpoints.
+
 **Run 5 October 2026: Green (implementation complete).** Branch `feat/scrum-10-equipment-availability`, commits `8750725` (clock), `0d9c357` (pure availability module), `4dd4044` (migration 0020 + verify script), `e946445` (status subtracts reservations), `6681a91` (availability-check endpoint). Environment: macOS (Darwin 24.6.0), Python 3.14.2 (project `.venv`), dependencies installed from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `FakeSupabase` for the database; authService and venueService stubbed at `httpx.get`; the clock frozen via `app.dependency_overrides[get_today]`.
 
 Command: `pytest -q` from `backend/equipmentService/` → **136 passed, 0 failed, 0 skipped** (54 pre-existing SCRUM-16/SCRUM-45 tests + 82 SCRUM-10 test runs). `ruff check .` → all checks passed. The one warning is a pre-existing starlette `anyio` deprecation, unrelated to this story.
