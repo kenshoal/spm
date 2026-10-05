@@ -1,6 +1,6 @@
 # SCRUM-12 Test Cases: Check Venue Suitability
 
-Last reviewed: 4 October 2026
+Last reviewed: 5 October 2026
 
 Status: **the AC review below was approved as proposed by the story owner (Kennedy) on 4 October 2026.** The test-design review is still pending. The implementation and tests were written before this document existed, so the sequence the standard asks for (approve the ACs, write the cases, watch them fail, implement) was not followed; see [Disclosures](#disclosures).
 
@@ -33,9 +33,10 @@ Expected change to scope: none. Expected change to testing effort: one case per 
 | --- | --- | --- |
 | Included | `POST /venues/{venue_id}/suitability`: an advisory comparison of caller-supplied requirements against one venue's recorded attributes | SCRUM-12 |
 | Excluded | Whether the venue is free on a date (blocks, bookings) | SCRUM-31, SCRUM-23 |
+| Excluded | Location. It is not in the ACs and an event has no structured location to compare; venue search already filters by location. Confirmed by Kennedy on 5 October 2026 | none |
 | Excluded | Submitting, deciding or holding a booking | SCRUM-32, SCRUM-15, SCRUM-18 |
 | Excluded | Reading the event's attendance or dates from eventRequestService | Not in the ACs (see Q1) |
-| Excluded | A frontend screen for the check | None built yet |
+| Included (added 5 October 2026) | A per-result "Check suitability" form on the existing venue search results page, showing the verdict and each mismatch (see Q3) | SCRUM-12 |
 
 ### Actors and relationship permissions
 
@@ -59,6 +60,7 @@ Expected change to scope: none. Expected change to testing effort: one case per 
 | A5 | A venue whose status is `blocked` is still compared on its attributes. Suitability is not availability. | none |
 | Q1 | Should the check read attendance from the event itself (by `event_request_id`) instead of the request body? | none |
 | Q2 | Should a blocked venue be reported as not suitable? | none |
+| Q3 | The search results contain only venues that already meet every search filter, so a check pre-filled from those filters will say Suitable. The check is useful when the coordinator changes a requirement (for example a larger attendance) or enters requirements the search did not filter on. Is that the intended use? | AC4-H6 |
 
 ## Test-case matrix
 
@@ -92,6 +94,17 @@ A row with an ID range is one parametrized test whose cases carry those IDs.
 | AC4-H2 | AC4 | A not-suitable result lists one reasoned mismatch per failed attribute | Happy | Venue capacity 20, no Stage | POST suitability | attendance 50, requires Stage | 200, `suitable` false, mismatches for `capacity` and `facilities`, each with a non-empty reason | none | API |
 | AC4-H3 | AC4 | Each reason names the values that failed | Happy | Venue meets nothing requested | Check suitability | capacity 10 vs 50, boardroom, NIGHT, Stage, Hearing loop | reasons contain 10 and 50, "boardroom", "NIGHT", "Stage", "Hearing loop" | none | Unit |
 | AC5-X1 | AC5 | A check, suitable or not, leaves the venue and the catalogue unchanged | Cross-cutting | Venue capacity 20 | Run one suitable and one unsuitable check | attendance 20, then 500 | Venue record and venue list identical before and after | no create, update or hold | API |
+| AC1-N3 to AC1-N6 | AC1 | A non-positive or non-whole attendance is reported on the form and no request is sent (A1) | Negative | Search results are shown | Submit the check form | attendance "0", "abc", "2.5", "-1" | Message "Enter a whole number greater than zero.", no verdict shown | No request reaches venueService | Unit |
+| AC3-H2 | AC3 | Only the requirements the coordinator filled in are sent, with lists split on commas | Happy | Search results are shown | Submit the check form | attendance 100, theatre, PM, "Projector, Stage", "Ramp access" | One `POST /venues/{id}/suitability` with `expected_attendance` 100, `required_layout` theatre, `required_slot` PM, two facilities, one accessibility feature | none | Unit |
+| AC3-P12 | AC3 | A layout or slot outside the enums is dropped instead of causing a 422 (same rule as venue search) | Partition | Search results are shown | Submit the check form | layout "ballroom", slot "MIDNIGHT" | Request has no `required_layout` or `required_slot` | none | Unit |
+| AC3-H3 | AC3 | The form is pre-filled from the search filters, so the check starts from what was searched for | Happy | Search with attendees 80, layout theatre, slot PM, facility Projector | Open a result's check form | none | Fields show 80, Theatre, PM, Projector | none | Unit |
+| AC3-N4 | AC3 | A venue deleted or unknown after the search is reported, with no verdict | Negative | Venue returns 404 | Submit the check form | valid attendance | Message "This venue no longer exists." | No verdict shown | Unit |
+| AC3-N5 | AC3 | An expired session goes to sign-in | Negative | venueService returns 401 | Submit the check form | valid attendance | Redirect to `/auth` | No verdict shown | Unit |
+| AC3-N6 | AC3 | A service failure or network error is reported as "could not be checked", never as a verdict | Negative | venueService returns 500, or fetch throws | Submit the check form | valid attendance | Message "The suitability check could not be completed. Please try again." | No suitable or not-suitable verdict shown | Unit |
+| AC4-H4 | AC4 | A not-suitable result shows the verdict in words and one line per mismatch with its attribute and reason | Happy | Result has two mismatches | Render the result | `suitable` false, capacity and facilities mismatches | Text "Not suitable", a list item per mismatch naming the attribute and its reason | Verdict is not conveyed by colour alone | Unit |
+| AC4-H5 | AC4 | A suitable result shows the verdict and no mismatch list | Happy | Result has no mismatches | Render the result | `suitable` true | Text "Suitable", no list | none | Unit |
+| AC4-H6 | AC4 | In a browser, a coordinator searches, checks a result against a larger attendance and sees Not suitable with the capacity reason, then a smaller attendance and sees Suitable | Happy | Venue capacity 120 seeded; signed in as `event_coordinator` | Search, open the check form on the result, submit 500, then 50 | attendance 500, then 50 | "Not suitable" with a capacity reason naming 500 and 120, then "Suitable" | none | E2E |
+| AC5-X2 | AC5 | Running the check from the UI sends exactly one request, a POST to the suitability path, and the venue stays in the search results | Cross-cutting | Search results are shown | Submit the check form; reload the search | valid attendance | One `POST /venues/{id}/suitability`, no other call; the venue is still listed | No create, update or delete call | Unit, E2E |
 
 ### Latest execution record
 
@@ -117,6 +130,12 @@ Results are from the run on 4 October 2026 by Claude Code on Kennedy's machine, 
 | AC4-H1, AC4-H2 | Green | As expected | Pass | `d1159c1` | `test_suitable_venue_returns_no_mismatches`, `test_unsuitable_venue_returns_a_reason_per_mismatch`; confirmed live |
 | AC4-H3 | Green | As expected | Pass | `d1159c1` | `test_reasons_name_the_failing_values` |
 | AC5-X1 | Green | As expected | Pass | `d1159c1` | `test_check_never_changes_the_venue_or_the_catalogue`; confirmed live |
+| AC1-N3 to AC1-N6 | Red then Green | Red: the test file failed to import the missing modules. Green: as expected | Pass (UI addition, uncommitted working tree on `213a543`) | `213a543` + working tree | `__tests__/venue-suitability.test.tsx`: `rejects attendance`, `an invalid attendance sends no request` |
+| AC3-H2, AC3-P12 | Red then Green | As expected | Pass (UI addition) | `213a543` + working tree | `sends the filled-in requirements...`, `omits requirements that were left blank`, `drops a layout and a slot outside the enums` |
+| AC3-H3 | Red then Green | As expected | Pass (UI addition) | `213a543` + working tree | `pre-fills each result's check form from the search filters` |
+| AC3-N4, AC3-N5, AC3-N6 | Red then Green | As expected | Pass (UI addition) | `213a543` + working tree | `reports a venue that no longer exists`, `redirects to sign-in...`, `reports ... as could not be checked` |
+| AC4-H4, AC4-H5 | Red then Green | As expected | Pass (UI addition) | `213a543` + working tree | `shows Not suitable with each mismatch...`, `shows Suitable with no mismatch list`, and `returns the result from the service`. Flipping the verdict wording made both verdict tests fail |
+| AC4-H6, AC5-X2 | Written after the code (not Red-first) | As expected | Pass (UI addition, mock venue API) | `213a543` + working tree | `e2e/venue-search.spec.ts`: `coordinator checks a venue's suitability from the search results`; the unit test `makes no call other than the suitability POST` covers AC5-X2. The same wording flip made the browser test fail |
 
 ## Latest verification
 
@@ -129,6 +148,17 @@ Run on 4 October 2026 against commit `d1159c1`. Environment for the automated ru
 | Whole venueService suite | `pytest -q` | 67 passed, 10 skipped |
 
 The 10 skipped tests are `tests/test_supabase_schema.py`, a live-database file that is untracked on this machine and not in the repository, so a clean checkout has no skips.
+
+**UI addition (5 October 2026, `213a543` plus uncommitted changes).** Run from `frontend/` on Kennedy's machine, Node tooling as in the repo.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Lint | `npm run lint` | Clean |
+| Type check | `npm run typecheck` | Clean |
+| Unit and component tests | `npm test` | 160 passed (19 files); 17 are new in `venue-suitability.test.tsx` |
+| Browser tests, full suite | `npx playwright test` through a temporary config that selects the installed Google Chrome (`channel: "chrome"`; the Playwright browser download was not installed) | 20 passed, including the new test |
+
+The browser test runs against the **mock** venue API in `e2e/support/venue-api.mjs`, which this change extended with a copy of the suitability rules. It proves the screen and the form-to-action wiring, not the real venueService contract. The real venueService is covered by its own 31 tests, and a manual check of the screen against the real stack (Docker Compose backends, `npm run dev`, signed in as a shared test coordinator) was done by Kennedy on 5 October 2026, who reported it working. That is the story owner's observation: no commands, counts or screenshots were captured, so it is not recorded as a Pass.
 
 **Live check (real authService, 3 October 2026).** The real authService (Supabase Auth, shared dev project) and venueService (in-memory store, port 8004) were started, with the shared dev test accounts from `database/seed_test_accounts.sql`. The venue was created as `venue_staff@example.com` and checked as `event_coordinator1@example.com`: no token gave 401, an invalid token gave 401, a suitable check gave 200 with `suitable` true, an unsuitable check gave 200 with `capacity` and `facilities` mismatches, an unknown venue gave 404, and the venue record was identical before and after. Both services were stopped afterwards.
 
@@ -156,3 +186,5 @@ The first run of this check showed that the original AC2-P1 did not catch M2, so
 - The implementation (commits `dfc8b17` and `6991101`) was written before this document and before the AC review. The tests were written after the code, not Red-first, and were strengthened afterwards by the mutation check above.
 - The code and the tests were both drafted by Claude Code. The test design review by a team member is **pending (Kennedy)**.
 - The AC review in [Story contract](#story-contract) was **approved as proposed by Kennedy on 4 October 2026**; the assumptions A1 to A5 were not separately confirmed.
+- The UI addition (per-result check form) was requested by Kennedy on 5 October 2026. Its cases were written into this document before the tests, and the unit tests were Red first. The browser test was written after the code. The pre-existing test `shows key attributes for each result` was changed to read the attribute list only, because the new form also offers "Theatre" as an option and made the old query ambiguous.
+- Q3 (search results are already filtered, so a pre-filled check says Suitable until a requirement is changed) is open. Date and location checks were considered and left out of SCRUM-12 by Kennedy on 5 October 2026.

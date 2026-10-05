@@ -65,7 +65,16 @@ export default async function VenueSearchPage({ searchParams }: { searchParams: 
       ) : outcome.failed ? (
         <div role="alert" className="rounded-2xl border border-[#eccdbe] bg-[#fff8f3] px-6 py-8 text-[#793f27]">The venue service is unavailable. Start the local API on port 8004, then refresh.</div>
       ) : (
-        <VenueResults venues={outcome.venues} />
+        <VenueResults
+          venues={outcome.venues}
+          requirements={{
+            expected_attendance: input.required_capacity ?? "",
+            required_layout: input.layout ?? "",
+            required_slot: input.slot ?? "",
+            required_facilities: input.facility ?? "",
+            required_accessibility: input.accessibility ?? "",
+          }}
+        />
       )}
     </AppShell>
   );
