@@ -24,7 +24,7 @@ The live Jira ACs (revised 5 October 2026) are a role checklist. Following `test
 | AC3 | Given an Event Organiser belongs to an unrelated client organisation, or to none, when they try to list, open or change another Organiser's request, then it is absent from their list and every direct access returns `404`, so its existence is not disclosed. | **Clarify** | "Blocks access and does not expose restricted details" made observable: `404`, identical to a missing request. |
 | AC4 | Given an Attendee, when they view events, then they receive only the public projection of **Confirmed** or **Completed** events, and planning fields are never returned. | **Keep** | Implemented in `b3afacb` / `d60b694`. |
 | AC5 | Given an Event Coordinator, when they open a request, then they can read it only while they are its currently assigned Coordinator; otherwise `404`. | **Keep** | Implemented; "otherwise permitted by internal workflow rules" has no further rule in R1 (Event Operations Manager access is SCRUM-14). |
-| AC6 | Given Venue Staff, when they read venue booking requests, then they receive SCRUM-32's booking record (venue, event reference, date range, slots, and the event snapshot taken at submission) needed to approve or reject it, and no other planning fields. | **Keep** | Implemented in `0eb166d`; on 5 Oct 2026 realigned to SCRUM-32's live `venue_booking_requests` table (see Disclosures). |
+| AC6 | Given Venue Staff, when they read venue booking requests, then they receive SCRUM-32's booking record (venue, event reference, date range, slots, and the event snapshot taken at submission) needed to approve or reject it, and no other planning fields. | **Keep** | Delivered by SCRUM-32's `GET /booking-requests` endpoints, which this story reuses (see Disclosures). |
 | AC7 | Given Technical Support Staff, when they read equipment reservations, then they receive the reservation record (event, equipment, quantity, requirements) and no other planning fields. | **Keep** | Implemented in `0eb166d`. |
 | AC8 | Given any user without the relationships above, when they request event data, then access is refused without exposing restricted details. | **Merge** | Covered by the negative cases of AC2–AC7; kept as an ID for the cross-cutting matrix rows. |
 
@@ -108,10 +108,10 @@ Fixtures for the API and unit layers: organisation **Acme** has Organisers `org-
 | AC4-N1 | AC4 | Other roles are refused the public projection | Negative | Organiser or Coordinator caller | `GET /event-requests/public-events` | — | `403` | — | API |
 | AC5-H1 | AC5 | Details are visible only to the owner or the assigned Coordinator | Happy | Request with an assigned Coordinator | `GET /event-requests/{id}` per caller (parametrized) | — | Owner and assigned Coordinator `200`; related but unauthorised `404`; unrelated roles `403` | — | API |
 | AC5-N1 | AC5 | An unassigned Coordinator cannot confirm a request exists | Negative | Request assigned to another Coordinator | `GET /event-requests/{id}` | — | `404` | — | API |
-| AC6-H1 | AC6 | Venue Staff read the real SCRUM-32 booking row, including its event snapshot | Happy | One `venue_booking_requests` row as SCRUM-32 defines it | `list_booking_requests()` | `_booking_row()` | Every field of the record returned unchanged | — | API (repository) |
-| AC6-H2 | AC6 | Venue Staff can list booking requests | Happy | Venue Staff caller | `GET /venue-booking-requests` | — | `200` | — | API |
-| AC6-N1 | AC6 | The booking queue needs a signed-in user | Negative | No token | `GET /venue-booking-requests` | — | `401` | — | API |
-| AC6-N2 | AC6 | Other roles cannot read the booking queue | Negative | Attendee caller | `GET /venue-booking-requests` | — | `403` | — | API |
+| AC6-H1 | AC6 | Venue Staff read the pending booking queue with the event snapshot | Happy | SCRUM-32 booking requests | `GET /booking-requests` as Venue Staff | — | `200`, SCRUM-32 records | — | API (reused: SCRUM-32 `AC3-H2`, `AC3-P1`) |
+| AC6-N1 | AC6 | Other roles cannot read the booking queue | Negative | Coordinator or Organiser caller | `GET /booking-requests` | — | `403` | — | API (reused: SCRUM-32 `AC3-N2`, `AC3-N3`) |
+| AC6-N2 | AC6 | Reads need a signed-in user | Negative | No token | Every booking read | — | `401` | — | API (reused: SCRUM-32 `AC3-X2`) |
+| AC6-X1 | AC6 | A Coordinator cannot see another Coordinator's booking request | Cross-cutting | Booking by another Coordinator | `GET /booking-requests/{id}` | — | `404`, same as an unknown id | — | API (reused: SCRUM-32 `AC5-N14`) |
 | AC7-H1 | AC7 | Technical Support Staff list equipment reservations | Happy | Technical Support caller, one reservation row | `GET /equipment/reservations` | — | `200` with the reservation | — | API |
 | AC7-N1 | AC7 | The reservation queue needs a signed-in user | Negative | No token | `GET /equipment/reservations` | — | `401` | — | API |
 | AC7-N2 | AC7 | Other roles cannot read the reservation queue | Negative | Coordinator caller | `GET /equipment/reservations` | — | `403` | — | API |
@@ -131,14 +131,14 @@ Working tree on top of `0eb166d` (uncommitted), Windows 11, 5 October 2026, exec
 | AC2-X2 | Green | As expected | Pass | as above, Chromium, stub APIs | Claude, 5 Oct 2026 | `frontend/e2e/organisation-access.spec.ts`. Red first: the shared notice was missing |
 | AC1-H2, AC2-X1 (DB), AC3-P2 (DB), AC3-N2, AC3-N3 | Green | Block ended with `VERIFY PASSED: AC1-H2, AC2-X1, AC3-P2, AC3-N2, AC3-N3`; follow-up query found 0 leftover rows | Pass | `0019` + `0020` applied to shared Supabase `rrmvhxrxrrnigjdxcbwt` on 5 Oct 2026 | Claude, 5 Oct 2026 | The checks from `verify_client_organisations.sql`, run in the Supabase SQL Editor inside one block that ends with an exception so every change rolls back |
 | AC3-N1 | Green | `anon`/`authenticated` have no SELECT/INSERT on `client_organisations`, `organisation_members` or `equipment_reservations`, and no EXECUTE on the trigger function | Pass | as above | Claude, 5 Oct 2026 | `has_table_privilege` / `has_function_privilege` query through Supabase MCP |
-| AC6-H1 | Green | As expected | Pass | as above, `httpx.MockTransport` | Claude, 5 Oct 2026 | `venueService/tests/test_supabase_repository.py`. Red first: `ValidationError`, 5 fields missing, which is the same failure the live table would cause |
-| AC6-H2, AC6-N1, AC6-N2, AC7-H1, AC7-N1, AC7-N2 | Green (pre-existing, now labelled) | As expected | Pass | as above | Claude, 5 Oct 2026 | `venueService/tests/test_booking_access.py`, `equipmentService/tests/test_equipment.py` |
+| AC6-H1, AC6-N1, AC6-N2, AC6-X1 | Green (SCRUM-32 tests) | As expected | Pass | merge `8aed6ed` | Claude, 5 Oct 2026 | `venueService/tests/test_booking_requests_read.py`. This branch's duplicate `GET /venue-booking-requests` was removed when `dev` was merged (see Disclosures) |
+| AC7-H1, AC7-N1, AC7-N2, AC4-N2, AC4-N3 | Green (pre-existing, now labelled) | As expected | Pass | merge `8aed6ed` | Claude, 5 Oct 2026 | `equipmentService/tests/test_equipment.py`, `test_status.py` (AC4-N2/N3: Attendees refused equipment and status reads) |
 | AC4-H1, AC4-N1, AC5-H1, AC5-N1 | Green (pre-existing, now labelled) | As expected | Pass | as above | Claude, 5 Oct 2026 | `eventRequestService/tests/test_event_request_controller.py` |
 
-Suite-level results on the same tree:
+Suite-level results after merging `dev` (merge commit `8aed6ed`):
 
-- `backend/eventRequestService`: `ruff check .` passed; `pytest` **246 passed**, 0 failed, 0 skipped (2 deprecation warnings from starlette/anyio).
-- `frontend`: `npm run lint` clean; `npm run typecheck` clean; `npm test` **18 files, 143 tests passed**; `npm run test:e2e` **20 passed** (Chromium, stub APIs); `npm run build` compiled successfully.
+- Backend `pytest`: eventRequestService **272 passed**, venueService **147 passed**, equipmentService **71 passed**, authService **45 passed**, notificationService **53 passed**; 0 failed, 0 skipped; `ruff check .` clean in all five.
+- `frontend`: `npm run lint` clean; `npm run typecheck` clean; `npm test` **21 files, 180 tests passed**; `npm run test:e2e` **24 passed** (Chromium, stub APIs); `npm run build` compiled successfully.
 - Shared Supabase: Security Advisor reports only INFO `rls_enabled_no_policy` for the new tables (intended: service-role only, the same as every other table) and INFO `unused_index` (tables are new). No new WARN.
 - Seed: `client_organisations` / `organisation_members` are empty. `event_organiser2@example.com` and `event_organiser3@example.com` are not registered yet, so `seed_test_accounts.sql` has not been run.
 - Pull-request CI: see the pull request.
@@ -148,4 +148,5 @@ Suite-level results on the same tree:
 - The role scopes for Attendees, Coordinators, Venue Staff and Technical Support (`b3afacb`, `d60b694`, `0eb166d`) were implemented before this story contract existed, so the standard's order (approve the ACs, write the cases, watch them fail) was not followed for AC4–AC7.
 - Claude (AI) drafted this AC review, the test design, the tests and the implementation. A team member still has to review the test design (`testing.md` §10).
 - The three repository query tests were written after the implementation.
+- When `dev` was merged, SCRUM-32's `GET /booking-requests` endpoints were already there and cover AC6, including restricting Coordinators to their own bookings. This branch's duplicate `GET /venue-booking-requests`, its `VenueBookingRequest` model and its tests were removed, and AC6 now reuses SCRUM-32's tests.
 - `0eb166d` originally created its own `venue_booking_requests` table in a second `0018` migration. That clashed with SCRUM-32's table, which is already live in the shared project, and venueService would have failed to read real rows. On 5 Oct 2026 the table was dropped from this branch, the migration renamed to `0020_equipment_reservations.sql`, and `VenueBookingRequest` aligned to SCRUM-32's columns.
