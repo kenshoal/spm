@@ -34,6 +34,14 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0015_harden_coordinator_transition_search_path.sql` | Pins the SCRUM-28 transition RPC to an empty search path, clearing the Supabase mutable-search-path warning without changing behavior |
 | `migrations/0016_event_request_review_decisions.sql` | SCRUM-17 review history plus server-only atomic RPCs for decisions, organiser clarification responses and resuming review |
 | `migrations/0017_notifications.sql` | `notifications` table for SCRUM-37: one row per recipient per event, unique `(recipient_id, event_id)` so a retried event is stored once, newest-first inbox index, RLS on with service-role access only |
+| `migrations/0019_equipment_reservations.sql` | `equipment_reservations` table for SCRUM-10 (numbered after dev's `0018_venue_booking_requests.sql`): units of an equipment row committed to an event, `quantity > 0` and `return_date >= collection_date` CHECKs, FKs to `equipment` and `event_requests`, hold-window index, RLS on with service-role access only. Starts empty; SCRUM-13 writes rows |
+
+Verify `0019` after applying it: run
+[`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
+SQL Editor — it exercises the CHECK constraints and both foreign keys
+(including the refusal paths) and prints
+`ALL EQUIPMENT RESERVATION VERIFICATIONS PASSED` on success, rolling back so
+no data is left behind.
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
