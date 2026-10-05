@@ -1,7 +1,7 @@
 -- Equipment reservations (SCRUM-10). Starts empty; SCRUM-13 writes rows.
 -- collection_date = hold start (D-1 plus any transfer day); return_date = event end date.
 -- Date maths lives in Python (app/availability.py), not SQL. Safe to re-run.
--- Numbered 0019 because dev already took 0018 (venue_booking_requests, SCRUM-32).
+-- Numbered 0020 (after the SCRUM-39 placeholder table was dropped; see README).
 
 CREATE TABLE IF NOT EXISTS public.equipment_reservations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

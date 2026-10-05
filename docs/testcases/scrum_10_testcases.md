@@ -35,7 +35,7 @@ Scenario form used by the matrix (**proposed wording, pending story-owner approv
 
 ### Scope
 
-- **Included:** the `equipment_reservations` table (migration `0019`; numbered after `0018_venue_booking_requests.sql`, which dev took for SCRUM-32), the pure Python availability module `app/availability.py` (`check_availability`, `hold_window`, `needs_transfer`, `committed_peak`), `POST /equipment/availability-check`, the reservation-aware `available_quantity` on `GET /equipment/{id}/status`, the `get_today()` Singapore-time dependency, and the venueService lookup.
+- **Included:** the `equipment_reservations` table (migration `0020`; numbered after `0018_venue_booking_requests.sql`, which dev took for SCRUM-32), the pure Python availability module `app/availability.py` (`check_availability`, `hold_window`, `needs_transfer`, `committed_peak`), `POST /equipment/availability-check`, the reservation-aware `available_quantity` on `GET /equipment/{id}/status`, the `get_today()` Singapore-time dependency, and the venueService lookup.
 - **Excluded (named, not claimed):** creating reservations and refusing a reservation on shortfall (SCRUM-13); linking reservations to recorded requirements (SCRUM-13, after SCRUM-33); flagging reservations when an event is rescheduled or equipment is marked damaged (SCRUM-49); preventing two staff from reserving the last units at once (SCRUM-13).
 - **Actors:** Technical Support Staff run the check (`technical_support` role; an Operations Manager who also holds it is let through by `require_role`). Event coordinators without the role are refused. `GET /status` stays open to any authenticated user (unchanged from SCRUM-16).
 - **State transitions:** none. The check and the status read are read-only.
@@ -83,7 +83,7 @@ The **event venue is `v-big`** (building "Search Wing") unless a case says other
 | Backend, whole service | `pytest -q` from `backend/equipmentService/` | Includes the SCRUM-16 and SCRUM-45 regression suites |
 | Availability unit tests | `pytest tests/test_availability.py -q` | Pure function, no mocks |
 | Availability API tests | `pytest tests/test_availability_check.py tests/test_status.py -q` | `FakeSupabase` and stubbed authService and venueService |
-| Database checks (manual) | Run `database/verify_equipment_reservations.sql` in the Supabase SQL editor after migration `0019` | One transaction, rolled back. Not run in CI |
+| Database checks (manual) | Run `database/verify_equipment_reservations.sql` in the Supabase SQL editor after migration `0020` | One transaction, rolled back. Not run in CI |
 | Lint | `ruff check .` from `backend/equipmentService/` | |
 
 Every automated test carries a label comment with its ID, e.g. `# AC4-B1 (boundary): …`.
@@ -153,11 +153,11 @@ Layers: **Unit** = `app/availability.py` called directly; **API** = FastAPI `Tes
 | AC3-P6 | AC3 | `GET /status`: fully reserved working stock stays `available: true` (proposal 6) | Partition | Today = Mon 12; `R(P10, 10, Sun 11 → Mon 12)` | `GET` status | — | `available: true`, `available_quantity: 0` | — | API |
 | AC3-P7 | AC3 | `GET /status`: a non-`AVAILABLE` row with a reservation stays at 0, never negative | Partition | Today = Mon 12; row ×10 `DAMAGED`; `R(row, 4, Sun 11 → Mon 12)` | `GET` status | — | `available: false`, `available_quantity: 0` | — | API |
 | AC3-X1 | AC3 | "Today" is Singapore time, not server time | Cross-cutting | — | Call `get_today` with the clock at `2026-10-11T16:30Z` (00:30 Mon 12 in Singapore) | — | Returns `2026-10-12` (a UTC-based date would be Sun 11) | — | Unit |
-| AC3-H4 | AC3 | A valid reservation row can be stored | Happy | Migrations through `0019` applied | Run `verify_equipment_reservations.sql` | Insert quantity 2, Sun 11 → Mon 12, existing equipment and event request | Insert succeeds; rolled back at the end | Data left behind | DB (manual) |
+| AC3-H4 | AC3 | A valid reservation row can be stored | Happy | Migrations through `0020` applied | Run `verify_equipment_reservations.sql` | Insert quantity 2, Sun 11 → Mon 12, existing equipment and event request | Insert succeeds; rolled back at the end | Data left behind | DB (manual) |
 | AC3-N1 | AC3 | Quantity must be positive | Negative | As AC3-H4 | Run the script | quantity 0 | Check-constraint violation | Row stored | DB (manual) |
 | AC3-N2 | AC3 | Return date cannot be before collection date | Negative | As AC3-H4 | Run the script | Mon 12 → Sun 11 | Check-constraint violation (same-day Mon 12 → Mon 12 accepted) | Row stored | DB (manual) |
 | AC3-N3 | AC3 | Reservation must point at real equipment and a real event request | Negative | As AC3-H4 | Run the script | unknown `equipment_id`; unknown `event_request_id` | Foreign-key violation for each | Row stored | DB (manual) |
-| AC3-X2 | AC3 | Browser roles cannot read or write reservations | Cross-cutting | `0019` applied with RLS on and grants revoked | `GET /rest/v1/equipment_reservations` with the publishable key | — | Permission denied / empty, matching the other equipment tables | Rows exposed | DB (manual, REST) |
+| AC3-X2 | AC3 | Browser roles cannot read or write reservations | Cross-cutting | `0020` applied with RLS on and grants revoked | `GET /rest/v1/equipment_reservations` with the publishable key | — | Permission denied / empty, matching the other equipment tables | Rows exposed | DB (manual, REST) |
 
 ### AC4: unavailable from D-1 until Return Day + 1
 
@@ -214,11 +214,11 @@ Row `P10`, no reservations, event Wed 14, unless stated.
 
 ## Latest execution record
 
-**Run 5 October 2026: Green (implementation complete).** Branch `feat/scrum-10-equipment-availability`, commits `8750725` (clock), `0d9c357` (pure availability module), `4dd4044` (migration 0019 + verify script), `e946445` (status subtracts reservations), `6681a91` (availability-check endpoint). Environment: macOS (Darwin 24.6.0), Python 3.14.2 (project `.venv`), dependencies installed from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `FakeSupabase` for the database; authService and venueService stubbed at `httpx.get`; the clock frozen via `app.dependency_overrides[get_today]`.
+**Run 5 October 2026: Green (implementation complete).** Branch `feat/scrum-10-equipment-availability`, commits `8750725` (clock), `0d9c357` (pure availability module), `4dd4044` (migration 0020 + verify script), `e946445` (status subtracts reservations), `6681a91` (availability-check endpoint). Environment: macOS (Darwin 24.6.0), Python 3.14.2 (project `.venv`), dependencies installed from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `FakeSupabase` for the database; authService and venueService stubbed at `httpx.get`; the clock frozen via `app.dependency_overrides[get_today]`.
 
 Command: `pytest -q` from `backend/equipmentService/` → **136 passed, 0 failed, 0 skipped** (54 pre-existing SCRUM-16/SCRUM-45 tests + 82 SCRUM-10 test runs). `ruff check .` → all checks passed. The one warning is a pre-existing starlette `anyio` deprecation, unrelated to this story.
 
-Migration 0019 and `verify_equipment_reservations.sql` were **not** applied to the shared Supabase database (pending story-owner approval), so the manual database cases are recorded **Blocked**, not Pass.
+Migration 0020 and `verify_equipment_reservations.sql` were **not** applied to the shared Supabase database (pending story-owner approval), so the manual database cases are recorded **Blocked**, not Pass.
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -227,8 +227,8 @@ Migration 0019 and `verify_equipment_reservations.sql` were **not** applied to t
 | AC1-H2, AC1-P4, AC1-P5, AC1-B1–B4, AC1-N1–N8, AC1-X1–X3, AC2-H2, AC3-H2, AC3-B2, AC5-H2, AC6-H1 | Automated | Expected results, including no venue call and no table queried on any refusal | Pass | `6681a91` | Claude (AI), 5 Oct 2026 | `pytest tests/test_availability_check.py -q` → 30 passed |
 | AC3-H3, AC3-B3–B6, AC3-P6, AC3-P7 | Automated | Expected results | Pass | `6681a91` | Claude (AI), 5 Oct 2026 | `pytest tests/test_status.py -q` → 31 passed (incl. SCRUM-16 regression) |
 | SCRUM-16 / SCRUM-45 regression | Automated | 54 existing tests pass with reservations unseeded (`data = None` → `[]`) | Pass | `6681a91` | Claude (AI), 5 Oct 2026 | `pytest -q` → 136 passed |
-| AC3-H4, AC3-N1–N3 | Manual | — | **Blocked** | `4dd4044` | — | Migration `0019` and `verify_equipment_reservations.sql` not yet applied to the shared Supabase database; awaiting story-owner approval. Run in the SQL editor, expect `ALL EQUIPMENT RESERVATION VERIFICATIONS PASSED` |
-| AC3-X2 | Manual | — | **Blocked** | `4dd4044` | — | Needs the real Supabase RLS roles and the publishable key over REST after `0019` is applied |
+| AC3-H4, AC3-N1–N3 | Manual | — | **Blocked** | `4dd4044` | — | Migration `0020` and `verify_equipment_reservations.sql` not yet applied to the shared Supabase database; awaiting story-owner approval. Run in the SQL editor, expect `ALL EQUIPMENT RESERVATION VERIFICATIONS PASSED` |
+| AC3-X2 | Manual | — | **Blocked** | `4dd4044` | — | Needs the real Supabase RLS roles and the publishable key over REST after `0020` is applied |
 | Integration (`testing.md` §5) | Manual | — | **Blocked** | `6681a91` | — | `docker compose up` + real-token POST to `:8002/equipment/availability-check` needs live authService/venueService/Supabase credentials |
 
 **Run 5 October 2026: Red (tests written, behaviour not implemented).** Branch `feat/scrum-10-equipment-availability` from `dev` at `7ed6df6`, uncommitted. Environment: Linux VM, Python 3.12.14, dependencies installed from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `FakeSupabase` for the database; authService and venueService stubbed at `httpx.get`. `app/availability.py` and `app/clock.py` are interface stubs that raise `NotImplementedError`; `POST /equipment/availability-check` does not exist yet.
@@ -242,7 +242,7 @@ Command: `pytest -q` from `backend/equipmentService/` → **79 failed, 57 passed
 | AC1-H2, AC1-P4, AC1-P5, AC1-B1–B4, AC1-N1–N8, AC1-X1–X3, AC2-H2, AC3-H2, AC3-B2, AC5-H2, AC6-H1 | Red | `405 Method Not Allowed` (route missing; 30 test runs) | Fail (expected) | As above | Claude (AI), 5 Oct 2026 | `tests/test_availability_check.py` |
 | AC3-H3, AC3-B4, AC3-B5, AC3-P6 | Red | `available_quantity` 10 instead of 6 / 0: reservations not subtracted | Fail (expected) | As above | Claude (AI), 5 Oct 2026 | `tests/test_status.py` |
 | AC3-B3, AC3-B6, AC3-P7 | Green before implementation | 10, 10, 0 as expected | Pass | As above | Claude (AI), 5 Oct 2026 | Guards: they pin that out-of-window reservations and non-`AVAILABLE` rows are *not* over-subtracted, so they cannot fail against today's code. They prove their value once the subtraction exists |
-| AC3-H4, AC3-N1–N3 | Planned | — | Not executed | — | — | `database/verify_equipment_reservations.sql` (manual; expected Red before migration `0019`: relation does not exist) |
+| AC3-H4, AC3-N1–N3 | Planned | — | Not executed | — | — | `database/verify_equipment_reservations.sql` (manual; expected Red before migration `0020`: relation does not exist) |
 | AC3-X2 | Planned | — | Not executed | — | — | Manual REST check with the publishable key |
 | SCRUM-16 / SCRUM-45 regression | Green | 54 existing tests pass with the extended `FakeSupabase` | Pass | As above | Claude (AI), 5 Oct 2026 | `pytest -q` |
 

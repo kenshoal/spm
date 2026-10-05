@@ -1,6 +1,6 @@
 -- Behavioural verification for the equipment_reservations table (SCRUM-10).
 --
--- Run in the Supabase SQL Editor AFTER applying migration 0019. Before the
+-- Run in the Supabase SQL Editor AFTER applying migration 0020. Before the
 -- migration it fails with "relation equipment_reservations does not exist",
 -- which is the expected Red. The whole script runs in one transaction and
 -- ROLLBACKs, so it never leaves data behind; pass/fail is the final NOTICE
