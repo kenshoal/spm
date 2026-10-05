@@ -8,6 +8,7 @@ from app.services.event_request_service import (
     EventRequestNotFoundError,
     EventRequestService,
 )
+from app.services.notification_client import NotificationClient
 
 NOT_FOUND_ERRCODE = "P0002"
 NOT_ASSIGNED_ERRCODE = "P0003"
@@ -47,8 +48,13 @@ class EventTransitionService:
     post-submission change requests remain in their owning stories.
     """
 
-    def __init__(self, event_request_service: EventRequestService) -> None:
+    def __init__(
+        self,
+        event_request_service: EventRequestService,
+        notification_client: NotificationClient | None = None,
+    ) -> None:
         self.event_request_service = event_request_service
+        self.notification_client = notification_client or NotificationClient(None)
 
     def start_review(
         self, event_request_id: str, caller_id: str
@@ -95,7 +101,7 @@ class EventTransitionService:
         if payload.requires_reason() and payload.reason is None:
             raise DecisionReasonRequiredError(payload.decision)
         try:
-            return self.event_request_service.decide_by_coordinator(
+            event_request = self.event_request_service.decide_by_coordinator(
                 event_request_id,
                 caller_id,
                 payload.decision,
@@ -112,6 +118,18 @@ class EventTransitionService:
                     f"Cannot decide event request {event_request_id} from its current status",
                 ) from error
             raise
+
+        # Only after the locked write succeeded, so a refused decision tells nobody
+        # to clarify something that was never recorded. Approved and Rejected
+        # notices belong to SCRUM-36. A reason is guaranteed here: the check above
+        # refuses a Changes Requested decision without one.
+        if payload.decision == EventRequestStatus.CHANGES_REQUESTED:
+            self.notification_client.notify_clarification_requested(
+                event_request_id=event_request_id,
+                organiser_id=event_request.organiser_id,
+                reason=payload.reason,
+            )
+        return event_request
 
     def _advance(
         self,

@@ -29,7 +29,7 @@ def repository_answering(handler) -> SupabaseNotificationRepository:
     )
 
 
-# Purpose: A repeated event (same recipient and event_id) must be dropped by the
+# AC6-N1 (negative): A repeated event (same recipient and event_id) must be dropped by the
 # database, not stored twice, so a retried hook never notifies someone twice.
 def test_save_inserts_and_ignores_duplicates() -> None:
     captured: dict[str, object] = {}
@@ -66,7 +66,7 @@ def test_save_inserts_and_ignores_duplicates() -> None:
     }
 
 
-# Purpose: PostgREST answers an ignored duplicate with an empty list; that must
+# AC6-N1 (negative): PostgREST answers an ignored duplicate with an empty list; that must
 # be reported as "not created" so the service can log it as a duplicate.
 def test_save_reports_an_ignored_duplicate() -> None:
     repository = repository_answering(lambda request: httpx2.Response(201, json=[]))
@@ -81,7 +81,7 @@ def test_save_reports_an_ignored_duplicate() -> None:
     assert created is False
 
 
-# Purpose: The inbox shows only the caller's notifications, newest first.
+# AC6-H1 (happy): The inbox shows only the caller's notifications, newest first.
 def test_list_for_recipient_filters_and_orders() -> None:
     captured: dict[str, str | None] = {}
 
@@ -102,7 +102,7 @@ def test_list_for_recipient_filters_and_orders() -> None:
     }
 
 
-# Purpose: "Unread only" is filtered in the database, not after fetching.
+# AC6-P1 (partition): "Unread only" is filtered in the database, not after fetching.
 def test_list_for_recipient_can_filter_to_unread() -> None:
     captured: dict[str, str | None] = {}
 
@@ -117,7 +117,7 @@ def test_list_for_recipient_can_filter_to_unread() -> None:
     assert captured["read_at"] == "is.null"
 
 
-# Purpose: Marking as read is scoped to the recipient, so nobody can mark (or
+# AC6-H2 (happy): Marking as read is scoped to the recipient, so nobody can mark (or
 # discover) someone else's notification, and it keeps the first read time.
 def test_mark_read_updates_only_the_recipients_unread_notification() -> None:
     captured: dict[str, object] = {}
@@ -143,7 +143,7 @@ def test_mark_read_updates_only_the_recipients_unread_notification() -> None:
     assert set(captured["body"]) == {"read_at"}
 
 
-# Purpose: Marking an already-read notification again succeeds and returns it
+# AC6-P3 (partition): Marking an already-read notification again succeeds and returns it
 # unchanged, so a double click in the inbox is not an error.
 def test_mark_read_returns_an_already_read_notification() -> None:
     already_read = stored_row(read_at="2026-09-29T10:30:00+00:00")
@@ -158,14 +158,14 @@ def test_mark_read_returns_an_already_read_notification() -> None:
     assert row == already_read
 
 
-# Purpose: Unknown ids and other people's notifications look the same: absent.
+# AC6-N5 (negative): Unknown ids and other people's notifications look the same: absent.
 def test_mark_read_returns_none_when_not_the_recipients() -> None:
     repository = repository_answering(lambda request: httpx2.Response(200, json=[]))
 
     assert repository.mark_read(NOTIFICATION_ID, "someone-else") is None
 
 
-# Purpose: Legacy service-role keys are JWTs and must also be sent as a bearer
+# AC6-X4 (cross-cutting): Legacy service-role keys are JWTs and must also be sent as a bearer
 # token; new sb_secret keys must not be.
 @pytest.mark.parametrize(
     ("key", "expected_authorization"),
@@ -187,7 +187,7 @@ def test_sends_the_key_the_way_supabase_expects(
     assert captured["authorization"] == expected_authorization
 
 
-# Purpose: Any Supabase failure surfaces as one error type the API maps to 502.
+# AC6-N3 (negative): Any Supabase failure surfaces as one error type the API maps to 502.
 @pytest.mark.parametrize(
     "handler",
     [

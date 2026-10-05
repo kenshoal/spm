@@ -19,7 +19,7 @@ class SpyNotificationClient:
         self.calls.append(kwargs)
 
 
-# Purpose: Confirms assignment notifies the assigned Coordinator with the right details.
+# AC2-H1 (happy): Confirms assignment notifies the assigned Coordinator with the right details.
 def test_assign_notifies_the_assigned_coordinator() -> None:
     event_requests = FakeEventRequestRepository()
     event_request_id = submit_event_request(event_requests)
@@ -45,7 +45,7 @@ def test_assign_notifies_the_assigned_coordinator() -> None:
     ]
 
 
-# Purpose: Without a notification_client, assignment still succeeds — the default is a no-op.
+# AC2-N1 (negative): Without a notification_client, assignment still succeeds — the default is a no-op.
 def test_assign_succeeds_without_a_notification_client_configured() -> None:
     event_requests = FakeEventRequestRepository()
     event_request_id = submit_event_request(event_requests)
