@@ -50,13 +50,23 @@ This story covers post-approval amendment requests, relationship-based visibilit
 | AC6-N1 | AC6 | Negative: stale plan cannot be overwritten | Event updated after request creation | Coordinator approves | 409 stale conflict | Event and request remain unchanged | DB/API |
 | AC3-X1 | AC3, AC6 | Cross-cutting: browser roles cannot bypass server workflow | Migration applied | Inspect grants and call table/RPC as browser role | Access denied | No direct write | DB |
 
+## Implementation evidence
+
+| Acceptance criterion | Evidence |
+| --- | --- |
+| AC1, AC5 | `EventChangeRequestCreate`, the organiser route and `create_event_change_request` validate ownership, event state, changed values and the single-pending rule before retaining a request. |
+| AC2 | The history route checks the owning organiser or latest coordinator assignment before returning `event_change_requests`; the organiser and coordinator detail pages render that history. |
+| AC3, AC6 | `decide_event_change_request` locks the event and amendment, rechecks the latest assignment and version, then applies all proposed values and decision metadata in one transaction. Migrations `0020`–`0022` make the event version marker strictly monotonic. |
+| AC4 | The decision model requires a rejection reason, and the atomic decision function records the reason without updating the event plan. |
+| AC1–AC6 | `verify_event_change_requests.sql` exercises the real Supabase functions, constraints, forbidden side effects and server-only privileges inside a rolled-back transaction. |
+
 ## Latest execution record
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC1-H1, AC1-P1–P2, AC1-B1–B3, AC1-N1, AC2-N1, AC3-H1, AC4-H1, AC4-N1, AC5-N1, AC5-P1–P8, AC5-N3–N4, AC6-N1 | Green | 23 focused backend cases passed after the initial route-missing Red run failed 9 cases | Pass | Working tree | Codex, 4 Oct 2026 | `uv run pytest tests/test_event_change_request.py -q`; Supabase workflow also verified in a rolled-back transaction. |
-| AC1-H1, AC3-H1, AC4-N1 | Green | 3 component cases and 4 related action cases passed | Pass | Working tree | Codex, 4 Oct 2026 | Vitest focused run; full frontend suite 150 passed. Full backend regression suite: 233 passed. |
-| AC1-H1, AC2-X1, AC3-H1 | Green | Organiser-to-coordinator approval journey passed | Pass | Working tree | Codex, 4 Oct 2026 | `npx playwright test`; 20 passed across the full suite. |
-| AC3-X1 | Green | Table and functions granted only to postgres/service_role; atomic create/approve checks passed and rolled back | Pass | Supabase migration `event_change_requests` | Codex, 4 Oct 2026 | Connected project `rrmvhxrxrrnigjdxcbwt`; no fixture rows retained. |
+| AC1-H1, AC1-P1–P2, AC1-B1–B3, AC1-N1–N2, AC2-X1, AC2-N1, AC3-H1, AC4-H1, AC4-N1, AC5-N1, AC5-P1–P8, AC5-N3–N4, AC6-N1 | Green | 25 focused backend cases passed; unchanged values, related visibility and unrelated coordinator disclosure are directly asserted | Pass | `ffe481a` | Codex, 5 Oct 2026 | `uv run pytest tests/test_event_change_request.py -q`; mocked repository. Full event-service regression: 261 passed with two dependency deprecation warnings. Ruff passed. |
+| AC1-H1, AC3-H1, AC4-N1 | Green | Component and action coverage passed within the full 187-test frontend suite | Pass | `ffe481a` | Codex, 5 Oct 2026 | `npm test -- --run`; 22 files and 187 tests passed. ESLint and TypeScript passed. `next build --webpack` passed; default Turbopack was blocked by sandbox port permissions. |
+| AC1-H1, AC2, AC3 | Green | Organiser-to-coordinator approval journey and all earlier browser workflows passed | Pass | `ffe481a` | Codex, 5 Oct 2026 | `npx playwright test`; 24 Chromium tests passed using local mock services. |
+| AC1-H1, AC1-N2, AC3-H1, AC4-H1, AC5-N1, AC5-N3, AC6-N1, AC3-X1 | Green | Real functions, atomic writes, stale/reassignment refusals and grants passed in one rolled-back transaction | Pass | Supabase migrations through `20261005143815` | Codex, 5 Oct 2026 | Ran `database/verify_event_change_requests.sql` against project `rrmvhxrxrrnigjdxcbwt`; no fixture rows retained. The first run exposed the non-advancing timestamp defect; migrations `0020`–`0022` corrected it before this pass. |
 
 Human review of these AI-drafted test cases is still required before the story meets the repository Definition of Done.
