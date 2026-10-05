@@ -140,7 +140,7 @@ Suite-level results after merging `dev` (merge commit `8aed6ed`):
 - Backend `pytest`: eventRequestService **272 passed**, venueService **147 passed**, equipmentService **71 passed**, authService **45 passed**, notificationService **53 passed**; 0 failed, 0 skipped; `ruff check .` clean in all five.
 - `frontend`: `npm run lint` clean; `npm run typecheck` clean; `npm test` **21 files, 180 tests passed**; `npm run test:e2e` **24 passed** (Chromium, stub APIs); `npm run build` compiled successfully.
 - Shared Supabase: Security Advisor reports only INFO `rls_enabled_no_policy` for the new tables (intended: service-role only, the same as every other table) and INFO `unused_index` (tables are new). No new WARN.
-- Seed: `client_organisations` / `organisation_members` are empty. `event_organiser2@example.com` and `event_organiser3@example.com` are not registered yet, so `seed_test_accounts.sql` has not been run.
+- Seed: `seed_test_accounts.sql` run on the shared project on 5 Oct 2026. `event_organiser@example.com` and `event_organiser2@example.com` are in Acme Events and `event_organiser3@example.com` is in Globex Corporation, each with the `event_organiser` role (checked with a read query through Supabase MCP).
 - Pull-request CI: see the pull request.
 
 ## Disclosures
