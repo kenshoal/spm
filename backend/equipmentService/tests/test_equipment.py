@@ -128,6 +128,7 @@ def test_list_equipment_invalid_status_filter(
     assert response.status_code == 422
 
 
+# AC7-H1 (happy): Technical Support Staff list equipment reservations
 def test_technical_support_can_list_equipment_reservations(
     client: TestClient, fake_client, auth_staff
 ) -> None:
@@ -140,12 +141,14 @@ def test_technical_support_can_list_equipment_reservations(
     assert ("order", "created_at") in fake_client.filters
 
 
+# AC7-N1 (negative): the reservation queue requires a signed-in user (401)
 def test_equipment_reservations_require_authentication(client: TestClient) -> None:
     response = client.get("/equipment/reservations")
 
     assert response.status_code == 401
 
 
+# AC7-N2 (negative): roles other than Technical Support are refused (403)
 def test_equipment_reservations_forbidden_for_unrelated_roles(
     client: TestClient, auth
 ) -> None:
