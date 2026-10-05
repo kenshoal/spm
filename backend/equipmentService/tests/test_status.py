@@ -1,8 +1,12 @@
+from datetime import date
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
+
+from app.clock import get_today
+from app.main import app
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
 EQUIPMENT_ID = "22222222-2222-2222-2222-222222222222"
@@ -308,3 +312,121 @@ def test_get_status_invalid_equipment_id(client: TestClient, auth) -> None:
     response = client.get("/equipment/not-a-uuid/status", headers=bearer())
 
     assert response.status_code == 422
+
+
+# --- SCRUM-10: GET /status subtracts units reserved today ---------------------
+# Test-case IDs trace to docs/testcases/scrum_10_testcases.md (AC3).
+
+MON12 = date(2026, 10, 12)
+
+
+@pytest.fixture
+def frozen_today():
+    # The client fixture clears dependency overrides on teardown.
+    app.dependency_overrides[get_today] = lambda: MON12
+    yield MON12
+
+
+def reserved(qty: int, collect: str, ret: str) -> dict[str, Any]:
+    return {
+        "equipment_id": EQUIPMENT_ID,
+        "quantity": qty,
+        "collection_date": collect,
+        "return_date": ret,
+    }
+
+
+def seed_status(fake_client, *, qty: int, status: str, reservations: list) -> None:
+    fake_client.table_data["equipment"] = [
+        {**EQUIPMENT_ROW, "total_owned_quantity": qty, "operational_status": status}
+    ]
+    fake_client.table_data["equipment_reservations"] = reservations
+
+
+# AC3-H3 (happy): GET /status subtracts the units reserved today
+def test_get_status_subtracts_units_reserved_today(
+    client: TestClient, fake_client, auth, frozen_today
+) -> None:
+    seed_status(
+        fake_client,
+        qty=10,
+        status="AVAILABLE",
+        reservations=[reserved(4, "2026-10-11", "2026-10-13")],
+    )
+
+    response = client.get(f"/equipment/{EQUIPMENT_ID}/status", headers=bearer())
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "equipment_id": EQUIPMENT_ID,
+        "operational_status": "AVAILABLE",
+        "available": True,
+        "available_quantity": 6,
+    }
+    assert fake_client.inserts == [] and fake_client.updates == []
+
+
+# AC3-B3, AC3-B4, AC3-B5, AC3-B6 (boundary): only reservations covering today count
+@pytest.mark.parametrize(
+    ("collect", "ret", "available_quantity"),
+    [
+        ("2026-10-10", "2026-10-11", 10),  # returned yesterday
+        ("2026-10-11", "2026-10-12", 6),  # returning today
+        ("2026-10-12", "2026-10-13", 6),  # collecting today
+        ("2026-10-13", "2026-10-14", 10),  # collecting tomorrow
+    ],
+    ids=["AC3-B3", "AC3-B4", "AC3-B5", "AC3-B6"],
+)
+def test_get_status_counts_only_reservations_covering_today(
+    client: TestClient,
+    fake_client,
+    auth,
+    frozen_today,
+    collect: str,
+    ret: str,
+    available_quantity: int,
+) -> None:
+    seed_status(
+        fake_client, qty=10, status="AVAILABLE", reservations=[reserved(4, collect, ret)]
+    )
+
+    response = client.get(f"/equipment/{EQUIPMENT_ID}/status", headers=bearer())
+
+    assert response.status_code == 200
+    assert response.json()["available_quantity"] == available_quantity
+
+
+# AC3-P6 (partition): fully reserved working stock stays available=true (proposal 6)
+def test_get_status_fully_reserved_stays_available(
+    client: TestClient, fake_client, auth, frozen_today
+) -> None:
+    seed_status(
+        fake_client,
+        qty=10,
+        status="AVAILABLE",
+        reservations=[reserved(10, "2026-10-11", "2026-10-12")],
+    )
+
+    response = client.get(f"/equipment/{EQUIPMENT_ID}/status", headers=bearer())
+
+    assert response.status_code == 200
+    assert response.json()["available"] is True
+    assert response.json()["available_quantity"] == 0
+
+
+# AC3-P7 (partition): a non-AVAILABLE row with a reservation stays at 0, never negative
+def test_get_status_unavailable_row_with_reservation_is_zero(
+    client: TestClient, fake_client, auth, frozen_today
+) -> None:
+    seed_status(
+        fake_client,
+        qty=10,
+        status="DAMAGED",
+        reservations=[reserved(4, "2026-10-11", "2026-10-12")],
+    )
+
+    response = client.get(f"/equipment/{EQUIPMENT_ID}/status", headers=bearer())
+
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+    assert response.json()["available_quantity"] == 0
