@@ -34,6 +34,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0015_harden_coordinator_transition_search_path.sql` | Pins the SCRUM-28 transition RPC to an empty search path, clearing the Supabase mutable-search-path warning without changing behavior |
 | `migrations/0016_event_request_review_decisions.sql` | SCRUM-17 review history plus server-only atomic RPCs for decisions, organiser clarification responses and resuming review |
 | `migrations/0017_notifications.sql` | `notifications` table for SCRUM-37: one row per recipient per event, unique `(recipient_id, event_id)` so a retried event is stored once, newest-first inbox index, RLS on with service-role access only |
+| `migrations/0018_venue_booking_requests.sql` | `venue_booking_requests` table for SCRUM-32: dates, slots and status with CHECK constraints (slot rules as in `venue_blocks`, decision fields always consistent with the status), a restrictive foreign key to `venues`, four lookup indexes, RLS on with service-role access only. Applied to shared development on 4 October 2026 |
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
@@ -65,6 +66,12 @@ indexes present, no `anon`/`authenticated` access, and `service_role` insert and
 update. `verify_notifications.sql` was run against a local Postgres, not shared
 development, because it writes rows (they are rolled back).
 
+`0018` was applied to shared development on 4 October 2026 through the SQL Editor,
+and `verify_venue_booking_requests.sql` then ran there without error (it rolls
+back every row it writes). Read-only Data API checks afterwards found the table
+readable by the service role and refused to the browser role. Do not apply it
+again there (it is safe to re-run, but there is no need).
+
 New RPCs should revoke `EXECUTE` from `PUBLIC, anon, authenticated` in the same
 migration that creates them. Supabase grants all three by default.
 
@@ -89,6 +96,15 @@ The notifications table is verified by
 it proves a retried event is stored once, one event can notify several
 recipients, a non-object payload is refused and browser roles cannot read the
 table. The script rolls back all test rows.
+
+The booking-request table is verified by
+[`verify_venue_booking_requests.sql`](verify_venue_booking_requests.sql).
+Run it once before `0018`, when it should stop with a missing-table error (the
+Red result), and again after, when it should print
+`ALL VENUE BOOKING REQUEST VERIFICATIONS PASSED`. It covers dates, slots,
+required columns, status and decision consistency, the venue foreign key and
+server-only access. The script rolls back all rows and needs no Supabase Auth
+user.
 
 The coordinator transition function is verified by
 [`verify_event_request_status_transitions.sql`](verify_event_request_status_transitions.sql).

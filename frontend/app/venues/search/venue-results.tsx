@@ -1,6 +1,12 @@
+import type { SuitabilityFormValues } from "@/lib/venue-suitability";
 import { layoutLabel, type Venue } from "@/lib/venues";
+import { SuitabilityCheck } from "./suitability-check";
 
-export function VenueResults({ venues }: { venues: Venue[] }) {
+const NO_REQUIREMENTS: SuitabilityFormValues = {
+  expected_attendance: "", required_layout: "", required_slot: "", required_facilities: "", required_accessibility: "",
+};
+
+export function VenueResults({ venues, requirements = NO_REQUIREMENTS }: { venues: Venue[]; requirements?: SuitabilityFormValues }) {
   if (venues.length === 0) {
     return <p className="rounded-2xl border border-dashed border-[#cbd7d1] bg-white px-6 py-10 text-center text-sm text-[#718078]">No venue matches every filter. Try removing one.</p>;
   }
@@ -19,6 +25,7 @@ export function VenueResults({ venues }: { venues: Venue[] }) {
               <dt className="text-[#718078]">Accessibility</dt><dd className="text-[#273832]">{venue.accessibility_features.join(", ") || "None recorded"}</dd>
               <dt className="text-[#718078]">Slots</dt><dd className="text-[#273832]">{venue.operating_slots.join(", ")}</dd>
             </dl>
+            <SuitabilityCheck venueId={venue.id} defaults={requirements} />
           </article>
         ))}
       </div>

@@ -57,6 +57,28 @@ def require_authenticated(
         ) from error
 
 
+def bearer_token(authorization: Annotated[str | None, Header()] = None) -> str:
+    """The caller's raw token, to forward to another service on their behalf."""
+
+    return (authorization or "").removeprefix("Bearer ").strip()
+
+
+def require_event_coordinator(
+    principal: Annotated[Principal, Depends(require_authenticated)],
+) -> Principal:
+    if "event_coordinator" not in principal.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return principal
+
+
+def require_booking_reader(
+    principal: Annotated[Principal, Depends(require_authenticated)],
+) -> Principal:
+    if not {"venue_staff", "event_coordinator"} & set(principal.roles):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return principal
+
+
 def require_venue_staff(
     principal: Annotated[Principal, Depends(require_authenticated)],
 ) -> Principal:

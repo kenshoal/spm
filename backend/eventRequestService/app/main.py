@@ -1,3 +1,7 @@
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
@@ -33,16 +37,32 @@ from app.services.event_transition_service import (
     TransitionForbiddenError,
     TransitionNotAllowedError,
 )
+from app.services.outbox_relay import OutboxRelay, build_outbox_relay
 
 
 def create_app(
     repository: EventRequestRepository | None = None,
     coordinator_repository: CoordinatorAssignmentRepository | None = None,
+    outbox_relay: OutboxRelay | None = None,
 ) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        relay_task = (
+            asyncio.create_task(outbox_relay.run_forever())
+            if outbox_relay is not None
+            else None
+        )
+        yield
+        if relay_task is not None:
+            relay_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await relay_task
+
     application = FastAPI(
         title="eventRequestService",
         description="Create and manage event requests.",
         version="0.1.0",
+        lifespan=lifespan,
     )
     event_request_service = (
         EventRequestService(repository) if repository is not None else None
@@ -181,4 +201,6 @@ def create_app(
     return application
 
 
-app = create_app()
+# Only the served app relays the outbox; apps built in tests get no relay unless
+# they pass one, so a test run never delivers real events.
+app = create_app(outbox_relay=build_outbox_relay())

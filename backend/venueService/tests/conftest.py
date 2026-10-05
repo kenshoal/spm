@@ -1,5 +1,6 @@
 import pytest
 
+from app.booking_repository import booking_repository
 from app.config import get_settings
 from app.dependencies import Principal, require_authenticated, require_venue_staff
 from app.main import app
@@ -19,6 +20,8 @@ def _clear_repository(monkeypatch: pytest.MonkeyPatch) -> None:
     app.dependency_overrides[require_authenticated] = lambda: principal
     app.dependency_overrides[require_venue_staff] = lambda: principal
     repository.clear()
+    booking_repository.clear()
     yield
     repository.clear()
+    booking_repository.clear()
     app.dependency_overrides.clear()

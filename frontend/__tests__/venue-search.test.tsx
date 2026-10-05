@@ -60,9 +60,10 @@ const venue: Venue = {
 test("shows key attributes for each result", () => {
   render(<VenueResults venues={[venue]} />);
 
-  const card = screen.getByRole("article", { name: "Riverside Hall" });
+  // Scoped to the attribute list: the card's check form also offers "Theatre" as an option.
+  const attributes = screen.getByRole("article", { name: "Riverside Hall" }).querySelector("dl") as HTMLElement;
   for (const text of ["East Wing", "120", "Theatre", "Projector", "Ramp access", "AM, PM"]) {
-    expect(within(card).getByText(new RegExp(text))).toBeDefined();
+    expect(within(attributes).getByText(new RegExp(text))).toBeDefined();
   }
   expect(screen.getByText("1 venue matches every filter.")).toBeDefined();
 });
