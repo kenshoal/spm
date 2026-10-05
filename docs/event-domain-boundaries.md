@@ -40,14 +40,17 @@ commands behind the hand-off contract above.
 
 ## Interim access relationships
 
-- Event Organisers are currently scoped to requests whose `organiser_id` is
-  their own user ID. Organisation-wide or same-client access stays denied until
-  organisation membership and the same-client rule are defined.
+- Event Organisers can view and change requests whose `organiser_id` is their
+  own user ID. Organisers in the same client organisation can view each other's
+  non-Draft requests but cannot change them (`403`); unrelated organisations get
+  `404` (clarification #81, migration `0019`). Organisation membership is seeded
+  data until E3-4 adds maintenance.
 - Attendees receive only the public projection of Confirmed or Completed
   events; requirements and other planning fields are never included.
-- Venue Staff receive concrete venue booking requests through `venueService`;
-  the booking record contains the event, venue, date and slot relationship
-  needed for approval or rejection.
+- Venue Staff receive venue booking requests through `venueService`. The
+  record is SCRUM-32's `venue_booking_requests` row: venue, event reference,
+  date range, slots, and the event snapshot (name, attendance, requirements
+  note) taken at submission, so Venue Staff never read the event request.
 - Technical Support Staff receive concrete equipment reservations through
   `equipmentService`; the reservation record contains the event, equipment and
   quantity relationship needed to support the arrangement.

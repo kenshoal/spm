@@ -218,7 +218,7 @@ def get_event_request(
 
     if "event_organiser" in roles:
         try:
-            return service.get(request_id, caller.id)
+            return service.get_viewable(request_id, caller.id)
         except EventRequestNotFoundError:
             pass  # Not the owner — the caller's coordinator role may still grant access.
 
@@ -255,7 +255,7 @@ def list_review_decisions(
 
     if "event_organiser" in roles:
         try:
-            service.get(request_id, caller.id)
+            service.get_viewable(request_id, caller.id)
             return service.list_review_decisions(request_id)
         except EventRequestNotFoundError:
             pass

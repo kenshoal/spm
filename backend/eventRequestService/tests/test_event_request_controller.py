@@ -47,6 +47,14 @@ class FakeEventRequestRepository:
             if row["organiser_id"] == organiser_id
         ]
 
+    def get_organisation_id(self, user_id: str) -> str | None:
+        return None  # No memberships; see test_organisation_access.py.
+
+    def list_shared_with_organisation(
+        self, organisation_id: str
+    ) -> list[dict[str, Any]]:
+        return []
+
     def list_by_status(self, status: str) -> list[dict[str, Any]]:
         return [
             dict(row)
@@ -941,7 +949,7 @@ def test_assigned_to_me_accepts_multi_role_coordinator(
         (("event_organiser", "event_coordinator"), "other", 404),
     ],
 )
-# Purpose: Request details are visible only to the owner organiser or the assigned
+# AC5-H1 (happy): details are visible only to the owner organiser or the assigned
 # coordinator; related-but-unauthorised callers get 404, unrelated roles 403.
 def test_get_event_request_is_scoped_to_request_access(
     roles: tuple[str, ...],
@@ -976,7 +984,7 @@ def test_get_event_request_is_scoped_to_request_access(
     assert response.status_code == expected_status
 
 
-# Purpose: Coordinators cannot confirm the existence of unassigned requests by id.
+# AC5-N1 (negative): an unassigned coordinator cannot confirm a request exists (404)
 def test_coordinator_gets_not_found_for_unassigned_request() -> None:
     event_requests = FakeEventRequestRepository()
     coordinators = FakeCoordinatorAssignmentRepository()
@@ -997,6 +1005,7 @@ def test_coordinator_gets_not_found_for_unassigned_request() -> None:
     assert response.status_code == 404
 
 
+# AC4-H1 (happy): Attendees see only Confirmed or Completed events, public fields only
 def test_attendee_view_exposes_only_public_stages_and_fields() -> None:
     repository = FakeEventRequestRepository()
     for event_status in [
@@ -1046,6 +1055,7 @@ def test_attendee_view_exposes_only_public_stages_and_fields() -> None:
     )
 
 
+# AC4-N1 (negative): roles other than Attendee are refused the public projection
 def test_attendee_view_rejects_unrelated_roles() -> None:
     application = create_app(FakeEventRequestRepository())
     application.dependency_overrides[

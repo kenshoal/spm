@@ -19,6 +19,14 @@ class EventRequestNotFoundError(Exception):
         self.event_request_id = event_request_id
 
 
+class EventRequestForbiddenError(Exception):
+    """The caller may view the request (same client organisation) but not change it."""
+
+    def __init__(self, event_request_id: str) -> None:
+        super().__init__("Insufficient permissions")
+        self.event_request_id = event_request_id
+
+
 class EventRequestNotDraftError(Exception):
     def __init__(self, event_request_id: str) -> None:
         super().__init__(f"Event request {event_request_id} is no longer a Draft")
@@ -76,8 +84,44 @@ class EventRequestService:
         return self._row_to_response(self.repository.create(values))
 
     def list_for_organiser(self, organiser_id: str) -> list[EventRequestResponse]:
-        rows = self.repository.list_for_organiser(organiser_id)
-        return [self._row_to_response(row) for row in rows]
+        """The organiser's own requests plus their organisation's non-Draft ones."""
+        rows = {row["id"]: row for row in self.repository.list_for_organiser(organiser_id)}
+        organisation_id = self.repository.get_organisation_id(organiser_id)
+        if organisation_id is not None:
+            for row in self.repository.list_shared_with_organisation(organisation_id):
+                rows.setdefault(row["id"], row)
+        return sorted(
+            (self._row_to_response(row) for row in rows.values()),
+            key=lambda request: request.created_at,
+            reverse=True,
+        )
+
+    def get_viewable(
+        self, event_request_id: str, organiser_id: str
+    ) -> EventRequestResponse:
+        """Read access for an organiser: the owner, or a same-organisation
+        colleague once the request has left Draft (SCRUM-39)."""
+        row = self.repository.get_by_id(event_request_id)
+        if row is None or not self._can_view(row, organiser_id):
+            raise EventRequestNotFoundError(event_request_id)
+        return self._row_to_response(row)
+
+    def _can_view(self, row: dict[str, Any], organiser_id: str) -> bool:
+        if row["organiser_id"] == organiser_id:
+            return True
+        organisation_id = row.get("organisation_id")
+        return (
+            row["status"] != EventRequestStatus.DRAFT.value
+            and organisation_id is not None
+            and organisation_id == self.repository.get_organisation_id(organiser_id)
+        )
+
+    def _refusal(self, event_request_id: str, organiser_id: str) -> Exception:
+        """403 for a colleague who can already see the request, else 404."""
+        row = self.repository.get_by_id(event_request_id)
+        if row is not None and self._can_view(row, organiser_id):
+            return EventRequestForbiddenError(event_request_id)
+        return EventRequestNotFoundError(event_request_id)
 
     def list_by_status(self, status: EventRequestStatus) -> list[EventRequestResponse]:
         """Unscoped lookup across every organiser, for a caller whose remit is
@@ -218,7 +262,7 @@ class EventRequestService:
             )
         except EventRequestRpcError as error:
             if error.errcode == "P0002":
-                raise EventRequestNotFoundError(event_request_id) from error
+                raise self._refusal(event_request_id, organiser_id) from error
             if error.errcode == "P0004":
                 raise ClarificationResponseNotAllowedError(event_request_id) from error
             raise
@@ -234,7 +278,7 @@ class EventRequestService:
     ) -> NoReturn:
         row = self.repository.get_for_organiser(event_request_id, organiser_id)
         if row is None:
-            raise EventRequestNotFoundError(event_request_id)
+            raise self._refusal(event_request_id, organiser_id)
         raise EventRequestNotDraftError(event_request_id)
 
     @staticmethod
