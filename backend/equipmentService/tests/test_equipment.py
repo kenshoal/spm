@@ -24,6 +24,7 @@ def bearer() -> dict[str, str]:
     return {"Authorization": "Bearer test-token"}
 
 
+# Cross-cutting (smoke, DoD-level; outside the AC matrix): the service answers at /
 def test_hello(client: TestClient) -> None:
     response = client.get("/")
 
@@ -34,6 +35,7 @@ def test_hello(client: TestClient) -> None:
     }
 
 
+# Cross-cutting (smoke, DoD-level; outside the AC matrix): the health check reports ok
 def test_health(client: TestClient) -> None:
     response = client.get("/health")
 
@@ -44,12 +46,14 @@ def test_health(client: TestClient) -> None:
     }
 
 
+# AC3-X1 (cross-cutting): listing the catalogue requires an authenticated session
 def test_list_equipment_requires_authentication(client: TestClient) -> None:
     response = client.get("/equipment")
 
     assert response.status_code == 401
 
 
+# AC3-X2 (cross-cutting): every malformed Authorization header variant is refused
 @pytest.mark.parametrize(
     "authorization", ["Basic abc", "Bearer ", "Bearer a b", "Bearer"]
 )
@@ -61,6 +65,7 @@ def test_list_equipment_rejects_malformed_bearer(
     assert response.status_code == 401
 
 
+# AC3-H1 (happy path): the catalogue lists records with their current attributes
 def test_list_equipment(client: TestClient, fake_client, auth) -> None:
     fake_client.table_data["equipment"] = [EQUIPMENT_ROW]
 
@@ -73,6 +78,7 @@ def test_list_equipment(client: TestClient, fake_client, auth) -> None:
     assert body[0]["operational_status"] == "AVAILABLE"
 
 
+# AC3-P1 (partition): the list can be filtered by type and operational status
 def test_list_equipment_filters(client: TestClient, fake_client, auth) -> None:
     fake_client.table_data["equipment"] = [EQUIPMENT_ROW]
 
@@ -87,6 +93,17 @@ def test_list_equipment_filters(client: TestClient, fake_client, auth) -> None:
     assert ("operational_status", "AVAILABLE") in fake_client.filters
 
 
+# AC3-N1 (negative): an empty catalogue is presented as 200 [] for a valid query
+def test_list_equipment_empty(client: TestClient, fake_client, auth) -> None:
+    fake_client.table_data["equipment"] = []
+
+    response = client.get("/equipment", headers=bearer())
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# AC3-N2 (negative): an unknown operational_status filter value is refused
 def test_list_equipment_invalid_status_filter(
     client: TestClient, auth
 ) -> None:
@@ -97,6 +114,7 @@ def test_list_equipment_invalid_status_filter(
     assert response.status_code == 422
 
 
+# AC3-H2 (happy path): a single record shows its current attributes
 def test_get_equipment(client: TestClient, fake_client, auth) -> None:
     fake_client.table_data["equipment"] = [EQUIPMENT_ROW]
 
@@ -106,18 +124,21 @@ def test_get_equipment(client: TestClient, fake_client, auth) -> None:
     assert response.json()["id"] == EQUIPMENT_ID
 
 
+# AC3-N3 (negative): an unknown equipment id is 404
 def test_get_equipment_not_found(client: TestClient, auth) -> None:
     response = client.get(f"/equipment/{EQUIPMENT_ID}", headers=bearer())
 
     assert response.status_code == 404
 
 
+# AC3-N4 (negative): a malformed equipment id is refused
 def test_get_equipment_invalid_id(client: TestClient, auth) -> None:
     response = client.get("/equipment/not-a-uuid", headers=bearer())
 
     assert response.status_code == 422
 
 
+# AC1-X1 (cross-cutting): creating requires an authenticated session
 def test_create_equipment_requires_authentication(client: TestClient) -> None:
     response = client.post(
         "/equipment",
@@ -131,6 +152,7 @@ def test_create_equipment_requires_authentication(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+# AC1-X2 (cross-cutting): an event coordinator may not create equipment
 def test_create_equipment_forbidden_for_event_coordinator(
     client: TestClient, auth
 ) -> None:
@@ -147,6 +169,7 @@ def test_create_equipment_forbidden_for_event_coordinator(
     assert response.status_code == 403
 
 
+# AC1-H1 (happy path): technical support creates a record with every attribute
 def test_create_equipment(client: TestClient, fake_client, auth_staff) -> None:
     fake_client.rpc_result = dict(EQUIPMENT_ROW)
 
@@ -178,6 +201,7 @@ def test_create_equipment(client: TestClient, fake_client, auth_staff) -> None:
     ]
 
 
+# AC1-P1 (partition): a matching role anywhere in the roles list is sufficient
 def test_create_equipment_allows_matching_role_in_roles_list(
     client: TestClient, fake_client, auth_manager_staff
 ) -> None:
@@ -196,6 +220,7 @@ def test_create_equipment_allows_matching_role_in_roles_list(
     assert response.status_code == 201
 
 
+# AC1-N1 (negative): a negative total owned quantity is refused
 def test_create_equipment_negative_quantity(
     client: TestClient, auth_staff
 ) -> None:
@@ -212,6 +237,7 @@ def test_create_equipment_negative_quantity(
     assert response.status_code == 422
 
 
+# AC1-N2 (negative): missing required fields are refused
 def test_create_equipment_missing_required_fields(
     client: TestClient, auth_staff
 ) -> None:
@@ -224,6 +250,27 @@ def test_create_equipment_missing_required_fields(
     assert response.status_code == 422
 
 
+# AC1-B1 (boundary): a type of exactly 120 characters is accepted
+def test_create_equipment_type_at_max_length(
+    client: TestClient, fake_client, auth_staff
+) -> None:
+    fake_client.rpc_result = dict(EQUIPMENT_ROW)
+
+    response = client.post(
+        "/equipment",
+        headers=bearer(),
+        json={
+            "type": "S" * 120,
+            "total_owned_quantity": 4,
+            "home_location": "Store Room B",
+        },
+    )
+
+    assert response.status_code == 201
+    assert fake_client.rpc_calls[0][1]["p_type"] == "S" * 120
+
+
+# AC1-B2 (boundary): a type of 121 characters is refused
 def test_create_equipment_type_too_long(client: TestClient, auth_staff) -> None:
     response = client.post(
         "/equipment",
@@ -238,6 +285,27 @@ def test_create_equipment_type_too_long(client: TestClient, auth_staff) -> None:
     assert response.status_code == 422
 
 
+# AC1-B3 (boundary): a home location of exactly 120 characters is accepted
+def test_create_equipment_home_location_at_max_length(
+    client: TestClient, fake_client, auth_staff
+) -> None:
+    fake_client.rpc_result = dict(EQUIPMENT_ROW)
+
+    response = client.post(
+        "/equipment",
+        headers=bearer(),
+        json={
+            "type": "Speaker",
+            "total_owned_quantity": 4,
+            "home_location": "S" * 120,
+        },
+    )
+
+    assert response.status_code == 201
+    assert fake_client.rpc_calls[0][1]["p_home_location"] == "S" * 120
+
+
+# AC1-B4 (boundary): a home location of 121 characters is refused
 def test_create_equipment_home_location_too_long(
     client: TestClient, auth_staff
 ) -> None:
@@ -254,6 +322,7 @@ def test_create_equipment_home_location_too_long(
     assert response.status_code == 422
 
 
+# AC1-P2 (partition): an explicit non-default operational status is honoured
 def test_create_equipment_with_explicit_status(
     client: TestClient, fake_client, auth_staff
 ) -> None:
@@ -278,6 +347,7 @@ def test_create_equipment_with_explicit_status(
     assert fake_client.rpc_calls[0][1]["p_operational_status"] == "DAMAGED"
 
 
+# AC1-P3 (partition): the description is optional and defaults to null
 def test_create_equipment_description_optional(
     client: TestClient, fake_client, auth_staff
 ) -> None:
@@ -298,6 +368,7 @@ def test_create_equipment_description_optional(
     assert fake_client.rpc_calls[0][1]["p_description"] is None
 
 
+# AC2-X1 (cross-cutting): updating quantity requires an authenticated session
 def test_update_quantity_requires_authentication(client: TestClient) -> None:
     response = client.patch(
         f"/equipment/{EQUIPMENT_ID}/quantity",
@@ -307,6 +378,7 @@ def test_update_quantity_requires_authentication(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+# AC2-X2 (cross-cutting): an event coordinator may not update quantity
 def test_update_quantity_forbidden_for_event_coordinator(
     client: TestClient, auth
 ) -> None:
@@ -319,6 +391,7 @@ def test_update_quantity_forbidden_for_event_coordinator(
     assert response.status_code == 403
 
 
+# AC2-H1 (happy path): technical support updates the total owned quantity
 def test_update_quantity(client: TestClient, fake_client, auth_staff) -> None:
     fake_client.rpc_result = {**EQUIPMENT_ROW, "total_owned_quantity": 6}
 
@@ -342,6 +415,7 @@ def test_update_quantity(client: TestClient, fake_client, auth_staff) -> None:
     ]
 
 
+# AC2-N1 (negative): a negative quantity is refused and nothing is written
 def test_update_quantity_negative(
     client: TestClient, fake_client, auth_staff
 ) -> None:
@@ -355,6 +429,7 @@ def test_update_quantity_negative(
     assert fake_client.rpc_calls == []
 
 
+# AC2-B1 (boundary): zero is the accepted quantity floor
 def test_update_quantity_zero(client: TestClient, fake_client, auth_staff) -> None:
     fake_client.rpc_result = {**EQUIPMENT_ROW, "total_owned_quantity": 0}
 
@@ -368,6 +443,7 @@ def test_update_quantity_zero(client: TestClient, fake_client, auth_staff) -> No
     assert response.json()["total_owned_quantity"] == 0
 
 
+# AC2-N2 (negative): an unknown equipment maps RPC errcode P0002 to 404
 def test_update_quantity_not_found(
     client: TestClient, fake_client, auth_staff
 ) -> None:
@@ -385,6 +461,7 @@ def test_update_quantity_not_found(
     assert response.json()["detail"] == "Equipment not found"
 
 
+# AC2-N3 (negative): a generic RPC failure is a 500, not a crash
 def test_update_quantity_rpc_failure(
     client: TestClient, fake_client, auth_staff
 ) -> None:

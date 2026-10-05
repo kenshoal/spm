@@ -8,7 +8,7 @@ import { StatusHistory } from "@/app/equipment/[id]/status-history";
 
 afterEach(cleanup);
 
-// Purpose: The status picker never offers the status the equipment already has.
+// AC1-P5 (partition): the status picker offers every status except the one the equipment already has
 test("offers every status except the current one", () => {
   render(<StatusForm equipmentId="eq-1" currentStatus="AVAILABLE" />);
 
@@ -16,7 +16,7 @@ test("offers every status except the current one", () => {
   expect(options.map((option) => option.textContent)).toEqual(["Damaged", "Under repair", "Under maintenance", "Retired"]);
 });
 
-// Purpose: SCRUM-16 AC3 — each change shows who made it and when.
+// AC3-H2 (happy path): each change in the history shows who made it and when
 test("lists each change with who and when", () => {
   render(
     <StatusHistory
@@ -31,7 +31,7 @@ test("lists each change with who and when", () => {
   expect(item.textContent).toMatch(/20 Sept? 2026/);
 });
 
-// Purpose: An empty history explains itself.
+// AC3-P2 (partition): equipment with no status changes shows an explanatory empty state
 test("explains an empty history", () => {
   render(<StatusHistory entries={[]} />);
 
