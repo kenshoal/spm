@@ -96,6 +96,41 @@ attach the owning Organiser's clarification response and return the request to
 read-only throughout. Direct client roles cannot read the history table or
 execute these functions; authorised access goes through this API.
 
+## Submission confirmations
+
+When an event request becomes `Submitted`, the database records one
+`event_request.submitted` row in `event_request_outbox` (migration `0008`).
+While the service runs, a background relay checks that table every 10 seconds
+and sends each unpublished row to notificationService as an
+`event_request_submitted` notification for the Organiser (SCRUM-37 AC1), then
+sets `published_at`.
+
+- A row is marked published only after notificationService accepts it, so an
+  unreachable notification service delays confirmations instead of losing
+  them.
+- The outbox row id is sent as `event_id`, and notificationService stores a
+  repeated `event_id` once, so a re-sent row never notifies the Organiser
+  twice.
+- The relay runs only when `NOTIFICATION_SERVICE_URL` and Supabase are both
+  configured. Without them, rows stay unpublished until a relay can deliver
+  them.
+
+## Clarification notices
+
+When the assigned Coordinator records a `Changes Requested` decision through
+`POST /event-requests/{id}/decision`, the service sends the owning Organiser a
+`clarification_requested` notification carrying the Coordinator's reason
+(SCRUM-37 AC3), after the decision has been written.
+
+- The notice is sent once and is not retried. If notificationService is
+  unreachable, the failure is logged and the decision still succeeds; the
+  Organiser can read the clarification on the request itself. Unlike the
+  submission confirmation, it does not go through the outbox.
+- Approved and Rejected decisions send nothing here; their notices belong to
+  SCRUM-36.
+- A refused decision (wrong Coordinator, wrong status, missing reason) sends
+  nothing.
+
 ## Run locally on macOS/Linux
 
 The standard project workflow is to run `docker compose up --build -d` from

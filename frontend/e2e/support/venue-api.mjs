@@ -72,6 +72,26 @@ createServer(async (request, response) => {
       && access.every((a) => v.accessibility_features.map((x) => x.toLowerCase()).includes(a))));
   }
 
+  // Mirrors venueService's POST /venues/{id}/suitability rules (SCRUM-12) so the
+  // browser journey can run without the real service. It proves the screen, not
+  // the real API contract; that is covered by venueService's own tests.
+  const check = url.pathname.match(/^\/venues\/([^/]+)\/suitability$/);
+  if (check && request.method === "POST") {
+    const target = venues.get(decodeURIComponent(check[1]));
+    if (!target) return send(response, 404, { detail: "Venue not found" });
+    const need = await readJson(request);
+    const has = (list, wanted) => list.map((x) => x.toLowerCase()).includes(wanted.toLowerCase());
+    const mismatches = [];
+    if (need.expected_attendance > target.max_capacity) mismatches.push({ attribute: "capacity", reason: `Expected attendance ${need.expected_attendance} exceeds the venue's maximum capacity of ${target.max_capacity}.` });
+    if (need.required_layout && !target.supported_layouts.includes(need.required_layout)) mismatches.push({ attribute: "layout", reason: `The venue does not support the ${need.required_layout} layout.` });
+    if (need.required_slot && !target.operating_slots.includes(need.required_slot)) mismatches.push({ attribute: "operating_slot", reason: `The venue does not operate in the ${need.required_slot} slot.` });
+    const missing = (need.required_facilities ?? []).filter((f) => !has(target.facilities, f));
+    if (missing.length) mismatches.push({ attribute: "facilities", reason: `Missing required facility: ${missing.join(", ")}.` });
+    const lacking = (need.required_accessibility ?? []).filter((a) => !has(target.accessibility_features, a));
+    if (lacking.length) mismatches.push({ attribute: "accessibility", reason: `Missing required accessibility feature: ${lacking.join(", ")}.` });
+    return send(response, 200, { venue_id: target.id, suitable: mismatches.length === 0, mismatches });
+  }
+
   const match = url.pathname.match(/^\/venues\/([^/]+)$/);
   const venue = match ? venues.get(decodeURIComponent(match[1])) : undefined;
   if (match && request.method === "GET") return venue ? send(response, 200, venue) : send(response, 404, { detail: "Venue not found" });
