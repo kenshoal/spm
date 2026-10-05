@@ -91,6 +91,23 @@ def test_change_request_requires_at_least_one_changed_field() -> None:
     assert events.change_request_rows == []
 
 
+# AC1-N2 (negative): a submitted value must differ from the stored event value
+def test_change_request_rejects_unchanged_value() -> None:
+    client, events, event_request_id = eligible_fixture()
+    events.rows[event_request_id]["expected_attendance"] = 80
+
+    with client:
+        response = client.post(
+            f"/event-requests/{event_request_id}/change-requests",
+            headers=headers("organiser-1"),
+            json=change_payload(expected_attendance=80),
+        )
+
+    assert response.status_code == 409
+    assert events.rows[event_request_id]["expected_attendance"] == 80
+    assert events.change_request_rows == []
+
+
 @pytest.mark.parametrize(("length", "expected"), [(1, 201), (2000, 201), (2001, 422)], ids=["AC1-B1", "AC1-B2", "AC1-B3"])
 # AC1-B1, AC1-B2, AC1-B3 (boundary): explanation limits accept 1/2000 and reject 2001 characters
 def test_change_explanation_boundaries(length: int, expected: int) -> None:
@@ -138,10 +155,41 @@ def test_other_organiser_cannot_create_or_view_change_request() -> None:
             f"/event-requests/{event_request_id}/change-requests",
             headers=headers("organiser-2"),
         )
+        coordinator_listing = client.get(
+            f"/event-requests/{event_request_id}/change-requests",
+            headers=headers("coord-2"),
+        )
 
     assert create.status_code == 404
     assert listing.status_code == 404
+    assert coordinator_listing.status_code == 404
     assert events.change_request_rows == []
+
+
+# AC2-X1 (cross-cutting): owner and current coordinator see the same retained history
+def test_owner_and_assigned_coordinator_can_view_change_request() -> None:
+    client, _events, event_request_id = eligible_fixture()
+
+    with client:
+        created = client.post(
+            f"/event-requests/{event_request_id}/change-requests",
+            headers=headers("organiser-1"),
+            json=change_payload(),
+        )
+        owner_listing = client.get(
+            f"/event-requests/{event_request_id}/change-requests",
+            headers=headers("organiser-1"),
+        )
+        coordinator_listing = client.get(
+            f"/event-requests/{event_request_id}/change-requests",
+            headers=headers("coord-1"),
+        )
+
+    assert created.status_code == 201
+    assert owner_listing.status_code == 200
+    assert coordinator_listing.status_code == 200
+    assert owner_listing.json() == [created.json()]
+    assert coordinator_listing.json() == [created.json()]
 
 
 # AC3-H1 (happy): approval atomically applies only proposed values and retains the decision

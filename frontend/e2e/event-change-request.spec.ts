@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const EVENT_API = "http://127.0.0.1:8103";
 const cookie = (value: string) => [{ name: "cs_access_token", value, url: "http://127.0.0.1:3100" }];
 
-// AC1-H1, AC2-X1, AC3-H1 (happy): an organiser amendment is reviewed, applied and visible to both related roles
+// AC1-H1, AC2, AC3 (happy): an organiser amendment is reviewed, applied and visible to both related roles
 test("organiser requests an approved event change and coordinator approves it", async ({ page, request }) => {
   const seeded = await request.post(`${EVENT_API}/__seed`, {
     data: {
