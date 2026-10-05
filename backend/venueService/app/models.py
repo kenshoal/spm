@@ -88,14 +88,25 @@ class Venue(VenueBase):
 
 
 class VenueBookingRequest(BaseModel):
+    """Read projection of a SCRUM-32 venue_booking_requests row for Venue Staff.
+
+    event_name, expected_attendance and requirements_note are the snapshot
+    SCRUM-32 takes at submission, so Venue Staff never read the event request.
+    """
+
     id: str
-    event_request_id: str
     venue_id: str
-    requested_date: date
-    slot: Slot
-    status: Literal["pending", "approved", "rejected", "cancelled"]
-    notes: str | None
+    event_request_id: str
+    event_name: str | None
+    expected_attendance: int | None
+    requirements_note: str | None
+    start_date: date
+    end_date: date
+    slots: list[Slot]
+    status: Literal["pending", "approved", "rejected"]
+    decision_reason: str | None
+    suggested_alternative: str | None
     requested_by: str
-    reviewed_by: str | None
+    decided_by: str | None
+    decided_at: datetime | None
     created_at: datetime
-    reviewed_at: datetime | None

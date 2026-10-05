@@ -6,6 +6,7 @@ from app.main import app
 client = TestClient(app)
 
 
+# AC6-H2 (happy): Venue Staff can list booking requests
 def test_venue_staff_can_list_booking_requests() -> None:
     response = client.get("/venue-booking-requests")
 
@@ -13,6 +14,7 @@ def test_venue_staff_can_list_booking_requests() -> None:
     assert response.json() == []
 
 
+# AC6-N1 (negative): the booking queue requires a signed-in user (401)
 def test_booking_requests_require_authentication() -> None:
     app.dependency_overrides.clear()
 
@@ -21,6 +23,7 @@ def test_booking_requests_require_authentication() -> None:
     assert response.status_code == 401
 
 
+# AC6-N2 (negative): roles other than Venue Staff are refused (403)
 def test_booking_requests_are_forbidden_for_unrelated_roles() -> None:
     app.dependency_overrides[require_authenticated] = lambda: Principal(
         user_id="00000000-0000-0000-0000-000000000002",
