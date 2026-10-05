@@ -83,6 +83,8 @@ services:
       - "8004:8000"
     environment:
       AUTH_SERVICE_URL: http://auth-service:8000
+      # No depends_on: only booking-request submission calls this service.
+      EVENT_REQUEST_API_URL: http://event-request-service:8000
       VENUE_STORAGE_BACKEND: supabase
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
