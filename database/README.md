@@ -35,6 +35,14 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0016_event_request_review_decisions.sql` | SCRUM-17 review history plus server-only atomic RPCs for decisions, organiser clarification responses and resuming review |
 | `migrations/0017_notifications.sql` | `notifications` table for SCRUM-37: one row per recipient per event, unique `(recipient_id, event_id)` so a retried event is stored once, newest-first inbox index, RLS on with service-role access only |
 | `migrations/0018_venue_booking_requests.sql` | `venue_booking_requests` table for SCRUM-32: dates, slots and status with CHECK constraints (slot rules as in `venue_blocks`, decision fields always consistent with the status), a restrictive foreign key to `venues`, four lookup indexes, RLS on with service-role access only. Applied to shared development on 4 October 2026 |
+| `migrations/0020_equipment_reservations.sql` | `equipment_reservations` table for SCRUM-10: units of an equipment row committed to an event, `quantity > 0` and `return_date >= collection_date` CHECKs, FKs to `equipment` and `event_requests`, hold-window index, RLS on with service-role access only. Starts empty; SCRUM-13 writes rows. Applied to the shared development project on 6 October 2026, replacing the placeholder table from `feat/scoped-resource-access` (SCRUM-39), which was dropped the same day once the two stories deconflicted — SCRUM-10's hold-ledger schema (`collection_date`/`return_date`) is the canonical one |
+
+Verify `0020` after applying it: run
+[`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
+SQL Editor — it exercises the CHECK constraints and both foreign keys
+(including the refusal paths) and prints
+`ALL EQUIPMENT RESERVATION VERIFICATIONS PASSED` on success, rolling back so
+no data is left behind.
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
