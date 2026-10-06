@@ -123,6 +123,20 @@ def test_get_status_not_found(client: TestClient, fake_client, auth) -> None:
     assert response.status_code == 404
 
 
+# AC4-N3 (negative): Attendees cannot read equipment status or its history (403)
+@pytest.mark.parametrize(
+    "suffix", ["status", "status/history"]
+)
+def test_equipment_status_reads_forbidden_for_attendees(
+    client: TestClient, auth_attendee, suffix: str
+) -> None:
+    response = client.get(
+        f"/equipment/{EQUIPMENT_ID}/{suffix}", headers=bearer()
+    )
+
+    assert response.status_code == 403
+
+
 # AC2-N2 (negative): a malformed equipment id is refused before any query runs
 def test_get_status_invalid_equipment_id(client: TestClient, auth) -> None:
     response = client.get("/equipment/not-a-uuid/status", headers=bearer())

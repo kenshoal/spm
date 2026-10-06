@@ -19,7 +19,6 @@ EQUIPMENT_ROW: dict[str, Any] = {
     "updated_at": "2026-09-15T09:00:00+00:00",
 }
 
-
 def bearer() -> dict[str, str]:
     return {"Authorization": "Bearer test-token"}
 
@@ -136,6 +135,16 @@ def test_get_equipment_invalid_id(client: TestClient, auth) -> None:
     response = client.get("/equipment/not-a-uuid", headers=bearer())
 
     assert response.status_code == 422
+
+
+# AC4-N2 (negative): Attendees cannot read the equipment catalogue (403)
+@pytest.mark.parametrize("path", ["/equipment", f"/equipment/{EQUIPMENT_ID}"])
+def test_equipment_reads_forbidden_for_attendees(
+    client: TestClient, auth_attendee, path: str
+) -> None:
+    response = client.get(path, headers=bearer())
+
+    assert response.status_code == 403
 
 
 # AC1-X1 (cross-cutting): creating requires an authenticated session

@@ -16,7 +16,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies import Principal, require_authenticated, require_venue_staff
+from app.dependencies import Principal, require_venue_staff, require_venue_viewer
 from app.models import (
     RoomLayout,
     Slot,
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/venues", tags=["venues"])
 
 RepoDep = Annotated[VenueStore, Depends(get_repository)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
-AuthenticatedDep = Annotated[Principal, Depends(require_authenticated)]
+VenueViewerDep = Annotated[Principal, Depends(require_venue_viewer)]
 
 
 @router.post("", response_model=Venue, status_code=status.HTTP_201_CREATED)
@@ -46,14 +46,14 @@ def create_venue(
 
 
 @router.get("", response_model=list[Venue])
-def list_venues(principal: AuthenticatedDep, repo: RepoDep) -> list[Venue]:
+def list_venues(principal: VenueViewerDep, repo: RepoDep) -> list[Venue]:
     del principal
     return repo.list()
 
 
 @router.get("/search", response_model=list[Venue])
 def search_venues(
-    principal: AuthenticatedDep,
+    principal: VenueViewerDep,
     repo: RepoDep,
     required_capacity: Annotated[int | None, Query(gt=0)] = None,
     location: Annotated[str | None, Query()] = None,
@@ -101,7 +101,7 @@ def search_venues(
 
 
 @router.get("/{venue_id}", response_model=Venue)
-def get_venue(venue_id: str, principal: AuthenticatedDep, repo: RepoDep) -> Venue:
+def get_venue(venue_id: str, principal: VenueViewerDep, repo: RepoDep) -> Venue:
     del principal
     venue = repo.get(venue_id)
     if venue is None:

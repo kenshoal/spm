@@ -12,6 +12,7 @@ const port = 8103;
 // role the authService would report for it.
 const SESSIONS = {
   "test-session": { id: "playwright-user", role: "event_organiser" },
+  "colleague-session": { id: "playwright-colleague", role: "event_organiser" },
   "coordinator-session": { id: "playwright-coordinator", role: "event_coordinator" },
   "other-coordinator-session": { id: "other-coordinator", role: "event_coordinator" },
   "ops-session": { id: "playwright-ops", role: "event_operations_manager" },
@@ -28,6 +29,18 @@ const CANCEL_SOURCES = new Set([
 
 const COORDINATOR_IDS = new Set(["playwright-coordinator", "other-coordinator", "reassign-coordinator"]);
 const TERMINAL = new Set(["Completed", "Cancelled", "Rejected"]);
+
+// SCRUM-39: organisers in one client organisation view each other's
+// non-Draft requests, mirroring EventRequestService.get_viewable.
+const ORGANISATIONS = { "playwright-user": "acme", "playwright-colleague": "acme" };
+
+function organiserCanView(user, record) {
+  if (user.role !== "event_organiser") return false;
+  if (record.organiser_id === user.id) return true;
+  const organisation = ORGANISATIONS[record.organiser_id];
+  return record.status !== "Draft" && organisation !== undefined
+    && organisation === ORGANISATIONS[user.id];
+}
 
 function send(response, status, body) {
   response.writeHead(status, body === undefined ? {} : { "Content-Type": "application/json" });
@@ -160,7 +173,7 @@ createServer(async (request, response) => {
         response,
         200,
         [...records.values()]
-          .filter((record) => record.organiser_id === user.id)
+          .filter((record) => organiserCanView(user, record))
           .sort((a, b) => b.created_at.localeCompare(a.created_at)),
       );
       return;
@@ -259,7 +272,7 @@ createServer(async (request, response) => {
       const assignment = latestAssignmentFor(id);
       const canRead =
         user.role === "event_operations_manager" ||
-        (user.role === "event_organiser" && record.organiser_id === user.id) ||
+        organiserCanView(user, record) ||
         (user.role === "event_coordinator" && assignment?.coordinator_id === user.id);
 
       if (!canRead) {
@@ -287,11 +300,8 @@ createServer(async (request, response) => {
 
   if (request.method === "GET" && match) {
     if (user.role === "event_organiser") {
-      send(
-        response,
-        record.organiser_id === user.id ? 200 : 404,
-        record.organiser_id === user.id ? record : { detail: "Event request not found" },
-      );
+      const visible = organiserCanView(user, record);
+      send(response, visible ? 200 : 404, visible ? record : { detail: "Event request not found" });
       return;
     }
     if (user.role === "event_coordinator") {
@@ -389,7 +399,7 @@ createServer(async (request, response) => {
     }
     const assigned = latestAssignmentFor(id)?.coordinator_id === user.id;
     const canRead =
-      (user.role === "event_organiser" && record.organiser_id === user.id)
+      organiserCanView(user, record)
       || (user.role === "event_coordinator" && assigned);
     if (!canRead) {
       send(response, ["event_organiser", "event_coordinator"].includes(user.role) ? 404 : 403, {
@@ -404,8 +414,9 @@ createServer(async (request, response) => {
   }
 
   if (user.role !== "event_organiser" || record.organiser_id !== user.id) {
-    send(response, record.organiser_id === user.id ? 403 : 404, {
-      detail: "Event request not found",
+    const forbidden = organiserCanView(user, record);
+    send(response, forbidden ? 403 : 404, {
+      detail: forbidden ? "Insufficient permissions" : "Event request not found",
     });
     return;
   }
