@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.routers.venues import AuthenticatedDep, RepoDep
+from app.routers.venues import RepoDep, VenueViewerDep
 from app.suitability import check_suitability
 from app.suitability_models import SuitabilityRequest, SuitabilityResult
 
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/venues", tags=["venue suitability"])
 def check_venue_suitability(
     venue_id: str,
     payload: SuitabilityRequest,
-    principal: AuthenticatedDep,
+    principal: VenueViewerDep,
     repo: RepoDep,
 ) -> SuitabilityResult:
     del principal

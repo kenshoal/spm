@@ -453,3 +453,54 @@ def test_rpc_transport_failure_raises_repository_error() -> None:
         repository.advance_by_coordinator("request-1", "coord-1", "Cancelled")
 
     assert not isinstance(exc_info.value, EventRequestRpcError)
+
+
+def repository_capturing(
+    captured: list[httpx.Request], rows: list[dict[str, object]]
+) -> SupabaseEventRequestRepository:
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=rows)
+
+    return SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+
+
+# AC2-H2 (happy): shared requests are read by organisation, excluding Drafts
+def test_list_shared_with_organisation_excludes_drafts() -> None:
+    captured: list[httpx.Request] = []
+    row = response_row(status="Submitted", organisation_id="org-1")
+    repository = repository_capturing(captured, [row])
+
+    assert repository.list_shared_with_organisation("org-1") == [row]
+    assert captured[0].url.path == "/rest/v1/event_requests"
+    assert dict(captured[0].url.params) == {
+        "organisation_id": "eq.org-1",
+        "status": "neq.Draft",
+        "order": "created_at.desc",
+        "select": "*",
+    }
+
+
+# AC2-H1 (happy): an organiser's organisation is read from organisation_members
+def test_get_organisation_id_reads_membership() -> None:
+    captured: list[httpx.Request] = []
+    repository = repository_capturing(captured, [{"organisation_id": "org-1"}])
+
+    assert repository.get_organisation_id("user-1") == "org-1"
+    assert captured[0].url.path == "/rest/v1/organisation_members"
+    assert dict(captured[0].url.params) == {
+        "user_id": "eq.user-1",
+        "select": "organisation_id",
+        "limit": "1",
+    }
+
+
+# AC3-P2 (partition): an organiser with no membership has no organisation
+def test_get_organisation_id_returns_none_without_membership() -> None:
+    repository = repository_capturing([], [])
+
+    assert repository.get_organisation_id("user-1") is None

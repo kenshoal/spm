@@ -58,11 +58,12 @@ coverage of booking persistence, concurrency or notification acceptance criteria
 
 Venues are stored in the Supabase `public.venues` table
 (`database/migrations/0016_venues.sql`) and venue blocks in `public.venue_blocks`
-when `VENUE_STORAGE_BACKEND=supabase`, which Docker Compose sets. The default,
-`memory`, keeps both in process memory and is used by the unit tests and
-standalone development; that data is lost when the service stops. All routes
-verify the bearer token with `authService`; create and update operations
-require the `venue_staff` role.
+(`database/migrations/0023_venue_blocks.sql`) when `VENUE_STORAGE_BACKEND=supabase`,
+which Docker Compose sets. The default, `memory`, keeps both in process memory
+and is used by the unit tests and standalone development; that data is lost
+when the service stops. All routes verify the bearer token with `authService`;
+reads require `event_coordinator` or `venue_staff`, while create and update
+operations require `venue_staff`.
 
 `POST /venues/{id}/suitability` compares an event's stated requirements
 (expected attendance, layout, operating slot, facilities, accessibility)
@@ -103,7 +104,8 @@ and notifications are not yet integrated.
 ## Block retrieval and search (Day 4)
 
 `GET /venues/{venue_id}/blocks` returns all blocks for that venue, including
-lifted blocks, through the existing authenticated-user dependency. An existing
+lifted blocks. It is limited to Venue Staff (`403` otherwise) because block
+reasons are internal. An existing
 venue with no blocks returns `[]`; an unknown venue returns `404`.
 
 Search behaviour:
@@ -165,9 +167,14 @@ errors, timeouts, and creation-to-search behaviour.
 ## Integration notes
 
 Venue blocking has no dependency on equipmentService for its acceptance criteria.
-Booking checks need the booking/event owner; Coordinator alerts need event and
-notification interfaces. Equipment integration is only needed if the team adds
-an explicit requirement about equipment affected by a venue closure.
+Equipment integration is only needed if the team adds an explicit requirement
+about equipment affected by a venue closure.
+
+Coordinator alerts for confirmed events affected by a new block (SCRUM-23 AC3)
+are not implemented yet. As agreed with the SCRUM-32 owner, an approved request
+in `venue_booking_requests` is the booking, so affected events will come from
+approved rows for the venue plus the event's status and current Coordinator
+from eventRequestService, once SCRUM-15 can approve requests.
 
 Booking requests (SCRUM-32) are stored in `public.venue_booking_requests`
 (`database/migrations/0018_venue_booking_requests.sql`) under the same
@@ -212,52 +219,12 @@ ruff check .
 pytest
 ```
 
-## Notification hook (prepared integration)
-
-`app/notification_client.py` follows eventRequestService's notification hook:
-without `NOTIFICATION_SERVICE_URL`, it sends nothing. When configured, the
-client POSTs to that exact URL with a five-second timeout. The envelope is
-`event_type`, `recipient_id`, and `payload`; the proposed event type is
-`venue_block_applied`. The payload contains the event request ID, Coordinator
-ID, block/venue IDs, blocked dates and slots, reason, and creator.
-
-The `get_notification_client` dependency prepares this client without sending
-anything. Future server-side affected-event logic should call:
-
-```python
-notifications.notify_venue_block_applied(
-    block=saved_block,
-    event_request_id=affected_event_id,
-    coordinator_id=assigned_coordinator_id,
-)
-```
-
-Only call it after saving the block and identifying a confirmed upcoming event
-with a reservation overlapping that block. Read the Coordinator from trusted
-event-service data, not the block creator or a client-supplied recipient.
-Payload dates/slots describe the block, not the event's exact schedule.
-
-**Not yet wired to block creation:** eventRequestService currently exposes
-proposed date-times and free-text venue requirements, not a confirmed venue
-reservation lookup. The caller/recipient selection must be integrated when that
-contract exists. Setting the URL alone does not make block creation send alerts.
-This change adds no public notification-trigger endpoint or receiving service.
-
-HTTP errors are logged using IDs without failing the caller or modifying the
-saved block. As in the teammate's hook, there is no durable queue, automatic
-retry, or duplicate suppression. Receiver acceptance is not proof of delivery
-to a Coordinator. The receiver must agree on this new event type/payload and
-delivery authentication before production use. No email provider is configured.
-The notification acceptance criterion is not complete with this hook alone.
-
-Hook tests replace HTTP calls; they cover disabled mode, payload serialization,
-receiver errors, connection failures and timeouts. No real alerts are sent.
-
 ## Venue-block availability check
 
 `POST /venues/{venue_id}/availability` is a read-only check using the existing
-venue and block repositories (memory or database). It uses the authenticated
-reader dependency.
+venue and block repositories (memory or database). Venue Staff and Event
+Coordinators may call it; other roles get `403`. The result contains dates,
+slots and reason codes but never a block's free-text reason.
 
 ```json
 {
@@ -280,78 +247,3 @@ bookings. Its answer is a snapshot. The booking owner must call the check,
 reject `available: false`, and coordinate check-and-save with block writes to
 avoid a block being created between checking and saving. Merely calling this
 endpoint separately is not an atomic booking guarantee.
-
-## Affected-event lookup
-
-`GET /venues/{venue_id}/blocks/{block_id}/affected-events` uses the staff
-dependency and returns one entry per affected event with:
-
-- `event_request_id`, `event_name`, and current `coordinator_id`.
-- `affected_periods`: allocation ID, intersecting dates, and intersecting slots.
-
-Only active allocations for the same venue, on Confirmed events, are considered.
-Only affected dates on/after today in Asia/Singapore are returned. Same-day slots
-are included because no clock-time boundaries for AM/PM/NIGHT have been agreed.
-Lifted or fully past blocks return `[]`. Exact duplicate allocations are removed.
-A missing Coordinator is represented by `null`, never by the block creator;
-that event still needs attention but is not ready to receive a targeted alert.
-Missing venues/blocks (including a block belonging to another venue) return `404`.
-No notifications are sent and no records are changed by this GET request.
-
-### Pending booking/event integration contract
-
-The actual allocation provider is not present in the current repo. Do not use
-proposed dates or free-text venue requirements as if they were booked allocations.
-Until configured, lookup for an active current/future block returns `503` rather
-than a misleading empty list.
-
-The new adapter uses an explicitly proposed interface for the booking/event owner:
-
-```dotenv
-# Exact endpoint URL; leave unset until the owner implements this contract.
-# EVENT_ALLOCATIONS_URL=https://event-service.example/venue-allocations
-# Optional server-to-server credential, never a Supabase database secret key.
-# EVENT_ALLOCATIONS_TOKEN=service-issued-token
-```
-
-The adapter issues a GET with `venue_id`, `start_date`, and `end_date` query
-parameters. The provider must return actual allocations intersecting that
-inclusive period, plus current event status and the latest Coordinator assignment:
-
-```json
-{
-  "allocations": [
-    {
-      "allocation_id": "allocation-id",
-      "venue_id": "venue-id",
-      "event_request_id": "event-request-id",
-      "event_name": "Example event",
-      "allocation_status": "active",
-      "event_status": "Confirmed",
-      "coordinator_id": "assigned-user-id",
-      "start_date": "2026-10-01",
-      "end_date": "2026-10-03",
-      "slots": ["AM"]
-    }
-  ],
-  "next_cursor": null
-}
-```
-
-All fields in each allocation above are required; event name and Coordinator
-may be null. Cancelled allocations use `allocation_status: "cancelled"`.
-An opaque `next_cursor` is passed back as the next request's `cursor`; null ends
-pagination. Results must be consistent across pages. The provider must resolve
-status and Coordinator from trusted event data (eventRequestService already
-owns those fields), not accept client-selected recipients. The existing
-Coordinator assignment service uses the highest assignment ID as the latest.
-
-The client uses a five-second timeout per page. Invalid responses, network errors,
-non-success statuses, inconsistent duplicate allocations/Coordinators, and broken
-pagination return `502`; partial results are not reported as complete. Credentials
-and upstream error details are not returned to callers.
-
-These additions create no reservation tables, booking-management endpoints,
-notification receiver, or email delivery. The remaining integration work is to
-implement/connect the allocation provider, call availability from the real
-booking commit flow, and trigger notifications for the affected-event results.

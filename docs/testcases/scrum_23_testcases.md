@@ -19,8 +19,9 @@ The original acceptance criteria were reviewed against the customer briefing (*V
 
 - **Included:** Venue Staff create a dated block through the frontend (AC1); dated search excludes blocked venues (AC2, already implemented and tested in venueService); Venue Staff view blocked periods on a monthly calendar (AC4).
 - **Shared-file change:** one "Venue blocks" workspace link for Venue Staff in `frontend/app/components/app-shell.tsx`, with its expectations in `frontend/__tests__/workspace-links.test.ts`. The venue catalogue page (SCRUM-30) is unchanged; the block page has its own venue picker.
+- **Review follow-ups (PR #45):** the AC3 placeholder that read allocations from an external `EVENT_ALLOCATIONS_URL` service was removed, because the agreed design (0018) makes an approved `venue_booking_requests` row the booking; AC3 will be rebuilt on that table after SCRUM-15. `GET /venues/{id}/blocks` is now Venue Staff only and `POST /venues/{id}/availability` is Venue Staff and Event Coordinators only. `database/migrations/0023_venue_blocks.sql` records the hand-created table and revokes browser-role access; it was applied to shared development on 6 October 2026.
 - **Excluded:** AC2b booking refusal and AC3 Coordinator notification (wait on SCRUM-15 bookings and SCRUM-37); Event Coordinator calendar access; lifting a block (no endpoint); post-login landing change (shared file, next increment); booking requests inbox (SCRUM-15).
-- **Actors and access:** Only Venue Staff can open `/venue-blocks` or create a block. venueService enforces the `venue_staff` role on `POST /venues/{id}/blocks`.
+- **Actors and access:** Only Venue Staff can open `/venue-blocks`, create a block or list block reasons; Venue Staff and Event Coordinators can run the availability check, which returns no free-text reasons; external roles get 403. venueService enforces the `venue_staff` role on `POST /venues/{id}/blocks`.
 - **State:** A new block is `active`. `lifted` blocks are kept as history and never shown as blocked.
 - **Persistence:** One `POST /venues/{venue_id}/blocks` call writes the block; the server sets its ID, creator, status and timestamp.
 - **Assumptions:** A venue whose catalogue status is `blocked` (set on the venue edit page, SCRUM-30) is unavailable on every date, so the calendar shows it as unavailable rather than available. Dates are inclusive; the chosen slots apply on every date in the range; NIGHT belongs to its starting date; a block on a slot the venue does not operate is still shown as blocked; past dates are not refused because no AC requires it.
@@ -56,8 +57,11 @@ The original acceptance criteria were reviewed against the customer briefing (*V
 | AC1-X1 | AC1 | The page is Venue Staff only | Cross-cutting | Non-staff session | Open `/venue-blocks` | `requireRole` refuses | `requireRole("venue_staff")` is checked first | Venues and blocks are not fetched | Component |
 | AC1-X2 | AC1 | The API refuses a non-staff caller | Cross-cutting | Event Coordinator principal | `POST /venues/{id}/blocks` | Valid body | 403 | No block is stored | API (backend) |
 | AC1-X3 | AC1, AC4 | Only Venue Staff get a "Venue blocks" workspace link to the block page | Cross-cutting | Each role | Build the workspace links | Every role | Venue Staff: Venues, Venue blocks, Venue search; no other role gets `/venue-blocks` | No other role's links change | Unit + live check |
+| AC1-X4 | AC1 | Block reasons are readable by Venue Staff only | Cross-cutting | One block with detail; caller is Event Coordinator, Event Organiser or Attendee | `GET /venues/{id}/blocks` | — | 403 | Reason text not returned; block unchanged | API (backend) |
+| AC1-X6 | AC1 | The block table is reproducible and closed to browser roles | Cross-cutting | Fresh Postgres with 0016 applied | Apply `0023_venue_blocks.sql` twice | — | Table matches the shared schema; second run is a no-op; `anon`/`authenticated` have no privileges; RLS on | Shared database not touched | DB |
+| AC2-X1 | AC2 | Only internal planners can run the availability check | Cross-cutting | Caller of each role | `POST /venues/{id}/availability` | Venue Staff, Event Coordinator, Event Organiser, Attendee | 200, 200, 403, 403 | No block free text in any response | API (backend) |
 | AC2-H1 | AC2 | Search excludes a venue on its blocked date/slot, including both boundary dates | Happy | Venue with a 20–21 Sep AM block | Search each date | 2026-09-20/21/22, AM | Excluded on 20 and 21, included on 22 | — | API (backend, existing) |
-| AC2-P1 | AC2 | Lifted blocks and non-overlapping slots do not hide a venue | Partition | Lifted block; PM search on AM block | Search | — | Venue included | — | API (backend, existing) |
+| AC2-P1 | AC2 | Non-overlapping dates and slots still offer the venue | Partition | AM block on 20–21 Sep | Search other dates and slots | 2026-09-19/22 AM, 2026-09-20 PM | Venue included | — | API (backend) |
 | AC4-H1 | AC4 | Covered cells show "Blocked" with the reason | Happy | Active block 20–21 Oct AM+PM, maintenance | Build and render October | — | 4 cells blocked with "Maintenance — Air-con repairs" | Other cells not blocked | Unit + component |
 | AC4-B1 | AC4 | The first and last days are blocked; the days either side are not | Boundary | Same block | Build October | 19, 20, 21, 22 Oct | 20 and 21 blocked; 19 and 22 open | — | Unit |
 | AC4-B2 | AC4 | A block spanning two months appears in both, only on its own days | Boundary | Block 30 Oct–2 Nov | Build October and November | — | 30–31 Oct and 1–2 Nov blocked | 29 Oct and 3 Nov open | Unit |
@@ -72,15 +76,60 @@ The original acceptance criteria were reviewed against the customer briefing (*V
 | AC4-N3 | AC4 | Failed block lookup never shows an all-open calendar | Negative | `listVenueBlocks` fails | Open page | — | Alert that blocks could not be loaded | No calendar cells are shown as open | Component |
 | AC4-P5 | AC4 | An empty catalogue is presented plainly | Partition | No venues | Open page | — | "No venues in the catalogue yet." | No form | Component |
 
+### Backend test cases (venueService)
+
+Each backend test carries its ID in a one-line label comment; parametrized cases have per-case IDs (for example `AC1-N10a`). Pre-conditions use the in-memory stores reset by `tests/conftest.py`, signed in as Venue Staff unless stated.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Test |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC1-H3 | AC1 | A valid block request parses its dates and slots | Happy | Dates and slot enum parsed | Unit | `test_block_models.py` |
+| AC1-H4 | AC1 | A stored block gets an id, a UTC timestamp and active status | Happy | Server defaults set | Unit | `test_block_models.py` |
+| AC1-H5 | AC1 | The API stores a normalised block with server-set id, creator and status | Happy | 201; slots ordered, detail trimmed, creator from the token | API | `test_venue_blocks.py` |
+| AC1-H6 | AC1 | Blocks persist in the database across requests and drive search | Happy | Stored rows returned and applied by later requests | API + mocked Data API | `test_database_storage.py` |
+| AC1-P6 | AC1 | Each story reason category is accepted | Partition | All four accepted | Unit | `test_block_models.py` |
+| AC1-P7 | AC1 | Detail is trimmed, blank becomes absent, 1,000 characters kept | Partition | Normalised values | Unit | `test_block_models.py` |
+| AC1-P8 | AC1 | Repeated blocks get distinct ids; detail is optional | Partition | Two rows, distinct ids, null detail | API | `test_venue_blocks.py` |
+| AC1-B4 | AC1 | A same-day full-day block keeps AM, PM, NIGHT order | Boundary | Canonical order | Unit | `test_block_models.py` |
+| AC1-N10–N13 | AC1 | Invalid dates/slots/reasons, missing reason, client-set server fields, blank identity | Negative | Validation error | Unit | `test_block_models.py` |
+| AC1-N14 | AC1 | Unknown venue | Negative | 404; nothing stored | API | `test_venue_blocks.py` |
+| AC1-N15 | AC1 | Invalid or spoofed request body | Negative | 422; nothing stored | API | `test_venue_blocks.py` |
+| AC1-N16 | AC1 | Unknown or malformed venue id in database mode | Negative | 404; nothing written | API + mocked Data API | `test_database_storage.py` |
+| AC1-N17 | AC1 | Database constraint/permission errors | Negative | 409, 422, 502; no database detail leaked | API + mocked Data API | `test_database_storage.py` |
+| AC1-N18 | AC1 | Non-UUID creator | Negative | Refused before any database call | Unit | `test_database_storage.py` |
+| AC1-X5 | AC1 | Database mode needs a URL and a server-side secret key | Cross-cutting | Settings rejected | Unit | `test_database_storage.py` |
+| AC2-H2 | AC2 | A block identifies exactly the dates and slots it shares with a booking | Happy | Shared cells only | Unit | `test_slots.py` |
+| AC2-H3 | AC2 | The availability check reports block conflicts | Happy | `available: false`, conflict dates/slots; no writes | API | `test_block_checks.py` |
+| AC2-P2 | AC2 | Overlap is symmetric | Partition | Same result either order | Unit | `test_slots.py` |
+| AC2-P3 | AC2 | A lifted block does not hide the venue | Partition | Venue included | API | `test_block_availability.py` |
+| AC2-P4 | AC2 | Search without a date makes no dated claim | Partition | Dated blocks ignored | API | `test_block_availability.py` |
+| AC2-P5 | AC2 | Date-only search needs one operating slot free across all blocks | Partition | Excluded only when every slot is blocked | API | `test_block_availability.py` |
+| AC2-P6 | AC2 | A block on a non-operating slot does not hide the venue | Partition | Venue included | API | `test_block_availability.py` |
+| AC2-P7 | AC2 | A venue with no operating slots is not offered for a date | Partition | Venue excluded | API | `test_block_availability.py` |
+| AC2-P8 | AC2 | Dated search keeps every catalogue filter | Partition | Filters still applied | API | `test_block_availability.py` |
+| AC2-P9 | AC2 | Catalogue-blocked venue or non-operating slot is unavailable | Partition | Reason codes reported | API | `test_block_checks.py` |
+| AC2-P10 | AC2 | A database block hides only its own venue | Partition | Other venue still offered | API + mocked Data API | `test_database_storage.py` |
+| AC2-B1–B3 | AC2 | Leap day/month end, widest date range, last representable date | Boundary | Overlap computed correctly | Unit | `test_slots.py` |
+| AC2-B4 | AC2 | Every slot blocked excludes a date-only search | Boundary | Venue excluded | API | `test_block_availability.py` |
+| AC2-B5 | AC2 | NIGHT belongs to its starting date | Boundary | Only the starting date affected | API | `test_block_availability.py` |
+| AC2-B6 | AC2 | Availability treats block dates as inclusive | Boundary | 30 Sep and 4 Oct free; 1 and 3 Oct blocked | API | `test_block_checks.py` |
+| AC2-N1 | AC2 | Reversed period | Negative | ValueError in both checks | Unit | `test_slots.py` |
+| AC2-N2 | AC2 | Invalid date or slot in search | Negative | 422 | API | `test_block_availability.py` |
+| AC2-N3 | AC2 | Invalid availability body | Negative | 422 | API | `test_block_checks.py` |
+| AC2-N4 | AC2 | Availability for an unknown venue | Negative | 404 | API | `test_block_checks.py` |
+| AC4-H2 | AC4 | A venue's block list is scoped to it and keeps lifted blocks | Happy | Own blocks only, lifted included | API | `test_block_availability.py` |
+| AC4-P7 | AC4 | A venue with no blocks | Partition | `[]` | API | `test_block_availability.py` |
+| AC4-N4 | AC4 | Block list for an unknown venue | Negative | 404 | API | `test_block_availability.py` |
+| AC4-N5 | AC4 | Database timeout | Negative | Error, never an empty list | Unit | `test_database_storage.py` |
+
 Planned for the next increment (needs shared files): an end-to-end journey in `frontend/e2e/` (block → calendar → search), which requires block endpoints in the shared mock `e2e/support/venue-api.mjs`.
 
 ## Latest execution record
 
-Build: uncommitted working tree on `feat/venue-blocking` at `c9ebb5d` (dev merged at `48b55ae`). Executed with Claude Code on 4 October 2026, pending human review.
+Build: `feat/venue-blocking` at `c352c51` plus the PR #45 review follow-ups (dev merged at `6673a21`). Executed with Claude Code on 6 October 2026, pending human review.
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC1-H1 | Green | Payload posted once; `/venue-blocks` revalidated; redirect to the venue's month; venue id URL-encoded | Pass | c9ebb5d + working tree, local | Claude Code, 4 Oct 2026 | `frontend/__tests__/venue-block-actions.test.ts`, `venue-block-form.test.ts`, `venue-blocks.test.tsx` |
+| AC1-H1 | Green | Payload posted once; `/venue-blocks` revalidated; redirect to the venue's month; venue id URL-encoded | Pass | c352c51 + review follow-ups, local | Claude Code, 4 Oct 2026 | `frontend/__tests__/venue-block-actions.test.ts`, `venue-block-form.test.ts`, `venue-blocks.test.tsx` |
 | AC1-H2 | Green | "Block saved." status and block listed | Pass | same | same | `frontend/__tests__/venue-blocks.test.tsx` |
 | AC1-P1–P5 | Green | All four reasons accepted; slots canonicalised, unknown dropped | Pass | same | same | `frontend/__tests__/venue-block-form.test.ts` |
 | AC1-B1–B3 | Green | One-day block accepted; end-before-start refused without an API call; 1,000/1,001 detail boundary held; blank detail omitted | Pass | same | same | `venue-block-form.test.ts`, `venue-block-actions.test.ts` |
@@ -89,7 +138,9 @@ Build: uncommitted working tree on `feat/venue-blocking` at `c9ebb5d` (dev merge
 | AC1-X1 | Green | Role checked before any data or API call (page and action); live: coordinator redirected to `/unauthorised` | Pass | same | same | `venue-blocks.test.tsx`, `venue-block-actions.test.ts`; live check below |
 | AC1-X3 | Green | Venue Staff menu shows Venues, Venue blocks, Venue search; coordinator menu unchanged (live) | Pass | same | same | Red observed first, then Green: `frontend/__tests__/workspace-links.test.ts` (2 SCRUM-27 expectations updated to include the new link, 1 test added) |
 | AC1-X2 | Green | Coordinator principal gets 403; nothing stored | Pass | same | same | `backend/venueService/tests/test_venue_blocks.py::test_non_venue_staff_cannot_create_block` |
-| AC2-H1, AC2-P1 | Green (existing) | Boundary dates excluded, neighbouring date and lifted block included | Pass | same | same | `backend/venueService/tests/test_block_availability.py` |
+| AC1-X4, AC2-X1 | Green | Organiser/attendee/coordinator get 403 on the block list; organiser/attendee get 403 and staff/coordinator 200 on availability | Pass | c352c51 + review follow-ups, local | Claude Code, 6 Oct 2026 | Red observed first (5 refusal cases returned 200), then Green: `tests/test_venue_blocks.py` |
+| AC1-X6 | Green | Applied twice on a throwaway `postgres:16-alpine`; columns match; second run skipped; `anon`/`authenticated` have no SELECT; RLS on | Pass | same | same | Applied to shared development on 6 October 2026 (SQL Editor): `has_table_privilege` false for `anon` and `authenticated`; publishable key `401` (`42501`); secret key still reads 2 blocks |
+| Backend AC1/AC2/AC4 catalogue | Green | All 48 block tests labelled and passing | Pass | same | same | `backend/venueService/tests/` (see Backend test cases) |
 | AC4-H1, B1–B3, P1–P4 | Green | Calendar model and rendering as specified | Pass | same | same | `frontend/__tests__/block-calendar.test.ts`, `venue-blocks.test.tsx` |
 | AC4-P6 | Green | Banner shown; operating cells Unavailable; dated block reasons kept; no Available cell | Pass | same | same | Red observed first (cell was `open`), then Green: `block-calendar.test.ts`, `venue-blocks.test.tsx` |
 | AC4-N1–N3, P5 | Green | Outage, not-found, failed block lookup (no open calendar) and empty catalogue each reported | Pass | same | same | `frontend/__tests__/venue-blocks.test.tsx` |
@@ -102,10 +153,10 @@ Build: uncommitted working tree on `feat/venue-blocking` at `c9ebb5d` (dev merge
 
 | Boundary | Command or environment | Result | Limitation |
 | --- | --- | --- | --- |
-| Frontend unit/component | `npx vitest run` (from `frontend/`) | 22 files, 199 passed (46 SCRUM-23 tests new or updated) | API calls mocked. |
+| Frontend unit/component | `npx vitest run` (from `frontend/`) | 25 files, 236 passed (46 SCRUM-23 tests new or updated) | API calls mocked. |
 | Frontend lint and types | `npm run lint`; `npm run typecheck` | Passed | Local only. |
 | Production build | `npm run build` | Passed; `/venue-blocks` listed as a dynamic route | Local only. |
-| Backend | `ruff check .`; `pytest` in `python:3.12-slim` (the Docker image's Python) | Lint clean; 188 passed | In-memory repositories. |
+| Backend | `ruff check .`; `pytest` in `python:3.12-slim` (the Docker image's Python) | Lint clean; 259 passed (includes SCRUM-32 and suitability) | In-memory repositories. |
 | Live stack, read-only | Docker Compose services + `npm run dev`; Venue Staff (`venue_staff@example.com`) and Event Coordinator (`event_coordinator1@example.com`) test accounts | Staff page renders form, calendar and list; existing Supabase block (20–21 Sep, AM/PM) shown Blocked with its reason, 19 and 22 Sep and NIGHT Available; coordinator redirected to `/unauthorised` | No block was created in the shared database. |
 
 Pull-request CI and reviewer approval: not yet run.

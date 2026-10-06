@@ -40,6 +40,7 @@ def search(**params):
     return {venue["id"] for venue in response.json()}
 
 
+# AC4-H2 (happy): a venue's block list is scoped to it and keeps lifted blocks
 def test_list_blocks_is_scoped_and_includes_lifted_records():
     venue_id, other_id = make_venue(), make_venue()
     active = make_block(venue_id)
@@ -54,6 +55,7 @@ def test_list_blocks_is_scoped_and_includes_lifted_records():
     assert response.json() == [active, lifted]
 
 
+# AC4-P7 (partition): a venue with no blocks returns an empty list
 def test_list_blocks_for_venue_without_blocks():
     venue_id = make_venue()
     response = client.get(f"/venues/{venue_id}/blocks")
@@ -61,13 +63,15 @@ def test_list_blocks_for_venue_without_blocks():
     assert response.json() == []
 
 
+# AC4-N4 (negative): listing blocks for an unknown venue returns 404
 def test_list_blocks_for_missing_venue():
     response = client.get("/venues/missing/blocks")
     assert response.status_code == 404
     assert response.json()["detail"] == "Venue not found"
 
 
-@pytest.mark.parametrize("on_date", ["2026-09-20", "2026-09-21", "2026-09-22"])
+# AC2-H1 (happy): search excludes a venue on both boundary dates of its block
+@pytest.mark.parametrize("on_date", ["2026-09-20", "2026-09-21", "2026-09-22"], ids=["AC2-H1a", "AC2-H1b", "AC2-H1c"])
 def test_creation_to_listing_to_search_includes_both_boundary_dates(on_date):
     venue_id, other_id = make_venue(), make_venue()
     assert venue_id in search(date=on_date, slot="AM")
@@ -77,6 +81,7 @@ def test_creation_to_listing_to_search_includes_both_boundary_dates(on_date):
     assert client.get(f"/venues/{venue_id}").json()["status"] == "available"
 
 
+# AC2-P1 (partition): other dates and slots still offer the venue
 @pytest.mark.parametrize(
     "on_date,slot",
     [
@@ -85,6 +90,7 @@ def test_creation_to_listing_to_search_includes_both_boundary_dates(on_date):
         ("2026-09-21", "PM"),
         ("2026-09-21", "NIGHT"),
     ],
+    ids=["AC2-P1a", "AC2-P1b", "AC2-P1c", "AC2-P1d"],
 )
 def test_non_overlapping_search_keeps_venue(on_date, slot):
     venue_id = make_venue()
@@ -92,6 +98,7 @@ def test_non_overlapping_search_keeps_venue(on_date, slot):
     assert search(date=on_date, slot=slot) == {venue_id}
 
 
+# AC2-P3 (partition): a lifted block does not hide the venue
 def test_lifted_block_does_not_restrict_search():
     venue_id = make_venue()
     block = make_block(venue_id)
@@ -100,6 +107,7 @@ def test_lifted_block_does_not_restrict_search():
     assert search(date="2026-09-21") == {venue_id}
 
 
+# AC2-P4 (partition): a search without a date makes no dated availability claim
 def test_search_without_date_does_not_apply_dated_blocks():
     venue_id = make_venue()
     make_block(venue_id, slots=["AM", "PM", "NIGHT"])
@@ -107,6 +115,7 @@ def test_search_without_date_does_not_apply_dated_blocks():
     assert search(slot="AM") == {venue_id}
 
 
+# AC2-P5 (partition): a date-only search needs one operating slot free across all blocks
 def test_date_only_search_requires_one_free_operating_slot_across_all_blocks():
     venue_id = make_venue(operating_slots=["AM", "PM"])
     make_block(venue_id, slots=["AM"])
@@ -116,12 +125,14 @@ def test_date_only_search_requires_one_free_operating_slot_across_all_blocks():
     assert search(date="2026-09-23") == {venue_id}
 
 
+# AC2-B4 (boundary): a block on every slot excludes a date-only search
 def test_full_day_block_excludes_date_only_search():
     venue_id = make_venue()
     make_block(venue_id, slots=["AM", "PM", "NIGHT"])
     assert search(date="2026-09-21") == set()
 
 
+# AC2-P6 (partition): a block on a non-operating slot does not hide the venue
 def test_date_only_search_ignores_blocks_outside_operating_slots():
     venue_id = make_venue(operating_slots=["AM"])
     make_block(venue_id, slots=["PM"])
@@ -129,11 +140,13 @@ def test_date_only_search_ignores_blocks_outside_operating_slots():
     assert search(date="2026-09-21", slot="PM") == set()
 
 
+# AC2-P7 (partition): a venue with no operating slots is not offered for a date
 def test_date_only_search_excludes_venue_without_operating_slots():
     make_venue(operating_slots=[])
     assert search(date="2026-09-21") == set()
 
 
+# AC2-B5 (boundary): a NIGHT block affects its starting date only
 def test_night_block_belongs_to_starting_date():
     venue_id = make_venue()
     make_block(venue_id, end_date="2026-09-20", slots=["NIGHT"])
@@ -141,6 +154,7 @@ def test_night_block_belongs_to_starting_date():
     assert search(date="2026-09-21", slot="NIGHT") == {venue_id}
 
 
+# AC2-P8 (partition): dated search still applies every catalogue filter
 def test_dated_search_preserves_catalogue_filters():
     attributes = {
         "location": "Marina Bay",
@@ -175,6 +189,7 @@ def test_dated_search_preserves_catalogue_filters():
     ) == {match}
 
 
-@pytest.mark.parametrize("params", [{"date": "invalid"}, {"slot": "invalid"}])
+# AC2-N2 (negative): an invalid date or slot in search returns 422
+@pytest.mark.parametrize("params", [{"date": "invalid"}, {"slot": "invalid"}], ids=["AC2-N2a", "AC2-N2b"])
 def test_invalid_search_parameters(params):
     assert client.get("/venues/search", params=params).status_code == 422

@@ -58,7 +58,7 @@ export default async function VenueSearchPage({ searchParams }: { searchParams: 
         <label className={labelClass}>Required facilities<input name="facility" defaultValue={input.facility} placeholder="Projector, WiFi" className={inputClass} /></label>
         <label className={labelClass}>Accessibility needs<input name="accessibility" defaultValue={input.accessibility} placeholder="Ramp access" className={inputClass} /></label>
         <div className="flex items-end"><button type="submit" className="min-h-11 w-full rounded-xl bg-[#0f6b5b] px-5 text-sm font-bold text-white hover:bg-[#0b5b4d]">Search venues</button></div>
-        <p className="text-xs text-[#718078] sm:col-span-2 lg:col-span-4">The date is recorded with your search, but date-specific bookings are not checked yet; a venue blocked as a whole is always excluded.</p>
+        <p className="text-xs text-[#718078] sm:col-span-2 lg:col-span-4">Venues blocked for the chosen date and slot are excluded, as are venues blocked as a whole. Existing bookings are not checked yet.</p>
       </form>
       {outcome === null ? (
         Object.keys(errors).length ? null : <p className="text-sm text-[#718078]">Add at least one filter to search.</p>

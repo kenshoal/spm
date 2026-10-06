@@ -19,6 +19,7 @@ from app.repositories.coordinator_assignment_repository import (
     SupabaseCoordinatorAssignmentRepository,
 )
 from app.services.coordinator_assignment_service import CoordinatorAssignmentService
+from app.services.event_request_service import EventRequestNotFoundError
 from app.services.notification_client import NotificationClient
 
 router = APIRouter(prefix="/event-requests", tags=["coordinator assignment"])
@@ -119,12 +120,13 @@ def get_coordinator(
     if "event_operations_manager" in roles:
         return service.get_current(event_request_id)
 
-    event_request = service.event_request_service.get_by_id(event_request_id)
-    if (
-        "event_organiser" in roles
-        and event_request.organiser_id == caller.id
-    ):
-        return service.get_current(event_request_id)
+    if "event_organiser" in roles:
+        try:
+            # Owner or same-organisation colleague (SCRUM-39).
+            service.event_request_service.get_viewable(event_request_id, caller.id)
+            return service.get_current(event_request_id)
+        except EventRequestNotFoundError:
+            pass  # The caller's coordinator role may still grant access.
 
     assignment = service.get_current(event_request_id)
     if (

@@ -37,3 +37,24 @@ Approval, rejection, changes requested, planning, confirmation and automatic
 completion must be written by their own stories, not invented in
 `eventRequestService`. When the coordination service is integrated, move these
 commands behind the hand-off contract above.
+
+## Interim access relationships
+
+- Event Organisers can view and change requests whose `organiser_id` is their
+  own user ID. Organisers in the same client organisation can view each other's
+  non-Draft requests but cannot change them (`403`); unrelated organisations get
+  `404` (clarification #81, migration `0019`). Organisation membership is seeded
+  data until E3-4 adds maintenance.
+- Attendees receive only the public projection of Confirmed or Completed
+  events; requirements and other planning fields are never included.
+- Venue Staff receive venue booking requests through `venueService`. The
+  record is SCRUM-32's `venue_booking_requests` row: venue, event reference,
+  date range, slots, and the event snapshot (name, attendance, requirements
+  note) taken at submission, so Venue Staff never read the event request.
+- Technical Support Staff will read equipment reservations once SCRUM-13
+  (Reserve Equipment for an Event) creates them; that story owns the
+  reservation table. Until then they can read the equipment catalogue and
+  status, which Attendees cannot.
+- The assigned Event Coordinator remains the only coordinator who can read the
+  full request. Venue and technical queues are role-wide until those domains
+  define individual staff assignment.

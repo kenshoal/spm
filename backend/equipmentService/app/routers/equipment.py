@@ -8,14 +8,16 @@ from pydantic import BaseModel, Field
 from supabase import Client
 
 from app.db import get_client
-from app.deps import TECHNICAL_SUPPORT_ROLE, User, get_current_user, require_role
+from app.deps import EVENT_COORDINATOR_ROLE, TECHNICAL_SUPPORT_ROLE, User, require_role
 from app.models import OperationalStatus
 from app.rpc_errors import rpc_error_to_http
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
 ClientDep = Annotated[Client, Depends(get_client)]
-ViewerDep = Annotated[User, Depends(get_current_user)]
+ViewerDep = Annotated[
+    User, Depends(require_role(EVENT_COORDINATOR_ROLE, TECHNICAL_SUPPORT_ROLE))
+]
 StaffDep = Annotated[User, Depends(require_role(TECHNICAL_SUPPORT_ROLE))]
 
 
