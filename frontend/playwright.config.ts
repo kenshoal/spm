@@ -43,7 +43,14 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: "npm run build && npm run start -- --hostname 127.0.0.1 --port 3100",
+      command: "node e2e/support/notification-api.mjs",
+      url: "http://127.0.0.1:8107/health",
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+    {
+      // Webpack avoids Turbopack's internal helper-port requirement in restricted CI runners.
+      command: "npm run build -- --webpack && npm run start -- --hostname 127.0.0.1 --port 3100",
       url: "http://127.0.0.1:3100",
       reuseExistingServer: false,
       timeout: 120_000,
@@ -52,6 +59,7 @@ export default defineConfig({
         EVENT_REQUEST_API_URL: "http://127.0.0.1:8103",
         VENUE_API_URL: "http://127.0.0.1:8105",
         EQUIPMENT_API_URL: "http://127.0.0.1:8106",
+        NOTIFICATION_API_URL: "http://127.0.0.1:8107",
       },
     },
   ],

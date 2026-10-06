@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -7,9 +7,12 @@ from postgrest.exceptions import APIError
 from pydantic import BaseModel, Field
 from supabase import Client
 
+from app.availability import committed_peak
+from app.clock import get_today
 from app.db import get_client
 from app.deps import TECHNICAL_SUPPORT_ROLE, User, get_current_user, require_role
 from app.models import OperationalStatus
+from app.reservations import reservation_from_row
 from app.rpc_errors import rpc_error_to_http
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
@@ -17,6 +20,7 @@ router = APIRouter(prefix="/equipment", tags=["equipment"])
 ClientDep = Annotated[Client, Depends(get_client)]
 ViewerDep = Annotated[User, Depends(get_current_user)]
 StaffDep = Annotated[User, Depends(require_role(TECHNICAL_SUPPORT_ROLE))]
+TodayDep = Annotated[date, Depends(get_today)]
 
 
 class StatusOut(BaseModel):
@@ -53,6 +57,7 @@ def get_status(
     equipment_id: UUID,
     client: ClientDep,
     _user: ViewerDep,
+    today: TodayDep,
 ) -> StatusOut:
     response = (
         client.table("equipment")
@@ -66,14 +71,29 @@ def get_status(
             status_code=status.HTTP_404_NOT_FOUND, detail="Equipment not found"
         )
     row = response.data[0]
-    # Pre-reservations semantics (SCRUM-10 will subtract committed units):
-    # status is row-level, so a non-AVAILABLE row has zero serviceable units.
+    # `available` means working (status AVAILABLE); `available_quantity` is
+    # what is left after the units reserved today (SCRUM-10). Stored
+    # reservation windows already include the D-1 and transfer days, so a
+    # reservation covers today when collection_date <= today <= return_date.
     serviceable = row["operational_status"] == OperationalStatus.AVAILABLE
+    available_quantity = 0
+    if serviceable:
+        reserved = (
+            client.table("equipment_reservations")
+            .select("equipment_id, quantity, collection_date, return_date")
+            .eq("equipment_id", str(row["id"]))
+            .lte("collection_date", today.isoformat())
+            .gte("return_date", today.isoformat())
+            .execute()
+        ).data or []
+        reservations = [reservation_from_row(r) for r in reserved]
+        peak = committed_peak(str(row["id"]), reservations, today, today)
+        available_quantity = max(0, row["total_owned_quantity"] - peak)
     return StatusOut(
         equipment_id=row["id"],
         operational_status=row["operational_status"],
         available=serviceable,
-        available_quantity=row["total_owned_quantity"] if serviceable else 0,
+        available_quantity=available_quantity,
     )
 
 

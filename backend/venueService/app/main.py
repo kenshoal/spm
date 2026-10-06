@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.routers import block_checks, venues
+from app.routers import block_checks, booking_requests, suitability, venues
 from app.supabase_block_repository import StorageError
 from app.supabase_repository import SupabaseRepositoryError
 
@@ -25,6 +25,8 @@ app = FastAPI(
 
 app.include_router(venues.router)
 app.include_router(block_checks.router)
+app.include_router(booking_requests.router)
+app.include_router(suitability.router)
 
 
 @app.exception_handler(SupabaseRepositoryError)

@@ -102,6 +102,17 @@ export interface CoordinatorAssignment {
   assigned_at: string;
 }
 
+export interface EventReviewDecision {
+  id: number;
+  event_request_id: string;
+  coordinator_id: string;
+  decision_status: "Changes Requested" | "Approved" | "Rejected";
+  reason: string | null;
+  decided_at: string;
+  organiser_response: string | null;
+  responded_at: string | null;
+}
+
 const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
 async function request(path: string): Promise<Response> {
@@ -141,6 +152,17 @@ export async function getCoordinatorAssignment(
   return response.status === 404
     ? null
     : response.json() as Promise<CoordinatorAssignment>;
+}
+
+export async function listReviewDecisions(
+  eventRequestId: string,
+): Promise<EventReviewDecision[]> {
+  const response = await request(
+    `/event-requests/${encodeURIComponent(eventRequestId)}/decisions`,
+  );
+  return response.status === 404
+    ? []
+    : response.json() as Promise<EventReviewDecision[]>;
 }
 
 export function groupRequests(

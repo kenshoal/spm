@@ -11,7 +11,7 @@ from app.main import create_app
 ENDPOINT = "/notifications/events"
 
 
-# Purpose: The contract must accept, unchanged, the body eventRequestService's
+# AC2-H1 (happy): The contract must accept, unchanged, the body eventRequestService's
 # NotificationClient.notify_coordinator_assigned already sends (SCRUM-14/37),
 # and store it for that coordinator.
 def test_stores_the_existing_coordinator_assigned_hook_body() -> None:
@@ -39,7 +39,7 @@ def test_stores_the_existing_coordinator_assigned_hook_body() -> None:
     ] == [("coord-1", "coordinator_assigned", payload)]
 
 
-# Purpose: The log line is how a caller confirms its hook reached this service.
+# AC6-X3 (cross-cutting): The log line is how a caller confirms its hook reached this service.
 def test_logs_each_accepted_event(caplog: pytest.LogCaptureFixture) -> None:
     with (
         caplog.at_level("INFO", logger="app.main"),
@@ -53,7 +53,7 @@ def test_logs_each_accepted_event(caplog: pytest.LogCaptureFixture) -> None:
     assert "Received event.cancelled event for recipient organiser-1" in caplog.text
 
 
-# Purpose: A retried event (same event_id, same recipient) must never notify
+# AC6-N1 (negative): A retried event (same event_id, same recipient) must never notify
 # twice, and the retry must still succeed so the caller stops retrying.
 def test_a_repeated_event_is_stored_once(caplog: pytest.LogCaptureFixture) -> None:
     repository = FakeNotificationRepository()
@@ -74,7 +74,7 @@ def test_a_repeated_event_is_stored_once(caplog: pytest.LogCaptureFixture) -> No
     assert "duplicate" in caplog.text
 
 
-# Purpose: One workflow event may notify several people (e.g. a cancellation
+# AC6-P2 (partition): One workflow event may notify several people (e.g. a cancellation
 # reaches both Organiser and Coordinator) under the same event_id.
 def test_the_same_event_id_can_notify_different_recipients() -> None:
     repository = FakeNotificationRepository()
@@ -95,7 +95,7 @@ def test_the_same_event_id_can_notify_different_recipients() -> None:
     ]
 
 
-# Purpose: Without an event_id nothing identifies a retry, so each event is new.
+# AC6-P2 (partition): Without an event_id nothing identifies a retry, so each event is new.
 def test_events_without_an_event_id_are_all_stored() -> None:
     repository = FakeNotificationRepository()
     event = {"event_type": "event.cancelled", "recipient_id": "organiser-1"}
@@ -106,7 +106,7 @@ def test_events_without_an_event_id_are_all_stored() -> None:
     assert len(repository.rows) == 2
 
 
-# Purpose: A hook with nothing extra to say may omit the payload entirely.
+# AC6-P2 (partition): A hook with nothing extra to say may omit the payload entirely.
 def test_payload_defaults_to_empty() -> None:
     repository = FakeNotificationRepository()
     with make_client(repository) as client:
@@ -119,7 +119,7 @@ def test_payload_defaults_to_empty() -> None:
     assert repository.rows[0]["payload"] == {}
 
 
-# Purpose: Malformed events are refused at the boundary so callers find
+# AC6-N2 (negative): Malformed events are refused at the boundary so callers find
 # contract mistakes during development, not as silently lost notifications.
 @pytest.mark.parametrize(
     "body",
@@ -141,7 +141,7 @@ def test_rejects_malformed_events(body: dict[str, Any]) -> None:
     assert repository.rows == []
 
 
-# Purpose: A database outage is reported as 502 so the caller logs a warning
+# AC6-N3 (negative): A database outage is reported as 502 so the caller logs a warning
 # (callers never let this break the action that caused the event).
 def test_reports_a_store_failure_as_bad_gateway() -> None:
     repository = FakeNotificationRepository()
@@ -154,7 +154,7 @@ def test_reports_a_store_failure_as_bad_gateway() -> None:
     assert response.status_code == 502
 
 
-# Purpose: Without Supabase settings the service says so instead of crashing.
+# AC6-N3 (negative): Without Supabase settings the service says so instead of crashing.
 def test_reports_missing_supabase_configuration(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

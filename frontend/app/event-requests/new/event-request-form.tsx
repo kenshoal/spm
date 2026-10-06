@@ -60,7 +60,10 @@ export function EventRequestForm({ request }: { request?: EventRequest }) {
   const [dateOptions, setDateOptions] = useState(initialDates);
 
   return (
-    <form action={draftFormAction} className="space-y-6">
+    <form
+      action={draftFormAction}
+      className="space-y-6"
+    >
       {state.message && (
         <div role="alert" className="rounded-xl border border-[#efc7c4] bg-[#fff4f3] px-4 py-3 text-sm text-[#8e3d35]">
           {state.message}

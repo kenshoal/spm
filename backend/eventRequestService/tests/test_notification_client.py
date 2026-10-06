@@ -4,7 +4,7 @@ import pytest
 from app.services.notification_client import NotificationClient
 
 
-# Purpose: No Notification System exists yet — unconfigured must never attempt a call.
+# AC2-N1 (negative): No Notification System exists yet — unconfigured must never attempt a call.
 def test_noop_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail_if_called(*args: object, **kwargs: object) -> httpx.Response:
         raise AssertionError("httpx.post should not be called when unconfigured")
@@ -16,7 +16,7 @@ def test_noop_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-# Purpose: Confirms the payload shape matches the original NotificationOutbox design.
+# AC2-H1 (happy): Confirms the payload shape matches the original NotificationOutbox design.
 def test_posts_expected_payload_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
@@ -43,7 +43,7 @@ def test_posts_expected_payload_when_configured(monkeypatch: pytest.MonkeyPatch)
     }
 
 
-# Purpose: A network failure must be logged, never raised — it can't be allowed
+# AC2-N1 (negative): A network failure must be logged, never raised — it can't be allowed
 # to fail the assignment it's reporting on.
 def test_connection_failure_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_post(*args: object, **kwargs: object) -> httpx.Response:
@@ -56,7 +56,7 @@ def test_connection_failure_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
 
-# Purpose: A non-2xx response must also be swallowed, not just a connection failure.
+# AC2-N1 (negative): A non-2xx response must also be swallowed, not just a connection failure.
 def test_error_response_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     url = "https://notifications.example.com/events"
     monkeypatch.setattr(
@@ -70,3 +70,85 @@ def test_error_response_is_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     NotificationClient("https://notifications.example.com/events").notify_coordinator_assigned(
         event_request_id="req-1", coordinator_id="coord-1", assigned_by="ops-1"
     )
+
+
+SUBMITTED_PAYLOAD = {
+    "event_request_id": "req-1",
+    "organiser_id": "org-1",
+    "status": "Submitted",
+}
+
+
+# AC1-H1 (happy): The Organiser's submission confirmation (SCRUM-37 AC1) carries the outbox
+# event id, which notificationService uses to store a re-sent event only once.
+def test_submission_posts_organiser_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_post(url: str, **kwargs: object) -> httpx.Response:
+        captured["url"] = url
+        captured["json"] = kwargs.get("json")
+        return httpx.Response(202, json={"status": "accepted"}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    delivered = NotificationClient(
+        "https://notifications.example.com/events"
+    ).notify_event_request_submitted(
+        event_id="outbox-1", organiser_id="org-1", payload=SUBMITTED_PAYLOAD
+    )
+
+    assert delivered is True
+    assert captured["url"] == "https://notifications.example.com/events"
+    assert captured["json"] == {
+        "event_type": "event_request_submitted",
+        "recipient_id": "org-1",
+        "event_id": "outbox-1",
+        "payload": {
+            "event_request_id": "req-1",
+            "organiser_id": "org-1",
+            "status": "Submitted",
+        },
+    }
+
+
+# AC1-N1 (negative): A failed delivery is reported, not raised, so the outbox row stays
+# unpublished and is retried instead of being marked as sent.
+@pytest.mark.parametrize(
+    "outcome",
+    [httpx.ConnectError("connection refused"), 500],
+    ids=["unreachable", "error-response"],
+)
+def test_submission_reports_failed_delivery(
+    monkeypatch: pytest.MonkeyPatch, outcome: object
+) -> None:
+    url = "https://notifications.example.com/events"
+
+    def fake_post(*args: object, **kwargs: object) -> httpx.Response:
+        if isinstance(outcome, Exception):
+            raise outcome
+        return httpx.Response(outcome, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    delivered = NotificationClient(url).notify_event_request_submitted(
+        event_id="outbox-1", organiser_id="org-1", payload=SUBMITTED_PAYLOAD
+    )
+
+    assert delivered is False
+
+
+# AC1-N2 (negative): Unconfigured means nothing was delivered — reporting success here would
+# let the relay mark events as sent that nobody received.
+def test_submission_unconfigured_reports_not_delivered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_called(*args: object, **kwargs: object) -> httpx.Response:
+        raise AssertionError("httpx.post should not be called when unconfigured")
+
+    monkeypatch.setattr(httpx, "post", fail_if_called)
+
+    delivered = NotificationClient(None).notify_event_request_submitted(
+        event_id="outbox-1", organiser_id="org-1", payload=SUBMITTED_PAYLOAD
+    )
+
+    assert delivered is False

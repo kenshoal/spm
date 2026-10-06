@@ -22,12 +22,17 @@ export function workspaceLinks(roles: string[]): NavLink[] {
   }
   if (roles.includes("venue_staff")) {
     links.push({ href: "/venues", label: "Venues" });
+    links.push({ href: "/venue-blocks", label: "Venue blocks" });
   }
   if (roles.includes("event_coordinator") || roles.includes("venue_staff")) {
     links.push({ href: "/venues/search", label: "Venue search" });
   }
   if (roles.includes("technical_support")) {
     links.push({ href: "/equipment", label: "Equipment" });
+  }
+  // Last, so the logo (the first link) still opens the user's main workspace.
+  if (links.length > 0) {
+    links.push({ href: "/notifications", label: "Notifications" });
   }
   return links;
 }

@@ -1,7 +1,7 @@
 # eventRequestService
 
-FastAPI service for creating and managing an Event Organiser's event-request
-drafts. Drafts are persisted in the shared Supabase project.
+FastAPI service for event-request submission, coordinator assignment, review
+decisions and lifecycle transitions. Records are persisted in Supabase.
 
 ## Current API
 
@@ -19,6 +19,10 @@ drafts. Drafts are persisted in the shared Supabase project.
 | `POST` | `/event-requests/{id}/coordinator` | Assign or reassign a Coordinator |
 | `GET` | `/event-requests/{id}/coordinator` | Get the current Coordinator |
 | `POST` | `/event-requests/{id}/review` | Assigned Coordinator starts review (`Submitted` → `Under Review`) |
+| `POST` | `/event-requests/{id}/decision` | Assigned Coordinator approves, requests clarification, or rejects an `Under Review` request |
+| `GET` | `/event-requests/{id}/decisions` | List retained review decisions for the owning Organiser or assigned Coordinator |
+| `POST` | `/event-requests/{id}/clarification-response` | Owning Organiser answers the current clarification without editing submitted fields |
+| `POST` | `/event-requests/{id}/resume-review` | Assigned Coordinator continues review after the Organiser responds |
 | `POST` | `/event-requests/{id}/cancellation` | Assigned Coordinator cancels a non-terminal request (→ `Cancelled`) |
 | `POST` | `/event-requests/{id}/completion` | Assigned Coordinator marks a confirmed event complete (`Confirmed` → `Completed`) |
 | `GET` | `/health` | Service health check |
@@ -65,14 +69,16 @@ agreed status vocabulary. This service writes only the following transitions:
 | --- | --- | --- |
 | `Draft` → `Submitted` | Owning Organiser | `POST /{id}/submit` (or direct `POST /submissions`) |
 | `Submitted` → `Under Review` | Assigned Coordinator | `POST /{id}/review` |
+| `Under Review` → `Changes Requested`, `Approved`, or `Rejected` | Assigned Coordinator | `POST /{id}/decision` |
+| `Changes Requested` → `Under Review` | Assigned Coordinator, after Organiser response | `POST /{id}/resume-review` |
 | Any non-terminal status → `Cancelled` | Assigned Coordinator | `POST /{id}/cancellation` |
 | `Confirmed` → `Completed` | Assigned Coordinator | `POST /{id}/completion` |
 
-Owned by other stories and **not** implemented here: approval and rejection
-(SCRUM-17), changes requested and resubmission (SCRUM-35), Planning and
-Confirmed (venue/operations stories), and automatic completion of Confirmed
-events more than seven days overdue (SCRUM-40). `Completed`, `Cancelled` and
-`Rejected` are terminal.
+Owned by other stories and **not** implemented here: post-submission change
+requests raised by an Organiser after a decision (SCRUM-35), Planning and
+Confirmed (venue/operations stories), notification delivery (SCRUM-36), and
+automatic completion of Confirmed events more than seven days overdue
+(SCRUM-40). `Completed`, `Cancelled` and `Rejected` are terminal.
 
 The three coordinator commands run through the database function
 `advance_event_request_by_coordinator` (migration
@@ -81,7 +87,49 @@ the latest assignment and updates the status in one transaction, so a refused
 call never changes the status. The service maps its error codes, not message
 text: `P0002` → 404, `P0003` → 403, `P0004` → 409. Apply `0012` to the target
 Supabase project before deploying this service; see `database/README.md`.
-Notifications for these transitions belong to SCRUM-36/37.
+Notification delivery for these transitions belongs to SCRUM-36.
+
+SCRUM-17 uses the three server-only functions in migration
+`0016_event_request_review_decisions.sql`. They atomically record a decision,
+attach the owning Organiser's clarification response and return the request to
+`Under Review` only for the assigned Coordinator. Submitted request fields stay
+read-only throughout. Direct client roles cannot read the history table or
+execute these functions; authorised access goes through this API.
+
+## Submission confirmations
+
+When an event request becomes `Submitted`, the database records one
+`event_request.submitted` row in `event_request_outbox` (migration `0008`).
+While the service runs, a background relay checks that table every 10 seconds
+and sends each unpublished row to notificationService as an
+`event_request_submitted` notification for the Organiser (SCRUM-37 AC1), then
+sets `published_at`.
+
+- A row is marked published only after notificationService accepts it, so an
+  unreachable notification service delays confirmations instead of losing
+  them.
+- The outbox row id is sent as `event_id`, and notificationService stores a
+  repeated `event_id` once, so a re-sent row never notifies the Organiser
+  twice.
+- The relay runs only when `NOTIFICATION_SERVICE_URL` and Supabase are both
+  configured. Without them, rows stay unpublished until a relay can deliver
+  them.
+
+## Clarification notices
+
+When the assigned Coordinator records a `Changes Requested` decision through
+`POST /event-requests/{id}/decision`, the service sends the owning Organiser a
+`clarification_requested` notification carrying the Coordinator's reason
+(SCRUM-37 AC3), after the decision has been written.
+
+- The notice is sent once and is not retried. If notificationService is
+  unreachable, the failure is logged and the decision still succeeds; the
+  Organiser can read the clarification on the request itself. Unlike the
+  submission confirmation, it does not go through the outbox.
+- Approved and Rejected decisions send nothing here; their notices belong to
+  SCRUM-36.
+- A refused decision (wrong Coordinator, wrong status, missing reason) sends
+  nothing.
 
 ## Run locally on macOS/Linux
 

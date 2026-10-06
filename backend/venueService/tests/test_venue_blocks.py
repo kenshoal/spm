@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.block_repository import block_repository
-from app.dependencies import Principal, require_venue_staff
+from app.dependencies import Principal, require_authenticated, require_venue_staff
 from app.main import app
 
 client = TestClient(app)
@@ -59,6 +59,21 @@ def test_create_block_stores_normalized_record_and_server_metadata(venue_id):
     assert body["reason_detail"] == "Air-conditioning repairs"
     assert block_repository.get(body["id"]).model_dump(mode="json") == body
     assert client.get(f"/venues/{venue_id}").json()["status"] == "available"
+
+
+# AC1-X2 (cross-cutting): a non-Venue-Staff caller is refused and no block is stored
+def test_non_venue_staff_cannot_create_block(venue_id):
+    app.dependency_overrides[require_authenticated] = lambda: Principal(
+        user_id="00000000-0000-0000-0000-000000000002",
+        roles=("event_coordinator",),
+    )
+    app.dependency_overrides.pop(require_venue_staff, None)
+
+    response = client.post(f"/venues/{venue_id}/blocks", json=payload())
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Insufficient permissions"
+    assert block_repository.list() == []
 
 
 def test_missing_venue_does_not_store_block():

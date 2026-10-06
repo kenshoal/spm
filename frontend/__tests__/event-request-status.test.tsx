@@ -2,6 +2,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test } from "vitest";
 
 import { StatusProgress } from "@/app/components/status-progress";
+import { ReviewDecisionHistory } from "@/app/components/review-decision-history";
+import { RequestDetails } from "@/app/components/request-details";
 import {
   EVENT_REQUEST_STATUSES,
   groupRequests,
@@ -140,42 +142,46 @@ test("marks Confirmed as current with earlier stages done", () => {
     "Confirmed",
   );
   const stages = screen.getAllByRole("listitem").map((item) => item.textContent);
-  expect(stages[0]).toContain("Completed stage: Submitted");
-  expect(stages[1]).toContain("Completed stage: Under Review");
+  expect(stages[0]).toContain("Completed stage: Draft");
+  expect(stages[1]).toContain("Completed stage: Submitted");
+  expect(stages[2]).toContain("Completed stage: Under Review");
 });
 
-// Purpose: A draft shows no milestones — nothing has entered the workflow yet.
-test("shows description only for a draft", () => {
+// Purpose: A draft still previews the entire journey before submission.
+test("shows the full upcoming journey for a draft", () => {
   render(<StatusProgress status="Draft" />);
 
-  expect(screen.queryByRole("list")).toBeNull();
+  expect(screen.getAllByRole("listitem")).toHaveLength(7);
+  expect(screen.getByRole("listitem", { current: "step" }).textContent).toContain("Draft");
+  expect(screen.getAllByRole("listitem")[6].textContent).toContain("Not reached yet: Completed");
   expect(screen.getByText(/Not submitted yet/)).toBeDefined();
 });
 
-// Purpose: A changes-requested request points the organiser at resubmission, not later stages.
-test("stops the stepper at Under Review with a changes-requested notice", () => {
+// Purpose: Clarification keeps the current review stage and all later stages visible.
+test("shows the full journey while clarification is requested", () => {
   render(<StatusProgress status="Changes Requested" />);
 
   const stages = screen.getAllByRole("listitem").map((item) => item.textContent);
-  expect(stages).toHaveLength(2);
-  expect(stages[1]).toContain("Current stage: Under Review");
-  expect(screen.getByText(/update and resubmit/i)).toBeDefined();
+  expect(stages).toHaveLength(7);
+  expect(stages[2]).toContain("Current stage: Under Review");
+  expect(stages[6]).toContain("Not reached yet: Completed");
+  expect(screen.getByText(/clarification response/i)).toBeDefined();
 });
 
-// Purpose: A rejected request explains the outcome instead of implying later stages exist.
-test("shows an explicit notice without a stepper for rejected", () => {
+// Purpose: A rejected outcome retains the whole journey and marks its stages as not reached.
+test("shows the full journey and an explicit notice for rejected", () => {
   render(<StatusProgress status="Rejected" />);
 
-  expect(screen.queryByRole("list")).toBeNull();
-  expect(screen.getByText(/No further stages will follow/)).toBeDefined();
+  expect(screen.getAllByRole("listitem")).toHaveLength(7);
+  expect(screen.getByText(/later stages shown below were not reached/i)).toBeDefined();
 });
 
-// Purpose: A cancelled request explains the outcome instead of implying later stages exist.
-test("shows an explicit notice without a stepper for cancelled", () => {
+// Purpose: A cancelled outcome keeps the normal lifecycle visible for context.
+test("shows the full journey and an explicit notice for cancelled", () => {
   render(<StatusProgress status="Cancelled" />);
 
-  expect(screen.queryByRole("list")).toBeNull();
-  expect(screen.getByText(/was cancelled/i)).toBeDefined();
+  expect(screen.getAllByRole("listitem")).toHaveLength(7);
+  expect(screen.getByText(/ended as cancelled/i)).toBeDefined();
 });
 
 // Purpose: Completion reads as an end state with the final milestone reached.
@@ -185,5 +191,106 @@ test("marks Completed as the final reached stage", () => {
   expect(screen.getByRole("listitem", { current: "step" }).textContent).toContain(
     "Completed",
   );
-  expect(screen.getByText(/has finished/i)).toBeDefined();
+  expect(screen.getByText(/reached the final stage/i)).toBeDefined();
+});
+
+// Purpose: The organiser can read the coordinator's retained clarification reason.
+test("shows the review decision and reason", () => {
+  render(
+    <ReviewDecisionHistory
+      decisions={[
+        {
+          id: 1,
+          event_request_id: "request-1",
+          coordinator_id: "coordinator-1",
+          decision_status: "Changes Requested",
+          reason: "Clarify the equipment requirements.",
+          decided_at: "2026-09-25T10:00:00Z",
+          organiser_response: null,
+          responded_at: null,
+        },
+      ]}
+    />,
+  );
+
+  expect(screen.getByRole("region", { name: "Review activity" })).toBeDefined();
+  expect(screen.getByText("Changes Requested")).toBeDefined();
+  expect(screen.getByText("Clarify the equipment requirements.")).toBeDefined();
+});
+
+// Purpose: A coordinator sees every submitted field needed for review without receiving edit controls.
+test("renders every submitted request field as read-only details", () => {
+  const request: EventRequest = {
+    ...makeRequest("Under Review"),
+    event_name: "Neighbourhood Showcase",
+    purpose: "Connect local creators",
+    description: "An evening exhibition and networking session.",
+    proposed_date_times: ["2026-11-20T02:00:00Z"],
+    expected_attendance: 125,
+    venue_requirements: "Hall with movable seating",
+    accessibility_needs: "Step-free access",
+    equipment_requirements: "Projector and two microphones",
+    registration_needs: "Online registration desk",
+  };
+
+  render(<RequestDetails request={request} coordinatorAssigned />);
+
+  for (const value of [
+    "Neighbourhood Showcase",
+    "Connect local creators",
+    "An evening exhibition and networking session.",
+    "125",
+    "Hall with movable seating",
+    "Step-free access",
+    "Projector and two microphones",
+    "Online registration desk",
+  ]) {
+    expect(screen.getByText(value)).toBeDefined();
+  }
+  expect(screen.getByText(/20 Nov 2026/)).toBeDefined();
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(screen.queryByRole("button", { name: /save|submit|delete/i })).toBeNull();
+});
+
+// Purpose: A history outage is visible instead of being mistaken for an empty review record.
+test("shows an accessible error when review activity is unavailable", () => {
+  render(<ReviewDecisionHistory decisions={[]} unavailable />);
+
+  expect(
+    screen.getByRole("alert", { name: "Review activity unavailable" }).textContent,
+  ).toMatch(/could not be loaded/i);
+});
+
+// Purpose: A final decision must not erase the clarification exchange that informed it.
+test("keeps clarification and organiser response visible beside the final decision", () => {
+  render(
+    <ReviewDecisionHistory
+      decisions={[
+        {
+          id: 2,
+          event_request_id: "request-1",
+          coordinator_id: "coordinator-1",
+          decision_status: "Approved",
+          reason: null,
+          decided_at: "2026-09-25T11:00:00Z",
+          organiser_response: null,
+          responded_at: null,
+        },
+        {
+          id: 1,
+          event_request_id: "request-1",
+          coordinator_id: "coordinator-1",
+          decision_status: "Changes Requested",
+          reason: "Clarify the equipment requirements.",
+          decided_at: "2026-09-25T10:00:00Z",
+          organiser_response: "Two wireless microphones are required.",
+          responded_at: "2026-09-25T10:30:00Z",
+        },
+      ]}
+    />,
+  );
+
+  expect(screen.getByText("Approved")).toBeDefined();
+  expect(screen.getByText("Clarify the equipment requirements.")).toBeDefined();
+  expect(screen.getByText("Two wireless microphones are required.")).toBeDefined();
 });

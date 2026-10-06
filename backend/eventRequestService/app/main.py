@@ -1,3 +1,7 @@
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
@@ -19,26 +23,44 @@ from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentService,
 )
 from app.services.event_request_service import (
+    ClarificationResponseNotAllowedError,
     EventRequestNotDraftError,
     EventRequestNotFoundError,
     EventRequestService,
     EventRequestTransitionConflictError,
 )
 from app.services.event_transition_service import (
+    DecisionReasonRequiredError,
     EventTransitionService,
     TransitionForbiddenError,
     TransitionNotAllowedError,
 )
+from app.services.outbox_relay import OutboxRelay, build_outbox_relay
 
 
 def create_app(
     repository: EventRequestRepository | None = None,
     coordinator_repository: CoordinatorAssignmentRepository | None = None,
+    outbox_relay: OutboxRelay | None = None,
 ) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        relay_task = (
+            asyncio.create_task(outbox_relay.run_forever())
+            if outbox_relay is not None
+            else None
+        )
+        yield
+        if relay_task is not None:
+            relay_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await relay_task
+
     application = FastAPI(
         title="eventRequestService",
         description="Create and manage event requests.",
         version="0.1.0",
+        lifespan=lifespan,
     )
     event_request_service = (
         EventRequestService(repository) if repository is not None else None
@@ -74,6 +96,15 @@ def create_app(
     @application.exception_handler(EventRequestNotDraftError)
     async def event_request_not_draft(
         request: Request, error: EventRequestNotDraftError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(ClarificationResponseNotAllowedError)
+    async def clarification_response_not_allowed(
+        request: Request, error: ClarificationResponseNotAllowedError
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
@@ -125,6 +156,15 @@ def create_app(
             content={"detail": str(error)},
         )
 
+    @application.exception_handler(DecisionReasonRequiredError)
+    async def decision_reason_required(
+        request: Request, error: DecisionReasonRequiredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(error)},
+        )
+
     @application.exception_handler(SupabaseRepositoryError)
     async def supabase_unavailable(
         request: Request, error: SupabaseRepositoryError
@@ -141,4 +181,6 @@ def create_app(
     return application
 
 
-app = create_app()
+# Only the served app relays the outbox; apps built in tests get no relay unless
+# they pass one, so a test run never delivers real events.
+app = create_app(outbox_relay=build_outbox_relay())
