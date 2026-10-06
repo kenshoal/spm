@@ -42,6 +42,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0020_event_change_request_updated_at.sql` | Advances the event version timestamp when an amendment is approved |
 | `migrations/0021_event_change_request_monotonic_updated_at.sql` | Makes the approval-side timestamp assignment strictly monotonic |
 | `migrations/0022_monotonic_event_request_updated_at_trigger.sql` | Makes the shared event-request update trigger monotonic, including multiple writes in one transaction |
+| `migrations/0023_venue_blocks.sql` | `venue_blocks` table for SCRUM-23 with its `block_reason` and `block_status` enums, a foreign key to `venues` and a per-venue index. **Reference snapshot** of the table created by hand in the dashboard (safe to re-run: it skips existing objects), plus RLS on and `REVOKE ALL` from `anon` and `authenticated`, so only venueService's secret key can read block reasons. Applied to shared development on 6 October 2026 through the SQL Editor; afterwards `has_table_privilege` returns false for `anon` and `authenticated`, and the publishable key gets `401` (`42501`) while venueService still reads both existing blocks |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
