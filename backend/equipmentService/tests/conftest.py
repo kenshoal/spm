@@ -25,9 +25,12 @@ class FakeSupabase:
         self.rpc_calls: list[tuple[str, dict[str, Any]]] = []
         self.rpc_error: Exception | None = None
         self.rpc_result: Any = None
+        self.table_errors: dict[str, Exception] = {}
+        self.tables_queried: list[str] = []
 
     def table(self, name: str) -> "FakeQuery":
-        return FakeQuery(self, self.table_data.get(name))
+        self.tables_queried.append(name)
+        return FakeQuery(self, self.table_data.get(name), self.table_errors.get(name))
 
     def rpc(self, name: str, params: dict[str, Any]) -> "FakeQuery":
         self.rpc_calls.append((name, params))
@@ -37,9 +40,12 @@ class FakeSupabase:
 
 
 class FakeQuery:
-    def __init__(self, fake: FakeSupabase, data: Any) -> None:
+    def __init__(
+        self, fake: FakeSupabase, data: Any, error: Exception | None = None
+    ) -> None:
         self._fake = fake
         self._data = data
+        self._error = error
 
     def select(self, *columns: str) -> "FakeQuery":
         return self
@@ -56,6 +62,18 @@ class FakeQuery:
         self._fake.filters.append((column, value))
         return self
 
+    def in_(self, column: str, values: list[Any]) -> "FakeQuery":
+        self._fake.filters.append((column, "in", list(values)))
+        return self
+
+    def lte(self, column: str, value: Any) -> "FakeQuery":
+        self._fake.filters.append((column, "lte", value))
+        return self
+
+    def gte(self, column: str, value: Any) -> "FakeQuery":
+        self._fake.filters.append((column, "gte", value))
+        return self
+
     def limit(self, count: int) -> "FakeQuery":
         return self
 
@@ -67,6 +85,8 @@ class FakeQuery:
         return self
 
     def execute(self) -> FakeResponse:
+        if self._error is not None:
+            raise self._error
         return FakeResponse(self._data)
 
 

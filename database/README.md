@@ -37,9 +37,17 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0018_event_change_requests.sql` | SCRUM-35 change-request history plus server-only atomic RPCs for organiser creation and coordinator approval or rejection |
 | `migrations/0018_venue_booking_requests.sql` | `venue_booking_requests` table for SCRUM-32: dates, slots and status with CHECK constraints (slot rules as in `venue_blocks`, decision fields always consistent with the status), a restrictive foreign key to `venues`, four lookup indexes, RLS on with service-role access only. Applied to shared development on 4 October 2026 |
 | `migrations/0019_event_change_requests_organiser_index.sql` | Covering index for the SCRUM-35 organiser foreign key |
+| `migrations/0020_equipment_reservations.sql` | `equipment_reservations` table for SCRUM-10: units of an equipment row committed to an event, `quantity > 0` and `return_date >= collection_date` CHECKs, FKs to `equipment` and `event_requests`, hold-window index, RLS on with service-role access only. Starts empty; SCRUM-13 writes rows. Applied to the shared development project on 6 October 2026, replacing the placeholder table from `feat/scoped-resource-access` (SCRUM-39), which was dropped the same day once the two stories deconflicted — SCRUM-10's hold-ledger schema (`collection_date`/`return_date`) is the canonical one |
 | `migrations/0020_event_change_request_updated_at.sql` | Advances the event version timestamp when an amendment is approved |
 | `migrations/0021_event_change_request_monotonic_updated_at.sql` | Makes the approval-side timestamp assignment strictly monotonic |
 | `migrations/0022_monotonic_event_request_updated_at_trigger.sql` | Makes the shared event-request update trigger monotonic, including multiple writes in one transaction |
+
+Verify `0020` after applying it: run
+[`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
+SQL Editor — it exercises the CHECK constraints and both foreign keys
+(including the refusal paths) and prints
+`ALL EQUIPMENT RESERVATION VERIFICATIONS PASSED` on success, rolling back so
+no data is left behind.
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
