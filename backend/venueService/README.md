@@ -4,46 +4,43 @@ FastAPI microservice for the venue catalogue and venue search / filtering.
 
 ## Scope
 
-### SCRUM-15 decision rules (integration pending)
+### SCRUM-15 booking decisions
 
-`app/booking_decisions.py` contains the pure `assess_booking_decision` function.
-This work is on `feat/venue-booking-decision`, based on `feat/venue-blocking` to
-reuse SCRUM-23's availability checks. The internal input projections are not a
-database schema or an agreed booking/event API.
+Venue Staff approve or reject a pending booking request (SCRUM-32) with
+`POST /booking-requests/{id}/decision`:
 
-- Only a request whose normalized status is `pending` can receive a decision.
-- Explicit rejection preserves an optional reason and suggested alternative.
-  It does not require availability lookups to succeed. Blank details are absent;
-  nonempty rejection details on an approval are rejected as invalid input.
-- Approval checks current whole-venue status, operating slots and active blocks
-  using SCRUM-23's existing logic, plus overlapping confirmed venue bookings.
-- Dates are inclusive and a shared slot is required for overlap. Other venues,
-  disjoint periods/slots and lifted blocks do not conflict.
-- `None` for either lookup means it has not succeeded and prevents approval;
-  an empty list means a successful lookup found no rows.
-- Refused approval returns machine-readable reasons and block/booking conflict
-  evidence, with no target status. The request remains pending until a separate
-  explicit decision is saved. The future handler must record refusal evidence.
+```json
+{"decision": "rejected", "reason": "Hall under repair", "suggested_alternative": "Try Orchard Studio"}
+```
 
-`ConfirmedVenueBooking` represents an actual reserved venue period, not proposed
-event timing. The future adapter must supply all relevant current confirmed
-reservations and omit cancelled/unconfirmed ones. A venue reservation must count
-even if the overall event has not yet reached `Confirmed`; do not reuse the
-affected-event notification filter for booking conflict checks.
+- Only a `pending` request can be decided; a decided one returns `409`
+  ("already been decided") and an unknown one `404`. Non-staff get `403`.
+- A rejection needs a non-blank reason; the alternative is optional free text.
+  An approval carries neither. Anything else returns `422`.
+- An approved request **is** the confirmed booking (agreed in 0018).
+- Approval is refused with `409` and
+  `{"message", "refusal_codes", "conflicting_block_ids", "conflicting_booking_ids"}`
+  when the venue is blocked in the catalogue (`venue_unavailable`), a slot is not
+  operated (`outside_operating_slots`), an active block overlaps (`active_block`)
+  or another **approved** request for the venue overlaps (`booking_conflict`).
+  Dates are inclusive and NIGHT belongs to its starting date. Pending and
+  rejected requests never conflict.
+- A refused approval leaves the request pending and records who, when and why.
+  Venue Staff read the log with `GET /booking-requests/{id}/refusals`.
 
-The evaluator performs no authorization, writes, allocation creation, event
-changes or notifications. No endpoint has been added. Integration still needs
-the shared booking schema and allocation ownership/API. The handler must verify
-Venue Staff permission, read current data, and coordinate its final check and
-save with both competing approvals and venue-block writes. A successful rule
-assessment alone does not lock or reserve a slot. Notify the requesting
-Coordinator only after a decision is committed, leaving any event changes to
-the Coordinator. Notification delivery is not implemented by these rules.
+In database mode the decision runs in `decide_venue_booking_request`
+(`database/migrations/0024_venue_booking_decisions.sql`), which locks the venue
+row, then the request row, and re-checks everything before writing the decision
+or one `venue_booking_refusals` row. Block creation goes through
+`create_venue_block`, which takes the same venue lock, so two approvals, or an
+approval and a block, cannot both succeed for overlapping periods. Memory mode
+applies `assess_booking_decision` (`app/booking_decisions.py`) under an
+equivalent process-wide lock (`app/venue_locks.py`). Verify the database
+functions with `database/verify_venue_booking_decisions.sql`.
 
-Tests: `pytest tests/test_booking_decisions.py`. These cover decision eligibility,
-rejection details, availability/conflict refusals, inclusive boundaries, failed
-lookups, invalid inputs and absence of mutation. They do not claim end-to-end
-coverage of booking persistence, concurrency or notification acceptance criteria.
+Not yet included: notifying the requesting Coordinator (AC4), the Venue Staff
+booking-requests page, and showing booked slots in search, the availability
+check and the calendar. Setup and turnaround gaps belong to M5-1.
 
 ### Existing endpoints
 
@@ -55,6 +52,7 @@ coverage of booking persistence, concurrency or notification acceptance criteria
 | Create a venue block | `POST /venues/{venue_id}/blocks` |
 | List a venue's blocks | `GET /venues/{venue_id}/blocks` |
 | Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}` |
+| Decide a booking request | `POST /booking-requests/{id}/decision`, `GET /booking-requests/{id}/refusals` |
 
 Venues are stored in the Supabase `public.venues` table
 (`database/migrations/0016_venues.sql`) and venue blocks in `public.venue_blocks`
