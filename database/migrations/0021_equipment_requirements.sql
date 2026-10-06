@@ -91,7 +91,12 @@ BEGIN
 
     UPDATE public.equipment_requirements
     SET status = p_new_status,
-        support_note = COALESCE(p_support_note, support_note),
+        -- D9: a blank or omitted note keeps the existing one.
+        support_note = CASE
+            WHEN p_support_note IS NOT NULL AND btrim(p_support_note) <> ''
+                THEN p_support_note
+            ELSE support_note
+        END,
         updated_by = p_updated_by,
         updated_at = now()
     WHERE id = p_requirement_id

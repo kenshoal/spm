@@ -15,7 +15,7 @@ python -m pip install -e ".[dev]"
 uvicorn app.main:app --reload --port 8002
 ```
 
-Requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `AUTH_SERVICE_URL` in the environment (or a `.env` file in the working directory; `AUTH_SERVICE_URL` defaults to `http://127.0.0.1:8001`). `VENUE_SERVICE_URL` (default `http://127.0.0.1:8004`) is needed for `POST /equipment/availability-check` (SCRUM-10).
+Requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `AUTH_SERVICE_URL` in the environment (or a `.env` file in the working directory; `AUTH_SERVICE_URL` defaults to `http://127.0.0.1:8001`). `VENUE_SERVICE_URL` (default `http://127.0.0.1:8004`) is needed for `POST /equipment/availability-check` (SCRUM-10). `EVENT_REQUEST_SERVICE_URL` (default `http://127.0.0.1:8003`) is needed for the equipment-requirements endpoints (SCRUM-33).
 
 The service is available at `http://localhost:8002`, its health check at `http://localhost:8002/health`, and interactive API documentation at `http://localhost:8002/docs`.
 
@@ -32,8 +32,9 @@ Mutations are Postgres functions (RPCs) in the shared database, defined in [`dat
 | `create_equipment` | Inserts the equipment row and its first `equipment_status_history` entry (`old_status` NULL) in one transaction; returns the row |
 | `update_equipment_quantity` | Locks the row (`FOR UPDATE`), appends old/new quantities to `equipment_quantity_history`, updates the row; returns it |
 | `transition_equipment_status` | Locks the row, updates `operational_status`, appends to `equipment_status_history` |
+| `transition_equipment_requirement` | Locks the `equipment_requirements` row, refuses a stale expected status, applies one allowed arrangement transition (`requested → in_progress/arranged`, `in_progress ↔ arranged`, `in_progress → in_progress` only with a non-blank note) and records who/when. `P0002` unknown id, `P0004` disallowed/stale/blank-note update |
 
-All three raise with ERRCODE `P0002` when the equipment id is unknown; the service maps that code to `404 Equipment not found` (`app/rpc_errors.py`) rather than matching error-message text. Any other RPC failure maps to `500`.
+The first three raise with ERRCODE `P0002` when the equipment id is unknown; the service maps that code to `404 Equipment not found` (`app/rpc_errors.py`) rather than matching error-message text. The requirement function maps `P0002` to `404 Equipment requirement not found` and `P0004` to `409 Transition not allowed`. Any other RPC failure maps to `500`.
 
 Note: `transition_equipment_status` did not exist in the live database until migration `0002` — `PATCH /equipment/{id}/status` fails with `500` until it is applied.
 
@@ -51,6 +52,18 @@ Note: `transition_equipment_status` did not exist in the live database until mig
 | POST | `/equipment/availability-check` | Check how many units of each requested type could be committed to an event (SCRUM-10; `technical_support` only, read-only — nothing is booked). Body: `{ "start_date": "2026-10-14", "end_date": "2026-10-14", "venue_id": "v-big", "items": [{ "type": "Projector", "quantity": 5 }] }`. Response `200`: one `{ "requested", "available", "shortfall" }` entry per requested type, keyed by the type string as sent — a shortfall is still `200`, never `409`. Excludes non-`AVAILABLE` rows, units reserved on the busiest overlapping day of the hold (`start_date − 1` plus one transfer day when the row's building differs from the venue's), and honours the D-1 → Return Day hold. Errors: `422` invalid body, `401`/`403` no session/role, `404` unknown venue, `502` venueService unreachable, `500` database failure. Needs migration `0019` (`equipment_reservations`) applied |
 
 Valid statuses: `AVAILABLE`, `DAMAGED`, `UNDER_REPAIR`, `UNDER_MAINTENANCE`, `RETIRED`.
+
+### Equipment requirements (SCRUM-33)
+
+An assigned Event Coordinator records what equipment an event needs; Technical Support reviews and arranges. equipmentService owns the `equipment_requirements` table but not event relationships: to decide "does the caller currently coordinate this event", it asks eventRequestService with the caller's own token — `GET /event-requests/{id}/coordinator` compared with the caller's id, plus, on record only, `GET /event-requests/{id}` for the status and the name/date-time snapshot stored on the row. Technical Support is role-wide and never calls eventRequestService.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/equipment-requirements` | Record one requirement (`event_coordinator` assigned to the event only). Body: `{ "event_request_id", "equipment_type", "quantity", "technical_requirements?" }`; extra fields forbidden. The type is matched against non-retired catalogue rows ignoring case and extra spaces and stored in the catalogue's spelling; quantity is a whole number 1..2147483647; technical requirements are optional, at most 2,000 characters (blank stored as NULL). `201` with the stored row (`status: requested`, event snapshot, `recorded_by` from the token). Errors: `422` invalid body or unknown type, `404` not the assigned Coordinator (indistinguishable from a missing event), `409` event Cancelled/Completed/Rejected, `401`/`403` no session/role, `502` eventRequestService unavailable, `500` database failure. Needs migration `0021` |
+| GET | `/equipment-requirements` | Technical Support's review queue: every event's requirements with one status (default `requested`, `?status=` to choose), oldest first |
+| GET | `/equipment-requirements/by-event/{event_request_id}` | One event's requirements, oldest first (assigned `event_coordinator` or any `technical_support`) |
+| GET | `/equipment-requirements/{id}` | One requirement, every field (same readers; an unassigned Coordinator gets the same 404 as a missing requirement) |
+| PATCH | `/equipment-requirements/{id}/arrangement` | `technical_support` only. Body: `{ "expected_status", "status", "support_note?" }`. The database function applies the transition under a row lock and refuses disallowed or stale updates (`409`); a blank or omitted note keeps the existing note. `404` unknown id, `422` invalid body |
 
 ## Test
 

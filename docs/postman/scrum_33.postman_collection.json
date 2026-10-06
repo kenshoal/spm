@@ -1,0 +1,499 @@
+{
+  "info": {
+    "name": "SCRUM-33 Equipment Requirements (manual)",
+    "description": "Manual integration checks for SCRUM-33 against the Docker Compose stack (AC1-X3, AC6-X26, AC4-X2, AC5-X4, AC6-X27). Seed first: one event 'MANUAL-S33 Gala' submitted by event_organiser@example.com and assigned to event_coordinator1@example.com (seed SQL kept outside the repo), then paste its request id into `request_id`. AC6-X27 needs `supabase_url` and the publishable `supabase_anon_key`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "auth_url",
+      "value": "http://localhost:8001"
+    },
+    {
+      "key": "equipment_url",
+      "value": "http://localhost:8002"
+    },
+    {
+      "key": "request_id",
+      "value": ""
+    },
+    {
+      "key": "requirement_id",
+      "value": ""
+    },
+    {
+      "key": "coord_a_email",
+      "value": "event_coordinator1@example.com"
+    },
+    {
+      "key": "coord_a_password",
+      "value": "12345678"
+    },
+    {
+      "key": "coord_a_token",
+      "value": ""
+    },
+    {
+      "key": "coord_a_id",
+      "value": ""
+    },
+    {
+      "key": "coord_b_email",
+      "value": "event_coordinator2@example.com"
+    },
+    {
+      "key": "coord_b_password",
+      "value": "12345678"
+    },
+    {
+      "key": "coord_b_token",
+      "value": ""
+    },
+    {
+      "key": "tss_email",
+      "value": "technical_support@example.com"
+    },
+    {
+      "key": "tss_password",
+      "value": "12345678"
+    },
+    {
+      "key": "tss_token",
+      "value": ""
+    },
+    {
+      "key": "tss_id",
+      "value": ""
+    },
+    {
+      "key": "supabase_url",
+      "value": ""
+    },
+    {
+      "key": "supabase_anon_key",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Setup \u2014 log in",
+      "item": [
+        {
+          "name": "Log in as coordinator 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{coord_a_email}}\", \"password\": \"{{coord_a_password}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"coord_a_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in as coordinator 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{coord_b_email}}\", \"password\": \"{{coord_b_password}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"coord_b_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log in as technical support",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{auth_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{tss_email}}\", \"password\": \"{{tss_password}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"tss_token\", pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (coord_a)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{auth_url}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"coord_a_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I (tss)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tss_token}}"
+              }
+            ],
+            "url": "{{auth_url}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"tss_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Record",
+      "item": [
+        {
+          "name": "AC1-X3 Assigned coordinator records a requirement",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{equipment_url}}/equipment-requirements",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_request_id\": \"{{request_id}}\",\n  \"equipment_type\": \"Projector\",\n  \"quantity\": 2,\n  \"technical_requirements\": \"HDMI, 4K\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 201\", () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Event snapshot stored\", () => pm.expect(body.event_name).to.eql(\"MANUAL-S33 Gala\"));",
+                  "pm.test(\"Status starts requested\", () => pm.expect(body.status).to.eql(\"requested\"));",
+                  "pm.collectionVariables.set(\"requirement_id\", body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AC6-X26 Unassigned coordinator is not found",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_b_token}}"
+              }
+            ],
+            "url": "{{equipment_url}}/equipment-requirements",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_request_id\": \"{{request_id}}\",\n  \"equipment_type\": \"Projector\",\n  \"quantity\": 2\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"Indistinguishable from a missing event\", () => pm.expect(pm.response.json().detail).to.eql(\"Event request not found\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Review queue",
+      "item": [
+        {
+          "name": "AC4-X2 Technical support sees the requirement in the queue",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tss_token}}"
+              }
+            ],
+            "url": "{{equipment_url}}/equipment-requirements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "const id = pm.collectionVariables.get(\"requirement_id\");",
+                  "pm.test(\"Recorded requirement is listed\", () => pm.expect(pm.response.json().map(r => r.id)).to.include(id));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Arrangement",
+      "item": [
+        {
+          "name": "AC5-X4a Requested to in progress",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tss_token}}"
+              }
+            ],
+            "url": "{{equipment_url}}/equipment-requirements/{{requirement_id}}/arrangement",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"requested\",\n  \"status\": \"in_progress\",\n  \"support_note\": \"Sourcing two projectors\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AC5-X4b In progress to arranged",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tss_token}}"
+              }
+            ],
+            "url": "{{equipment_url}}/equipment-requirements/{{requirement_id}}/arrangement",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"in_progress\",\n  \"status\": \"arranged\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AC5-X4c Stale repeat is a conflict",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tss_token}}"
+              }
+            ],
+            "url": "{{equipment_url}}/equipment-requirements/{{requirement_id}}/arrangement",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_status\": \"in_progress\",\n  \"status\": \"arranged\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 409\", () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AC5-X4d Coordinator sees the arrangement",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{coord_a_token}}"
+              }
+            ],
+            "url": "{{equipment_url}}/equipment-requirements/{{requirement_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Arranged\", () => pm.expect(body.status).to.eql(\"arranged\"));",
+                  "pm.test(\"Updated by technical support\", () => pm.expect(body.updated_by).to.eql(pm.collectionVariables.get(\"tss_id\")));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Browser key blocked",
+      "item": [
+        {
+          "name": "AC6-X27 Publishable key cannot read requirements",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "apikey",
+                "value": "{{supabase_anon_key}}"
+              }
+            ],
+            "url": "{{supabase_url}}/rest/v1/equipment_requirements"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

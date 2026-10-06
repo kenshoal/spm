@@ -258,7 +258,8 @@ Docker Compose stack against the shared development database. Seed: event `MANUA
 ### Latest execution record
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
-| --- | --- | --- | --- | --- | --- | --- |
+| ID | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | Remarks and evidence; fakes only, no real service |
+| --- | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | ---; fakes only, no real service |
 | AC1-H1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
 | AC1-H2 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
 | AC1-N1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
@@ -287,79 +288,79 @@ Docker Compose stack against the shared development database. Seed: event `MANUA
 | AC6-X2 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
 | AC6-X3 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
 | AC6-X4 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC6-X5 | Red | NotImplementedError from the contract stub | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_event_requests_client.py` |
-| AC6-X6 | Red | NotImplementedError from the contract stub | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_event_requests_client.py` |
-| AC6-X7 | Red | NotImplementedError from the contract stub | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_event_requests_client.py` |
-| AC6-N1 | Red | NotImplementedError from the contract stub | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_event_requests_client.py` |
-| AC6-N2 | Red | NotImplementedError from the contract stub | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_event_requests_client.py` |
-| AC6-N3 | Red | NotImplementedError from the contract stub | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_event_requests_client.py` |
-| AC6-N4 | Red | NotImplementedError from the contract stub | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_event_requests_client.py` |
-| AC6-N5 | Red | NotImplementedError from the contract stub | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_event_requests_client.py` |
-| AC1-H3 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-H4 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-P1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-P2 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-P3 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-P4 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-P5 to AC1-P10 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-N6 to AC1-N9 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-N10 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC1-X2 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-B6 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-B7 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-B8 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-B9 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-N2 to AC2-N5 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-N6 to AC2-N8 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-N9 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-N10 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-B10 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-B11 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-P1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC2-N11, AC2-N12 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC7-N1 to AC7-N3 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC6-X8 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC6-X9 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC6-X10 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC6-X11 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC6-X12 to AC6-X16 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC6-N6 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC6-N7 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_record.py` |
-| AC3-H1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC3-H2 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC3-H3 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC3-H4 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC3-B1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC3-X1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC3-N1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC3-N2 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC4-H1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC4-P1, AC4-P2 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC4-B1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC4-N1 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC6-X17, AC6-X18 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC6-X19 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC6-X20 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC6-X21 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC6-X22 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC6-N8 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_read.py` |
-| AC5-H2 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-P8 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-X3 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-N11 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-N12 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-N13 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-N14 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-N15 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-N16 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC5-N17 to AC5-N19 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC6-X23, AC6-X24 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC6-X25 | Red | 404 Not Found: the route does not exist yet | Fail (expected Red) | `6673a21` + uncommitted Leg 1 tree | Claude (Cowork), 6 Oct 2026 | `tests/test_requirements_arrangement.py` |
-| AC1-X3 | Planned | not run | Not executed | n/a | n/a | |
-| AC6-X26 | Planned | not run | Not executed | n/a | n/a | |
-| AC4-X2 | Planned | not run | Not executed | n/a | n/a | |
-| AC5-X4 | Planned | not run | Not executed | n/a | n/a | |
-| AC6-X27 | Planned | not run | Not executed | n/a | n/a | |
+| AC6-X5 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
+| AC6-X6 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
+| AC6-X7 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
+| AC6-N1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
+| AC6-N2 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
+| AC6-N3 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
+| AC6-N4 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
+| AC6-N5 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
+| AC1-H3 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-H4 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-P1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-P2 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-P3 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-P4 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-P5 to AC1-P10 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-N6 to AC1-N9 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-N10 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC1-X2 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-B6 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-B7 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-B8 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-B9 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-N2 to AC2-N5 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-N6 to AC2-N8 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-N9 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-N10 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-B10 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-B11 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-P1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC2-N11, AC2-N12 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC7-N1 to AC7-N3 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC6-X8 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC6-X9 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC6-X10 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC6-X11 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC6-X12 to AC6-X16 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC6-N6 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC6-N7 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_record.py`; fakes only, no real service |
+| AC3-H1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC3-H2 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC3-H3 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC3-H4 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC3-B1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC3-X1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC3-N1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC3-N2 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC4-H1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC4-P1, AC4-P2 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC4-B1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC4-N1 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC6-X17, AC6-X18 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC6-X19 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC6-X20 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC6-X21 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC6-X22 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC6-N8 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_read.py`; fakes only, no real service |
+| AC5-H2 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-P8 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-X3 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-N11 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-N12 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-N13 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-N14 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-N15 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-N16 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC5-N17 to AC5-N19 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC6-X23, AC6-X24 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC6-X25 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
+| AC1-X3 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
+| AC6-X26 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
+| AC4-X2 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
+| AC5-X4 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
+| AC6-X27 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
 
 ## Latest verification
 
@@ -377,9 +378,36 @@ Two tests were corrected during the Red run because they would have passed vacuo
 
 **Database script dry run, 6 October 2026 (not evidence for the matrix).** `database/verify_equipment_requirements.sql` was run on a throwaway local PostgreSQL 16 database with stub `auth.users` and `event_requests` tables. Without the table it stops during compilation with `42P01 relation "public.equipment_requirements" does not exist`, before any case runs (the expected Red). Against a draft of migration `0021` kept outside the repo it reaches the final NOTICE, and seven injected faults (expected-status check removed, `FOR UPDATE` removed, `quantity >= 0`, note-only check removed, a transition removed, `REVOKE` removed, `updated_by` not set) each stopped the script at the expected case. The dry run found that `P0004`, the team's transition code, is PostgreSQL's `assert_failure`, which `WHEN OTHERS` does not catch; the script's helper catches it explicitly. The Supabase SQL Editor run by Yang is still required for the execution record.
 
+**Leg 2 Green run, 7 October 2026 (automated).** Run by Claude (Cowork) from `backend/equipmentService` on Yang's Mac (macOS, the repo `.venv`), on local branch `feat/scrum-33-equipment-requirements` at `d77b736`, after the Leg 2 slices 2.1–2.5. Dependencies are faked exactly as in the Red run (authService via the `httpx.get` stub, eventRequestService behind `httpx.MockTransport`, Supabase via `RequirementsStore`); no real service was involved, so this is local evidence only — shared-database and browser results are the manual cases below.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Lint | `.venv/bin/ruff check .` | All checks passed |
+| Whole suite | `.venv/bin/python -m pytest -q` | 248 passed, 1 warning (146 existing + 102 SCRUM-33); 0 failed |
+| eventRequestService regression | `python -m pytest -q` in `backend/eventRequestService` | 234 passed — unchanged |
+| Working tree after mutation checks | `git status` / `git diff` | Clean; every mutant reverted |
+
+**Manual mutation check, 7 October 2026** (`mutmut` is not installed; `testing.md` §7 tooling is a separate team change, so each mutant was applied by hand, its expected catcher run, and the tree restored — every mutant was killed):
+
+| Mutant | Expected catcher | Result |
+| --- | --- | --- |
+| M1 assignment compared with `==` | AC1-H3, AC6-X8 | killed (25 tests failed, including AC6-X6 and the record suite) |
+| M2 request body allows extra fields | AC1-N6 | killed (AC1-N6 to AC1-N9 failed) |
+| M3 coordinator role check removed on POST | AC6-X12 | killed (AC6-X12 failed: `technical_support` got 404 instead of 403) |
+| M4 Technical Support shortcut applied to coordinators on reads | AC6-X19 | killed |
+| M5 `quantity` `ge=0` | AC2-B6 | killed |
+| M6 `Rejected` missing from closed statuses | AC7-N3 | killed (AC7-N3 failed) |
+| M7 token not forwarded | AC6-X5 | killed |
+| M8 queue default `in_progress` | AC4-H1 | killed |
+| M9 type compared case-sensitively | AC1-P1 | killed |
+| M10 retired rows counted as catalogue types | AC2-N10 | killed |
+| M11 `expected_status` check removed in SQL | AC5-N8 | caught by the 6 October SQL dry run's injected fault "expected-status check removed" (script stopped at AC5-N8); Supabase run pending Yang |
+| M12 `FOR UPDATE` removed in SQL | AC5-X2 | caught by the 6 October SQL dry run's injected fault "`FOR UPDATE` removed" (script stopped at AC5-X2); Supabase run pending Yang |
+
 ## Disclosures
 
 - Test cases, tests, the SQL script and the contract stub were drafted by Claude (Cowork) from the approved ACs, before any implementation. The test design was reviewed and approved by **Yang Xue on 7 October 2026**, including D9 and D10.
 - `app/event_requests_client.py` and the `event_request_service_url` setting were added as signature-only stubs so the client tests fail with `NotImplementedError` rather than an import error (`testing.md` §5).
 - `tests/conftest.py` gained four SCRUM-33 fixtures (`req_store`, `req_events`, `as_user`, `req_api`); the existing fixtures are unchanged.
 - Per `commits.md` §4, the red tests are not pushed; they are committed with the code that makes them pass in Leg 2.
+- Leg 2's production code (migration `0021`, the event client, the requirements router) was written by Claude (Cowork) against the already-approved test suite, in the slice order of the plan; the D9 note-keeping rule is implemented in the database function, so every caller gets it.
