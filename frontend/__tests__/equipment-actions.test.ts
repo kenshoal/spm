@@ -103,7 +103,7 @@ test("explains missing equipment", async () => {
   expect(state).toEqual({ message: "This equipment record no longer exists.", values: { total_owned_quantity: "4" } });
 });
 
-// Purpose: SCRUM-16 AC1 — marking equipment damaged sends the status and reason.
+// AC1-H2 (happy path): marking equipment damaged sends the status and trimmed reason to the API
 test("changes the operational status with a reason", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
   vi.stubGlobal("fetch", fetchMock);
@@ -115,7 +115,7 @@ test("changes the operational status with a reason", async () => {
   expect(state).toEqual({ saved: true, message: "Status changed to Damaged." });
 });
 
-// Purpose: A status change must actually change something, and use a known status.
+// AC1-N6 (negative): an unchanged or unknown status is refused without calling the API
 test("refuses an unchanged or unknown status", async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -131,9 +131,10 @@ test("refuses an unchanged or unknown status", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-// Purpose: The backend's 255-character reason limit is enforced before sending.
+// AC1-B3 (boundary): a 256-character reason is refused before anything is sent
 test("rejects an overlong reason", async () => {
-  vi.stubGlobal("fetch", vi.fn());
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
 
   const state = await changeEquipmentStatus("eq-1", "AVAILABLE", {}, form({ new_status: "DAMAGED", reason: "x".repeat(256) }));
 
@@ -141,12 +142,13 @@ test("rejects an overlong reason", async () => {
     message: "Keep the reason to 255 characters or fewer.",
     values: { new_status: "DAMAGED", reason: "x".repeat(256) },
   });
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
-// Purpose: Ruling 4 — an overlong reason must echo the raw (trimmed) reason back
-// so a corrected resubmission doesn't lose what the user typed.
+// AC1-N7 (negative): an overlong reason echoes the trimmed input back so a corrected resubmission keeps what the user typed
 test("echoes the raw reason back when it is too long", async () => {
-  vi.stubGlobal("fetch", vi.fn());
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
 
   const state = await changeEquipmentStatus("eq-1", "AVAILABLE", {}, form({ new_status: "DAMAGED", reason: `  ${"y".repeat(260)}  ` }));
 
@@ -154,4 +156,5 @@ test("echoes the raw reason back when it is too long", async () => {
     message: "Keep the reason to 255 characters or fewer.",
     values: { new_status: "DAMAGED", reason: "y".repeat(260) },
   });
+  expect(fetchMock).not.toHaveBeenCalled();
 });

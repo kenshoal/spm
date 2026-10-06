@@ -40,3 +40,30 @@ test("an expired venue-service session redirects to sign-in", async ({ page }) =
   await page.goto("/venues/search?required_capacity=10");
   await expect(page).toHaveURL(/\/auth$/);
 });
+
+// Purpose: SCRUM-12 AC4-H6, AC5-X2 — a coordinator checks a search result against
+// a larger, then a smaller, attendance and sees the verdict in words with the
+// mismatch reason; the check leaves the venue in the results.
+test("coordinator checks a venue's suitability from the search results", async ({ page, request }) => {
+  await request.post(`${VENUE_API}/__seed`, {
+    data: { name: "Suitability Hall", location: "Suitability Wing", max_capacity: 120, facilities: ["Projector"], supported_layouts: ["theatre"] },
+  });
+
+  await page.context().addCookies([{ name: "cs_access_token", value: "coordinator-session", url: "http://127.0.0.1:3100" }]);
+  await page.goto("/venues/search?location=Suitability+Wing");
+  const card = page.getByRole("article", { name: "Suitability Hall" });
+  await card.getByText("Check suitability").click();
+
+  await card.getByLabel("Expected attendance").fill("500");
+  await card.getByRole("button", { name: "Check this venue" }).click();
+  await expect(card.getByRole("status")).toContainText("Not suitable");
+  await expect(card.getByRole("status")).toContainText("Expected attendance 500 exceeds the venue's maximum capacity of 120.");
+
+  await card.getByLabel("Expected attendance").fill("50");
+  await card.getByRole("button", { name: "Check this venue" }).click();
+  await expect(card.getByRole("status")).toContainText("Suitable");
+  await expect(card.getByRole("status")).not.toContainText("Not suitable");
+
+  await page.reload();
+  await expect(page.getByRole("article", { name: "Suitability Hall" })).toBeVisible();
+});

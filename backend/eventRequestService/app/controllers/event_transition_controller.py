@@ -3,12 +3,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 
+from app.config import get_settings
 from app.controllers.event_request_controller import (
     get_coordinator_id,
     get_event_request_service,
 )
 from app.models.event_request import EventRequestResponse, EventReviewDecision
 from app.services.event_transition_service import EventTransitionService
+from app.services.notification_client import NotificationClient
 
 router = APIRouter(prefix="/event-requests", tags=["event transitions"])
 
@@ -19,7 +21,12 @@ def get_event_transition_service(request: Request) -> EventTransitionService:
     if service is not None:
         return service
 
-    service = EventTransitionService(get_event_request_service(request))
+    # Evaluated left to right: an unconfigured Supabase is reported as a 503 by
+    # get_event_request_service before the settings are read again.
+    service = EventTransitionService(
+        get_event_request_service(request),
+        NotificationClient.from_settings(get_settings()),
+    )
     request.app.state.event_transition_service = service
     return service
 

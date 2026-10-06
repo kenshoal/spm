@@ -11,6 +11,7 @@ FastAPI microservice for the venue catalogue and venue search / filtering.
 | Check venue suitability | `POST /venues/{id}/suitability` |
 | Create a venue block | `POST /venues/{venue_id}/blocks` |
 | List a venue's blocks | `GET /venues/{venue_id}/blocks` |
+| Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}` |
 
 Venues are stored in the Supabase `public.venues` table
 (`database/migrations/0016_venues.sql`) and venue blocks in `public.venue_blocks`
@@ -124,6 +125,21 @@ Venue blocking has no dependency on equipmentService for its acceptance criteria
 Booking checks need the booking/event owner; Coordinator alerts need event and
 notification interfaces. Equipment integration is only needed if the team adds
 an explicit requirement about equipment affected by a venue closure.
+
+Booking requests (SCRUM-32) are stored in `public.venue_booking_requests`
+(`database/migrations/0018_venue_booking_requests.sql`) under the same
+`VENUE_STORAGE_BACKEND` switch. An Event Coordinator submits a request for a
+venue, an inclusive date range and one or more slots, for an event they are
+currently assigned to. venueService confirms that with eventRequestService
+(`EVENT_REQUEST_API_URL`, default `http://127.0.0.1:8003`) using the caller's own
+token, and copies the event's name, expected attendance and venue-requirements
+text into the request. Submitting creates a `pending` request and reserves
+nothing: pending requests never block each other, and approving or rejecting
+one belongs to a later story. Venue Staff list the queue
+(`GET /booking-requests`, pending by default, oldest first) and can open any
+request; a Coordinator lists (`/mine`, newest first) and opens only their own,
+and another Coordinator's request returns 404. A request for a blocked venue or
+for past dates is accepted at submission.
 
 ## Run locally
 

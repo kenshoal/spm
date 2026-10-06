@@ -41,7 +41,7 @@ def inbox_status(authorization: str | None) -> int:
         return client.get("/notifications", headers=headers).status_code
 
 
-# Purpose: The inbox trusts only the identity authService verifies for the token.
+# AC6-X1 (cross-cutting): The inbox trusts only the identity authService verifies for the token.
 def test_uses_the_user_id_authservice_verified(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -69,7 +69,7 @@ def test_uses_the_user_id_authservice_verified(
     }
 
 
-# Purpose: The scheme name is case-insensitive in HTTP, and login answers
+# AC6-X1 (cross-cutting): The scheme name is case-insensitive in HTTP, and login answers
 # "token_type": "bearer", so a lowercase scheme must work too.
 def test_accepts_a_lowercase_bearer_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
     auth_service_answers(monkeypatch, httpx2.Response(200, json={"id": USER_ID}))
@@ -77,7 +77,7 @@ def test_accepts_a_lowercase_bearer_scheme(monkeypatch: pytest.MonkeyPatch) -> N
     assert inbox_status("bearer valid-token") == 200
 
 
-# Purpose: Swagger UI never sends a header parameter named Authorization, so the
+# AC6-X1 (cross-cutting): Swagger UI never sends a header parameter named Authorization, so the
 # API docs must declare a bearer security scheme to get an Authorize button
 # that does send the token.
 def test_api_docs_declare_bearer_sign_in() -> None:
@@ -93,7 +93,7 @@ def test_api_docs_declare_bearer_sign_in() -> None:
     assert "security" not in schema["paths"]["/notifications/events"]["post"]
 
 
-# Purpose: Requests without a well-formed bearer token never reach authService.
+# AC6-N4 (negative): Requests without a well-formed bearer token never reach authService.
 @pytest.mark.parametrize(
     "authorization", [None, "", "Basic abc", "Bearer ", "Bearer two parts"]
 )
@@ -106,7 +106,7 @@ def test_rejects_a_missing_or_malformed_token(
     assert captured == {}
 
 
-# Purpose: An expired or invalid session is refused.
+# AC6-N4 (negative): An expired or invalid session is refused.
 def test_rejects_a_session_authservice_refuses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -115,7 +115,7 @@ def test_rejects_a_session_authservice_refuses(
     assert inbox_status("Bearer expired") == 401
 
 
-# Purpose: authService being down is a gateway failure, not the caller's fault.
+# AC6-N4 (negative): authService being down is a gateway failure, not the caller's fault.
 def test_reports_authservice_outage_as_bad_gateway(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -127,7 +127,7 @@ def test_reports_authservice_outage_as_bad_gateway(
     assert inbox_status("Bearer valid-token") == 502
 
 
-# Purpose: A reply without a usable user id is never treated as a signed-in user.
+# AC6-N4 (negative): A reply without a usable user id is never treated as a signed-in user.
 @pytest.mark.parametrize(
     "body", [{}, {"id": "not-a-uuid"}, {"id": None}, ["not", "an", "object"]]
 )
