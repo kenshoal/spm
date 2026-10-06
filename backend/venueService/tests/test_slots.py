@@ -13,6 +13,7 @@ def day(number: int) -> date:
     return date(2026, 9, number)
 
 
+# AC2-P2 (partition): overlap gives the same answer whichever period comes first
 @pytest.mark.parametrize(
     "a, b, expected",
     [
@@ -68,8 +69,9 @@ def test_period_comparisons_in_both_directions(
         assert conflicts(*args) == expected
 
 
-@pytest.mark.parametrize("function", [overlaps, conflicts])
-@pytest.mark.parametrize("first_invalid", [True, False])
+# AC2-N1 (negative): a period ending before it starts is rejected by both checks
+@pytest.mark.parametrize("function", [overlaps, conflicts], ids=["AC2-N1a", "AC2-N1b"])
+@pytest.mark.parametrize("first_invalid", [True, False], ids=["case1", "case2"])
 def test_reversed_ranges_are_rejected(function, first_invalid: bool) -> None:
     valid = (day(20), day(22), [AM])
     invalid = (day(22), day(20), [AM])
@@ -78,6 +80,7 @@ def test_reversed_ranges_are_rejected(function, first_invalid: bool) -> None:
         function(*args)
 
 
+# AC2-H2 (happy): a block identifies exactly the dates and slots it shares with a booking
 def test_new_block_identifies_affected_slots_of_existing_booking() -> None:
     block = VenueBlockCreate(
         start_date="2026-09-20",
@@ -93,6 +96,7 @@ def test_new_block_identifies_affected_slots_of_existing_booking() -> None:
     assert conflicts(*booking, *blocked) == [(day(21), PM)]
 
 
+# AC2-B1 (boundary): overlap spans a leap day and a month end
 def test_leap_day_and_month_boundary() -> None:
     args = (
         date(2028, 2, 28),
@@ -106,10 +110,12 @@ def test_leap_day_and_month_boundary() -> None:
     assert conflicts(*args) == [(date(2028, 2, 29), PM), (date(2028, 3, 1), PM)]
 
 
+# AC2-B2 (boundary): overlap handles the widest possible date range
 def test_boolean_check_handles_full_date_domain_without_expanding_it() -> None:
     assert overlaps(date.min, date.max, [AM], date.min, date.max, [AM])
 
 
+# AC2-B3 (boundary): conflicts include the last representable date
 def test_conflicts_can_include_last_representable_date() -> None:
     assert conflicts(date.max, date.max, [NIGHT], date.max, date.max, [NIGHT]) == [
         (date.max, NIGHT)

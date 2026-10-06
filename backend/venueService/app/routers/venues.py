@@ -42,11 +42,14 @@ BlockRepoDep = Annotated[BlockStore, Depends(get_block_repository)]
 @router.get("/{venue_id}/blocks", response_model=list[VenueBlock])
 def list_venue_blocks(
     venue_id: str,
-    principal: AuthenticatedDep,
+    principal: VenueStaffDep,
     repo: RepoDep,
     blocks: BlockRepoDep,
 ) -> list[VenueBlock]:
-    """List all recorded blocks for a venue, including lifted blocks."""
+    """List all recorded blocks for a venue, including lifted blocks.
+
+    Venue Staff only: reasons are internal planning information.
+    """
     del principal
     if repo.get(venue_id) is None:
         raise HTTPException(

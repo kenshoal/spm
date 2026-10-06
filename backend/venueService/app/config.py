@@ -17,11 +17,6 @@ class Settings(BaseSettings):
     venue_storage_backend: Literal["memory", "supabase"] = "memory"
     supabase_url: AnyHttpUrl | None = None
     supabase_secret_key: SecretStr | None = None
-    # Future notification receiver; unset means no delivery attempts.
-    notification_service_url: AnyHttpUrl | None = None
-    # Proposed allocation read interface, owned by the booking/event service.
-    event_allocations_url: AnyHttpUrl | None = None
-    event_allocations_token: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

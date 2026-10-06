@@ -122,6 +122,7 @@ def create_block(client, venue_id, slots=None):
     )
 
 
+# AC1-H6 (happy): blocks persist in the database across requests and drive search
 def test_database_creation_retrieval_update_and_search_across_requests(database):
     tables, calls = database
     with TestClient(app) as client:
@@ -167,6 +168,7 @@ def test_database_creation_retrieval_update_and_search_across_requests(database)
     assert any(r.url.params.get("offset") == "1" for r in calls)
 
 
+# AC1-N16 (negative): unknown or malformed venue ids store nothing in the database
 def test_database_missing_and_invalid_venue_ids(database):
     with TestClient(app) as client:
         for venue_id in ["not-a-uuid", str(uuid4())]:
@@ -182,6 +184,7 @@ def test_database_missing_and_invalid_venue_ids(database):
     assert database[0] == {"venues": [], "venue_blocks": []}
 
 
+# AC2-P10 (partition): a database block hides only its own venue
 def test_database_blocks_are_scoped_to_venue(database):
     with TestClient(app) as client:
         first, second = create_venue(client), create_venue(client)
@@ -193,8 +196,11 @@ def test_database_blocks_are_scoped_to_venue(database):
         assert {v["id"] for v in results.json()} == {second["id"]}
 
 
+# AC1-N17 (negative): database errors map to 409, 422 or 502 without leaking details
 @pytest.mark.parametrize(
-    "code,expected", [("23503", 409), ("23514", 422), ("42501", 502)]
+    "code,expected",
+    [("23503", 409), ("23514", 422), ("42501", 502)],
+    ids=["AC1-N17a", "AC1-N17b", "AC1-N17c"],
 )
 def test_database_errors_are_sanitized_and_mapped(code, expected):
     def handle(request):
@@ -214,6 +220,7 @@ def test_database_errors_are_sanitized_and_mapped(code, expected):
         assert "PRIVATE" not in response.text
 
 
+# AC4-N5 (negative): a database timeout is an error, never an empty block list
 def test_timeout_does_not_return_false_empty_availability():
     def handle(request):
         raise httpx.ReadTimeout("private", request=request)
@@ -224,6 +231,7 @@ def test_timeout_does_not_return_false_empty_availability():
             api.list_rows("venue_blocks")
 
 
+# AC1-N18 (negative): a non-UUID creator is refused before reaching the database
 def test_invalid_creator_is_not_sent_to_database():
     def handle(request):
         pytest.fail("An invalid creator must not reach the database")
@@ -244,6 +252,7 @@ def test_invalid_creator_is_not_sent_to_database():
             repo.create(str(uuid4()), data, "stub-venue-staff")
 
 
+# AC1-X5 (cross-cutting): database mode requires a URL and a server-side secret key
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -251,6 +260,7 @@ def test_invalid_creator_is_not_sent_to_database():
         {"supabase_url": None},
         {"supabase_secret_key": "sb_publishable_wrong"},
     ],
+    ids=["AC1-X5a", "AC1-X5b", "AC1-X5c"],
 )
 def test_invalid_settings_rejected(overrides):
     with pytest.raises(ValidationError):
