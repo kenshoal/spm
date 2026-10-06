@@ -58,8 +58,8 @@ test("links approved and planning events to change requests", () => {
 
   const changeLinks = screen.getAllByRole("link", { name: "Change requests" });
   expect(changeLinks.map((link) => link.getAttribute("href"))).toEqual([
-    "/event-requests/request-1/edit#change-requests",
-    "/event-requests/request-2/edit#change-requests",
+    "/event-requests/request-1/edit",
+    "/event-requests/request-2/edit",
   ]);
   expect(screen.getByRole("link", { name: "View request" })).toBeDefined();
 });

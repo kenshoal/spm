@@ -15,7 +15,7 @@ import { RequestDetails } from "../../../components/request-details";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { ClarificationResponseForm } from "../clarification-response-form";
 import { ChangeRequestHistory } from "../../../components/change-request-history";
-import { ChangeRequestForm } from "../change-request-form";
+import { ChangeRequestDialog } from "../change-request-dialog";
 
 async function EditDraft({ id }: { id: string }) {
   const result = await getEventRequest(id)
@@ -76,17 +76,16 @@ async function EditDraft({ id }: { id: string }) {
         <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">
           <span>This request is read-only after submission.</span>
-          {canRequestChange ? <Link href="#change-requests" className="font-semibold text-[#0f6b5b] underline underline-offset-2">Request a change</Link> : null}
+          {canRequestChange ? <ChangeRequestDialog eventRequestId={id} /> : null}
         </div>
         <RequestDetails request={result.request} coordinatorAssigned={coordinatorAssigned} />
         <div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div>
-        <div id="change-requests" className="scroll-mt-6">
+        <div>
           {changeResult.failed ? (
             <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">Change request history is temporarily unavailable.</div>
           ) : (
             <div className="mt-5"><ChangeRequestHistory requests={changeResult.requests} /></div>
           )}
-          {canRequestChange ? <div className="mt-5"><ChangeRequestForm eventRequestId={id} /></div> : null}
           {hasPendingChange ? <div role="status" className="mt-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">A change request is waiting for the assigned coordinator.</div> : null}
         </div>
       </div>
