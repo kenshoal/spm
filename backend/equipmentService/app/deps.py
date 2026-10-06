@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from app.config import get_settings
 
 TECHNICAL_SUPPORT_ROLE = "technical_support"
+EVENT_COORDINATOR_ROLE = "event_coordinator"
 
 
 class User(BaseModel):

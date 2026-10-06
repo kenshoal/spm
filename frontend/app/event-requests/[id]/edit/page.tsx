@@ -17,7 +17,9 @@ import { ClarificationResponseForm } from "../clarification-response-form";
 import { ChangeRequestHistory } from "../../../components/change-request-history";
 import { ChangeRequestDialog } from "../change-request-dialog";
 
-async function EditDraft({ id }: { id: string }) {
+const SHARED_NOTICE = "Shared by another organiser in your organisation. You can view it but not change it.";
+
+async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
   const result = await getEventRequest(id)
     .then((request) => ({ request, failed: false as const }))
     .catch((error: unknown) => {
@@ -31,6 +33,8 @@ async function EditDraft({ id }: { id: string }) {
   if (!result.request) {
     return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">Draft not found</h1><p className="mt-2 text-sm text-[#718078]">It may belong to another organiser or have been deleted.</p></div>;
   }
+  // SCRUM-39: same-organisation colleagues get a read-only view.
+  const shared = result.request.organiser_id !== viewerId;
   if (result.request.status === "Changes Requested") {
     const decisionResult = await listReviewDecisions(id)
       .then((decisions) => ({ decisions, failed: false as const }))
@@ -42,11 +46,11 @@ async function EditDraft({ id }: { id: string }) {
     return (
       <div className="mx-auto max-w-4xl">
         <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link>
-        <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">Your coordinator requested clarification. The submitted request remains read-only; respond below so review can continue.</div>
+        <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">{shared ? SHARED_NOTICE : "Your coordinator requested clarification. The submitted request remains read-only; respond below so review can continue."}</div>
         <RequestDetails request={result.request} coordinatorAssigned />
         <div className="mt-5"><ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} /></div>
         <div className="mt-5">
-          {decisionResult.failed ? null : latestClarification?.organiser_response ? (
+          {decisionResult.failed || shared ? null : latestClarification?.organiser_response ? (
             <div role="status" className="rounded-xl border border-[#bcd9ce] bg-[#edf7f3] px-4 py-3 text-sm text-[#145c40]">Your response was sent. The assigned coordinator can now continue the review.</div>
           ) : (
             <ClarificationResponseForm eventRequestId={id} />
@@ -70,11 +74,11 @@ async function EditDraft({ id }: { id: string }) {
     ]);
     const hasPendingChange = changeResult.requests.some((change) => change.status === "Pending");
     const canRequestChange = (result.request.status === "Approved" || result.request.status === "Planning")
-      && !hasPendingChange && !changeResult.failed;
+      && !shared && !hasPendingChange && !changeResult.failed;
     return (
       <div className="mx-auto max-w-4xl">
         <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link>
-        <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div>
+        <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">{shared ? SHARED_NOTICE : "This request is read-only after submission."}</div>
         <RequestDetails
           request={result.request}
           coordinatorAssigned={coordinatorAssigned}
@@ -112,5 +116,5 @@ function EditLoading() {
 
 export default async function EditEventRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireRole("event_organiser");
-  return <AppShell signedIn navLinks={workspaceLinks(user.roles)}><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} />)}</Suspense></AppShell>;
+  return <AppShell signedIn navLinks={workspaceLinks(user.roles)}><Suspense fallback={<EditLoading />}>{params.then(({ id }) => <EditDraft id={id} viewerId={user.id} />)}</Suspense></AppShell>;
 }

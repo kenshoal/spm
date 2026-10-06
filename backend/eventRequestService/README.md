@@ -11,6 +11,7 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `POST` | `/event-requests/submissions` | Submit a complete new request |
 | `GET` | `/event-requests` | List the current organiser's requests |
 | `GET` | `/event-requests/assigned-to-me` | List requests whose latest assignment is the calling Coordinator |
+| `GET` | `/event-requests/public-events` | Attendee-facing Confirmed and Completed events |
 | `GET` | `/event-requests/{id}` | Retrieve one request (owning Organiser or assigned Coordinator) |
 | `PATCH` | `/event-requests/{id}` | Update a Draft |
 | `POST` | `/event-requests/{id}/submit` | Submit a completed Draft |
@@ -54,6 +55,10 @@ Coordinator on its latest assignment. An unrelated Organiser or Coordinator gets
 404 (so request IDs cannot be probed); any other role gets 403.
 `GET /event-requests/assigned-to-me` returns `[]` when nothing is assigned and
 excludes requests that have since been reassigned to someone else.
+The three role-specific list endpoints return deliberately narrow response
+models: they never include `organiser_id`, purpose, review decisions or the
+other role's requirements. Attendee data is limited to Confirmed and Completed
+events; venue and equipment work begins only after approval.
 The non-null `organiser_id` column stores that verified UUID. This service no
 longer reads or writes `temporary_organiser_id`; the deployed Supabase table
 must match that contract before authenticated requests are tested.

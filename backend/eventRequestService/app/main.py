@@ -26,6 +26,7 @@ from app.services.event_request_service import (
     ClarificationResponseNotAllowedError,
     EventChangeRequestConflictError,
     EventChangeRequestForbiddenError,
+    EventRequestForbiddenError,
     EventRequestNotDraftError,
     EventRequestNotFoundError,
     EventRequestService,
@@ -92,6 +93,15 @@ def create_app(
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(EventRequestForbiddenError)
+    async def event_request_forbidden(
+        request: Request, error: EventRequestForbiddenError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
             content={"detail": str(error)},
         )
 

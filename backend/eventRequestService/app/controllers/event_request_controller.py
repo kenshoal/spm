@@ -8,12 +8,14 @@ from pydantic import ValidationError
 
 from app.config import get_settings
 from app.models.event_request import (
+    AttendeeEventResponse,
     EventChangeDecision,
     EventChangeRequestCreate,
     EventChangeRequestResponse,
     EventClarificationResponse,
     EventRequestCreate,
     EventRequestResponse,
+    EventRequestStatus,
     EventRequestSubmission,
     EventRequestUpdate,
     EventReviewDecisionResponse,
@@ -30,6 +32,8 @@ from app.services.event_request_service import (
 router = APIRouter(prefix="/event-requests", tags=["event requests"])
 EVENT_ORGANISER_ROLE = "event_organiser"
 EVENT_COORDINATOR_ROLE = "event_coordinator"
+
+_PUBLIC_STATUSES = {EventRequestStatus.CONFIRMED, EventRequestStatus.COMPLETED}
 
 
 @dataclass(frozen=True)
@@ -142,6 +146,11 @@ def _coordinator_assignment_service(request: Request):
     return get_coordinator_assignment_service(request)
 
 
+def _require_role(caller: AuthenticatedCaller, role: str) -> None:
+    if role not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+
+
 @router.post(
     "",
     response_model=EventRequestResponse,
@@ -188,6 +197,18 @@ def list_requests_assigned_to_me(
     )
 
 
+@router.get("/public-events", response_model=list[AttendeeEventResponse])
+def list_public_events(
+    caller: CallerDependency,
+    service: ServiceDependency,
+) -> list[AttendeeEventResponse]:
+    _require_role(caller, "attendee")
+    return [
+        AttendeeEventResponse.model_validate(request, from_attributes=True)
+        for request in service.list_by_statuses(_PUBLIC_STATUSES)
+    ]
+
+
 @router.get("/{event_request_id}", response_model=EventRequestResponse)
 def get_event_request(
     event_request_id: UUID,
@@ -200,7 +221,7 @@ def get_event_request(
 
     if "event_organiser" in roles:
         try:
-            return service.get(request_id, caller.id)
+            return service.get_viewable(request_id, caller.id)
         except EventRequestNotFoundError:
             pass  # Not the owner — the caller's coordinator role may still grant access.
 
@@ -237,7 +258,7 @@ def list_review_decisions(
 
     if "event_organiser" in roles:
         try:
-            service.get(request_id, caller.id)
+            service.get_viewable(request_id, caller.id)
             return service.list_review_decisions(request_id)
         except EventRequestNotFoundError:
             pass

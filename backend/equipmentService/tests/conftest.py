@@ -124,6 +124,14 @@ def auth_staff(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
+def auth_attendee(monkeypatch: pytest.MonkeyPatch):
+    _mock_auth(monkeypatch, "attendee")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture
 def auth_manager_staff(monkeypatch: pytest.MonkeyPatch):
     _mock_auth(
         monkeypatch,

@@ -14,6 +14,12 @@ class EventRequestRepository(Protocol):
 
     def list_by_status(self, status: str) -> list[dict[str, Any]]: ...
 
+    def get_organisation_id(self, user_id: str) -> str | None: ...
+
+    def list_shared_with_organisation(
+        self, organisation_id: str
+    ) -> list[dict[str, Any]]: ...
+
     def get_for_organiser(
         self, event_request_id: str, organiser_id: str
     ) -> dict[str, Any] | None: ...
@@ -153,6 +159,32 @@ class SupabaseEventRequestRepository:
             "GET",
             params={
                 "status": f"eq.{status}",
+                "order": "created_at.desc",
+                "select": "*",
+            },
+        )
+
+    def get_organisation_id(self, user_id: str) -> str | None:
+        rows = self._request_table(
+            "GET",
+            "/organisation_members",
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "organisation_id",
+                "limit": "1",
+            },
+        )
+        return rows[0]["organisation_id"] if rows else None
+
+    def list_shared_with_organisation(
+        self, organisation_id: str
+    ) -> list[dict[str, Any]]:
+        """Non-Draft requests recorded against one client organisation."""
+        return self._request(
+            "GET",
+            params={
+                "organisation_id": f"eq.{organisation_id}",
+                "status": "neq.Draft",
                 "order": "created_at.desc",
                 "select": "*",
             },

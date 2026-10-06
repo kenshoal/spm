@@ -236,6 +236,14 @@ class EventRequestResponse(EventRequestFields):
     updated_at: datetime
 
 
+class AttendeeEventResponse(BaseModel):
+    id: str
+    event_name: str | None
+    description: str | None
+    status: EventRequestStatus
+    proposed_date_times: list[AwareDatetime]
+
+
 class EventReviewDecisionResponse(BaseModel):
     id: int
     event_request_id: str

@@ -15,6 +15,8 @@ WHERE email_confirmed_at IS NULL
     'admin@example.com',
     'attendee@example.com',
     'event_organiser@example.com',
+    'event_organiser2@example.com',
+    'event_organiser3@example.com',
     'event_operations_manager@example.com',
     'event_coordinator1@example.com',
     'event_coordinator2@example.com',
@@ -30,6 +32,8 @@ FROM (VALUES
     ('admin@example.com',                    'admin'),
     ('attendee@example.com',                 'attendee'),
     ('event_organiser@example.com',          'event_organiser'),
+    ('event_organiser2@example.com',         'event_organiser'),
+    ('event_organiser3@example.com',         'event_organiser'),
     ('event_operations_manager@example.com', 'event_operations_manager'),
     ('event_coordinator1@example.com',       'event_coordinator'),
     ('event_coordinator2@example.com',       'event_coordinator'),
@@ -39,13 +43,31 @@ FROM (VALUES
 JOIN auth.users u ON u.email = r.email
 ON CONFLICT DO NOTHING;
 
--- 3. Check: expect 8 rows, each with confirmed = true. A missing row means
+-- 3. Client organisations (SCRUM-39, needs 0019): organisers 1 and 2 share
+--    Acme so same-organisation viewing can be tested; organiser 3 is in Globex.
+INSERT INTO public.client_organisations (name)
+VALUES ('Acme Events'), ('Globex Corporation')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO public.organisation_members (user_id, organisation_id)
+SELECT u.id, o.id
+FROM (VALUES
+    ('event_organiser@example.com',  'Acme Events'),
+    ('event_organiser2@example.com', 'Acme Events'),
+    ('event_organiser3@example.com', 'Globex Corporation')
+) AS m(email, organisation)
+JOIN auth.users u ON u.email = m.email
+JOIN public.client_organisations o ON o.name = m.organisation
+ON CONFLICT (user_id) DO NOTHING;
+
+-- 4. Check: expect 10 rows, each with confirmed = true. A missing row means
 --    that account has not been registered yet.
 SELECT u.email, s.role, u.email_confirmed_at IS NOT NULL AS confirmed
 FROM auth.users u
 JOIN public.staff_roles s ON s.user_id = u.id
 WHERE u.email IN (
     'admin@example.com', 'attendee@example.com', 'event_organiser@example.com',
+    'event_organiser2@example.com', 'event_organiser3@example.com',
     'event_operations_manager@example.com', 'event_coordinator1@example.com',
     'event_coordinator2@example.com', 'technical_support@example.com',
     'venue_staff@example.com'
