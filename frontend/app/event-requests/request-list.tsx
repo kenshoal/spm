@@ -22,8 +22,10 @@ export function RequestList({
 
   return (
     <div className="space-y-3">
-      {requests.map((request) => (
-        <article
+      {requests.map((request) => {
+        const hasChangeWorkflow = request.status === "Approved" || request.status === "Planning";
+        return (
+          <article
           key={request.id}
           className="grid gap-4 rounded-2xl border border-[#dce4e0] bg-white p-5 shadow-[0_1px_2px_rgba(22,46,37,0.04)] transition hover:border-[#a9c8be] hover:shadow-[0_8px_24px_rgba(22,46,37,0.08)] sm:grid-cols-[1fr_auto] sm:items-center sm:p-6"
         >
@@ -50,15 +52,16 @@ export function RequestList({
               />
             ) : null}
             <Link
-              href={`/event-requests/${request.id}/edit`}
+              href={`/event-requests/${request.id}/edit${hasChangeWorkflow ? "#change-requests" : ""}`}
               className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold text-[#0f6b5b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0f6b5b]"
             >
-              {request.status === "Draft" ? "Continue draft" : "View request"}
+              {request.status === "Draft" ? "Continue draft" : hasChangeWorkflow ? "Change requests" : "View request"}
               <ArrowIcon className="size-5 transition-transform group-hover:translate-x-1" />
             </Link>
           </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </div>
   );
 }

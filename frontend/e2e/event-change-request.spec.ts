@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const EVENT_API = "http://127.0.0.1:8103";
 const cookie = (value: string) => [{ name: "cs_access_token", value, url: "http://127.0.0.1:3100" }];
 
-// AC1-H1, AC2, AC3 (happy): an organiser amendment is reviewed, applied and visible to both related roles
+// AC1-H1, AC1-X1, AC2, AC3 (happy): organiser finds the amendment form from the list and both related roles see the applied change
 test("organiser requests an approved event change and coordinator approves it", async ({ page, request }) => {
   const seeded = await request.post(`${EVENT_API}/__seed`, {
     data: {
@@ -25,7 +25,9 @@ test("organiser requests an approved event change and coordinator approves it", 
   const event = await seeded.json();
 
   await page.context().addCookies(cookie("test-session"));
-  await page.goto(`/event-requests/${event.id}/edit`);
+  await page.goto("/event-requests");
+  await page.getByRole("link", { name: "Change requests" }).click();
+  await expect(page.getByRole("heading", { name: "Request a change" })).toBeVisible();
   await page.getByLabel("Reason for change").fill("Registrations exceeded the initial estimate.");
   await page.getByLabel("Proposed attendance").fill("80");
   await page.getByRole("button", { name: "Request change" }).click();

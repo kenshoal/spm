@@ -3,7 +3,8 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { ChangeRequestForm } from "@/app/event-requests/[id]/change-request-form";
 import { ChangeRequestPanel } from "@/app/coordination/requests/[id]/change-request-panel";
-import type { EventChangeRequest } from "@/lib/event-requests";
+import { RequestList } from "@/app/event-requests/request-list";
+import type { EventChangeRequest, EventRequest } from "@/lib/event-requests";
 
 vi.mock("@/app/event-requests/actions", () => ({
   createEventChangeRequest: vi.fn().mockResolvedValue({ submitted: true }),
@@ -33,6 +34,35 @@ const pending: EventChangeRequest = {
   created_at: "2026-10-04T02:00:00Z",
   decided_at: null,
 };
+
+const approvedEvent: EventRequest = {
+  id: "request-1",
+  organiser_id: "organiser-1",
+  status: "Approved",
+  event_name: "Community Forum",
+  purpose: "Gather neighbours",
+  description: "An approved event",
+  proposed_date_times: ["2026-11-20T02:00:00Z"],
+  expected_attendance: 40,
+  venue_requirements: "Seminar room",
+  accessibility_needs: "Step-free access",
+  equipment_requirements: "Projector",
+  registration_needs: "Online registration",
+  created_at: "2026-10-04T01:00:00Z",
+  updated_at: "2026-10-04T02:00:00Z",
+};
+
+// AC1-X1 (cross-cutting): eligible events expose the change workflow from the organiser list
+test("links approved and planning events to change requests", () => {
+  render(<RequestList requests={[approvedEvent, { ...approvedEvent, id: "request-2", status: "Planning" }, { ...approvedEvent, id: "request-3", status: "Submitted" }]} />);
+
+  const changeLinks = screen.getAllByRole("link", { name: "Change requests" });
+  expect(changeLinks.map((link) => link.getAttribute("href"))).toEqual([
+    "/event-requests/request-1/edit#change-requests",
+    "/event-requests/request-2/edit#change-requests",
+  ]);
+  expect(screen.getByRole("link", { name: "View request" })).toBeDefined();
+});
 
 // AC1-H1 (happy): the organiser can submit a structured attendance amendment
 test("submits an organiser change request", async () => {
