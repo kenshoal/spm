@@ -143,3 +143,82 @@ def record_requirement(
             status.HTTP_500_INTERNAL_SERVER_ERROR, "Database operation failed"
         ) from error
     return RequirementOut.model_validate(response.data[0])
+
+
+def _list_rows(client: Client, column: str, value: str) -> list[RequirementOut]:
+    """One lookup's rows, oldest first (recorded_at, then id, per AC3/AC4)."""
+    response = (
+        client.table("equipment_requirements")
+        .select("*")
+        .eq(column, value)
+        .order("recorded_at")
+        .order("id")
+        .execute()
+    )
+    return [RequirementOut.model_validate(row) for row in response.data]
+
+
+def _is_support(user: User) -> bool:
+    """Technical Support is role-wide (D6) and never asks eventRequestService."""
+    return TECHNICAL_SUPPORT_ROLE in user.roles
+
+
+@router.get("", response_model=list[RequirementOut])
+def review_queue(
+    user: StaffDep,
+    client: ClientDep,
+    status: RequirementStatus = "requested",
+) -> list[RequirementOut]:
+    """Technical Support's review queue across every event (AC4)."""
+    return _list_rows(client, "status", status)
+
+
+@router.get("/by-event/{event_request_id}", response_model=list[RequirementOut])
+def list_for_event(
+    event_request_id: UUID,
+    user: ViewerDep,
+    client: ClientDep,
+    events: EventDep,
+    authorization: Annotated[str | None, Header()] = None,
+) -> list[RequirementOut]:
+    """One event's requirements; Coordinators must currently be assigned."""
+    if not _is_support(user):
+        events.assert_assigned(str(event_request_id), _token(authorization), user.id)
+    return _list_rows(client, "event_request_id", str(event_request_id))
+
+
+@router.get("/{requirement_id}", response_model=RequirementOut)
+def get_requirement(
+    requirement_id: UUID,
+    user: ViewerDep,
+    client: ClientDep,
+    events: EventDep,
+    authorization: Annotated[str | None, Header()] = None,
+) -> RequirementOut:
+    """One requirement; Coordinators must currently be assigned (D7)."""
+    response = (
+        client.table("equipment_requirements")
+        .select("*")
+        .eq("id", str(requirement_id))
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Equipment requirement not found"
+        )
+    row = response.data[0]
+    if not _is_support(user):
+        try:
+            events.assert_assigned(
+                str(row["event_request_id"]), _token(authorization), user.id
+            )
+        except HTTPException as error:
+            # The requirement exists but not for this caller: it must be
+            # indistinguishable from a missing requirement (AC6-X19).
+            if error.status_code == status.HTTP_404_NOT_FOUND:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, "Equipment requirement not found"
+                ) from error
+            raise
+    return RequirementOut.model_validate(row)
