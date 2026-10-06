@@ -1,11 +1,14 @@
+from collections.abc import Callable, Iterator
 from typing import Any
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from requirements_support import C1, FakeEventService, RequirementsStore
 
 from app.config import get_settings
 from app.db import get_client
+from app.event_requests_client import get_event_request_client
 from app.main import app
 
 USER_ID = "11111111-1111-1111-1111-111111111111"
@@ -148,4 +151,49 @@ def client(fake_client: FakeSupabase) -> TestClient:
     app.dependency_overrides[get_client] = lambda: fake_client
     test_client = TestClient(app)
     yield test_client
+    app.dependency_overrides.clear()
+
+
+# --- SCRUM-33 equipment requirements -------------------------------------
+
+
+@pytest.fixture
+def req_store() -> RequirementsStore:
+    return RequirementsStore()
+
+
+@pytest.fixture
+def req_events() -> FakeEventService:
+    return FakeEventService()
+
+
+@pytest.fixture
+def as_user(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., None]]:
+    """Fake authService ``/auth/me``: ``as_user("event_coordinator")`` or
+    ``as_user("event_organiser", "event_coordinator", user_id=C2)``. Any other
+    ``httpx.get`` fails the test: the event client must not use it."""
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    get_settings.cache_clear()
+
+    def set_user(*roles: str, user_id: str = C1) -> None:
+        def fake_get(url: Any, *args: Any, **kwargs: Any) -> httpx.Response:
+            assert str(url).endswith("/auth/me"), f"unexpected httpx.get {url}"
+            return httpx.Response(
+                200, json={"id": user_id, "role": roles[0], "roles": list(roles)}
+            )
+
+        monkeypatch.setattr(httpx, "get", fake_get)
+
+    yield set_user
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def req_api(
+    req_store: RequirementsStore, req_events: FakeEventService
+) -> Iterator[TestClient]:
+    app.dependency_overrides[get_client] = lambda: req_store
+    app.dependency_overrides[get_event_request_client] = req_events.client
+    yield TestClient(app)
     app.dependency_overrides.clear()
