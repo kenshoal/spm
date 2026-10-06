@@ -245,3 +245,17 @@ test("requires a reason before rejecting an event change", async () => {
   expect(state.errors?.reason).toBe("Enter a reason for the organiser.");
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+// AC2-N3 (negative): old decision forms report the deferred workflow rather than a stale-plan error
+test("explains when change decisions are unavailable", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: false,
+    status: 409,
+    json: async () => ({ detail: { code: "CHANGE_DECISIONS_UNAVAILABLE" } }),
+  }));
+
+  const state = await decideEventChangeRequest("request-1", "change-1", "Approved", {}, new FormData());
+
+  expect(state.message).toBe("Approval and rejection are unavailable until arrangement review is supported.");
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});

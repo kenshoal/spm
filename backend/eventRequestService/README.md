@@ -28,7 +28,7 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `POST` | `/event-requests/{id}/completion` | Assigned Coordinator marks a confirmed event complete (`Confirmed` → `Completed`) |
 | `POST` | `/event-requests/{id}/change-requests` | Owning Organiser proposes structured changes to an Approved or Planning event |
 | `GET` | `/event-requests/{id}/change-requests` | Owning Organiser or assigned Coordinator reads the amendment history |
-| `POST` | `/event-requests/{id}/change-requests/{change_id}/decision` | Assigned Coordinator approves or rejects a pending amendment |
+| `POST` | `/event-requests/{id}/change-requests/{change_id}/decision` | Deferred: assigned Coordinator receives 409 `CHANGE_DECISIONS_UNAVAILABLE`; no decision is applied |
 | `GET` | `/health` | Service health check |
 
 Every event-request operation requires `Authorization: Bearer <access-token>`.
@@ -106,11 +106,17 @@ execute these functions; authorised access goes through this API.
 
 SCRUM-35 uses migration `0018_event_change_requests.sql`. An owning Organiser
 may retain one pending structured amendment while an event is Approved or
-Planning. The current event stays unchanged until the latest assigned
-Coordinator approves; approval locks the event row, rejects a stale base plan
-and applies all proposed values in the same transaction as the retained
-decision. Rejection retains its reason without changing the event. Browser
-roles cannot read the change table or execute either workflow function.
+Planning. The current increment retains Pending proposals for the owning
+Organiser and current assigned Coordinator to view. Approval and rejection
+controls are unavailable, and the decision endpoint returns HTTP 409 with
+`detail.code = CHANGE_DECISIONS_UNAVAILABLE` after checking the assignment
+and request. It does not call the decision RPC or change the event/arrangements,
+and no change notifications are sent.
+
+The decision primitive and existing migrations are retained for later integration;
+their presence does not enable API decisions. Browser roles cannot read the
+change table or execute either workflow function. The original SCRUM-35 criteria
+remain outstanding; see [the Sprint 2 blocker](../../docs/sprints/sprint-2/scrum_35_blocker.md).
 
 ## Submission confirmations
 

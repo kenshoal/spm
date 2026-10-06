@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 const EVENT_API = "http://127.0.0.1:8103";
 const cookie = (value: string) => [{ name: "cs_access_token", value, url: "http://127.0.0.1:3100" }];
 
-// AC1-H1, AC1-X1, AC1-X2, AC1-X3, AC2, AC3 (happy): organiser opens the centered event action and both related roles see the applied change
-test("organiser requests an approved event change and coordinator approves it", async ({ page, request }) => {
+// AC1-H1, AC1-X1, AC1-X2, AC1-X3, AC2-X1, AC2-X2, AC2-N2, AC2-N4 (cross-cutting): both related actors see a Pending proposal while the original plan is retained
+test("organiser creates a pending change and coordinator views it without deciding", async ({ page, request }) => {
   await page.setViewportSize({ width: 969, height: 930 });
   const seeded = await request.post(`${EVENT_API}/__seed`, {
     data: {
@@ -50,19 +50,55 @@ test("organiser requests an approved event change and coordinator approves it", 
   await changeDialog.getByLabel("Reason for change").fill("Registrations exceeded the initial estimate.");
   await changeDialog.getByLabel("Proposed attendance").fill("80");
   await changeDialog.getByRole("button", { name: "Request change" }).click();
-  await expect(page.getByText(/waiting for the assigned coordinator/i)).toBeVisible();
+  await expect(page.getByText(/saved for the assigned coordinator to view/i)).toBeVisible();
 
   await page.context().addCookies(cookie("coordinator-session"));
   await page.goto(`/coordination/requests/${event.id}`);
   await expect(page.getByText("Registrations exceeded the initial estimate.")).toBeVisible();
   await expect(page.getByText("80", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Approve change" }).click();
-  const dialog = page.getByRole("dialog", { name: "Approve this change?" });
-  await dialog.getByRole("button", { name: "Approve change" }).click();
-  await expect(page.getByText("Approved", { exact: true }).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve change" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reject change" })).toHaveCount(0);
+  await expect(page.getByText(/approval and rejection are unavailable/i)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
+  const changes = await request.get(`${EVENT_API}/event-requests/${event.id}/change-requests`, {
+    headers: { Authorization: "Bearer coordinator-session" },
+  });
+  expect(changes.status()).toBe(200);
+  const saved = await changes.json();
+  expect(saved).toHaveLength(1);
+  for (const decision of ["Approved", "Rejected"]) {
+    const denied = await request.post(`${EVENT_API}/event-requests/${event.id}/change-requests/${saved[0].id}/decision`, {
+      headers: { Authorization: "Bearer coordinator-session" },
+      data: { decision, reason: "Wait for arrangement assessment." },
+    });
+    expect(denied.status()).toBe(409);
+    expect((await denied.json()).detail.code).toBe("CHANGE_DECISIONS_UNAVAILABLE");
+  }
+  const unchanged = await request.get(`${EVENT_API}/event-requests/${event.id}`, {
+    headers: { Authorization: "Bearer coordinator-session" },
+  });
+  expect(unchanged.status()).toBe(200);
+  expect(await unchanged.json()).toEqual(event);
 
   await page.context().addCookies(cookie("test-session"));
   await page.goto(`/event-requests/${event.id}/edit`);
-  await expect(page.getByText("80", { exact: true })).toBeVisible();
+  await expect(page.getByText("40", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Change request history" })).toBeVisible();
+});
+
+// AC2-N5 (negative): shared event access does not expose another organiser's change workflow
+test("a colleague views the event without change controls or a misleading history error", async ({ page, request }) => {
+  const seeded = await request.post(`${EVENT_API}/__seed`, {
+    data: { status: "Approved", organiser_id: "playwright-user", coordinator_id: "playwright-coordinator", event_name: "SCRUM-35 Shared View" },
+  });
+  expect(seeded.status()).toBe(201);
+  const event = await seeded.json();
+  await page.context().addCookies(cookie("colleague-session"));
+  await page.goto(`/event-requests/${event.id}/edit`);
+  await expect(page.getByRole("heading", { name: event.event_name })).toBeVisible();
+  await expect(page.getByText(/shared by another organiser/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request a change" })).toHaveCount(0);
+  await expect(page.getByText("Change request history is temporarily unavailable.")).toHaveCount(0);
 });

@@ -7,12 +7,12 @@ export function ChangeRequestForm({ eventRequestId }: { eventRequestId: string }
   const action = createEventChangeRequest.bind(null, eventRequestId);
   const [state, formAction, pending] = useActionState(action, {});
   if (state.submitted) {
-    return <div role="status" className="rounded-xl border border-[#bcd9ce] bg-[#edf7f3] px-4 py-3 text-sm text-[#145c40]">Your change request was sent to the assigned coordinator.</div>;
+    return <div role="status" className="rounded-xl border border-[#bcd9ce] bg-[#edf7f3] px-4 py-3 text-sm text-[#145c40]">Your change request was saved for the assigned coordinator to view. The event plan remains unchanged.</div>;
   }
   return (
     <section aria-labelledby="request-change-title" className="rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
       <h2 id="request-change-title" className="pr-16 text-lg font-bold text-[#17211d]">Request a change</h2>
-      <p className="mt-2 text-sm leading-6 text-[#68776f]">Only complete the event details that should change. The current plan stays active until your coordinator approves.</p>
+      <p className="mt-2 text-sm leading-6 text-[#68776f]">Only complete the event details that should change. Submitted proposals remain Pending for coordinator viewing; the current event plan stays unchanged.</p>
       <form action={formAction} className="mt-5 grid gap-4 sm:grid-cols-2">
         <label className="sm:col-span-2 text-sm font-semibold text-[#34463f]">Reason for change
           <textarea name="explanation" required maxLength={2000} rows={4} className="mt-2 w-full rounded-xl border border-[#cfd9d4] px-4 py-3" />

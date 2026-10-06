@@ -349,27 +349,15 @@ createServer(async (request, response) => {
     }
     const changeId = decodeURIComponent(changeDecisionMatch[2]);
     const change = changeRequests.find((item) => item.id === changeId && item.event_request_id === id);
-    const body = await readJson(request);
+    await readJson(request);
     if (!change) {
       send(response, 404, { detail: "Change request not found" });
       return;
     }
-    if (change.status !== "Pending" || (body.decision === "Approved" && record.updated_at !== change.base_event_updated_at)) {
-      send(response, 409, { detail: "Change request already decided or stale" });
-      return;
-    }
-    if (!["Approved", "Rejected"].includes(body.decision) || (body.decision === "Rejected" && !body.reason?.trim())) {
-      send(response, 422, { detail: "Invalid decision" });
-      return;
-    }
-    if (body.decision === "Approved") {
-      Object.assign(record, change.proposed_changes, { updated_at: new Date().toISOString() });
-    }
-    Object.assign(change, {
-      status: body.decision, coordinator_id: user.id,
-      decision_reason: body.reason ?? null, decided_at: new Date().toISOString(),
-    });
-    send(response, 200, change);
+    send(response, 409, { detail: {
+      code: "CHANGE_DECISIONS_UNAVAILABLE",
+      message: "Approval and rejection are unavailable until arrangement review is supported.",
+    } });
     return;
   }
 

@@ -263,6 +263,9 @@ class EventRequestService:
         coordinator_id: str,
         payload: EventChangeDecision,
     ) -> EventChangeRequestResponse:
+        """Retained internal primitive; the public API refuses decisions until
+        arrangement review and change notification workflows are integrated.
+        """
         try:
             row = self.repository.decide_change_request(
                 event_request_id,

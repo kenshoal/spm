@@ -171,6 +171,12 @@ export async function decideEventChangeRequest(
   }
   if (response.status === 401) redirect("/auth");
   if (!response.ok) {
+    if (response.status === 409) {
+      const body = await response.json().catch(() => null);
+      if (body?.detail?.code === "CHANGE_DECISIONS_UNAVAILABLE") {
+        return { message: "Approval and rejection are unavailable until arrangement review is supported." };
+      }
+    }
     return {
       message: response.status === 403
         ? "Only the coordinator currently assigned to this request can decide the change."

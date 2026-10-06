@@ -333,10 +333,26 @@ def decide_change_request(
     change_request_id: UUID,
     payload: EventChangeDecision,
     coordinator_id: CoordinatorDependency,
+    request: Request,
     service: ServiceDependency,
 ) -> EventChangeRequestResponse:
-    return service.decide_change_request(
-        str(event_request_id), str(change_request_id), coordinator_id, payload
+    request_id = str(event_request_id)
+    try:
+        assignment = _coordinator_assignment_service(request).get_current(request_id)
+    except CoordinatorAssignmentNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found") from error
+    if assignment.coordinator_id != coordinator_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the assigned coordinator can access this change")
+    if not any(change.id == str(change_request_id) for change in service.list_change_requests(request_id)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Change request not found")
+    # Pending-only increment: do not call the retained decision RPC until
+    # resource assessment, arrangement updates and notifications are integrated.
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail={
+            "code": "CHANGE_DECISIONS_UNAVAILABLE",
+            "message": "Approval and rejection are unavailable until arrangement review is supported.",
+        },
     )
 
 

@@ -1,4 +1,5 @@
 from copy import deepcopy
+from unittest.mock import Mock
 
 import pytest
 from fastapi import Header
@@ -192,51 +193,6 @@ def test_owner_and_assigned_coordinator_can_view_change_request() -> None:
     assert coordinator_listing.json() == [created.json()]
 
 
-# AC3-H1 (happy): approval atomically applies only proposed values and retains the decision
-def test_assigned_coordinator_approves_and_applies_change() -> None:
-    client, events, event_request_id = eligible_fixture()
-    with client:
-        created = client.post(
-            f"/event-requests/{event_request_id}/change-requests",
-            headers=headers("organiser-1"),
-            json=change_payload(venue_requirements="Lecture theatre"),
-        ).json()
-        response = client.post(
-            f"/event-requests/{event_request_id}/change-requests/{created['id']}/decision",
-            headers=headers("coord-1"),
-            json={"decision": "Approved"},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "Approved"
-    assert response.json()["coordinator_id"] == "coord-1"
-    assert events.rows[event_request_id]["expected_attendance"] == 80
-    assert events.rows[event_request_id]["venue_requirements"] == "Lecture theatre"
-    assert events.rows[event_request_id]["event_name"] == "Community Dinner"
-
-
-# AC4-H1 (happy): rejection retains its reason while leaving the event plan untouched
-def test_assigned_coordinator_rejects_without_changing_event() -> None:
-    client, events, event_request_id = eligible_fixture()
-    with client:
-        created = client.post(
-            f"/event-requests/{event_request_id}/change-requests",
-            headers=headers("organiser-1"),
-            json=change_payload(),
-        ).json()
-        before = deepcopy(events.rows[event_request_id])
-        response = client.post(
-            f"/event-requests/{event_request_id}/change-requests/{created['id']}/decision",
-            headers=headers("coord-1"),
-            json={"decision": "Rejected", "reason": "The capacity is unavailable."},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "Rejected"
-    assert response.json()["decision_reason"] == "The capacity is unavailable."
-    assert events.rows[event_request_id] == before
-
-
 # AC4-N1 (negative): a rejection without a reason is stopped before any write
 def test_rejection_requires_reason() -> None:
     client, events, event_request_id = eligible_fixture()
@@ -299,48 +255,31 @@ def test_former_coordinator_cannot_decide_after_reassignment() -> None:
     assert events.change_request_rows[0]["status"] == "Pending"
 
 
-# AC5-N4 (negative): a decided amendment cannot be decided a second time
-def test_repeated_change_decision_is_refused() -> None:
+@pytest.mark.parametrize("decision", ["Approved", "Rejected"], ids=["AC2-N2", "AC2-N4"])
+# AC2-N2, AC2-N4 (negative): decision calls cannot bypass the Pending-only increment or mutate the plan
+def test_change_decisions_are_unavailable_without_side_effects(decision: str, monkeypatch: pytest.MonkeyPatch) -> None:
     client, events, event_request_id = eligible_fixture()
+    service = client.app.state.event_request_service
+    decision_spy = Mock(side_effect=AssertionError("Deferred decision primitive must not run"))
+    monkeypatch.setattr(service, "decide_change_request", decision_spy)
+    notification_spy = Mock()
+    monkeypatch.setattr("httpx.post", notification_spy)
     with client:
         created = client.post(
             f"/event-requests/{event_request_id}/change-requests",
-            headers=headers("organiser-1"),
-            json=change_payload(),
-        ).json()
-        first = client.post(
-            f"/event-requests/{event_request_id}/change-requests/{created['id']}/decision",
-            headers=headers("coord-1"),
-            json={"decision": "Rejected", "reason": "Keep the current capacity."},
+            headers=headers("organiser-1"), json=change_payload(),
         )
-        second = client.post(
-            f"/event-requests/{event_request_id}/change-requests/{created['id']}/decision",
-            headers=headers("coord-1"),
-            json={"decision": "Approved"},
-        )
-    assert first.status_code == 200
-    assert second.status_code == 409
-    assert events.change_request_rows[0]["status"] == "Rejected"
-    assert events.rows[event_request_id].get("expected_attendance") != 80
-
-
-# AC6-N1 (negative): a later event update makes approval stale with no partial writes
-def test_stale_change_request_cannot_overwrite_newer_event() -> None:
-    client, events, event_request_id = eligible_fixture()
-    with client:
-        created = client.post(
-            f"/event-requests/{event_request_id}/change-requests",
-            headers=headers("organiser-1"),
-            json=change_payload(),
-        ).json()
-        events.rows[event_request_id]["updated_at"] = "2026-10-04T12:00:00+00:00"
-        before = deepcopy(events.rows[event_request_id])
+        assert created.status_code == 201
+        before_event = deepcopy(events.rows[event_request_id])
+        before_changes = deepcopy(events.change_request_rows)
         response = client.post(
-            f"/event-requests/{event_request_id}/change-requests/{created['id']}/decision",
+            f"/event-requests/{event_request_id}/change-requests/{created.json()['id']}/decision",
             headers=headers("coord-1"),
-            json={"decision": "Approved"},
+            json={"decision": decision, "reason": "The proposal needs staff assessment."},
         )
-
     assert response.status_code == 409
-    assert events.rows[event_request_id] == before
-    assert events.change_request_rows[0]["status"] == "Pending"
+    assert response.json()["detail"]["code"] == "CHANGE_DECISIONS_UNAVAILABLE"
+    assert events.rows[event_request_id] == before_event
+    assert events.change_request_rows == before_changes
+    decision_spy.assert_not_called()
+    notification_spy.assert_not_called()

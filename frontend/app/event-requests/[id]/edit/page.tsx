@@ -91,7 +91,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
           ) : (
             <div className="mt-5"><ChangeRequestHistory requests={changeResult.requests} /></div>
           )}
-          {hasPendingChange ? <div role="status" className="mt-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">A change request is waiting for the assigned coordinator.</div> : null}
+          {hasPendingChange ? <div role="status" className="mt-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">A change request is saved for the assigned coordinator to view. Approval and rejection are not available yet; the event plan remains unchanged.</div> : null}
         </div>
       </div>
     );

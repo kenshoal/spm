@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { ChangeRequestForm } from "@/app/event-requests/[id]/change-request-form";
@@ -9,12 +9,8 @@ import type { EventChangeRequest, EventRequest } from "@/lib/event-requests";
 vi.mock("@/app/event-requests/actions", () => ({
   createEventChangeRequest: vi.fn().mockResolvedValue({ submitted: true }),
 }));
-vi.mock("@/app/coordination/actions", () => ({
-  decideEventChangeRequest: vi.fn().mockResolvedValue({}),
-}));
 
 import { createEventChangeRequest } from "@/app/event-requests/actions";
-import { decideEventChangeRequest } from "@/app/coordination/actions";
 
 afterEach(() => {
   cleanup();
@@ -84,29 +80,13 @@ test("submits an organiser change request", async () => {
   );
 });
 
-// AC3-H1 (happy): the assigned coordinator sees and can approve the pending amendment
-test("shows proposed values and confirms approval", async () => {
-  render(<ChangeRequestPanel eventRequestId="request-1" requests={[pending]} />);
+
+// AC2-X2 (cross-cutting): coordinators can inspect Pending proposals without premature decision controls
+test("shows pending changes without approval or rejection controls", () => {
+  render(<ChangeRequestPanel requests={[pending]} />);
+  expect(screen.getByText(pending.explanation)).toBeDefined();
   expect(screen.getByText("80")).toBeDefined();
-  fireEvent.click(screen.getByRole("button", { name: "Approve change" }));
-  const dialog = screen.getByRole("dialog", { name: "Approve this change?" });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Approve change" }));
-
-  await waitFor(() =>
-    expect(decideEventChangeRequest).toHaveBeenCalledWith(
-      "request-1",
-      "change-1",
-      "Approved",
-      {},
-      expect.any(FormData),
-    ),
-  );
-});
-
-// AC4-N1 (negative): rejection cannot be sent without a coordinator reason
-test("requires a reason when rejecting a change", () => {
-  render(<ChangeRequestPanel eventRequestId="request-1" requests={[pending]} />);
-  fireEvent.click(screen.getByRole("button", { name: "Reject change" }));
-  const dialog = screen.getByRole("dialog", { name: "Reject this change?" });
-  expect(within(dialog).getByLabelText("Decision reason").hasAttribute("required")).toBe(true);
+  expect(screen.getByText(/approval and rejection are unavailable/i)).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Approve change" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Reject change" })).toBeNull();
 });
