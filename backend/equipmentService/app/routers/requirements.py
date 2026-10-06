@@ -19,6 +19,7 @@ from app.availability import norm
 from app.db import get_client
 from app.deps import TECHNICAL_SUPPORT_ROLE, User, require_role
 from app.event_requests_client import EventRequestClient, get_event_request_client
+from app.rpc_errors import requirement_rpc_error_to_http
 
 router = APIRouter(prefix="/equipment-requirements", tags=["equipment requirements"])
 
@@ -75,6 +76,18 @@ class RequirementCreate(BaseModel):
     @classmethod
     def _blank_is_none(cls, value: str | None) -> str | None:
         return value if value is not None and value.strip() else None
+
+
+class ArrangementUpdate(BaseModel):
+    """One arrangement change by Technical Support (D3/D4): the caller
+    states the status it saw, so a stale update is refused by the
+    database function under the row lock."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_status: RequirementStatus
+    status: RequirementStatus
+    support_note: str | None = Field(default=None, max_length=2000)
 
 
 def _token(authorization: str | None) -> str:
@@ -222,3 +235,33 @@ def get_requirement(
                 ) from error
             raise
     return RequirementOut.model_validate(row)
+
+
+@router.patch("/{requirement_id}/arrangement", response_model=RequirementOut)
+def update_arrangement(
+    requirement_id: UUID,
+    payload: ArrangementUpdate,
+    user: StaffDep,
+    client: ClientDep,
+) -> RequirementOut:
+    """Technical Support moves one requirement's arrangement along (AC5).
+
+    The transition table lives in transition_equipment_requirement, so the
+    allowed moves, the stale check and the note-only rule are one source of
+    truth applied under the row lock; this endpoint owns the contract and
+    error mapping.
+    """
+    try:
+        response = client.rpc(
+            "transition_equipment_requirement",
+            {
+                "p_requirement_id": str(requirement_id),
+                "p_expected_status": payload.expected_status,
+                "p_new_status": payload.status,
+                "p_support_note": payload.support_note,
+                "p_updated_by": user.id,
+            },
+        ).execute()
+    except APIError as error:
+        raise requirement_rpc_error_to_http(error) from error
+    return RequirementOut.model_validate(response.data)
