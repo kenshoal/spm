@@ -74,11 +74,12 @@ async function EditDraft({ id }: { id: string }) {
     return (
       <div className="mx-auto max-w-4xl">
         <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link>
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">
-          <span>This request is read-only after submission.</span>
-          {canRequestChange ? <ChangeRequestDialog eventRequestId={id} /> : null}
-        </div>
-        <RequestDetails request={result.request} coordinatorAssigned={coordinatorAssigned} />
+        <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request is read-only after submission.</div>
+        <RequestDetails
+          request={result.request}
+          coordinatorAssigned={coordinatorAssigned}
+          action={canRequestChange ? <ChangeRequestDialog eventRequestId={id} /> : null}
+        />
         <div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div>
         <div>
           {changeResult.failed ? (
