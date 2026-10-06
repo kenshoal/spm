@@ -206,3 +206,10 @@ Implementation: `2f9fc24cb2db5c3c766a410fd6b90634af00052e`, following dev reconc
 The internal historical decision verification script is retained for future integration; it was not used to claim an enabled current decision API. No tests here establish resource staff assessments, resource flags, conflict/confirmation blocking, notification delivery, concurrent request races, or the full live-auth application journey. Original Jira AC1 is partial; AC2 lacks decisions; AC3–AC6 remain unfinished.
 
 PR CI is tracked separately on the exact pushed PR head. Passing local checks and shared-database assertions do not substitute for human review, merged integrated verification or full original-story completion.
+
+
+### Latest dev reconciliation — 7 October 2026
+
+While finalising the PR, dev advanced to `ef4b191` (venue blocking, PR #45). Merge `f0e2789` retains both sets of migration documentation; no production SCRUM-35 conflict remained. Repeated event-service tests: 297 passed and Ruff passed. Newly integrated venue-service tests: 260 passed and Ruff passed, using `../eventRequestService/.venv/bin/python -m pytest -q` / the corresponding Ruff from `backend/venueService` because it has no separate local virtual environment. Frontend regression increased to 244 passed; lint and type checking passed. These counts include teammates' merged work and are not additional SCRUM-35 acceptance coverage.
+
+The post-merge `npm run test:e2e` production build and all 26 browser cases also passed. The server logged one `The destination stream closed early` diagnostic during navigation; no assertion failed. Its underlying navigation/stream cause was not separately investigated. PR CI remains a separate exact-head check.
