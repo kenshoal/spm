@@ -137,6 +137,7 @@ def test_get_equipment_invalid_id(client: TestClient, auth) -> None:
     assert response.status_code == 422
 
 
+# AC4-N2 (negative): Attendees cannot read the equipment catalogue (403)
 @pytest.mark.parametrize("path", ["/equipment", f"/equipment/{EQUIPMENT_ID}"])
 def test_equipment_reads_forbidden_for_attendees(
     client: TestClient, auth_attendee, path: str

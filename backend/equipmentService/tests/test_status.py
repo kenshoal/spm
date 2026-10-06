@@ -123,6 +123,7 @@ def test_get_status_not_found(client: TestClient, fake_client, auth) -> None:
     assert response.status_code == 404
 
 
+# AC4-N3 (negative): Attendees cannot read equipment status or its history (403)
 @pytest.mark.parametrize(
     "suffix", ["status", "status/history"]
 )
