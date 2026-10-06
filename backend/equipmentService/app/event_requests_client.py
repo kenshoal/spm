@@ -1,4 +1,4 @@
-"""eventRequestService seam for SCRUM-33 (contract stub, Leg 1).
+"""eventRequestService seam for SCRUM-33.
 
 equipmentService does not read eventRequestService's tables. To learn whether
 the caller coordinates an event, it asks eventRequestService with the
@@ -10,16 +10,18 @@ caller's own token, as venueService does for SCRUM-32:
 
 The transport is injectable so tests can fake eventRequestService without
 touching the ``httpx.get`` stub that conftest.py uses for authService.
-
-Leg 1 stub: the signatures are the agreed contract; behaviour arrives in
-Leg 2 (docs/superpowers/plans/2026-10-06-scrum-33-equipment-requirements.md).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
+from fastapi import HTTPException, status
+from pydantic import ValidationError
+
+from app.config import get_settings
 
 UNAVAILABLE = "Event request service unavailable"
 NOT_FOUND = "Event request not found"
@@ -42,6 +44,32 @@ class EventRequestClient:
             base_url=base_url.rstrip("/"), timeout=10, transport=transport
         )
 
+    def _get(self, path: str, token: str) -> dict[str, Any]:
+        try:
+            response = self._client.get(
+                path, headers={"Authorization": f"Bearer {token}"}
+            )
+        except httpx.HTTPError as error:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, UNAVAILABLE) from error
+        if response.status_code == status.HTTP_401_UNAUTHORIZED:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
+        # 403 is the owning organiser's (or anyone unauthorised's) answer; it
+        # must be indistinguishable from a missing event.
+        if response.status_code in (
+            status.HTTP_403_FORBIDDEN,
+            status.HTTP_404_NOT_FOUND,
+        ):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
+        if not response.is_success:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, UNAVAILABLE)
+        try:
+            body = response.json()
+        except ValueError as error:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, UNAVAILABLE) from error
+        if not isinstance(body, dict):
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, UNAVAILABLE)
+        return body
+
     def assert_assigned(
         self, event_request_id: str, token: str, coordinator_id: str
     ) -> None:
@@ -50,16 +78,41 @@ class EventRequestClient:
         Raises 404 (not assigned, no assignment, unknown event), 401 (invalid
         session) or 502 (unavailable or malformed reply).
         """
-        raise NotImplementedError("SCRUM-33 Leg 2")
+        assignment = self._get(f"/event-requests/{event_request_id}/coordinator", token)
+        assigned = assignment.get("coordinator_id")
+        if not isinstance(assigned, str):
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, UNAVAILABLE)
+        if assigned != coordinator_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
 
     def snapshot_for_coordinator(
         self, event_request_id: str, token: str, coordinator_id: str
     ) -> EventSnapshot:
         """``assert_assigned``, then read the event's status and snapshot."""
-        raise NotImplementedError("SCRUM-33 Leg 2")
+        self.assert_assigned(event_request_id, token, coordinator_id)
+        event = self._get(f"/event-requests/{event_request_id}", token)
+        event_status = event.get("status")
+        if not isinstance(event_status, str):
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, UNAVAILABLE)
+        proposed = event.get("proposed_date_times")
+        return EventSnapshot(
+            status=event_status,
+            event_name=event.get("event_name"),
+            proposed_date_times=(
+                [str(moment) for moment in proposed]
+                if isinstance(proposed, list)
+                else []
+            ),
+        )
 
 
 def get_event_request_client() -> EventRequestClient:
     """FastAPI dependency; the base URL comes from Settings
     (``EVENT_REQUEST_SERVICE_URL``). An invalid setting is a 503."""
-    raise NotImplementedError("SCRUM-33 Leg 2")
+    try:
+        base_url = str(get_settings().event_request_service_url).rstrip("/")
+    except ValidationError as error:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Service is not configured"
+        ) from error
+    return EventRequestClient(base_url)

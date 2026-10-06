@@ -61,6 +61,8 @@ services:
     environment:
       AUTH_SERVICE_URL: http://auth-service:8000
       VENUE_SERVICE_URL: http://venue-service:8000
+      # No depends_on: only requirement recording calls this service.
+      EVENT_REQUEST_SERVICE_URL: http://event-request-service:8000
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
     healthcheck:
