@@ -7,9 +7,8 @@ Night slots (GitHub discussion #50).
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -85,28 +84,3 @@ class Venue(VenueBase):
     status: VenueStatus = VenueStatus.AVAILABLE
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
-
-
-class VenueBookingRequest(BaseModel):
-    """Read projection of a SCRUM-32 venue_booking_requests row for Venue Staff.
-
-    event_name, expected_attendance and requirements_note are the snapshot
-    SCRUM-32 takes at submission, so Venue Staff never read the event request.
-    """
-
-    id: str
-    venue_id: str
-    event_request_id: str
-    event_name: str | None
-    expected_attendance: int | None
-    requirements_note: str | None
-    start_date: date
-    end_date: date
-    slots: list[Slot]
-    status: Literal["pending", "approved", "rejected"]
-    decision_reason: str | None
-    suggested_alternative: str | None
-    requested_by: str
-    decided_by: str | None
-    decided_at: datetime | None
-    created_at: datetime
