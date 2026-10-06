@@ -131,11 +131,22 @@ Counts are test functions per ID (`grep` over the labels); the commands below gi
 
 On 2 October 2026 the AC1 relay was run against the shared Supabase project from the working tree before it was committed: 8 backlog rows were delivered and a new test request was confirmed in 3.8 seconds, and marking one notification read took an Organiser from 9 unread to 8. This was not re-run on `ff62c8c`, so treat it as supporting evidence, not current evidence.
 
+### Checked live on 7 October 2026
+
+Run by Tate Lim's session with Claude on `origin/dev` at `ef4b191` (working tree identical to it), with authService (8001), eventRequestService (8003, `NOTIFICATION_SERVICE_URL` set so the relay ran) and notificationService (8005) started locally from their virtual environments against the **shared Supabase project**. The steps were driven over HTTP with the shared test accounts; no browser was used. Before starting, `event_request_outbox` held 0 unpublished rows, so the relay had no backlog to deliver.
+
+| ID | Steps | Actual result | Execution status |
+| --- | --- | --- | --- |
+| AC1-H1 | `event_organiser@example.com` submitted request `776689b2-2781-4c95-a474-29cd0464d081` (`POST /event-requests/submissions`, 201). | The Organiser's inbox held one `event_request_submitted` notice for that request, delivered by the outbox relay within the 30 s wait. | Pass (live, API) |
+| AC2-H1 | `event_operations_manager@example.com` assigned `event_coordinator1@example.com` (`POST /event-requests/{id}/coordinator`, 201). | The Coordinator's inbox held one `coordinator_assigned` notice for that request. | Pass (live, API) |
+| AC3-H1 | The Coordinator started review (200, `Under Review`), then recorded `Changes Requested` with a reason (200). | The Organiser's inbox held one `clarification_requested` notice whose payload carried the request id and the exact reason; the Coordinator's inbox held no clarification notice. | Pass (live, API) |
+
+Limitations: one run; the Organiser's inbox *page* was not opened, so the card wording and link were not seen live (that layer is covered by component and browser tests with a fake API); the notice payloads still carry no event name. The run left test rows in the shared project: request `776689b2-2781-4c95-a474-29cd0464d081` (now `Changes Requested`), one coordinator assignment, one published outbox row and three notifications. The script was a throwaway in the session scratchpad and is not committed.
+
 ### Not yet verified
 
 | Check | Status | Why and how |
 | --- | --- | --- |
-| **AC3 end to end against the live stack** (assign, start review, request clarification, read the notice in the Organiser's inbox) | Not executed | It writes a request, a decision and a notification to the shared Supabase project, so it was left for the story owner to run. Steps: submit a request as an Organiser, assign a Coordinator, start review and record `Changes Requested` with a reason, then sign in as that Organiser and open Notifications. |
 | Retry of an AC1 notice while notificationService is down, against the live stack | Not executed | Covered by unit tests only. |
 | Pull-request CI and reviewer approval | Not executed | The branch is pushed; the pull request has not been opened from this session. |
 
