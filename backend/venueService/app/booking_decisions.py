@@ -52,6 +52,8 @@ class DecisionDetails(BaseModel):
 
     @model_validator(mode="after")
     def rejection_details_only(self) -> "DecisionDetails":
+        if self.decision == "rejected" and self.reason is None:
+            raise ValueError("A rejection needs a reason")
         if self.decision == "approved" and (
             self.reason is not None or self.suggested_alternative is not None
         ):
