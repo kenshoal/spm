@@ -406,6 +406,8 @@ Two tests were corrected during the Red run because they would have passed vacuo
 
 **Database Green run, 7 October 2026 (shared dev).** Yang applied migration `0021` to the shared development project in the Supabase SQL Editor, then ran [`database/verify_equipment_requirements.sql`](../../database/verify_equipment_requirements.sql) there: the editor reported "Success. No rows returned" — the script compiled fully (so the table exists), reached the final `SCRUM-33 verify: all equipment_requirements cases passed` NOTICE, and rolled its one transaction back, leaving no data. All 28 database-layer cases above are recorded Green from this run. This is the only real-database evidence so far; the five manual API cases remain to be run on the Docker Compose stack.
 
+**Post-merge re-run, 7 October 2026 (automated).** After merging `dev` (SCRUM-39 scoped resource access and SCRUM-23 venue blocks, up to `ef4b191`) and switching the router to the shared `EVENT_COORDINATOR_ROLE` constant, the whole suite was re-run from `backend/equipmentService`: `ruff check .` clean, `python -m pytest -q` **252 passed, 0 failed** (the 248 SCRUM-33 Green-run tests plus SCRUM-39's four merged tests). `backend/eventRequestService` also passes (272). The event-client contract cases AC6-X5 to AC6-N5 still pass unchanged against the post-SCRUM-39 code, so the pinned `/coordinator` contract is intact.
+
 ## Disclosures
 
 - Test cases, tests, the SQL script and the contract stub were drafted by Claude (Cowork) from the approved ACs, before any implementation. The test design was reviewed and approved by **Yang Xue on 7 October 2026**, including D9 and D10.
