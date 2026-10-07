@@ -113,6 +113,31 @@ export interface EventReviewDecision {
   responded_at: string | null;
 }
 
+export type EventChangeRequestStatus = "Pending" | "Approved" | "Rejected";
+
+export interface EventChangeRequest {
+  id: string;
+  event_request_id: string;
+  organiser_id: string;
+  status: EventChangeRequestStatus;
+  explanation: string;
+  proposed_changes: Partial<
+    Pick<
+      EventRequest,
+      | "proposed_date_times"
+      | "expected_attendance"
+      | "venue_requirements"
+      | "equipment_requirements"
+      | "registration_needs"
+    >
+  >;
+  base_event_updated_at: string;
+  coordinator_id: string | null;
+  decision_reason: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
+
 const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
 async function request(path: string): Promise<Response> {
@@ -163,6 +188,17 @@ export async function listReviewDecisions(
   return response.status === 404
     ? []
     : response.json() as Promise<EventReviewDecision[]>;
+}
+
+export async function listEventChangeRequests(
+  eventRequestId: string,
+): Promise<EventChangeRequest[]> {
+  const response = await request(
+    `/event-requests/${encodeURIComponent(eventRequestId)}/change-requests`,
+  );
+  return response.status === 404
+    ? []
+    : response.json() as Promise<EventChangeRequest[]>;
 }
 
 export function groupRequests(

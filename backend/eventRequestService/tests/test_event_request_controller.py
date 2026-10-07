@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
@@ -28,6 +29,7 @@ class FakeEventRequestRepository:
         self.rows: dict[str, dict[str, Any]] = {}
         self.coordinator_assignment_rows: list[dict[str, Any]] = []
         self.review_decision_rows: list[dict[str, Any]] = []
+        self.change_request_rows: list[dict[str, Any]] = []
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()
@@ -222,6 +224,85 @@ class FakeEventRequestRepository:
             for row in reversed(self.review_decision_rows)
             if row["event_request_id"] == event_request_id
         ]
+
+    def create_change_request(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        explanation: str,
+        proposed_changes: dict[str, Any],
+    ) -> dict[str, Any]:
+        row = self.rows.get(event_request_id)
+        if row is None or row["organiser_id"] != organiser_id:
+            raise EventRequestRpcError("Event request not found", "P0002")
+        if row["status"] not in {"Approved", "Planning"}:
+            raise EventRequestRpcError("Change request not allowed", "P0004")
+        if any(
+            item["event_request_id"] == event_request_id and item["status"] == "Pending"
+            for item in self.change_request_rows
+        ):
+            raise EventRequestRpcError("Pending change request exists", "P0004")
+        if all(row.get(key) == value for key, value in proposed_changes.items()):
+            raise EventRequestRpcError("No value changed", "P0004")
+        now = datetime.now(UTC).isoformat()
+        change = {
+            "id": str(uuid4()),
+            "event_request_id": event_request_id,
+            "organiser_id": organiser_id,
+            "status": "Pending",
+            "explanation": explanation,
+            "proposed_changes": deepcopy(proposed_changes),
+            "base_event_updated_at": row["updated_at"],
+            "coordinator_id": None,
+            "decision_reason": None,
+            "created_at": now,
+            "decided_at": None,
+        }
+        self.change_request_rows.append(change)
+        return deepcopy(change)
+
+    def list_change_requests(self, event_request_id: str) -> list[dict[str, Any]]:
+        return [
+            deepcopy(row)
+            for row in reversed(self.change_request_rows)
+            if row["event_request_id"] == event_request_id
+        ]
+
+    def decide_change_request(
+        self,
+        event_request_id: str,
+        change_request_id: str,
+        coordinator_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> dict[str, Any]:
+        event = self.rows.get(event_request_id)
+        change = next(
+            (row for row in self.change_request_rows if row["id"] == change_request_id),
+            None,
+        )
+        if event is None or change is None or change["event_request_id"] != event_request_id:
+            raise EventRequestRpcError("Change request not found", "P0002")
+        assignments = [
+            row for row in self.coordinator_assignment_rows
+            if row["event_request_id"] == event_request_id
+        ]
+        if not assignments or assignments[-1]["coordinator_id"] != coordinator_id:
+            raise EventRequestRpcError("Not assigned", "P0003")
+        if change["status"] != "Pending" or event["updated_at"] != change["base_event_updated_at"]:
+            raise EventRequestRpcError("Change request is stale", "P0004")
+        if decision == "Approved":
+            event.update(deepcopy(change["proposed_changes"]))
+            event["updated_at"] = datetime.now(UTC).isoformat()
+        change.update(
+            {
+                "status": decision,
+                "coordinator_id": coordinator_id,
+                "decision_reason": reason,
+                "decided_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        return deepcopy(change)
 
     def respond_to_clarification(
         self, event_request_id: str, organiser_id: str, response: str

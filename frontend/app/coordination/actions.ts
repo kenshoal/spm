@@ -10,6 +10,7 @@ export interface TransitionState {
 }
 
 export type ReviewDecision = "Approved" | "Changes Requested" | "Rejected";
+export type ChangeDecision = "Approved" | "Rejected";
 
 const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
@@ -137,6 +138,57 @@ export async function decideEventRequest(
 
   revalidatePath("/coordination/requests");
   revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath("/event-requests");
+  return {};
+}
+
+export async function decideEventChangeRequest(
+  eventRequestId: string,
+  changeRequestId: string,
+  decision: ChangeDecision,
+  previousState: TransitionState,
+  formData: FormData,
+): Promise<TransitionState> {
+  void previousState;
+  await requireRole("event_coordinator");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (decision === "Rejected" && !reason) {
+    return { message: "Explain why the change is rejected.", errors: { reason: "Enter a reason for the organiser." } };
+  }
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/change-requests/${encodeURIComponent(changeRequestId)}/decision`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ decision, reason: reason || null }),
+      },
+    );
+  } catch {
+    return { message: "The change decision could not be recorded. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    if (response.status === 409) {
+      const body = await response.json().catch(() => null);
+      if (body?.detail?.code === "CHANGE_DECISIONS_UNAVAILABLE") {
+        return { message: "Approval and rejection are unavailable until arrangement review is supported." };
+      }
+    }
+    return {
+      message: response.status === 403
+        ? "Only the coordinator currently assigned to this request can decide the change."
+        : response.status === 409
+          ? "This change is already decided or the event plan has changed. Refresh before deciding."
+          : response.status === 422
+            ? "Check the decision details and try again."
+            : "The change decision could not be recorded. Please try again.",
+    };
+  }
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
   revalidatePath("/event-requests");
   return {};
 }

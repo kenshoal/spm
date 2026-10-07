@@ -21,6 +21,7 @@ import {
   cancelEventRequest,
   completeEventRequest,
   decideEventRequest,
+  decideEventChangeRequest,
   resumeEventRequestReview,
   startEventRequestReview,
 } from "@/app/coordination/actions";
@@ -211,4 +212,50 @@ test("redirects to sign-in when the session is no longer valid", async () => {
   await expect(
     cancelEventRequest("request-1", {}, new FormData()),
   ).rejects.toThrow("NEXT_REDIRECT");
+});
+
+// AC3-H1 (happy): the coordinator decision targets the exact retained change request
+test("approves an event change request", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const state = await decideEventChangeRequest(
+    "request/1", "change/1", "Approved", {}, new FormData(),
+  );
+
+  expect(fetchMock.mock.calls[0][0]).toBe(
+    "http://127.0.0.1:8003/event-requests/request%2F1/change-requests/change%2F1/decision",
+  );
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+    decision: "Approved",
+    reason: null,
+  });
+  expect(state).toEqual({});
+});
+
+// AC4-N1 (negative): a blank rejection reason never reaches the API
+test("requires a reason before rejecting an event change", async () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+
+  const state = await decideEventChangeRequest(
+    "request-1", "change-1", "Rejected", {}, new FormData(),
+  );
+
+  expect(state.errors?.reason).toBe("Enter a reason for the organiser.");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+// AC2-N3 (negative): old decision forms report the deferred workflow rather than a stale-plan error
+test("explains when change decisions are unavailable", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: false,
+    status: 409,
+    json: async () => ({ detail: { code: "CHANGE_DECISIONS_UNAVAILABLE" } }),
+  }));
+
+  const state = await decideEventChangeRequest("request-1", "change-1", "Approved", {}, new FormData());
+
+  expect(state.message).toBe("Approval and rejection are unavailable until arrangement review is supported.");
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
 });

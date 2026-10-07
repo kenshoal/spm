@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 const records = new Map();
 const assignments = [];
 const reviewDecisions = [];
+const changeRequests = [];
 let nextAssignmentId = 1;
 let nextDecisionId = 1;
 const port = 8103;
@@ -223,11 +224,14 @@ createServer(async (request, response) => {
   const decisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decision$/);
   const decisionsMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decisions$/);
   const clarificationMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/clarification-response$/);
+  const changeDecisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/change-requests\/([^/]+)\/decision$/);
+  const changeRequestsMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/change-requests$/);
   const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
   const match = url.pathname.match(/^\/event-requests\/([^/]+)$/);
   const id = decodeURIComponent(
     coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? decisionMatch?.[1]
-      ?? decisionsMatch?.[1] ?? clarificationMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
+      ?? decisionsMatch?.[1] ?? clarificationMatch?.[1] ?? changeDecisionMatch?.[1]
+      ?? changeRequestsMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
   );
   const record = records.get(id);
 
@@ -295,6 +299,65 @@ createServer(async (request, response) => {
 
   if (!id || !record) {
     send(response, 404, { detail: "Event request not found" });
+    return;
+  }
+
+  if (changeRequestsMatch && request.method === "GET") {
+    const assigned = latestAssignmentFor(id)?.coordinator_id === user.id;
+    const canRead =
+      (user.role === "event_organiser" && record.organiser_id === user.id)
+      || (user.role === "event_coordinator" && assigned);
+    if (!canRead) {
+      send(response, ["event_organiser", "event_coordinator"].includes(user.role) ? 404 : 403, { detail: "Event request not found" });
+      return;
+    }
+    send(response, 200, changeRequests.filter((change) => change.event_request_id === id).toReversed());
+    return;
+  }
+
+  if (changeRequestsMatch && request.method === "POST") {
+    if (user.role !== "event_organiser" || record.organiser_id !== user.id) {
+      send(response, user.role === "event_organiser" ? 404 : 403, { detail: "Event request not found" });
+      return;
+    }
+    if (!["Approved", "Planning"].includes(record.status)
+      || changeRequests.some((change) => change.event_request_id === id && change.status === "Pending")) {
+      send(response, 409, { detail: "Change request not allowed" });
+      return;
+    }
+    const body = await readJson(request);
+    const { explanation, ...proposed_changes } = body;
+    if (!explanation?.trim() || Object.keys(proposed_changes).length === 0) {
+      send(response, 422, { detail: "Invalid change request" });
+      return;
+    }
+    const change = {
+      id: randomUUID(), event_request_id: id, organiser_id: user.id,
+      status: "Pending", explanation: explanation.trim(), proposed_changes,
+      base_event_updated_at: record.updated_at, coordinator_id: null,
+      decision_reason: null, created_at: new Date().toISOString(), decided_at: null,
+    };
+    changeRequests.push(change);
+    send(response, 201, change);
+    return;
+  }
+
+  if (changeDecisionMatch && request.method === "POST") {
+    if (user.role !== "event_coordinator" || latestAssignmentFor(id)?.coordinator_id !== user.id) {
+      send(response, 403, { detail: "Only the assigned Coordinator can decide this change" });
+      return;
+    }
+    const changeId = decodeURIComponent(changeDecisionMatch[2]);
+    const change = changeRequests.find((item) => item.id === changeId && item.event_request_id === id);
+    await readJson(request);
+    if (!change) {
+      send(response, 404, { detail: "Change request not found" });
+      return;
+    }
+    send(response, 409, { detail: {
+      code: "CHANGE_DECISIONS_UNAVAILABLE",
+      message: "Approval and rejection are unavailable until arrangement review is supported.",
+    } });
     return;
   }
 
