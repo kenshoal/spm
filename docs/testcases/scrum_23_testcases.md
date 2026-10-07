@@ -145,7 +145,7 @@ Build: `feat/venue-blocking` at `c352c51` plus the PR #45 review follow-ups (dev
 | AC4-P6 | Green | Banner shown; operating cells Unavailable; dated block reasons kept; no Available cell | Pass | same | same | Red observed first (cell was `open`), then Green: `block-calendar.test.ts`, `venue-blocks.test.tsx` |
 | AC4-N1–N3, P5 | Green | Outage, not-found, failed block lookup (no open calendar) and empty catalogue each reported | Pass | same | same | `frontend/__tests__/venue-blocks.test.tsx` |
 | AC2b, AC3 | — | — | Blocked | — | — | Wait on SCRUM-15 venue bookings and SCRUM-37 delivery. |
-| E2E journey | Planned | — | Not executed | — | — | Needs block endpoints in the shared `e2e/support/venue-api.mjs`. |
+| E2E journey | Green | Venue Staff reach Venue blocks from the menu, see a slot error, block a venue, see it Blocked with its reason on the calendar; a Coordinator's dated search no longer offers that slot but still offers the other; Coordinators are redirected from `/venue-blocks` | Pass | `feat/venue-booking-decision` at 9a0859d + working tree, local | Claude Code, 8 Oct 2026 | `CI=1 npx playwright test`: 30 passed. `frontend/e2e/venue-blocking.spec.ts`; block endpoints added to the shared `e2e/support/venue-api.mjs`. Lands with the SCRUM-15 PR |
 
 **Red phase:** the new tests were written first and failed because the modules did not exist. Under `testing.md` §5 that is not a valid behavioural Red, so no Red evidence is claimed.
 
