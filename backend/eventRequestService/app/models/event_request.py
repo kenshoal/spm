@@ -2,7 +2,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class EventRequestStatus(str, Enum):
@@ -158,6 +165,69 @@ class EventClarificationResponse(BaseModel):
     response: str = Field(min_length=1, max_length=2_000)
 
 
+class EventChangeRequestStatus(str, Enum):
+    PENDING = "Pending"
+    APPROVED = "Approved"
+    REJECTED = "Rejected"
+
+
+class EventChangeRequestCreate(BaseModel):
+    """The canonical fields an organiser may propose changing after approval."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    explanation: str = Field(min_length=1, max_length=2_000)
+    proposed_date_times: list[AwareDatetime] | None = Field(default=None, min_length=1)
+    expected_attendance: int | None = Field(default=None, gt=0)
+    venue_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
+    equipment_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
+    registration_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
+
+    @model_validator(mode="after")
+    def proposed_change_is_required(self) -> "EventChangeRequestCreate":
+        proposed = self.model_dump(exclude={"explanation"}, exclude_none=True)
+        if not proposed:
+            raise ValueError("at least one event field must be changed")
+        return self
+
+    def proposed_changes(self) -> dict[str, Any]:
+        return self.model_dump(
+            exclude={"explanation"}, exclude_none=True, mode="json"
+        )
+
+
+class EventChangeDecision(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    decision: EventChangeRequestStatus
+    reason: str | None = Field(default=None, max_length=2_000)
+
+    @field_validator("decision")
+    @classmethod
+    def decision_must_be_final(
+        cls, value: EventChangeRequestStatus
+    ) -> EventChangeRequestStatus:
+        if value not in {
+            EventChangeRequestStatus.APPROVED,
+            EventChangeRequestStatus.REJECTED,
+        }:
+            raise ValueError("decision must be Approved or Rejected")
+        return value
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def blank_reason_is_missing(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def rejection_requires_reason(self) -> "EventChangeDecision":
+        if self.decision == EventChangeRequestStatus.REJECTED and not self.reason:
+            raise ValueError("a rejection reason is required")
+        return self
+
+
 class EventRequestResponse(EventRequestFields):
     id: str
     organiser_id: str
@@ -183,6 +253,20 @@ class EventReviewDecisionResponse(BaseModel):
     decided_at: datetime
     organiser_response: str | None = None
     responded_at: datetime | None = None
+
+
+class EventChangeRequestResponse(BaseModel):
+    id: str
+    event_request_id: str
+    organiser_id: str
+    status: EventChangeRequestStatus
+    explanation: str
+    proposed_changes: dict[str, Any]
+    base_event_updated_at: datetime
+    coordinator_id: str | None = None
+    decision_reason: str | None = None
+    created_at: datetime
+    decided_at: datetime | None = None
 
 
 class HealthResponse(BaseModel):

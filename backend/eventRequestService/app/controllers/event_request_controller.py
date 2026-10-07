@@ -9,6 +9,9 @@ from pydantic import ValidationError
 from app.config import get_settings
 from app.models.event_request import (
     AttendeeEventResponse,
+    EventChangeDecision,
+    EventChangeRequestCreate,
+    EventChangeRequestResponse,
     EventClarificationResponse,
     EventRequestCreate,
     EventRequestResponse,
@@ -275,6 +278,82 @@ def list_review_decisions(
     if roles.isdisjoint({"event_organiser", "event_coordinator"}):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
+
+
+@router.post(
+    "/{event_request_id}/change-requests",
+    response_model=EventChangeRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_change_request(
+    event_request_id: UUID,
+    payload: EventChangeRequestCreate,
+    organiser_id: OrganiserDependency,
+    service: ServiceDependency,
+) -> EventChangeRequestResponse:
+    return service.create_change_request(str(event_request_id), organiser_id, payload)
+
+
+@router.get(
+    "/{event_request_id}/change-requests",
+    response_model=list[EventChangeRequestResponse],
+)
+def list_change_requests(
+    event_request_id: UUID,
+    caller: CallerDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> list[EventChangeRequestResponse]:
+    request_id = str(event_request_id)
+    roles = set(caller.roles)
+    if EVENT_ORGANISER_ROLE in roles:
+        try:
+            service.get(request_id, caller.id)
+            return service.list_change_requests(request_id)
+        except EventRequestNotFoundError:
+            pass
+    if EVENT_COORDINATOR_ROLE in roles:
+        try:
+            assignment = _coordinator_assignment_service(request).get_current(request_id)
+        except CoordinatorAssignmentNotFoundError as error:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found") from error
+        if assignment.coordinator_id == caller.id:
+            return service.list_change_requests(request_id)
+    if roles.isdisjoint({EVENT_ORGANISER_ROLE, EVENT_COORDINATOR_ROLE}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
+
+
+@router.post(
+    "/{event_request_id}/change-requests/{change_request_id}/decision",
+    response_model=EventChangeRequestResponse,
+)
+def decide_change_request(
+    event_request_id: UUID,
+    change_request_id: UUID,
+    payload: EventChangeDecision,
+    coordinator_id: CoordinatorDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> EventChangeRequestResponse:
+    request_id = str(event_request_id)
+    try:
+        assignment = _coordinator_assignment_service(request).get_current(request_id)
+    except CoordinatorAssignmentNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found") from error
+    if assignment.coordinator_id != coordinator_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the assigned coordinator can access this change")
+    if not any(change.id == str(change_request_id) for change in service.list_change_requests(request_id)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Change request not found")
+    # Pending-only increment: do not call the retained decision RPC until
+    # resource assessment, arrangement updates and notifications are integrated.
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        detail={
+            "code": "CHANGE_DECISIONS_UNAVAILABLE",
+            "message": "Approval and rejection are unavailable until arrangement review is supported.",
+        },
+    )
 
 
 @router.patch("/{event_request_id}", response_model=EventRequestResponse)

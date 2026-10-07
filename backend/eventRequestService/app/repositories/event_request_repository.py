@@ -58,6 +58,18 @@ class EventRequestRepository(Protocol):
         self, event_request_id: str, coordinator_id: str
     ) -> dict[str, Any]: ...
 
+    def create_change_request(
+        self, event_request_id: str, organiser_id: str, explanation: str,
+        proposed_changes: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
+    def list_change_requests(self, event_request_id: str) -> list[dict[str, Any]]: ...
+
+    def decide_change_request(
+        self, event_request_id: str, change_request_id: str,
+        coordinator_id: str, decision: str, reason: str | None
+    ) -> dict[str, Any]: ...
+
     def update_for_organiser(
         self,
         event_request_id: str,
@@ -297,6 +309,69 @@ class SupabaseEventRequestRepository:
                 "select": "*",
             },
         )
+
+    def create_change_request(
+        self,
+        event_request_id: str,
+        organiser_id: str,
+        explanation: str,
+        proposed_changes: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "create_event_change_request",
+            {
+                "p_event_request_id": event_request_id,
+                "p_organiser_id": organiser_id,
+                "p_explanation": explanation,
+                "p_proposed_changes": proposed_changes,
+            },
+        )
+
+    def list_change_requests(self, event_request_id: str) -> list[dict[str, Any]]:
+        return self._request_table(
+            "GET",
+            "/event_change_requests",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "created_at.desc",
+                "select": "*",
+            },
+        )
+
+    def decide_change_request(
+        self,
+        event_request_id: str,
+        change_request_id: str,
+        coordinator_id: str,
+        decision: str,
+        reason: str | None,
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "decide_event_change_request",
+            {
+                "p_event_request_id": event_request_id,
+                "p_change_request_id": change_request_id,
+                "p_coordinator_id": coordinator_id,
+                "p_decision": decision,
+                "p_reason": reason,
+            },
+        )
+
+    def _call_rpc(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            response = self._client.post(
+                f"/rpc/{name}",
+                json=payload,
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
 
     def respond_to_clarification(
         self, event_request_id: str, organiser_id: str, response: str

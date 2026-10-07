@@ -30,6 +30,82 @@ def response_row(**overrides: object) -> dict[str, object]:
     }
 
 
+def change_response_row(**overrides: object) -> dict[str, object]:
+    return {
+        "id": "73fe8745-8147-48ee-b565-41e34811373c",
+        "event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
+        "organiser_id": "843fb1b8-0e0b-4af3-a237-5fe862ce9e36",
+        "status": "Pending",
+        "explanation": "Increase attendance",
+        "proposed_changes": {"expected_attendance": 80},
+        "base_event_updated_at": "2026-10-04T01:00:00+00:00",
+        "coordinator_id": None,
+        "decision_reason": None,
+        "created_at": "2026-10-04T02:00:00+00:00",
+        "decided_at": None,
+        **overrides,
+    }
+
+
+# AC1-H1 (happy): repository creation targets the atomic change-request function
+def test_create_change_request_posts_expected_rpc_payload() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=change_response_row())
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    row = repository.create_change_request(
+        "request-1", "organiser-1", "Increase attendance", {"expected_attendance": 80}
+    )
+
+    assert captured == {
+        "path": "/rest/v1/rpc/create_event_change_request",
+        "body": {
+            "p_event_request_id": "request-1",
+            "p_organiser_id": "organiser-1",
+            "p_explanation": "Increase attendance",
+            "p_proposed_changes": {"expected_attendance": 80},
+        },
+    }
+    assert row["status"] == "Pending"
+
+
+# AC3-H1 (happy): repository decisions target the exact event and amendment atomically
+def test_decide_change_request_posts_expected_rpc_payload() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=change_response_row(status="Approved"))
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co", "sb_secret_test", transport=httpx.MockTransport(handler)
+    )
+    row = repository.decide_change_request(
+        "request-1", "change-1", "coord-1", "Approved", None
+    )
+
+    assert captured == {
+        "path": "/rest/v1/rpc/decide_event_change_request",
+        "body": {
+            "p_event_request_id": "request-1",
+            "p_change_request_id": "change-1",
+            "p_coordinator_id": "coord-1",
+            "p_decision": "Approved",
+            "p_reason": None,
+        },
+    }
+    assert row["status"] == "Approved"
+
+
 # Purpose: Verifies draft creation uses the server-only key and organiser identity.
 def test_create_sends_expected_supabase_request() -> None:
     captured: dict[str, object] = {}
