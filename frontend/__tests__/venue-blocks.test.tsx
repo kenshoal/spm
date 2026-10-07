@@ -2,10 +2,11 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({ requireRole: vi.fn() }));
-const data = vi.hoisted(() => ({ listVenues: vi.fn(), listVenueBlocks: vi.fn() }));
+const data = vi.hoisted(() => ({ listVenues: vi.fn(), listVenueBlocks: vi.fn(), listApprovedBookings: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requireRole: auth.requireRole }));
 vi.mock("@/lib/venues", () => ({ listVenues: data.listVenues }));
 vi.mock("@/lib/venue-blocks", () => ({ listVenueBlocks: data.listVenueBlocks }));
+vi.mock("@/lib/venue-bookings", () => ({ listApprovedBookings: data.listApprovedBookings }));
 vi.mock("@/app/venue-blocks/actions", () => ({ createVenueBlock: vi.fn() }));
 vi.mock("@/app/auth/actions", () => ({ logout: vi.fn() }));
 
@@ -54,6 +55,8 @@ beforeEach(() => {
   data.listVenues.mockResolvedValue([hall, studio]);
   data.listVenueBlocks.mockReset();
   data.listVenueBlocks.mockResolvedValue([repairs]);
+  data.listApprovedBookings.mockReset();
+  data.listApprovedBookings.mockResolvedValue([]);
 });
 
 // AC4-H1 (happy): the selected venue's covered cells read "Blocked" with the reason
@@ -194,4 +197,30 @@ test("explains when the catalogue has no venues", async () => {
   expect(screen.getByText("No venues in the catalogue yet.")).toBeDefined();
   expect(data.listVenueBlocks).not.toHaveBeenCalled();
   expect(screen.queryByRole("form", { name: "Block a venue" })).toBeNull();
+});
+
+// AC3-H4 (happy): the calendar shows the selected venue's approved bookings as booked
+test("shows approved bookings for the selected venue as booked", async () => {
+  data.listApprovedBookings.mockResolvedValue([
+    { id: "r1", venue_id: "v1", event_name: "Open day", start_date: "2026-10-22", end_date: "2026-10-22", slots: ["PM"], status: "approved" },
+    { id: "r2", venue_id: "v2", event_name: "Other venue", start_date: "2026-10-22", end_date: "2026-10-22", slots: ["AM"], status: "approved" },
+  ]);
+
+  await openPage({ venue: "v1" });
+
+  const row = within(screen.getByRole("table")).getByRole("row", { name: /Thu 22 Oct/ });
+  expect(within(row).getByText("Booked")).toBeDefined();
+  expect(within(row).getByText("Booked — Open day")).toBeDefined();
+  expect(within(row).getAllByText("Available")).toHaveLength(1);
+  expect(screen.queryByText("Booked — Other venue")).toBeNull();
+});
+
+// AC3-N1 (negative): a failed booking lookup never shows an all-available calendar
+test("never shows an open calendar when bookings could not be loaded", async () => {
+  data.listApprovedBookings.mockRejectedValue(new Error("down"));
+
+  await openPage({ venue: "v1" });
+
+  expect(screen.getByRole("alert").textContent).toContain("Bookings for this venue could not be loaded.");
+  expect(screen.queryByRole("table")).toBeNull();
 });

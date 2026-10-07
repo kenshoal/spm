@@ -1,10 +1,12 @@
 // Pure month-calendar model for SCRUM-23 AC4. Dates are plain YYYY-MM-DD
 // strings compared lexically, so no time zone can shift a block by a day.
 import { blockReasonText, type VenueBlock } from "./venue-block-options";
+import type { VenueBooking } from "./venue-booking-options";
 import { SLOTS, type Slot } from "./venue-options";
 
 // "unavailable": the venue is blocked as a whole in the catalogue (status "blocked").
-export type CellState = "blocked" | "open" | "unavailable" | "not_offered";
+// "booked": an approved booking request holds the slot (SCRUM-15).
+export type CellState = "blocked" | "booked" | "open" | "unavailable" | "not_offered";
 
 export interface CalendarCell {
   slot: Slot;
@@ -46,10 +48,12 @@ export function buildBlockCalendar(
   venue: { id: string; operating_slots: readonly Slot[]; status?: "available" | "blocked" },
   blocks: readonly VenueBlock[],
   month: string,
+  bookings: readonly VenueBooking[] = [],
 ): BlockCalendar {
   const [year, monthNumber] = month.split("-").map(Number);
   const dayCount = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
   const active = blocks.filter((block) => block.status === "active" && block.venue_id === venue.id);
+  const approved = bookings.filter((booking) => booking.status === "approved" && booking.venue_id === venue.id);
 
   const days: CalendarDay[] = [];
   for (let day = 1; day <= dayCount; day += 1) {
@@ -58,8 +62,13 @@ export function buildBlockCalendar(
       const reasons = active
         .filter((block) => block.start_date <= date && date <= block.end_date && block.slots.includes(slot))
         .map(blockReasonText);
-      // An active block always shows, even on a slot the venue does not operate.
-      if (reasons.length) return { slot, state: "blocked", reasons };
+      const booked = approved
+        .filter((booking) => booking.start_date <= date && date <= booking.end_date && booking.slots.includes(slot))
+        .map((booking) => `Booked — ${booking.event_name ?? "event"}`);
+      // An active block always shows, even on a slot the venue does not operate,
+      // and still names any booking it now overlaps.
+      if (reasons.length) return { slot, state: "blocked", reasons: [...reasons, ...booked] };
+      if (booked.length) return { slot, state: "booked", reasons: booked };
       if (!venue.operating_slots.includes(slot)) return { slot, state: "not_offered", reasons: [] };
       return { slot, state: venue.status === "blocked" ? "unavailable" : "open", reasons: [] };
     });

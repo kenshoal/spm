@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { requireRole } from "@/lib/auth";
 import { buildBlockCalendar, currentMonth, parseMonth } from "@/lib/block-calendar";
 import type { VenueBlock } from "@/lib/venue-block-options";
+import type { VenueBooking } from "@/lib/venue-booking-options";
+import { listApprovedBookings } from "@/lib/venue-bookings";
 import { listVenueBlocks } from "@/lib/venue-blocks";
 import { listVenues, type Venue } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../components/app-shell";
@@ -57,8 +59,12 @@ async function VenueBlocksContent({ params }: { params: Record<string, string | 
   const venue = venues.value.find((candidate) => candidate.id === selectedId);
   if (!venue) return notFound;
 
-  const blocks = await load<VenueBlock[] | null>(listVenueBlocks(venue.id));
+  const [blocks, bookings] = await Promise.all([
+    load<VenueBlock[] | null>(listVenueBlocks(venue.id)),
+    load<VenueBooking[]>(listApprovedBookings()),
+  ]);
   if (!blocks.failed && blocks.value === null) return notFound;
+  const venueBookings = bookings.failed ? [] : bookings.value.filter((booking) => booking.venue_id === venue.id);
 
   return (
     <>
@@ -77,9 +83,12 @@ async function VenueBlocksContent({ params }: { params: Record<string, string | 
           {blocks.failed ? (
             // Never fall back to an all-available calendar when blocks are unknown.
             <Alert>Blocks for this venue could not be loaded. Refresh to try again.</Alert>
+          ) : bookings.failed ? (
+            // The same for approved bookings (SCRUM-15).
+            <Alert>Bookings for this venue could not be loaded. Refresh to try again.</Alert>
           ) : (
             <>
-              <BlockCalendarTable calendar={buildBlockCalendar(venue, blocks.value ?? [], month)} venueId={venue.id} venueName={venue.name} />
+              <BlockCalendarTable calendar={buildBlockCalendar(venue, blocks.value ?? [], month, venueBookings)} venueId={venue.id} venueName={venue.name} />
               <BlockList blocks={blocks.value ?? []} />
             </>
           )}
