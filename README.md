@@ -97,6 +97,3 @@ Inside Compose, every API listens on port `8000`; the host ports above keep
 the services distinct. Inter-service URLs use Compose service names, such as
 `http://auth-service:8000`. Protected endpoints require a Supabase access
 token in the `Authorization: Bearer` header.
-
-The draft-request and operational-event ownership boundary is documented in
-[`docs/event-domain-boundaries.md`](docs/event-domain-boundaries.md).

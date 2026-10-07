@@ -116,7 +116,7 @@ and no change notifications are sent.
 The decision primitive and existing migrations are retained for later integration;
 their presence does not enable API decisions. Browser roles cannot read the
 change table or execute either workflow function. The original SCRUM-35 criteria
-remain outstanding; see [the Sprint 2 blocker](../../docs/sprints/sprint-2/scrum_35_blocker.md).
+remain outstanding.
 
 ## Submission confirmations
 
