@@ -260,34 +260,34 @@ Docker Compose stack against the shared development database. Seed: event `MANUA
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | ID | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | Remarks and evidence; fakes only, no real service |
 | --- | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | ---; fakes only, no real service |
-| AC1-H1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC1-H2 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC1-N1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC1-N2 to AC1-N5 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC1-X1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC2-B1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC2-B2 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC2-B3 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC2-N1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC2-B4 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC2-B5 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-P1 to AC5-P3 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-N1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-N2 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-N3 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-H1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-P4 to AC5-P7 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-N4 to AC5-N7 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-N8 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-N9 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-N10 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-X1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC5-X2 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC4-X1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC6-X1 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC6-X2 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC6-X3 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
-| AC6-X4 | Planned | not run on Supabase | Not executed | n/a | pending Yang | Red run in the SQL Editor before `0021` is applied |
+| AC1-H1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC1-H2 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC1-N1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC1-N2 to AC1-N5 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC1-X1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC2-B1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC2-B2 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC2-B3 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC2-N1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC2-B4 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC2-B5 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-P1 to AC5-P3 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-N1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-N2 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-N3 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-H1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-P4 to AC5-P7 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-N4 to AC5-N7 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-N8 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-N9 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-N10 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-X1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC5-X2 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC4-X1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC6-X1 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC6-X2 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC6-X3 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
+| AC6-X4 | Green | passed | Pass | migration `0021` applied to shared dev | Yang, 7 Oct 2026 | SQL Editor, `database/verify_equipment_requirements.sql`; one transaction, rolled back |
 | AC6-X5 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
 | AC6-X6 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
 | AC6-X7 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_event_requests_client.py`; fakes only, no real service |
@@ -403,6 +403,8 @@ Two tests were corrected during the Red run because they would have passed vacuo
 | M10 retired rows counted as catalogue types | AC2-N10 | killed |
 | M11 `expected_status` check removed in SQL | AC5-N8 | caught by the 6 October SQL dry run's injected fault "expected-status check removed" (script stopped at AC5-N8); Supabase run pending Yang |
 | M12 `FOR UPDATE` removed in SQL | AC5-X2 | caught by the 6 October SQL dry run's injected fault "`FOR UPDATE` removed" (script stopped at AC5-X2); Supabase run pending Yang |
+
+**Database Green run, 7 October 2026 (shared dev).** Yang applied migration `0021` to the shared development project in the Supabase SQL Editor, then ran [`database/verify_equipment_requirements.sql`](../../database/verify_equipment_requirements.sql) there: the editor reported "Success. No rows returned" — the script compiled fully (so the table exists), reached the final `SCRUM-33 verify: all equipment_requirements cases passed` NOTICE, and rolled its one transaction back, leaving no data. All 28 database-layer cases above are recorded Green from this run. This is the only real-database evidence so far; the five manual API cases remain to be run on the Docker Compose stack.
 
 ## Disclosures
 
