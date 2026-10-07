@@ -1,6 +1,6 @@
 # SCRUM-32 Test Cases: Submit a Venue Booking Request
 
-Last reviewed: 5 October 2026
+Last reviewed: 6 October 2026
 
 Status: **the AC review below was approved as proposed by the story owner (Kennedy) on 4 October 2026, and Kennedy approved the API test cases on 5 October 2026** (assumptions A1 to A9 and questions Q1 and Q2 are not separately confirmed). The database layer passed on 4 October 2026. The API and service layer was built Red first on 5 October 2026, and its local results are recorded below. Nothing here has been through pull-request CI or the integrated stack yet.
 
@@ -273,7 +273,23 @@ The SQL Editor raised two warnings before running (an `UPDATE` without a `WHERE`
 
 The suite was run with `-x`, so each row shows the first failure in file order, not necessarily the dedicated test.
 
-**Not yet evidenced:** pull-request CI, and the integrated stack. No real eventRequestService, authService or Supabase `venue_booking_requests` row has been exercised through the new endpoints; the Compose file now passes `EVENT_REQUEST_API_URL` to venueService, which is also untested.
+**Real-stack check, 6 October 2026.** Run by Kennedy on their machine against `dev` at `6673a21` (which includes PR #41), with Docker Compose: the real authService (Supabase Auth), eventRequestService and venueService (Supabase store, `EVENT_REQUEST_API_URL` set by Compose), and the shared development database. The script signs in as `event_coordinator1`, `event_coordinator2` and `venue_staff` (the shared test accounts) and uses the event "Postman Charity Run" (Under Review), which is assigned to one of the two coordinators, and the one venue on shared dev. It prints status codes only. **18 of 18 checks passed.**
+
+| ID | Live check | Expected | Actual |
+| --- | --- | --- | --- |
+| AC1-H3 | The assigned Coordinator submits a request | 201, `pending`, `requested_by` is the caller | 201, `pending`, `requested_by` is the caller |
+| AC2-H2 | The snapshot is copied from the event | name, attendance and requirements equal the event's | "Postman Charity Run", 120, "Park loop and start area"; also confirmed against the event row and the stored request row |
+| AC4-H2 | An identical second request coexists | 201 with a different id | 201, different id |
+| AC3-H2, AC3-N2 | Staff queue lists both new requests; a Coordinator cannot read the queue | 200 with both; 403 | 200 with both; 403 |
+| AC5-H1, AC5-H2, AC5-X1, AC5-N14 | `/mine`; own request; Venue Staff open any; another Coordinator's request | 200; 200 `pending`; 200; 404 | as expected |
+| AC6-X4, AC6-X5, AC6-N1 | Unassigned Coordinator; Venue Staff; unknown event | 404 "Event request not found"; 403; 404 | as expected |
+| AC1-N26, AC1-N25, AC1-N14 | No token; unknown venue; empty slots | 401; 404; 422 | as expected |
+
+**Database confirmation after the run (read-only, service role).** `venue_booking_requests` held exactly the 2 rows the script created: both `pending`, venue and event ids as submitted, dates 2030-03-04 to 2030-03-05, slots AM and PM, no decision fields, `requested_by` equal to the assigned Coordinator. The 6 refused submissions stored nothing. The 2 test rows remain on shared development (the service role has no DELETE grant); they hold no slot, because pending requests never block.
+
+Not covered live: the expired-token and 502 paths (event service down), the Supabase store's error mapping, and the date, slot and body validation cases other than empty slots. Those are covered only by the local tests above.
+
+**Not yet evidenced:** a browser or UI journey (none exists for this story). Pull-request CI passed on PR #41, and the real-stack check above covers the integrated stack.
 
 ## Disclosures
 
