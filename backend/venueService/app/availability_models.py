@@ -32,11 +32,23 @@ class BlockConflict(Period):
     block_id: str
 
 
+class BookingOverlap(Period):
+    """The part of an approved booking (SCRUM-15) that a requested period shares."""
+
+    booking_id: str
+
+
 class AvailabilityResult(BaseModel):
     venue_id: str
     available: bool
     reasons: list[
-        Literal["venue_unavailable", "outside_operating_slots", "active_block"]
+        Literal[
+            "venue_unavailable",
+            "outside_operating_slots",
+            "active_block",
+            "booking_conflict",
+        ]
     ]
     unsupported_slots: list[Slot]
     conflicts: list[BlockConflict]
+    booking_conflicts: list[BookingOverlap] = Field(default_factory=list)

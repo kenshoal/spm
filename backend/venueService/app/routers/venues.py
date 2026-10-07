@@ -18,6 +18,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.availability import available_slots
 from app.block_models import VenueBlock, VenueBlockCreate
+from app.booking_models import BookingRequestStatus
+from app.booking_repository import BookingRequestStore, get_booking_repository
 from app.dependencies import Principal, require_venue_staff, require_venue_viewer
 from app.models import (
     RoomLayout,
@@ -37,6 +39,7 @@ RepoDep = Annotated[VenueStore, Depends(get_repository)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
 VenueViewerDep = Annotated[Principal, Depends(require_venue_viewer)]
 BlockRepoDep = Annotated[BlockStore, Depends(get_block_repository)]
+BookingRepoDep = Annotated[BookingRequestStore, Depends(get_booking_repository)]
 
 
 @router.get("/{venue_id}/blocks", response_model=list[VenueBlock])
@@ -99,6 +102,7 @@ def search_venues(
     principal: VenueViewerDep,
     repo: RepoDep,
     blocks: BlockRepoDep,
+    bookings: BookingRepoDep,
     required_capacity: Annotated[int | None, Query(gt=0)] = None,
     location: Annotated[str | None, Query()] = None,
     slot: Annotated[Slot | None, Query()] = None,
@@ -109,10 +113,9 @@ def search_venues(
 ) -> list[Venue]:
     """Return venues matching every supplied filter.
 
-    With a date and slot, exclude venues blocked for that period. With only a
-    date, require at least one operating slot unaffected by active blocks.
-    Without a date, no dated availability claim is made. Reservations are not
-    yet checked.
+    With a date and slot, exclude venues blocked or booked for that period.
+    With only a date, require at least one operating slot free of active blocks
+    and approved bookings. Without a date, no dated availability claim is made.
     """
 
     del principal
@@ -120,6 +123,11 @@ def search_venues(
     wanted_facilities = {f.lower() for f in facility} if facility else set()
     wanted_accessibility = {a.lower() for a in accessibility} if accessibility else set()
 
+    approved = (
+        bookings.list_by_status(BookingRequestStatus.APPROVED)
+        if on_date is not None
+        else []
+    )
     results: list[Venue] = []
     for venue in repo.list():
         if venue.status is not VenueStatus.AVAILABLE:
@@ -142,7 +150,7 @@ def search_venues(
             continue
         if on_date is not None:
             remaining_slots = available_slots(
-                venue, on_date, blocks.list_for_venue(venue.id)
+                venue, on_date, blocks.list_for_venue(venue.id), approved
             )
             if not remaining_slots or (slot is not None and slot not in remaining_slots):
                 continue

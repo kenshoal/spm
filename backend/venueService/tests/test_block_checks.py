@@ -65,6 +65,7 @@ def test_availability_flow_reports_conflicts_without_writes(venue):
                 "slots": ["AM"],
             }
         ],
+        "booking_conflicts": [],
     }
     assert len(block_repository.list()) == 1
     assert check(venue, slots=["PM"]).json()["available"] is True
