@@ -88,6 +88,8 @@ services:
       AUTH_SERVICE_URL: http://auth-service:8000
       # No depends_on: only booking-request submission calls this service.
       EVENT_REQUEST_API_URL: http://event-request-service:8000
+      # No depends_on: a notification failure must never block a booking decision.
+      NOTIFICATION_SERVICE_URL: http://notification-service:8000/notifications/events
       VENUE_STORAGE_BACKEND: supabase
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}

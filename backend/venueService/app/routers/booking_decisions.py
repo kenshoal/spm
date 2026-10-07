@@ -3,7 +3,8 @@
 Approving a pending request makes it the confirmed booking. Approval is
 refused with 409 when the venue is unavailable, a slot is not operated, an
 active block overlaps or another approved request overlaps; each refusal is
-recorded and readable by Venue Staff.
+recorded and readable by Venue Staff. A saved decision notifies the requesting
+Coordinator.
 """
 
 from __future__ import annotations
@@ -21,14 +22,17 @@ from app.booking_decision_store import (
 )
 from app.booking_decisions import DecisionDetails
 from app.booking_models import BookingRequest
+from app.booking_notifications import BookingNotifier, get_booking_notifier
 from app.booking_repository import BookingRequestStore, get_booking_repository
 from app.dependencies import Principal, require_venue_staff
+from app.routers.venues import RepoDep
 
 router = APIRouter(prefix="/booking-requests", tags=["booking decisions"])
 
 DecisionStoreDep = Annotated[BookingDecisionStore, Depends(get_booking_decision_store)]
 BookingRepoDep = Annotated[BookingRequestStore, Depends(get_booking_repository)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
+NotifierDep = Annotated[BookingNotifier, Depends(get_booking_notifier)]
 
 
 @router.post("/{booking_id}/decision", response_model=BookingRequest)
@@ -37,8 +41,13 @@ def decide_booking_request(
     payload: DecisionDetails,
     principal: VenueStaffDep,
     store: DecisionStoreDep,
+    venues: RepoDep,
+    notifier: NotifierDep,
 ) -> BookingRequest:
-    """Approve or reject a pending request; the decider comes from the token."""
+    """Approve or reject a pending request; the decider comes from the token.
+
+    Only a saved decision notifies the requesting Coordinator (AC4).
+    """
     try:
         outcome = store.decide(booking_id, payload, decided_by=principal.user_id)
     except BookingNotFoundError:
@@ -59,6 +68,8 @@ def decide_booking_request(
                 "conflicting_booking_ids": outcome.conflicting_booking_ids,
             },
         )
+    venue = venues.get(outcome.booking.venue_id)
+    notifier.notify_decision(outcome.booking, venue.name if venue else None)
     return outcome.booking
 
 
