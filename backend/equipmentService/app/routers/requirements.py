@@ -17,15 +17,16 @@ from supabase import Client
 
 from app.availability import norm
 from app.db import get_client
-from app.deps import TECHNICAL_SUPPORT_ROLE, User, require_role
+from app.deps import (
+    EVENT_COORDINATOR_ROLE,
+    TECHNICAL_SUPPORT_ROLE,
+    User,
+    require_role,
+)
 from app.event_requests_client import EventRequestClient, get_event_request_client
 from app.rpc_errors import requirement_rpc_error_to_http
 
 router = APIRouter(prefix="/equipment-requirements", tags=["equipment requirements"])
-
-# SCRUM-39 (feat/scoped-resource-access) adds this constant to app/deps.py;
-# keep the local definition until that branch merges, then use the shared one.
-EVENT_COORDINATOR_ROLE = "event_coordinator"
 
 # Event statuses that refuse new requirements (AC7). Everything else is open.
 CLOSED_EVENT_STATUSES = frozenset({"Cancelled", "Completed", "Rejected"})
