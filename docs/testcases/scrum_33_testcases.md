@@ -356,11 +356,11 @@ Docker Compose stack against the shared development database. Seed: event `MANUA
 | AC5-N17 to AC5-N19 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
 | AC6-X23, AC6-X24 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
 | AC6-X25 | Green | passed | Pass | `d77b736` (local branch, unpushed) | Claude (Cowork), 7 Oct 2026 | `tests/test_requirements_arrangement.py`; fakes only, no real service |
-| AC1-X3 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
-| AC6-X26 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
-| AC4-X2 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
-| AC5-X4 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
-| AC6-X27 | Planned | not run | Not executed | n/a | pending Yang | Docker Compose stack; see docs/postman/README.md |
+| AC1-X3 | Green | passed | Pass | local branch at `3af53ad` + seeded event | Yang, 7 Oct 2026 | Docker Compose stack + shared dev, scrum_33 Postman collection: Postman folder 1: 201, snapshot "MANUAL-S33 Gala"; row visible in Supabase |
+| AC6-X26 | Green | passed | Pass | local branch at `3af53ad` + seeded event | Yang, 7 Oct 2026 | Docker Compose stack + shared dev, scrum_33 Postman collection: Postman folder 1: 404 Event request not found; no new row |
+| AC4-X2 | Green | passed | Pass | local branch at `3af53ad` + seeded event | Yang, 7 Oct 2026 | Docker Compose stack + shared dev, scrum_33 Postman collection: Postman folder 2: the recorded row is listed for technical_support |
+| AC5-X4 | Green | passed | Pass | local branch at `3af53ad` + seeded event | Yang, 7 Oct 2026 | Docker Compose stack + shared dev, scrum_33 Postman collection: Postman folder 3: 200, 200, then 409 on repeat; coordinator GET shows arranged with TSS as updated_by |
+| AC6-X27 | Green | passed | Pass | local branch at `3af53ad` + seeded event | Yang, 7 Oct 2026 | Docker Compose stack + shared dev, scrum_33 Postman collection: Postman folder 4: 401 with 42501 using the publishable key |
 
 ## Latest verification
 
