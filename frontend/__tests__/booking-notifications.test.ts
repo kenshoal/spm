@@ -67,3 +67,43 @@ test("encodes the event request id and drops a missing one", () => {
   );
   expect(describeNotification(bookingNotification("venue_booking_approved", { event_request_id: null })).href).toBeNull();
 });
+
+function blockNotification(payload: Record<string, unknown> = {}): AppNotification {
+  return {
+    id: "n2",
+    event_type: "venue_block_affects_booking",
+    payload: {
+      block_id: "k1",
+      booking_request_id: "b1",
+      event_request_id: "e1",
+      event_name: "Open day",
+      venue_name: "Riverside Hall",
+      block_start_date: "2026-11-21",
+      block_end_date: "2026-11-22",
+      block_slots: ["AM"],
+      reason_category: "maintenance",
+      reason_detail: "Air-con repairs",
+      ...payload,
+    },
+    read_at: null,
+    created_at: "2026-10-08T02:00:00Z",
+  };
+}
+
+// AC3-H5 (happy): a block over the Coordinator's booking explains when, which slots and why
+test("describes a block that affects the coordinator's booking", () => {
+  expect(describeNotification(blockNotification())).toEqual({
+    message: "Riverside Hall has been blocked during your booking for Open day.",
+    href: "/coordination/requests/e1",
+    detail: "Blocked 2026-11-21 to 2026-11-22 · AM · Maintenance — Air-con repairs. Arrange an alternative venue or time.",
+  });
+});
+
+// AC3-P6 (partition): missing venue name, event name and reason detail still read well
+test("describes a block notification with sparse details", () => {
+  expect(describeNotification(blockNotification({ venue_name: null, event_name: null, reason_detail: null, reason_category: "internal_use" }))).toEqual({
+    message: "A venue has been blocked during your booking.",
+    href: "/coordination/requests/e1",
+    detail: "Blocked 2026-11-21 to 2026-11-22 · AM · Internal use. Arrange an alternative venue or time.",
+  });
+});

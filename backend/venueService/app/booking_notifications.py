@@ -1,4 +1,5 @@
-"""Tell the requesting Coordinator about a booking decision (SCRUM-15 AC4).
+"""Tell the requesting Coordinator about a booking decision (SCRUM-15 AC4) or
+about a new block that affects their booking (SCRUM-23 AC3).
 
 Follows eventRequestService's NotificationClient: events go to
 notificationService's ``POST /notifications/events`` (SCRUM-37). Without
@@ -13,12 +14,16 @@ idempotent in notificationService.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+from datetime import date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
+from app.block_models import VenueBlock
 from app.booking_models import BookingRequest
 
 logger = logging.getLogger(__name__)
@@ -65,6 +70,42 @@ class BookingNotifier:
                 },
             }
         )
+
+
+def block_affects_booking_event(
+    block: VenueBlock, booking: BookingRequest, venue_name: str | None
+) -> dict[str, Any]:
+    """The SCRUM-23 AC3 event for one booking a new block overlaps."""
+    pair = hashlib.sha256(f"{block.id}:{booking.id}".encode()).hexdigest()[:48]
+    block_data = block.model_dump(mode="json")
+    return {
+        "event_type": "venue_block_affects_booking",
+        "recipient_id": booking.requested_by,
+        # Within notificationService's 64-character limit; one per block and booking.
+        "event_id": f"block-impact:{pair}",
+        "payload": {
+            "block_id": block.id,
+            "booking_request_id": booking.id,
+            "event_request_id": booking.event_request_id,
+            "event_name": booking.event_name,
+            "venue_id": booking.venue_id,
+            "venue_name": venue_name,
+            "block_start_date": block_data["start_date"],
+            "block_end_date": block_data["end_date"],
+            "block_slots": block_data["slots"],
+            "reason_category": block_data["reason_category"],
+            "reason_detail": block.reason_detail,
+            "booking_start_date": booking.start_date.isoformat(),
+            "booking_end_date": booking.end_date.isoformat(),
+            "booking_slots": [slot.value for slot in booking.slots],
+        },
+    }
+
+
+def current_venue_date() -> date:
+    """Today in Singapore, where the venues are; a dependency so tests can fix it."""
+
+    return datetime.now(ZoneInfo("Asia/Singapore")).date()
 
 
 def get_booking_notifier() -> BookingNotifier:

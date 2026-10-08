@@ -1,7 +1,7 @@
 import { unstable_rethrow } from "next/navigation";
 import type { ReactNode } from "react";
 import { requireRole } from "@/lib/auth";
-import { buildBlockCalendar, currentMonth, parseMonth } from "@/lib/block-calendar";
+import { bookingsAffectedBy, buildBlockCalendar, currentDate, currentMonth, parseMonth } from "@/lib/block-calendar";
 import type { VenueBlock } from "@/lib/venue-block-options";
 import type { VenueBooking } from "@/lib/venue-booking-options";
 import { listApprovedBookings } from "@/lib/venue-bookings";
@@ -27,6 +27,19 @@ async function load<T>(promise: Promise<T>): Promise<{ value: T; failed: false }
     unstable_rethrow(error);
     return { value: null, failed: true as const };
   });
+}
+
+function formatDay(date: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
+function savedMessage(affected: VenueBooking[]): string {
+  if (affected.length === 0) return "Block saved.";
+  const list = affected
+    .map((booking) => `${booking.event_name ?? "Untitled event"} (${formatDay(booking.start_date)} – ${formatDay(booking.end_date)})`)
+    .join("; ");
+  const plural = affected.length > 1;
+  return `Block saved. It affects ${affected.length} confirmed booking${plural ? "s" : ""}: ${list}. ${plural ? "Their Coordinators have" : "Its Coordinator has"} been notified.`;
 }
 
 function VenuePicker({ venues, selected, month }: { venues: Venue[]; selected: string; month: string }) {
@@ -65,12 +78,15 @@ async function VenueBlocksContent({ params }: { params: Record<string, string | 
   ]);
   if (!blocks.failed && blocks.value === null) return notFound;
   const venueBookings = bookings.failed ? [] : bookings.value.filter((booking) => booking.venue_id === venue.id);
+  const newBlock = blocks.failed ? undefined : (blocks.value ?? []).find((block) => block.id === first(params.block));
 
   return (
     <>
       {picker}
       {first(params.created) === "1" ? (
-        <p role="status" className="mb-6 rounded-xl bg-[#e3f2ea] px-4 py-3 text-sm font-semibold text-[#145c40]">Block saved.</p>
+        <p role="status" className="mb-6 rounded-xl bg-[#e3f2ea] px-4 py-3 text-sm font-semibold text-[#145c40]">
+          {savedMessage(newBlock ? bookingsAffectedBy(newBlock, venueBookings, currentDate()) : [])}
+        </p>
       ) : null}
       {venue.status === "blocked" ? (
         <p role="note" className="mb-6 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">

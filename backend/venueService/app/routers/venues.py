@@ -19,6 +19,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.availability import available_slots
 from app.block_models import VenueBlock, VenueBlockCreate
 from app.booking_models import BookingRequestStatus
+from app.booking_notifications import (
+    BookingNotifier,
+    block_affects_booking_event,
+    current_venue_date,
+    get_booking_notifier,
+)
 from app.booking_repository import BookingRequestStore, get_booking_repository
 from app.dependencies import Principal, require_venue_staff, require_venue_viewer
 from app.models import (
@@ -30,6 +36,7 @@ from app.models import (
     VenueUpdate,
 )
 from app.repository import VenueStore, get_repository
+from app.slots import overlaps
 from app.storage import BlockStore, get_block_repository
 
 router = APIRouter(prefix="/venues", tags=["venues"])
@@ -72,13 +79,37 @@ def create_venue_block(
     principal: VenueStaffDep,
     repo: RepoDep,
     blocks: BlockRepoDep,
+    bookings: BookingRepoDep,
+    notifier: Annotated[BookingNotifier, Depends(get_booking_notifier)],
+    today: Annotated[date, Depends(current_venue_date)],
 ) -> VenueBlock:
-    """Validate and store a dated block; booking impact is integrated later."""
-    if repo.get(venue_id) is None:
+    """Store a dated block, then alert the Coordinators of affected bookings.
+
+    An approved booking that shares a date and slot with the block and has not
+    ended is affected (SCRUM-23 AC3). The block is saved regardless; notifying
+    never fails or undoes it.
+    """
+    venue = repo.get(venue_id)
+    if venue is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Venue not found"
         )
-    return blocks.create(venue_id, payload, created_by=principal.user_id)
+    block = blocks.create(venue_id, payload, created_by=principal.user_id)
+    for booking in bookings.list_by_status(BookingRequestStatus.APPROVED):
+        if (
+            booking.venue_id == venue_id
+            and booking.end_date >= today
+            and overlaps(
+                block.start_date,
+                block.end_date,
+                block.slots,
+                booking.start_date,
+                booking.end_date,
+                booking.slots,
+            )
+        ):
+            notifier.send(block_affects_booking_event(block, booking, venue.name))
+    return block
 
 
 @router.post("", response_model=Venue, status_code=status.HTTP_201_CREATED)

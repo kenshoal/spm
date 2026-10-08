@@ -41,6 +41,9 @@ export async function createVenueBlock(previousState: BlockFormState, formData: 
   if (!response.ok) {
     return { message: failureMessages[response.status] ?? retryMessage, values: readBlockFormValues(formData) };
   }
+  // The saved block's id lets the page list the bookings it affects (SCRUM-23 AC3).
+  const saved = await response.json().catch(() => null);
+  const blockId = saved && typeof saved.id === "string" ? `&block=${encodeURIComponent(saved.id)}` : "";
   revalidatePath("/venue-blocks");
-  redirect(`/venue-blocks?venue=${venuePath}&month=${payload.start_date.slice(0, 7)}&created=1`);
+  redirect(`/venue-blocks?venue=${venuePath}&month=${payload.start_date.slice(0, 7)}&created=1${blockId}`);
 }

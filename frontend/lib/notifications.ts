@@ -1,4 +1,5 @@
 import { getJson } from "./api";
+import { reasonLabel, type BlockReason } from "./venue-block-options";
 
 export interface AppNotification {
   id: string;
@@ -73,6 +74,30 @@ export function describeNotification(notification: AppNotification): Notificatio
         message: `Your venue booking request${event ? ` for ${event}` : ""} was rejected.`,
         href,
         ...(detail ? { detail } : {}),
+      };
+    }
+    case "venue_block_affects_booking": {
+      // SCRUM-23 AC3: a new block overlaps the Coordinator's approved booking.
+      const text = (key: string) => {
+        const value = notification.payload[key];
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+      };
+      const venue = text("venue_name");
+      const event = text("event_name");
+      const slots = notification.payload.block_slots;
+      const category = text("reason_category");
+      const reason = category
+        ? [reasonLabel(category as BlockReason), text("reason_detail")].filter(Boolean).join(" — ")
+        : null;
+      const parts = [
+        text("block_start_date") && text("block_end_date") && `Blocked ${text("block_start_date")} to ${text("block_end_date")}`,
+        Array.isArray(slots) && slots.length ? slots.join(", ") : null,
+        reason,
+      ].filter(Boolean);
+      return {
+        message: `${venue ?? "A venue"} has been blocked during your booking${event ? ` for ${event}` : ""}.`,
+        href: id && `/coordination/requests/${id}`,
+        detail: `${parts.join(" · ")}. Arrange an alternative venue or time.`,
       };
     }
     default:

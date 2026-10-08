@@ -61,19 +61,19 @@ test("posts the block and opens the venue's month", async () => {
     }),
   });
   expect(navigation.revalidatePath).toHaveBeenCalledWith("/venue-blocks");
-  expect(navigation.redirect).toHaveBeenCalledWith("/venue-blocks?venue=v1&month=2026-10&created=1");
+  expect(navigation.redirect).toHaveBeenCalledWith("/venue-blocks?venue=v1&month=2026-10&created=1&block=b1");
 });
 
 // AC1-H1 (happy): the venue id is encoded into the API path and the redirect
 test("encodes the venue id in the request path and redirect", async () => {
   navigation.redirect.mockImplementation(() => { throw new Error("NEXT_REDIRECT"); });
-  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: "k/1" }) });
   vi.stubGlobal("fetch", fetchMock);
 
   await expect(createVenueBlock({}, form({ ...valid, venue_id: "a/b" }))).rejects.toThrow("NEXT_REDIRECT");
 
   expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8004/venues/a%2Fb/blocks");
-  expect(navigation.redirect).toHaveBeenCalledWith("/venue-blocks?venue=a%2Fb&month=2026-10&created=1");
+  expect(navigation.redirect).toHaveBeenCalledWith("/venue-blocks?venue=a%2Fb&month=2026-10&created=1&block=k%2F1");
 });
 
 // AC1-B2 (boundary): an end date before the start date never reaches the API and keeps the input

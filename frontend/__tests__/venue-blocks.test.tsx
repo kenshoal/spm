@@ -1,5 +1,5 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({ requireRole: vi.fn() }));
 const data = vi.hoisted(() => ({ listVenues: vi.fn(), listVenueBlocks: vi.fn(), listApprovedBookings: vi.fn() }));
@@ -223,4 +223,32 @@ test("never shows an open calendar when bookings could not be loaded", async () 
 
   expect(screen.getByRole("alert").textContent).toContain("Bookings for this venue could not be loaded.");
   expect(screen.queryByRole("table")).toBeNull();
+});
+
+// AC3-H6 (happy): after saving a block, Venue Staff see which confirmed bookings it affects
+test("lists the confirmed bookings a new block affects", async () => {
+  // "Affected" means the booking has not ended, so fix today's date.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-08T02:00:00Z"));
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  data.listApprovedBookings.mockResolvedValue([
+    { id: "r1", venue_id: "v1", event_name: "Open day", start_date: "2026-10-21", end_date: "2026-10-22", slots: ["AM"], status: "approved" },
+    { id: "r2", venue_id: "v1", event_name: "Evening talk", start_date: "2026-10-20", end_date: "2026-10-20", slots: ["NIGHT"], status: "approved" },
+    { id: "r3", venue_id: "v2", event_name: "Elsewhere", start_date: "2026-10-20", end_date: "2026-10-20", slots: ["AM"], status: "approved" },
+  ]);
+
+  await openPage({ venue: "v1", created: "1", block: "b1" });
+
+  expect(screen.getByRole("status").textContent).toBe(
+    "Block saved. It affects 1 confirmed booking: Open day (21 Oct 2026 – 22 Oct 2026). Its Coordinator has been notified.",
+  );
+});
+
+// AC3-P7 (partition): a block that affects no booking just confirms the save
+test("confirms a block that affects no booking", async () => {
+  await openPage({ venue: "v1", created: "1", block: "b1" });
+
+  expect(screen.getByRole("status").textContent).toBe("Block saved.");
 });
