@@ -18,6 +18,7 @@ test("links each role to its own workspace", () => {
   ]);
   expect(workspaceLinks(["venue_staff"])).toEqual([
     { href: "/venues", label: "Venues" },
+    { href: "/booking-requests", label: "Booking requests" },
     { href: "/venue-blocks", label: "Venue blocks" },
     { href: "/venues/search", label: "Venue search" },
     notifications,
@@ -44,6 +45,7 @@ test("gives a multi-role user one link per workspace", () => {
   expect(workspaceLinks(["event_coordinator", "venue_staff"])).toEqual([
     { href: "/coordination/requests", label: "Coordination" },
     { href: "/venues", label: "Venues" },
+    { href: "/booking-requests", label: "Booking requests" },
     { href: "/venue-blocks", label: "Venue blocks" },
     { href: "/venues/search", label: "Venue search" },
     notifications,
@@ -57,5 +59,15 @@ test("offers the Venue blocks link to Venue Staff only", () => {
   expect(hasBlocks(["venue_staff"])).toBe(true);
   for (const role of ["event_coordinator", "event_organiser", "event_operations_manager", "technical_support", "attendee"]) {
     expect(hasBlocks([role])).toBe(false);
+  }
+});
+
+// AC1-X4 (cross-cutting): only Venue Staff get the Booking requests workspace link
+test("offers the Booking requests link to Venue Staff only", () => {
+  const hasLink = (roles: string[]) => workspaceLinks(roles).some((link) => link.href === "/booking-requests");
+
+  expect(hasLink(["venue_staff"])).toBe(true);
+  for (const role of ["event_coordinator", "event_organiser", "event_operations_manager", "technical_support", "attendee"]) {
+    expect(hasLink([role])).toBe(false);
   }
 });

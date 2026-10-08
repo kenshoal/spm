@@ -62,6 +62,8 @@ class SupabaseDataAPI:
                 code = response.json().get("code")
             except (ValueError, AttributeError):
                 code = None
+            if code == "P0002":
+                raise StorageError("Venue not found", 404)
             if code == "23503":
                 raise StorageError("Referenced venue or creator no longer exists", 409)
             if code == "23505":
@@ -73,6 +75,8 @@ class SupabaseDataAPI:
             rows = response.json()
         except ValueError:
             raise StorageError("Database returned an invalid response") from None
+        if isinstance(rows, dict):  # a function returning one row
+            rows = [rows]
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise StorageError("Database returned an invalid response")
         return rows
@@ -125,11 +129,24 @@ class SupabaseBlockRepository:
             raise StorageError(
                 "A real creator UUID is required for database storage", 503
             )
-        values = data.model_dump(mode="json") | {
-            "venue_id": venue_id,
-            "created_by": created_by,
-        }
-        return _decode(VenueBlock, self.api.insert("venue_blocks", values))
+        values = data.model_dump(mode="json")
+        # create_venue_block (0024) locks the venue row like booking approval.
+        rows = self.api.request(
+            "POST",
+            "rpc/create_venue_block",
+            json={
+                "p_venue_id": venue_id,
+                "p_start_date": values["start_date"],
+                "p_end_date": values["end_date"],
+                "p_slots": values["slots"],
+                "p_reason_category": values["reason_category"],
+                "p_reason_detail": values["reason_detail"],
+                "p_created_by": created_by,
+            },
+        )
+        if len(rows) != 1:
+            raise StorageError("Database did not return the saved record")
+        return _decode(VenueBlock, rows[0])
 
     def get(self, block_id: str) -> VenueBlock | None:
         row = self.api.get_row("venue_blocks", block_id)

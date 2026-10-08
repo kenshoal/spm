@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.availability_models import AvailabilityResult, Period
 from app.block_checks import check_availability
+from app.booking_models import BookingRequestStatus
+from app.booking_repository import BookingRequestStore, get_booking_repository
 from app.dependencies import Principal, require_booking_reader
 from app.routers.venues import BlockRepoDep, RepoDep
 
@@ -19,6 +21,7 @@ def availability(
     principal: Annotated[Principal, Depends(require_booking_reader)],
     repo: RepoDep,
     blocks: BlockRepoDep,
+    bookings: Annotated[BookingRequestStore, Depends(get_booking_repository)],
 ) -> AvailabilityResult:
     """Check venue status/operating slots/blocks; does not reserve or lock a venue.
 
@@ -28,4 +31,9 @@ def availability(
     venue = repo.get(venue_id)
     if venue is None:
         raise HTTPException(404, "Venue not found")
-    return check_availability(venue, payload, blocks.list_for_venue(venue_id))
+    return check_availability(
+        venue,
+        payload,
+        blocks.list_for_venue(venue_id),
+        bookings.list_by_status(BookingRequestStatus.APPROVED),
+    )

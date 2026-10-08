@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 
 import { buildBlockCalendar, currentMonth, parseMonth, type BlockCalendar } from "@/lib/block-calendar";
 import type { VenueBlock } from "@/lib/venue-block-options";
+import type { VenueBooking } from "@/lib/venue-booking-options";
 
 const venue = { id: "v1", operating_slots: ["AM", "PM"] as const };
 
@@ -154,4 +155,51 @@ test("ignores blocks that belong to another venue", () => {
   const calendar = buildBlockCalendar({ ...venue, operating_slots: ["AM", "PM"] }, [block({ venue_id: "v2" })], "2026-10");
 
   expect(cell(calendar, "2026-10-20", "AM").state).toBe("open");
+});
+
+function booking(overrides: Partial<VenueBooking> = {}): VenueBooking {
+  return {
+    id: "r1",
+    venue_id: "v1",
+    event_name: "Open day",
+    start_date: "2026-10-20",
+    end_date: "2026-10-21",
+    slots: ["AM"],
+    status: "approved",
+    ...overrides,
+  };
+}
+
+// AC3-H3 (happy): an approved booking shows as booked with its event on every covered cell
+test("marks approved bookings as booked with the event name", () => {
+  const calendar = buildBlockCalendar({ ...venue, operating_slots: ["AM", "PM"] }, [], "2026-10", [booking()]);
+
+  expect(cell(calendar, "2026-10-20", "AM")).toEqual({ slot: "AM", state: "booked", reasons: ["Booked — Open day"] });
+  expect(cell(calendar, "2026-10-21", "AM").state).toBe("booked");
+  expect(cell(calendar, "2026-10-20", "PM").state).toBe("open");
+  expect(cell(calendar, "2026-10-22", "AM").state).toBe("open");
+});
+
+// AC3-P4 (partition): pending or rejected requests and other venues' bookings are not shown as booked
+test("ignores unapproved requests and other venues", () => {
+  const calendar = buildBlockCalendar({ ...venue, operating_slots: ["AM"] }, [], "2026-10", [
+    booking({ status: "pending" }),
+    booking({ id: "r2", status: "rejected" }),
+    booking({ id: "r3", venue_id: "v2" }),
+  ]);
+
+  expect(cell(calendar, "2026-10-20", "AM").state).toBe("open");
+});
+
+// AC3-P5 (partition): a block on a booked cell shows as blocked and still names the booking
+test("shows a block over a booking as blocked with both reasons", () => {
+  const calendar = buildBlockCalendar({ ...venue, operating_slots: ["AM"] }, [block()], "2026-10", [
+    booking({ event_name: null }),
+  ]);
+
+  expect(cell(calendar, "2026-10-20", "AM")).toEqual({
+    slot: "AM",
+    state: "blocked",
+    reasons: ["Maintenance — Air-con repairs", "Booked — event"],
+  });
 });

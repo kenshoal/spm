@@ -41,6 +41,40 @@ export function describeNotification(notification: AppNotification): Notificatio
         ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
       };
     }
+    case "venue_booking_approved":
+    case "venue_booking_rejected": {
+      // SCRUM-15: sent to the Coordinator who requested the booking, so it
+      // links to their coordination view of the event.
+      const text = (key: string) => {
+        const value = notification.payload[key];
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+      };
+      const event = text("event_name");
+      const href = id && `/coordination/requests/${id}`;
+      if (notification.event_type === "venue_booking_approved") {
+        const slots = notification.payload.slots;
+        const where = [
+          text("venue_name"),
+          text("start_date") && text("end_date") && `${text("start_date")} to ${text("end_date")}`,
+          Array.isArray(slots) && slots.length ? slots.join(", ") : null,
+        ].filter(Boolean);
+        return {
+          message: `Your venue booking${event ? ` for ${event}` : ""} was approved.`,
+          href,
+          ...(where.length ? { detail: where.join(" · ") } : {}),
+        };
+      }
+      const reason = text("decision_reason");
+      const alternative = text("suggested_alternative");
+      const detail = [reason && `Reason: ${reason}`, alternative && `Suggested alternative: ${alternative}`]
+        .filter(Boolean)
+        .join(". ");
+      return {
+        message: `Your venue booking request${event ? ` for ${event}` : ""} was rejected.`,
+        href,
+        ...(detail ? { detail } : {}),
+      };
+    }
     default:
       return { message: "There's an update on an event request.", href: null };
   }

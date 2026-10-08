@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.block_models import VenueBlock, VenueBlockCreate
+from app.venue_locks import venue_write_lock
 
 
 class VenueBlockRepository:
@@ -15,7 +16,9 @@ class VenueBlockRepository:
         block = VenueBlock(
             **data.model_dump(), venue_id=venue_id, created_by=created_by
         )
-        self._blocks[block.id] = block
+        # Same lock as booking approval, so neither bypasses the other's checks.
+        with venue_write_lock:
+            self._blocks[block.id] = block
         return block
 
     def get(self, block_id: str) -> VenueBlock | None:

@@ -4,6 +4,54 @@ FastAPI microservice for the venue catalogue and venue search / filtering.
 
 ## Scope
 
+### SCRUM-15 booking decisions
+
+Venue Staff approve or reject a pending booking request (SCRUM-32) with
+`POST /booking-requests/{id}/decision`:
+
+```json
+{"decision": "rejected", "reason": "Hall under repair", "suggested_alternative": "Try Orchard Studio"}
+```
+
+- Only a `pending` request can be decided; a decided one returns `409`
+  ("already been decided") and an unknown one `404`. Non-staff get `403`.
+- A rejection needs a non-blank reason; the alternative is optional free text.
+  An approval carries neither. Anything else returns `422`.
+- An approved request **is** the confirmed booking (agreed in 0018).
+- Approval is refused with `409` and
+  `{"message", "refusal_codes", "conflicting_block_ids", "conflicting_booking_ids"}`
+  when the venue is blocked in the catalogue (`venue_unavailable`), a slot is not
+  operated (`outside_operating_slots`), an active block overlaps (`active_block`)
+  or another **approved** request for the venue overlaps (`booking_conflict`).
+  Dates are inclusive and NIGHT belongs to its starting date. Pending and
+  rejected requests never conflict.
+- A refused approval leaves the request pending and records who, when and why.
+  Venue Staff read the log with `GET /booking-requests/{id}/refusals`.
+
+In database mode the decision runs in `decide_venue_booking_request`
+(`database/migrations/0024_venue_booking_decisions.sql`), which locks the venue
+row, then the request row, and re-checks everything before writing the decision
+or one `venue_booking_refusals` row. Block creation goes through
+`create_venue_block`, which takes the same venue lock, so two approvals, or an
+approval and a block, cannot both succeed for overlapping periods. Memory mode
+applies `assess_booking_decision` (`app/booking_decisions.py`) under an
+equivalent process-wide lock (`app/venue_locks.py`). Verify the database
+functions with `database/verify_venue_booking_decisions.sql`.
+
+A saved decision notifies the requesting Coordinator (`requested_by`) through
+notificationService (`NOTIFICATION_SERVICE_URL`, set in Docker Compose) with
+event type `venue_booking_approved` or `venue_booking_rejected`. A refused
+approval sends nothing, and a failed notification is logged without undoing
+the decision.
+
+Approved requests make their venue, dates and slots unavailable: dated
+`GET /venues/search` excludes them like active blocks, and
+`POST /venues/{id}/availability` reports them as `booking_conflict` with
+`booking_conflicts`. Pending and rejected requests reserve nothing. Setup and
+turnaround gaps belong to M5-1.
+
+### Existing endpoints
+
 | Capability | Endpoints |
 | --- | --- |
 | Maintain the venue catalogue | `POST /venues`, `GET /venues/{id}`, `PATCH /venues/{id}`, `GET /venues` |
@@ -12,6 +60,7 @@ FastAPI microservice for the venue catalogue and venue search / filtering.
 | Create a venue block | `POST /venues/{venue_id}/blocks` |
 | List a venue's blocks | `GET /venues/{venue_id}/blocks` |
 | Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}` |
+| Decide a booking request | `POST /booking-requests/{id}/decision`, `GET /booking-requests/{id}/refusals` |
 
 Venues are stored in the Supabase `public.venues` table
 (`database/migrations/0016_venues.sql`) and venue blocks in `public.venue_blocks`
@@ -28,8 +77,9 @@ against a venue's recorded attributes and lists any attribute that doesn't
 match. It is advisory only — a `suitable: false` result never books, holds,
 or changes the venue.
 
-`GET /venues/search` checks active venue blocks when a `date` is supplied.
-Whole-venue status and the existing catalogue filters still apply.
+`GET /venues/search` checks active venue blocks and approved bookings when a
+`date` is supplied. Whole-venue status and the existing catalogue filters still
+apply.
 
 ## Create a venue block (Day 3)
 
@@ -81,7 +131,7 @@ For the example above, September 20 AM search excludes the venue; NIGHT search
 can include it if NIGHT is an operating slot and no other filter or block
 excludes it. September 22 AM is outside this block and is unaffected by it.
 
-These checks consider venue blocks only, not existing reservations.
+These checks also exclude approved bookings (SCRUM-15).
 There is no block-lifting endpoint or calendar UI yet.
 
 ## Database integration (local development)
@@ -199,8 +249,7 @@ are ignored; dates are inclusive and NIGHT belongs to its starting date. A
 missing venue returns `404`; invalid dates/slots or extra fields return `422`.
 Backend failures are errors, never an `available: true` fallback.
 
-This endpoint does not create a booking, lock the venue, or check existing
-bookings. Its answer is a snapshot. The booking owner must call the check,
-reject `available: false`, and coordinate check-and-save with block writes to
-avoid a block being created between checking and saving. Merely calling this
-endpoint separately is not an atomic booking guarantee.
+This endpoint does not create a booking or lock the venue; it reports active
+blocks and approved bookings (`booking_conflict`, `booking_conflicts`) as a
+snapshot. Approval itself re-checks everything under the venue lock in
+`decide_venue_booking_request` (SCRUM-15).

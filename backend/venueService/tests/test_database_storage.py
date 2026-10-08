@@ -51,6 +51,22 @@ def database(monkeypatch):
         assert request.headers["apikey"] == "sb_secret_test-only"
         table = request.url.path.rsplit("/", 1)[-1]
         params = request.url.params
+        if request.method == "POST" and table == "create_venue_block":
+            # The locked create_venue_block function (0024) returns one row.
+            assert request.url.path.endswith("/rest/v1/rpc/create_venue_block")
+            assert "authorization" not in request.headers
+            args = json.loads(request.content)
+            row = VenueBlock(
+                venue_id=args["p_venue_id"],
+                start_date=args["p_start_date"],
+                end_date=args["p_end_date"],
+                slots=args["p_slots"],
+                reason_category=args["p_reason_category"],
+                reason_detail=args["p_reason_detail"],
+                created_by=args["p_created_by"],
+            ).model_dump(mode="json")
+            tables["venue_blocks"].append(row)
+            return httpx.Response(200, json=row)
         if request.method == "POST":
             payload = json.loads(request.content)
             if table == "venue_blocks":

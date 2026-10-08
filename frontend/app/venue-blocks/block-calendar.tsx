@@ -15,6 +15,14 @@ function Cell({ cell }: { cell: CalendarCell }) {
       </td>
     );
   }
+  if (cell.state === "booked") {
+    return (
+      <td className="border-t border-[#eef2f0] bg-[#e8eefb] px-3 py-2 align-top">
+        <span className="block text-xs font-bold text-[#2b4a8c]">Booked</span>
+        {cell.reasons.map((reason, index) => <span key={index} className="block text-xs text-[#33456b]">{reason}</span>)}
+      </td>
+    );
+  }
   if (cell.state === "unavailable") {
     return <td className="border-t border-[#eef2f0] bg-[#fbf3ee] px-3 py-2 text-xs font-semibold text-[#8c3a2b]">Unavailable</td>;
   }

@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 
 const venues = new Map();
+const blocks = new Map();
+const bookings = new Map();
+const NOTIFICATION_SEED = "http://127.0.0.1:8107/__seed";
+const REASONS = ["maintenance", "renovation", "safety", "internal_use"];
 const SESSIONS = {
   "test-session": "event_organiser",
   "coordinator-session": "event_coordinator",
@@ -25,6 +29,18 @@ function invalid(body) {
   return !body.name || !body.location || !Number.isInteger(body.max_capacity) || body.max_capacity <= 0;
 }
 
+// Dates are inclusive YYYY-MM-DD strings; a shared slot on a shared date overlaps.
+function overlaps(a, b) {
+  return a.start_date <= b.end_date && b.start_date <= a.end_date && a.slots.some((slot) => b.slots.includes(slot));
+}
+
+function takenFor(venueId) {
+  return [
+    ...[...blocks.values()].filter((b) => b.venue_id === venueId && b.status === "active"),
+    ...[...bookings.values()].filter((b) => b.venue_id === venueId && b.status === "approved"),
+  ];
+}
+
 function makeVenue(body) {
   const now = new Date().toISOString();
   return {
@@ -40,6 +56,17 @@ createServer(async (request, response) => {
     const venue = makeVenue(await readJson(request));
     venues.set(venue.id, venue);
     return send(response, 201, venue);
+  }
+  // Test-only: a pending booking request, as SCRUM-32 submission would create it.
+  if (request.method === "POST" && url.pathname === "/__seed_booking") {
+    const body = await readJson(request);
+    const booking = {
+      id: randomUUID(), event_request_id: randomUUID(), event_name: null, expected_attendance: null,
+      requirements_note: null, status: "pending", decision_reason: null, suggested_alternative: null,
+      decided_by: null, decided_at: null, created_at: new Date().toISOString(), ...body,
+    };
+    bookings.set(booking.id, booking);
+    return send(response, 201, booking);
   }
 
   const role = SESSIONS[(request.headers.authorization ?? "").replace(/^Bearer /, "")];
@@ -62,8 +89,17 @@ createServer(async (request, response) => {
     const layout = url.searchParams.get("layout");
     const facilities = url.searchParams.getAll("facility").map((f) => f.toLowerCase());
     const access = url.searchParams.getAll("accessibility").map((a) => a.toLowerCase());
+    // SCRUM-23 / SCRUM-15: a dated search skips blocked and booked slots.
+    const day = url.searchParams.get("date");
+    const freeOn = (v) => {
+      if (!day) return true;
+      const taken = takenFor(v.id);
+      const free = v.operating_slots.filter((s) => !taken.some((t) => overlaps(t, { start_date: day, end_date: day, slots: [s] })));
+      return slot ? free.includes(slot) : free.length > 0;
+    };
     return send(response, 200, [...venues.values()].filter((v) =>
       v.status === "available"
+      && freeOn(v)
       && (!capacity || v.max_capacity >= Number(capacity))
       && (!location || v.location.toLowerCase().includes(location.toLowerCase()))
       && (!slot || v.operating_slots.includes(slot))
@@ -90,6 +126,85 @@ createServer(async (request, response) => {
     const lacking = (need.required_accessibility ?? []).filter((a) => !has(target.accessibility_features, a));
     if (lacking.length) mismatches.push({ attribute: "accessibility", reason: `Missing required accessibility feature: ${lacking.join(", ")}.` });
     return send(response, 200, { venue_id: target.id, suitable: mismatches.length === 0, mismatches });
+  }
+
+  // Mirrors venueService's block and SCRUM-15 decision rules so the browser
+  // journeys run without the real service; the real rules are covered by
+  // venueService's own tests and database verification.
+  const blockPath = url.pathname.match(/^\/venues\/([^/]+)\/blocks$/);
+  if (blockPath) {
+    if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
+    const venueId = decodeURIComponent(blockPath[1]);
+    if (!venues.has(venueId)) return send(response, 404, { detail: "Venue not found" });
+    if (request.method === "GET") return send(response, 200, [...blocks.values()].filter((b) => b.venue_id === venueId));
+    if (request.method === "POST") {
+      const body = await readJson(request);
+      if (!body.start_date || !body.end_date || body.end_date < body.start_date || !body.slots?.length || !REASONS.includes(body.reason_category)) {
+        return send(response, 422, { detail: "Invalid block" });
+      }
+      const block = {
+        ...body, slots: ["AM", "PM", "NIGHT"].filter((s) => body.slots.includes(s)), reason_detail: body.reason_detail ?? null,
+        id: randomUUID(), venue_id: venueId, status: "active", created_by: "playwright-venue", created_at: new Date().toISOString(),
+      };
+      blocks.set(block.id, block);
+      return send(response, 201, block);
+    }
+  }
+
+  if (url.pathname === "/booking-requests" && request.method === "GET") {
+    if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
+    const wanted = url.searchParams.get("status") ?? "pending";
+    return send(response, 200, [...bookings.values()].filter((b) => b.status === wanted).sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  }
+
+  const decisionPath = url.pathname.match(/^\/booking-requests\/([^/]+)\/decision$/);
+  if (decisionPath && request.method === "POST") {
+    if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
+    const booking = bookings.get(decodeURIComponent(decisionPath[1]));
+    if (!booking) return send(response, 404, { detail: "Booking request not found" });
+    const body = await readJson(request);
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    const alternative = typeof body.suggested_alternative === "string" ? body.suggested_alternative.trim() : "";
+    if (!["approved", "rejected"].includes(body.decision) || (body.decision === "rejected" && !reason)
+        || (body.decision === "approved" && (reason || alternative))) {
+      return send(response, 422, { detail: "Invalid decision" });
+    }
+    if (booking.status !== "pending") return send(response, 409, { detail: "Booking request has already been decided" });
+    if (body.decision === "approved") {
+      const target = venues.get(booking.venue_id);
+      const codes = [];
+      if (!target || target.status !== "available") codes.push("venue_unavailable");
+      if (target && booking.slots.some((s) => !target.operating_slots.includes(s))) codes.push("outside_operating_slots");
+      const blocking = [...blocks.values()].filter((b) => b.venue_id === booking.venue_id && b.status === "active" && overlaps(b, booking));
+      const clashing = [...bookings.values()].filter((b) => b.venue_id === booking.venue_id && b.status === "approved" && b.id !== booking.id && overlaps(b, booking));
+      if (blocking.length) codes.push("active_block");
+      if (clashing.length) codes.push("booking_conflict");
+      if (codes.length) {
+        return send(response, 409, { detail: {
+          message: "Approval refused", refusal_codes: codes,
+          conflicting_block_ids: blocking.map((b) => b.id), conflicting_booking_ids: clashing.map((b) => b.id),
+        } });
+      }
+    }
+    Object.assign(booking, {
+      status: body.decision, decision_reason: body.decision === "rejected" ? reason : null,
+      suggested_alternative: body.decision === "rejected" && alternative ? alternative : null,
+      decided_by: "playwright-venue", decided_at: new Date().toISOString(),
+    });
+    // Like venueService, hand the saved decision to notificationService; never fail on it.
+    await fetch(NOTIFICATION_SEED, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event_type: `venue_booking_${booking.status}`, recipient_id: booking.requested_by,
+        payload: {
+          booking_request_id: booking.id, event_request_id: booking.event_request_id, event_name: booking.event_name,
+          venue_id: booking.venue_id, venue_name: venues.get(booking.venue_id)?.name ?? null,
+          start_date: booking.start_date, end_date: booking.end_date, slots: booking.slots,
+          decision_reason: booking.decision_reason, suggested_alternative: booking.suggested_alternative,
+        },
+      }),
+    }).catch(() => undefined);
+    return send(response, 200, booking);
   }
 
   const match = url.pathname.match(/^\/venues\/([^/]+)$/);
