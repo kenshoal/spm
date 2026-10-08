@@ -12,7 +12,7 @@ The original acceptance criteria were reviewed against the customer briefing (*V
 | --- | --- | --- |
 | Venue Staff can mark a venue unavailable for a date-range/slot with a recorded reason. | Clarify | Inputs, inclusivity and refusals were not stated. |
 | Given a blocked venue/slot, when a search or booking is attempted for that period, then the venue is not offered or booked. | Split | Search (AC2) is testable now; booking (AC2b) needs venue booking requests from SCRUM-15. |
-| Given a block that affects an already-confirmed upcoming event, when applied, then the affected event's Coordinator is notified. | Keep, dependent | Needs confirmed venue bookings (SCRUM-15) and notification delivery (SCRUM-37). |
+| Given a block that affects an already-confirmed upcoming event, when applied, then the affected event's Coordinator is notified. | Clarify | Approved 8 October 2026: an approved booking request is the confirmed booking (0018), "upcoming" means it has not ended (Singapore date), and the recipient is the booking's requesting Coordinator, as in SCRUM-15. The block is still saved. |
 | Blocked periods appear as "blocked" on the availability calendar. | Clarify | Viewer, covered periods and non-operating slots were not stated. |
 
 ## Increment scope
@@ -20,7 +20,7 @@ The original acceptance criteria were reviewed against the customer briefing (*V
 - **Included:** Venue Staff create a dated block through the frontend (AC1); dated search excludes blocked venues (AC2, already implemented and tested in venueService); Venue Staff view blocked periods on a monthly calendar (AC4).
 - **Shared-file change:** one "Venue blocks" workspace link for Venue Staff in `frontend/app/components/app-shell.tsx`, with its expectations in `frontend/__tests__/workspace-links.test.ts`. The venue catalogue page (SCRUM-30) is unchanged; the block page has its own venue picker.
 - **Review follow-ups (PR #45):** the AC3 placeholder that read allocations from an external `EVENT_ALLOCATIONS_URL` service was removed, because the agreed design (0018) makes an approved `venue_booking_requests` row the booking; AC3 will be rebuilt on that table after SCRUM-15. `GET /venues/{id}/blocks` is now Venue Staff only and `POST /venues/{id}/availability` is Venue Staff and Event Coordinators only. `database/migrations/0023_venue_blocks.sql` records the hand-created table and revokes browser-role access; it was applied to shared development on 6 October 2026.
-- **Excluded:** AC2b booking refusal and AC3 Coordinator notification (wait on SCRUM-15 bookings and SCRUM-37); Event Coordinator calendar access; lifting a block (no endpoint); post-login landing change (shared file, next increment); booking requests inbox (SCRUM-15).
+- **Delivered later:** AC2b booking refusal arrived with SCRUM-15 (PR #48); AC3 Coordinator alerts on `feat/scrum-23-block-notifications`. **Excluded:** Event Coordinator calendar access; lifting a block (no endpoint); post-login landing change; notifying a reassigned Coordinator or the Organiser (C-9a; eventRequestService refuses the Coordinator lookup for Venue Staff).
 - **Actors and access:** Only Venue Staff can open `/venue-blocks`, create a block or list block reasons; Venue Staff and Event Coordinators can run the availability check, which returns no free-text reasons; external roles get 403. venueService enforces the `venue_staff` role on `POST /venues/{id}/blocks`.
 - **State:** A new block is `active`. `lifted` blocks are kept as history and never shown as blocked.
 - **Persistence:** One `POST /venues/{venue_id}/blocks` call writes the block; the server sets its ID, creator, status and timestamp.
@@ -30,8 +30,8 @@ The original acceptance criteria were reviewed against the customer briefing (*V
 
 - **AC1:** Given Venue Staff and an existing venue, when they submit a start and end date (inclusive), at least one slot (AM/PM/NIGHT) and a reason (maintenance, renovation, safety or internal use, with optional detail up to 1,000 characters), then an active block is saved and shown. An end date before the start date, no slots, no reason or no venue is refused and nothing is saved; a non-Venue-Staff user cannot open the page and the API refuses them with 403.
 - **AC2:** Given an active block on a venue for a date and slot, when someone searches for that date and slot, then the venue is not offered; it is still offered for unblocked dates and slots, and lifted blocks do not hide it.
-- **AC2b (dependent on SCRUM-15):** Given an active block, when a booking for an overlapping date and slot is approved, then the approval is refused.
-- **AC3 (dependent on SCRUM-15 and SCRUM-37):** Given a block that affects an already-confirmed upcoming event, when it is applied, then the event's Coordinator is notified.
+- **AC2b:** Given an active block, when a booking for an overlapping date and slot is approved, then the approval is refused and recorded (delivered by SCRUM-15).
+- **AC3:** Given Venue Staff create a block, when it shares a date and slot with an approved booking that has not ended, then the block is saved, the booking's requesting Coordinator receives a notification with the block's dates, slots and reason, and Venue Staff are told which bookings are affected. Pending or rejected requests, other venues, non-overlapping and ended bookings are not notified; a notification failure never fails the block.
 - **AC4:** Given a venue with blocks, when Venue Staff view its availability calendar for a month, then every date and slot covered by an active block shows "Blocked" with its reason; lifted blocks and uncovered cells do not; slots the venue does not operate show "Not offered".
 
 ## Test-case specification
@@ -121,7 +121,19 @@ Each backend test carries its ID in a one-line label comment; parametrized cases
 | AC4-N4 | AC4 | Block list for an unknown venue | Negative | 404 | API | `test_block_availability.py` |
 | AC4-N5 | AC4 | Database timeout | Negative | Error, never an empty list | Unit | `test_database_storage.py` |
 
-Planned for the next increment (needs shared files): an end-to-end journey in `frontend/e2e/` (block → calendar → search), which requires block endpoints in the shared mock `e2e/support/venue-api.mjs`.
+### AC2b and AC3 test cases
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Test |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC2b | AC2b | Approval of a booking over an active block is refused and recorded | Happy | 409 `active_block`; refusal logged | API + DB | SCRUM-15: `tests/test_booking_decision_api.py` (AC5-H1), `database/verify_venue_booking_decisions.sql` |
+| AC3-H1 | AC3 | A block over an approved, upcoming booking notifies its requesting Coordinator | Happy | One `venue_block_affects_booking` event with block and booking details; idempotency key ≤ 64 chars | API + E2E | `tests/test_block_impact_notifications.py`; `frontend/e2e/venue-blocking.spec.ts` |
+| AC3-H2 | AC3 | Every affected booking is notified once | Happy | One event per affected booking | API | `tests/test_block_impact_notifications.py` |
+| AC3-P1 | AC3 | Pending/rejected requests, other venues, other slots and later dates are not notified | Partition | No events | API | `tests/test_block_impact_notifications.py` |
+| AC3-B1 | AC3 | A booking ending today is upcoming; one that ended yesterday is not | Boundary | Today notified; yesterday not | API | `tests/test_block_impact_notifications.py` |
+| AC3-N1 | AC3 | A notification failure never fails or undoes the block | Negative | 201; block stored | API | `tests/test_block_impact_notifications.py` |
+| AC3-N2 | AC3 | A refused block (422, 404) sends nothing | Negative | No events | API | `tests/test_block_impact_notifications.py` |
+| AC3-H5, AC3-P6 | AC3 | The Coordinator's inbox explains the block | Happy / Partition | Venue, event, dates, slots, reason; sparse payloads still read well; link to the coordination page | Unit | `frontend/__tests__/booking-notifications.test.ts` |
+| AC3-H6, AC3-P7 | AC3 | Venue Staff see which confirmed bookings a new block affects | Happy / Partition | Saved message lists affected bookings and says their Coordinators were notified; plain "Block saved." otherwise | Component | `frontend/__tests__/venue-blocks.test.tsx`, `venue-block-actions.test.ts` |
 
 ## Latest execution record
 
@@ -144,7 +156,10 @@ Build: `feat/venue-blocking` at `c352c51` plus the PR #45 review follow-ups (dev
 | AC4-H1, B1–B3, P1–P4 | Green | Calendar model and rendering as specified | Pass | same | same | `frontend/__tests__/block-calendar.test.ts`, `venue-blocks.test.tsx` |
 | AC4-P6 | Green | Banner shown; operating cells Unavailable; dated block reasons kept; no Available cell | Pass | same | same | Red observed first (cell was `open`), then Green: `block-calendar.test.ts`, `venue-blocks.test.tsx` |
 | AC4-N1–N3, P5 | Green | Outage, not-found, failed block lookup (no open calendar) and empty catalogue each reported | Pass | same | same | `frontend/__tests__/venue-blocks.test.tsx` |
-| AC2b, AC3 | — | — | Blocked | — | — | Wait on SCRUM-15 venue bookings and SCRUM-37 delivery. |
+| AC2b | Green | Approval over an active block refused with `active_block` and recorded | Pass | dev at `2997af2` (PR #48) | Claude Code, 7–8 Oct 2026 | Evidence in `docs/testcases/scrum_15_testcases.md` (AC5-H1, DB-1) |
+| AC3 (backend) | Green | Affected Coordinators notified once each; unaffected, ended and refused cases send nothing; failure keeps the block | Pass | `feat/scrum-23-block-notifications` working tree on dev `36432fe` | Claude Code, 8 Oct 2026 | Red first (the 3 notify cases sent nothing), then Green: `tests/test_block_impact_notifications.py` |
+| AC3 (frontend) | Green | Inbox message; staff told which bookings are affected; block id passed back after saving | Pass | same | same | Red first (5 cases), then Green: `booking-notifications.test.ts`, `venue-blocks.test.tsx`, `venue-block-actions.test.ts` (2 redirect expectations updated) |
+| AC3 (E2E) | Green | Staff block a booked slot, see the affected booking, Coordinator inbox shows the alert | Pass | same | same | `CI=1 npx playwright test`: 31 passed; dates use next year so the "not ended" rule stays true |
 | E2E journey | Green | Venue Staff reach Venue blocks from the menu, see a slot error, block a venue, see it Blocked with its reason on the calendar; a Coordinator's dated search no longer offers that slot but still offers the other; Coordinators are redirected from `/venue-blocks` | Pass | `feat/venue-booking-decision` at 9a0859d + working tree, local | Claude Code, 8 Oct 2026 | `CI=1 npx playwright test`: 30 passed. `frontend/e2e/venue-blocking.spec.ts`; block endpoints added to the shared `e2e/support/venue-api.mjs`. Lands with the SCRUM-15 PR |
 
 **Red phase:** the new tests were written first and failed because the modules did not exist. Under `testing.md` §5 that is not a valid behavioural Red, so no Red evidence is claimed.
