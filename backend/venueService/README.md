@@ -177,11 +177,13 @@ Venue blocking has no dependency on equipmentService for its acceptance criteria
 Equipment integration is only needed if the team adds an explicit requirement
 about equipment affected by a venue closure.
 
-Coordinator alerts for confirmed events affected by a new block (SCRUM-23 AC3)
-are not implemented yet. As agreed with the SCRUM-32 owner, an approved request
-in `venue_booking_requests` is the booking, so affected events will come from
-approved rows for the venue plus the event's status and current Coordinator
-from eventRequestService, once SCRUM-15 can approve requests.
+When Venue Staff create a block (SCRUM-23 AC3), venueService finds every
+approved booking request for that venue that shares a date and slot with the
+block and has not ended (Singapore date), and sends its requesting Coordinator
+a `venue_block_affects_booking` notification with the block's dates, slots and
+reason. The block is always saved; a failed notification is logged and never
+undoes it. As agreed with the SCRUM-32 owner, an approved request is the
+booking, so no event-status lookup is needed.
 
 Booking requests (SCRUM-32) are stored in `public.venue_booking_requests`
 (`database/migrations/0018_venue_booking_requests.sql`) under the same
