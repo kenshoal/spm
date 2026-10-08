@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from app.routers import availability, equipment, status
+from app.routers import availability, equipment, requirements, status
 
 
 class ServiceResponse(BaseModel):
@@ -23,6 +23,7 @@ app = FastAPI(
 app.include_router(equipment.router)
 app.include_router(status.router)
 app.include_router(availability.router)
+app.include_router(requirements.router)
 
 
 @app.get("/", response_model=ServiceResponse, tags=["service"])

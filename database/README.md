@@ -41,6 +41,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0020_equipment_reservations.sql` | `equipment_reservations` table for SCRUM-10: units of an equipment row committed to an event, `quantity > 0` and `return_date >= collection_date` CHECKs, FKs to `equipment` and `event_requests`, hold-window index, RLS on with service-role access only. Starts empty; SCRUM-13 writes rows. Applied to the shared development project on 6 October 2026, replacing the placeholder table from `feat/scoped-resource-access` (SCRUM-39), which was dropped the same day once the two stories deconflicted — SCRUM-10's hold-ledger schema (`collection_date`/`return_date`) is the canonical one |
 | `migrations/0020_event_change_request_updated_at.sql` | Advances the event version timestamp when an amendment is approved |
 | `migrations/0021_event_change_request_monotonic_updated_at.sql` | Makes the approval-side timestamp assignment strictly monotonic |
+| `migrations/0021_equipment_requirements.sql` | `equipment_requirements` table for SCRUM-33: what equipment an event needs (`quantity >= 1`, 2,000-character limits on the free-text columns, blank type refused), the event snapshot, and `requested`/`in_progress`/`arranged` with audit fields that must move together; `transition_equipment_requirement` RPC applies one arrangement transition under `FOR UPDATE` (ERRCODE `P0002` unknown id, `P0004` disallowed, stale or note-less update), two oldest-first lookup indexes, RLS on with service-role access only. Applied to shared development on 7 October 2026 |
 | `migrations/0022_monotonic_event_request_updated_at_trigger.sql` | Makes the shared event-request update trigger monotonic, including multiple writes in one transaction |
 | `migrations/0023_venue_blocks.sql` | `venue_blocks` table for SCRUM-23 with its `block_reason` and `block_status` enums, a foreign key to `venues` and a per-venue index. **Reference snapshot** of the table created by hand in the dashboard (safe to re-run: it skips existing objects), plus RLS on and `REVOKE ALL` from `anon` and `authenticated`, so only venueService's secret key can read block reasons. Applied to shared development on 6 October 2026 through the SQL Editor; afterwards `has_table_privilege` returns false for `anon` and `authenticated`, and the publishable key gets `401` (`42501`) while venueService still reads both existing blocks |
 | `migrations/0024_venue_booking_decisions.sql` | SCRUM-15: `venue_booking_refusals` append-only log of refused approvals (who, when, reason codes, conflicting block and booking ids), plus server-only `decide_venue_booking_request` (locks the venue row, then the request row; approves, rejects with a required reason, or records a refusal for `venue_unavailable` / `outside_operating_slots` / `active_block` / `booking_conflict`) and `create_venue_block` (same venue lock). Errors: `P0002` not found, `55000` already decided, `22023` invalid decision. RLS on and no browser-role access. Verify with `verify_venue_booking_decisions.sql`. Applied to shared development on 8 October 2026 through the SQL Editor; afterwards the secret key reads `venue_booking_refusals`, the publishable key gets `401` on the table and on `decide_venue_booking_request`, and an unknown request id returns `P0002` without writing |
@@ -137,6 +138,16 @@ path (including reassignment away and repeated actions), confirms refused calls
 leave the status unchanged, and checks the `EXECUTE` grants. It prints
 `ALL EVENT-REQUEST STATUS TRANSITION VERIFICATIONS PASSED` and rolls back.
 Requires at least one Supabase Auth user (used as the organiser).
+
+The equipment-requirements table and its transition function are verified by
+[`verify_equipment_requirements.sql`](verify_equipment_requirements.sql).
+Run it once before `0021`, when it should stop with a missing-table error (the
+Red result), and again after, when it should print
+`SCRUM-33 verify: all equipment_requirements cases passed`. It covers the
+defaults, every CHECK and foreign key (including the refusal paths), the
+allowed transitions and their audit fields, the row lock, the lookup indexes
+and server-only access. It rolls back all rows and needs at least one Supabase
+Auth user (run `seed_test_accounts.sql` first).
 
 Atomic assignment is verified by
 [`verify_atomic_coordinator_assignment.sql`](verify_atomic_coordinator_assignment.sql).
