@@ -147,6 +147,26 @@ createServer(async (request, response) => {
         id: randomUUID(), venue_id: venueId, status: "active", created_by: "playwright-venue", created_at: new Date().toISOString(),
       };
       blocks.set(block.id, block);
+      // SCRUM-23 AC3: like venueService, alert the Coordinator of each approved,
+      // not-yet-ended booking the new block overlaps; never fail the block.
+      const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
+      const affected = [...bookings.values()].filter((b) =>
+        b.venue_id === venueId && b.status === "approved" && b.end_date >= today && overlaps(b, block));
+      for (const booking of affected) {
+        await fetch(NOTIFICATION_SEED, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event_type: "venue_block_affects_booking", recipient_id: booking.requested_by,
+            payload: {
+              block_id: block.id, booking_request_id: booking.id, event_request_id: booking.event_request_id,
+              event_name: booking.event_name, venue_id: venueId, venue_name: venues.get(venueId)?.name ?? null,
+              block_start_date: block.start_date, block_end_date: block.end_date, block_slots: block.slots,
+              reason_category: block.reason_category, reason_detail: block.reason_detail,
+              booking_start_date: booking.start_date, booking_end_date: booking.end_date, booking_slots: booking.slots,
+            },
+          }),
+        }).catch(() => undefined);
+      }
       return send(response, 201, block);
     }
   }
