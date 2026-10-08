@@ -33,9 +33,27 @@ export function parseMonth(value: string | undefined, fallback: string): string 
   return value && MONTH_PATTERN.test(value) ? value : fallback;
 }
 
-// The venues are in Singapore, so "this month" follows Singapore time.
+// The venues are in Singapore, so "today" and "this month" follow Singapore time.
+export function currentDate(now: Date = new Date()): string {
+  return now.toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" });
+}
+
 export function currentMonth(now: Date = new Date()): string {
-  return now.toLocaleDateString("en-CA", { timeZone: "Asia/Singapore" }).slice(0, 7);
+  return currentDate(now).slice(0, 7);
+}
+
+// Approved bookings for the block's venue that share a date and slot with it
+// and have not ended: the ones whose Coordinators venueService notifies.
+export function bookingsAffectedBy(block: VenueBlock, bookings: readonly VenueBooking[], today: string): VenueBooking[] {
+  return bookings.filter(
+    (booking) =>
+      booking.status === "approved" &&
+      booking.venue_id === block.venue_id &&
+      booking.end_date >= today &&
+      booking.start_date <= block.end_date &&
+      block.start_date <= booking.end_date &&
+      booking.slots.some((slot) => block.slots.includes(slot)),
+  );
 }
 
 function shiftMonth(month: string, delta: number): string {
