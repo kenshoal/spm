@@ -13,6 +13,7 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `GET` | `/event-requests/assigned-to-me` | List requests whose latest assignment is the calling Coordinator |
 | `GET` | `/event-requests/public-events` | Attendee-facing Confirmed and Completed events |
 | `GET` | `/event-requests/{id}` | Retrieve one request (owning Organiser or assigned Coordinator) |
+| `GET` | `/event-requests/{id}/status-history` | Chronological read-only status evidence, using the same request visibility as SCRUM-39 |
 | `PATCH` | `/event-requests/{id}` | Update a Draft |
 | `POST` | `/event-requests/{id}/submit` | Submit a completed Draft |
 | `DELETE` | `/event-requests/{id}` | Delete a Draft |
@@ -117,6 +118,39 @@ The decision primitive and existing migrations are retained for later integratio
 their presence does not enable API decisions. Browser roles cannot read the
 change table or execute either workflow function. The original SCRUM-35 criteria
 remain outstanding.
+
+## Status history (SCRUM-48)
+
+Apply `database/migrations/0025_event_request_status_history.sql` before deploying
+this endpoint in a fresh environment. **Applied to shared Supabase on 10 October
+2026 after explicit approval**, migration version `20261010034216`. It installs
+triggers, replaces three coordinator RPCs, changes history permissions and adds
+baseline rows for existing events. Local and focused shared verification passed;
+the full verification script encountered a connector request-state error, so its
+assertions were checked in smaller rolled-back blocks. The real repository read
+and publishable-key refusal were also verified through shared PostgREST.
+
+`GET /event-requests/{id}/status-history` requires a verified session and reuses
+request visibility: the owner, current coordinator and same-client-organisation
+Organisers with non-Draft read access can read it. Other relationships receive
+404 `HISTORY_NOT_FOUND`; unrelated roles receive 403 `HISTORY_FORBIDDEN`.
+There is no history-write endpoint. Browser database roles cannot read the table;
+the server role can only select history, while private database triggers insert it.
+
+Creation and each actual status change append one entry in the event transaction.
+Refused actions, same-status writes, detail edits and clarification responses add
+none. Resume review does add a transition. Entries are ordered by timestamp then
+identity, and include previous/new status, actor ID/role, source and timestamp.
+Existing events receive an honest system baseline rather than invented earlier
+activity. Discarding an unsubmitted Draft removes its history; retained event
+history cannot be independently modified or deleted.
+
+The organiser and coordinator detail pages display this timeline separately from
+review conversations, change proposals and the progress tracker. Loading, empty
+and dependency-error states are explicit. Future status writers must follow the
+actor/transaction contract in `database/README.md`; their workflows are not
+implemented by this story. See `docs/testcases/scrum_48_testcases.md` for coverage,
+evidence and remaining review/deployment checks.
 
 ## Submission confirmations
 

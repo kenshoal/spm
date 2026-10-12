@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import (
     AwareDatetime,
@@ -272,3 +272,17 @@ class EventChangeRequestResponse(BaseModel):
 class HealthResponse(BaseModel):
     service: str
     status: str
+
+
+class EventStatusHistoryResponse(BaseModel):
+    """Read-only status evidence; baseline rows explicitly identify legacy events."""
+
+    id: int
+    event_request_id: str
+    previous_status: EventRequestStatus | None
+    new_status: EventRequestStatus
+    actor_id: str | None
+    actor_role: str
+    source: str
+    entry_kind: Literal["created", "transition", "baseline"]
+    occurred_at: AwareDatetime

@@ -11,6 +11,7 @@ from app.models.event_request import (
     EventRequestSubmission,
     EventRequestUpdate,
     EventReviewDecisionResponse,
+    EventStatusHistoryResponse,
 )
 from app.repositories import EventRequestRepository
 from app.repositories.event_request_repository import EventRequestRpcError
@@ -73,6 +74,14 @@ class EventRequestService:
 
     def __init__(self, repository: EventRequestRepository) -> None:
         self.repository = repository
+
+    def list_status_history(self, event_request_id: str) -> list[EventStatusHistoryResponse]:
+        """Sort deterministically even when several entries have equal timestamps."""
+        rows = self.repository.list_status_history(event_request_id)
+        return sorted(
+            (EventStatusHistoryResponse.model_validate(row) for row in rows),
+            key=lambda entry: (entry.occurred_at, entry.id),
+        )
 
     def create(
         self, payload: EventRequestCreate, organiser_id: str
