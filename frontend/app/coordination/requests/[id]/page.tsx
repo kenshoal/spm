@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { requireRole, type AuthenticatedUser } from "@/lib/auth";
 import {
   coordinatorActions,
-  getEventRequest,
+  getEventRequestStatusView,
   listEventChangeRequests,
   listReviewDecisions,
 } from "@/lib/event-requests";
@@ -16,9 +16,11 @@ import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
 import { ChangeRequestPanel } from "./change-request-panel";
 
+import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
+
 async function CoordinatorRequestView({ id }: { id: string }) {
-  const result = await getEventRequest(id)
-    .then((request) => ({ request, failed: false as const }))
+  const result = await getEventRequestStatusView(id)
+    .then((view) => ({ ...view, failed: false as const }))
     .catch((error: unknown) => {
       unstable_rethrow(error);
       return { request: null, failed: true as const };
@@ -29,6 +31,16 @@ async function CoordinatorRequestView({ id }: { id: string }) {
   }
   if (!result.request) {
     return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">Request not found</h1><p className="mt-2 text-sm text-[#718078]">It may not exist, or it may not be assigned to you.</p></div>;
+  }
+
+  if (result.statusUnsettled) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <p role="alert" className="mb-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request changed while loading. Refresh to see its current status and available actions.</p>
+        <RequestDetails request={result.request} />
+        <StatusHistory entries={[]} unavailable />
+      </div>
+    );
   }
 
   const request = result.request;
@@ -57,6 +69,7 @@ async function CoordinatorRequestView({ id }: { id: string }) {
     <div className="mx-auto max-w-4xl">
       <Link href="/coordination/requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to assigned requests</Link>
       <RequestDetails request={request} coordinatorAssigned />
+      <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
       <div className="mt-5">
         <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
       </div>
@@ -96,7 +109,7 @@ async function CoordinatorRequestView({ id }: { id: string }) {
 }
 
 function DetailLoading() {
-  return <div aria-label="Loading request" className="mx-auto h-[34rem] max-w-4xl animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" />;
+  return <><div aria-label="Loading request" className="mx-auto h-[34rem] max-w-4xl animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" /><StatusHistoryLoading /></>;
 }
 
 export default async function CoordinationRequestPage({ params }: { params: Promise<{ id: string }> }) {
