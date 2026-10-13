@@ -44,8 +44,9 @@ class EventTransitionService:
     """Own coordinator transitions and SCRUM-17 review decisions.
 
     Every operation uses a database function that locks the request and
-    re-checks the latest assignment before writing. Planning/confirmation and
-    post-submission change requests remain in their owning stories.
+    re-checks the latest assignment before writing. Approved -> Planning is
+    SCRUM-58; the safety check, confirmation and post-submission change
+    requests remain in their owning stories.
     """
 
     def __init__(
@@ -81,6 +82,13 @@ class EventTransitionService:
                     "A clarification response is required before review can continue",
                 ) from error
             raise
+
+    def start_planning(
+        self, event_request_id: str, caller_id: str
+    ) -> EventRequestResponse:
+        return self._advance(
+            event_request_id, caller_id, EventRequestStatus.PLANNING
+        )
 
     def cancel(self, event_request_id: str, caller_id: str) -> EventRequestResponse:
         return self._advance(
