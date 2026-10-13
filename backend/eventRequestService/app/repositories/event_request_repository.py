@@ -6,6 +6,8 @@ from app.config import Settings
 
 
 class EventRequestRepository(Protocol):
+    def list_status_history(self, event_request_id: str) -> list[dict[str, Any]]: ...
+
     def create(self, values: dict[str, Any]) -> dict[str, Any]: ...
 
     def list_for_organiser(
@@ -141,6 +143,16 @@ class SupabaseEventRequestRepository:
             headers={"Prefer": "return=representation"},
         )
         return rows[0]
+
+    def list_status_history(self, event_request_id: str) -> list[dict[str, Any]]:
+        """The controller checks SCRUM-39 visibility before this server-only read."""
+        return self._request_table(
+            "GET", "/event_request_status_history",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "occurred_at.asc,id.asc", "select": "*",
+            },
+        )
 
     def list_for_organiser(
         self, organiser_id: str

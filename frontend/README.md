@@ -13,6 +13,19 @@ This is the ConnectSphere frontend.
 
 Users with both roles see links to both workspaces.
 
+Organiser and coordinator details show a read-only status timeline. Before rendering
+status-dependent controls, the page compares the latest history entry with the event
+status and retries both reads once if a transition occurred between them. If they
+still disagree, it shows refresh guidance and withholds those controls. A history
+outage keeps the event details available with an explicit unavailable message;
+expired sessions still redirect to sign-in.
+
+The timeline shows the latest five entries with a **Newest first** label.
+**Show older activity** adds five more entries until the full history is visible;
+the API keeps its complete chronological record. **Refresh status and history**
+refreshes the whole detail view through the same server loader. Existing workflow
+actions continue to refresh their detail pages after a successful change.
+
 ## Workspaces
 
 | Role | Lands on | Pages |

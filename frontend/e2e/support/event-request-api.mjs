@@ -5,6 +5,8 @@ const records = new Map();
 const assignments = [];
 const reviewDecisions = [];
 const changeRequests = [];
+const statusHistory = [];
+let nextHistoryId = 1;
 let nextAssignmentId = 1;
 let nextDecisionId = 1;
 const port = 8103;
@@ -92,6 +94,16 @@ function recordFields(overrides = {}) {
   };
 }
 
+// Mirrors the persisted history contract; real transaction behaviour is verified in Postgres.
+function recordHistory(record, previousStatus, actor, source, entryKind = "transition") {
+  statusHistory.push({
+    id: nextHistoryId++, event_request_id: record.id,
+    previous_status: previousStatus, new_status: record.status,
+    actor_id: actor?.id ?? null, actor_role: actor?.role ?? "system",
+    source, entry_kind: entryKind, occurred_at: new Date().toISOString(),
+  });
+}
+
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
   const user = caller(request);
@@ -108,6 +120,7 @@ createServer(async (request, response) => {
     const { coordinator_id, review_decision, ...recordOverrides } = body;
     const record = recordFields({ ...recordOverrides, status: body.status ?? "Submitted" });
     records.set(record.id, record);
+    recordHistory(record, null, null, "history.recording_started", "baseline");
     if (coordinator_id) {
       assignments.push({
         id: nextAssignmentId++,
@@ -149,6 +162,7 @@ createServer(async (request, response) => {
       status: "Draft",
     });
     records.set(record.id, record);
+    recordHistory(record, null, user, "event_request.created", "created");
     send(response, 201, record);
     return;
   }
@@ -164,6 +178,7 @@ createServer(async (request, response) => {
       status: "Submitted",
     });
     records.set(record.id, record);
+    recordHistory(record, null, user, "event_request.created", "created");
     send(response, 201, record);
     return;
   }
@@ -219,6 +234,7 @@ createServer(async (request, response) => {
     return;
   }
 
+  const historyMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/status-history$/);
   const coordinatorMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/coordinator$/);
   const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|resume-review|cancellation|completion)$/);
   const decisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decision$/);
@@ -229,7 +245,7 @@ createServer(async (request, response) => {
   const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
   const match = url.pathname.match(/^\/event-requests\/([^/]+)$/);
   const id = decodeURIComponent(
-    coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? decisionMatch?.[1]
+    historyMatch?.[1] ?? coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? decisionMatch?.[1]
       ?? decisionsMatch?.[1] ?? clarificationMatch?.[1] ?? changeDecisionMatch?.[1]
       ?? changeRequestsMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
   );
@@ -299,6 +315,39 @@ createServer(async (request, response) => {
 
   if (!id || !record) {
     send(response, 404, { detail: "Event request not found" });
+    return;
+  }
+
+  if (historyMatch) {
+    if (request.method !== "GET") {
+      send(response, 405, { detail: "Method not allowed" });
+      return;
+    }
+    const canRead = organiserCanView(user, record)
+      || (user.role === "event_coordinator" && latestAssignmentFor(id)?.coordinator_id === user.id);
+    if (!canRead) {
+      const eligibleRole = ["event_organiser", "event_coordinator"].includes(user.role);
+      send(response, eligibleRole ? 404 : 403, { detail: {
+        code: eligibleRole ? "HISTORY_NOT_FOUND" : "HISTORY_FORBIDDEN",
+        message: "Status history is not accessible",
+      } });
+      return;
+    }
+    if (record.history_unavailable) {
+      send(response, 502, { detail: "Status history unavailable" });
+      return;
+    }
+    // Test-only competing writer: the details read has finished before this history lookup.
+    // A one-shot real-looking transition makes the two valid responses disagree in time.
+    if (record.history_read_transition === "Under Review" && record.status === "Submitted") {
+      delete record.history_read_transition;
+      const previous = record.status;
+      record.status = "Under Review";
+      record.updated_at = new Date().toISOString();
+      recordHistory(record, previous, { id: "playwright-coordinator", role: "event_coordinator" }, "coordinator.review");
+    }
+    send(response, 200, statusHistory.filter((entry) => entry.event_request_id === id)
+      .sort((a, b) => a.occurred_at.localeCompare(b.occurred_at) || a.id - b.id));
     return;
   }
 
@@ -409,6 +458,7 @@ createServer(async (request, response) => {
       updated_at: new Date().toISOString(),
     };
     records.set(id, updated);
+    recordHistory(updated, record.status, user, `coordinator.${action.replaceAll("-", "_")}`);
     send(response, 200, updated);
     return;
   }
@@ -451,6 +501,7 @@ createServer(async (request, response) => {
       updated_at: new Date().toISOString(),
     };
     records.set(id, updated);
+    recordHistory(updated, record.status, user, "coordinator.decision");
     send(response, 200, updated);
     return;
   }
@@ -496,6 +547,7 @@ createServer(async (request, response) => {
       updated_at: new Date().toISOString(),
     };
     records.set(id, updated);
+    recordHistory(updated, record.status, user, "event_request.submitted");
     send(response, 200, updated);
     return;
   }
@@ -541,6 +593,9 @@ createServer(async (request, response) => {
       return;
     }
     records.delete(id);
+    for (let i = statusHistory.length - 1; i >= 0; i--) {
+      if (statusHistory[i].event_request_id === id) statusHistory.splice(i, 1);
+    }
     send(response, 204);
     return;
   }

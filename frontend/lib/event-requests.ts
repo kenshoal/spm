@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAccessToken } from "./auth";
 
 export const EVENT_REQUEST_STATUSES = [
@@ -140,11 +140,24 @@ export interface EventChangeRequest {
 
 const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
-async function request(path: string): Promise<Response> {
+export interface EventStatusHistory {
+  id: number;
+  event_request_id: string;
+  previous_status: EventRequestStatus | null;
+  new_status: EventRequestStatus;
+  actor_id: string | null;
+  actor_role: string;
+  source: string;
+  entry_kind: 'created' | 'transition' | 'baseline';
+  occurred_at: string;
+}
+
+async function request(path: string, signal?: AbortSignal): Promise<Response> {
   const token = await requireAccessToken();
   const response = await fetch(`${apiUrl}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
+    ...(signal ? { signal } : {}),
   });
   if (response.status === 401) redirect("/auth");
   if (!response.ok && response.status !== 404) {
@@ -163,8 +176,8 @@ export async function listAssignedEventRequests(): Promise<EventRequest[]> {
   return response.json() as Promise<EventRequest[]>;
 }
 
-export async function getEventRequest(id: string): Promise<EventRequest | null> {
-  const response = await request(`/event-requests/${encodeURIComponent(id)}`);
+export async function getEventRequest(id: string, signal?: AbortSignal): Promise<EventRequest | null> {
+  const response = await request(`/event-requests/${encodeURIComponent(id)}`, signal);
   return response.status === 404 ? null : response.json() as Promise<EventRequest>;
 }
 
@@ -188,6 +201,54 @@ export async function listReviewDecisions(
   return response.status === 404
     ? []
     : response.json() as Promise<EventReviewDecision[]>;
+}
+
+export async function listStatusHistory(eventRequestId: string, signal?: AbortSignal): Promise<EventStatusHistory[]> {
+  const response = await request(`/event-requests/${encodeURIComponent(eventRequestId)}/status-history`, signal);
+  // A revoked relationship is not a successful empty audit trail.
+  if (response.status === 404) throw new Error('Status history is not accessible');
+  return response.json() as Promise<EventStatusHistory[]>;
+}
+
+export interface EventRequestStatusView {
+  request: EventRequest | null;
+  history: EventStatusHistory[];
+  historyUnavailable: boolean;
+  statusUnsettled: boolean;
+}
+
+/** Reconcile separate reads before details, timeline and status actions render. */
+export async function getEventRequestStatusView(id: string): Promise<EventRequestStatusView> {
+  let current = await getEventRequest(id);
+  if (!current) {
+    return { request: null, history: [], historyUnavailable: false, statusUnsettled: false };
+  }
+
+  let statusUnsettled = false;
+  try {
+    let history = await listStatusHistory(id);
+    if (history.length > 0 && history[history.length - 1].new_status !== current.status) {
+      // Retry once: a transition can commit between the event and history reads.
+      statusUnsettled = true;
+      // Signals bypass Next render-pass memoisation so the retry is genuinely fresh.
+      const { signal } = new AbortController();
+      current = await getEventRequest(id, signal);
+      if (!current) {
+        return { request: null, history: [], historyUnavailable: false, statusUnsettled: false };
+      }
+      history = await listStatusHistory(id, signal);
+      statusUnsettled = history.length > 0 && history[history.length - 1].new_status !== current.status;
+    }
+    return {
+      request: current,
+      history: statusUnsettled ? [] : history,
+      historyUnavailable: statusUnsettled,
+      statusUnsettled,
+    };
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    return { request: current, history: [], historyUnavailable: true, statusUnsettled };
+  }
 }
 
 export async function listEventChangeRequests(

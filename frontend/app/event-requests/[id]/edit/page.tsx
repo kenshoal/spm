@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { requireRole } from "@/lib/auth";
 import {
   getCoordinatorAssignment,
-  getEventRequest,
+  getEventRequestStatusView,
   listEventChangeRequests,
   listReviewDecisions,
 } from "@/lib/event-requests";
@@ -17,11 +17,13 @@ import { ClarificationResponseForm } from "../clarification-response-form";
 import { ChangeRequestHistory } from "../../../components/change-request-history";
 import { ChangeRequestDialog } from "../change-request-dialog";
 
+import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
+
 const SHARED_NOTICE = "Shared by another organiser in your organisation. You can view it but not change it.";
 
 async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
-  const result = await getEventRequest(id)
-    .then((request) => ({ request, failed: false as const }))
+  const result = await getEventRequestStatusView(id)
+    .then((view) => ({ ...view, failed: false as const }))
     .catch((error: unknown) => {
       unstable_rethrow(error);
       return { request: null, failed: true as const };
@@ -33,6 +35,16 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
   if (!result.request) {
     return <div className="rounded-2xl border border-[#dce4e0] bg-white px-6 py-12 text-center"><h1 className="text-xl font-bold">Draft not found</h1><p className="mt-2 text-sm text-[#718078]">It may belong to another organiser or have been deleted.</p></div>;
   }
+  if (result.statusUnsettled) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <p role="alert" className="mb-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">This request changed while loading. Refresh to see its current status and available actions.</p>
+        <RequestDetails request={result.request} />
+        <StatusHistory entries={[]} unavailable />
+      </div>
+    );
+  }
+
   // SCRUM-39: same-organisation colleagues get a read-only view.
   const shared = result.request.organiser_id !== viewerId;
   if (result.request.status === "Changes Requested") {
@@ -48,6 +60,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
         <Link href="/event-requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to event requests</Link>
         <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">{shared ? SHARED_NOTICE : "Your coordinator requested clarification. The submitted request remains read-only; respond below so review can continue."}</div>
         <RequestDetails request={result.request} coordinatorAssigned />
+        <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
         <div className="mt-5"><ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} /></div>
         <div className="mt-5">
           {decisionResult.failed || shared ? null : latestClarification?.organiser_response ? (
@@ -84,6 +97,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
           coordinatorAssigned={coordinatorAssigned}
           action={canRequestChange ? <ChangeRequestDialog eventRequestId={id} /> : null}
         />
+        <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
         <div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div>
         <div>
           {changeResult.failed ? (
@@ -106,12 +120,13 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[#68776f] sm:text-base">Update any available details and save this draft again.</p>
       </div>
       <EventRequestForm request={result.request} />
+      <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
     </div>
   );
 }
 
 function EditLoading() {
-  return <div aria-label="Loading draft" className="mx-auto h-[34rem] max-w-4xl animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" />;
+  return <><div aria-label="Loading draft" className="mx-auto h-[34rem] max-w-4xl animate-pulse rounded-2xl border border-[#e1e7e4] bg-white" /><StatusHistoryLoading /></>;
 }
 
 export default async function EditEventRequestPage({ params }: { params: Promise<{ id: string }> }) {

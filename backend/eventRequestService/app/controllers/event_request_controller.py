@@ -19,6 +19,7 @@ from app.models.event_request import (
     EventRequestSubmission,
     EventRequestUpdate,
     EventReviewDecisionResponse,
+    EventStatusHistoryResponse,
 )
 from app.repositories import SupabaseEventRequestRepository
 from app.services.coordinator_assignment_service import (
@@ -279,6 +280,29 @@ def list_review_decisions(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
 
+
+@router.get(
+    "/{event_request_id}/status-history",
+    response_model=list[EventStatusHistoryResponse],
+)
+def list_status_history(
+    event_request_id: UUID,
+    caller: CallerDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> list[EventStatusHistoryResponse]:
+    """Reuse request visibility so the history cannot expand SCRUM-39 access."""
+    try:
+        get_event_request(event_request_id, caller, request, service)
+    except HTTPException as error:
+        if error.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND):
+            code = "HISTORY_FORBIDDEN" if error.status_code == 403 else "HISTORY_NOT_FOUND"
+            raise HTTPException(
+                error.status_code,
+                detail={"code": code, "message": "Status history is not accessible"},
+            ) from error
+        raise
+    return service.list_status_history(str(event_request_id))
 
 @router.post(
     "/{event_request_id}/change-requests",

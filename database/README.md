@@ -46,6 +46,8 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0023_venue_blocks.sql` | `venue_blocks` table for SCRUM-23 with its `block_reason` and `block_status` enums, a foreign key to `venues` and a per-venue index. **Reference snapshot** of the table created by hand in the dashboard (safe to re-run: it skips existing objects), plus RLS on and `REVOKE ALL` from `anon` and `authenticated`, so only venueService's secret key can read block reasons. Applied to shared development on 6 October 2026 through the SQL Editor; afterwards `has_table_privilege` returns false for `anon` and `authenticated`, and the publishable key gets `401` (`42501`) while venueService still reads both existing blocks |
 | `migrations/0024_venue_booking_decisions.sql` | SCRUM-15: `venue_booking_refusals` append-only log of refused approvals (who, when, reason codes, conflicting block and booking ids), plus server-only `decide_venue_booking_request` (locks the venue row, then the request row; approves, rejects with a required reason, or records a refusal for `venue_unavailable` / `outside_operating_slots` / `active_block` / `booking_conflict`) and `create_venue_block` (same venue lock). Errors: `P0002` not found, `55000` already decided, `22023` invalid decision. RLS on and no browser-role access. Verify with `verify_venue_booking_decisions.sql`. Applied to shared development on 8 October 2026 through the SQL Editor; afterwards the secret key reads `venue_booking_refusals`, the publishable key gets `401` on the table and on `decide_venue_booking_request`, and an unknown request id returns `P0002` without writing |
 
+| `migrations/0025_event_request_status_history.sql` | SCRUM-48: immutable event status history, atomic insert/update triggers, honest legacy baselines and actor context in three existing coordinator RPCs. Browser access revoked; service role reads only. **Applied to shared development via MCP on 10 October 2026, version `20261010034216`; local and focused shared checks passed** |
+
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
 SQL Editor — it exercises the CHECK constraints and both foreign keys
@@ -166,6 +168,97 @@ SCRUM-35 event amendments are verified by
 requests, atomic approval, rejection without event mutation, stale approval,
 reassignment and server-only table/function access. It requires one Supabase
 Auth user and rolls back all verification data.
+
+## Event status history contract (SCRUM-48)
+
+Migration `0025` was **applied to shared development on 10 October 2026** after
+explicit requester approval, as MCP migration `20261010034216`
+(`event_request_status_history`). Do not reapply it there. It created 12 labelled
+baselines for the 12 existing events; verification fixtures were rolled back.
+It depends on the event-request, assignment and review-decision migrations through
+`0016` and the existing `private` schema. It does not change authentication or add
+new transition rules. Before deployment, compare the three replaced RPC definitions
+with the target database to avoid overwriting another team's newer changes.
+For a fresh environment, deploy the database change before the new service/UI
+and run the rolled-back verification afterwards. If verification fails, stop the release and inspect the
+failure; do not drop history to make the checks pass. Removing this migration is
+not a data-preserving rollback and would need a separately reviewed recovery plan.
+
+All actual status writes are recorded by private triggers in the same transaction.
+A trusted status-changing RPC must first verify the caller, lock the event row and
+validate its current state/assignment, then supply its actor immediately before the
+status update:
+
+```sql
+PERFORM private.set_event_status_actor(
+    p_event_request_id, p_verified_actor_id, 'event_coordinator', 'coordinator.action'
+);
+UPDATE public.event_requests SET status = p_new_status WHERE id = p_event_request_id;
+```
+
+Call the helper and update within **one database RPC/transaction**, never separate
+REST requests. Context is scoped to the event, transaction-local and consumed once.
+System workflows use a null actor ID, role `system` and a named source. The helper
+rejects invalid context with `22023`. Creation and Draft submission identify the
+owning Organiser through their existing authenticated workflow. A privileged
+status update without context is recorded honestly as `system` /
+`database.status_update`; it never guesses the actor from an assignment.
+
+The service role has SELECT only on history; browsers have no table access or
+helper execution. The immutable-history triggers reject independent update,
+delete and truncate with `P0003`. The existing Draft-discard cascade is preserved;
+retained events cannot be deleted to erase their status evidence.
+
+Run [`verify_event_request_status_history.sql`](verify_event_request_status_history.sql)
+after `0025`. It requires an existing auth user, creates only transactional fixtures
+and rolls back. It covers creation/submission, all current coordinator writers,
+resume, named system work, actor boundaries/context isolation, failure rollback,
+refused side effects, chronology, immutability, grants and actual server-role RPC
+execution. It prints `ALL EVENT STATUS HISTORY VERIFICATIONS PASSED`.
+
+Shared PostgreSQL 17.6 verification passed for creation/direct submission,
+review/clarification/resume/approval, cancellation/completion/rejection, refusal,
+write-failure rollback, actor boundaries/isolation, Draft discard, retained-event
+protection, immutable update/delete/truncate and actual service-role execution.
+The MCP returned `Invalid or expired requestState` for the combined script;
+its assertions were checked through shorter rolled-back blocks instead. The
+single-call script run remains unverified on the connector. The real repository
+also read a valid baseline through shared PostgREST, while the publishable-key
+read was refused with HTTP 401 / `42501`. See the SCRUM-48 test document for
+remaining authenticated UI/CI/human-review checks and advisor findings.
+
+The two-connection race test is **local only** because it commits fixture rows:
+use a disposable migrated database with an existing fixture auth user, then discard
+the entire database after the test. It refuses non-loopback database URLs and needs
+only Python's standard library plus `psql`:
+
+```bash
+python3 database/tests/test_event_status_history_concurrency.py \
+  --dsn postgresql://scrum48_test@127.0.0.1:55484/postgres \
+  --psql /opt/homebrew/opt/postgresql@14/bin/psql
+```
+
+The example identifies the disposable cluster used for the recorded local run;
+create/migrate your own disposable cluster before rerunning it. No shared Supabase
+credentials should be supplied. A duplicate transition must yield one success,
+one `P0004` conflict and exactly one additional matching history row.
+
+Supplemental live API checks are opt-in through
+[`tests/verify_live_event_status_history.py`](tests/verify_live_event_status_history.py),
+which is not part of normal pytest runs. Start the real auth, event and frontend
+services and use the existing development test accounts shown on `/auth`.
+The `prepare` and `race` modes require explicit approval for shared test writes and
+`--allow-shared-test-write`; they retain their labelled fixtures rather than delete
+them. Keep application notification delivery disabled for this bounded check.
+
+See [`docs/testcases/scrum_48_testcases.md`](../docs/testcases/scrum_48_testcases.md)
+for the `access`, `prepare` and `race` commands and execution evidence. Overlapping
+HTTP calls are supplemental integration evidence, not deterministic proof that
+shared database row locks overlapped; storage side effects need separate checks.
+
+The timeline does not replace clarification or amendment records. Future
+SCRUM-35/40/58/60 status producers must adopt this contract when their stories are
+implemented. This migration does not enable those stories or their notifications.
 
 ## Test accounts
 
