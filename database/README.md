@@ -47,6 +47,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0024_venue_booking_decisions.sql` | SCRUM-15: `venue_booking_refusals` append-only log of refused approvals (who, when, reason codes, conflicting block and booking ids), plus server-only `decide_venue_booking_request` (locks the venue row, then the request row; approves, rejects with a required reason, or records a refusal for `venue_unavailable` / `outside_operating_slots` / `active_block` / `booking_conflict`) and `create_venue_block` (same venue lock). Errors: `P0002` not found, `55000` already decided, `22023` invalid decision. RLS on and no browser-role access. Verify with `verify_venue_booking_decisions.sql`. Applied to shared development on 8 October 2026 through the SQL Editor; afterwards the secret key reads `venue_booking_refusals`, the publishable key gets `401` on the table and on `decide_venue_booking_request`, and an unknown request id returns `P0002` without writing |
 
 | `migrations/0025_event_request_status_history.sql` | SCRUM-48: immutable event status history, atomic insert/update triggers, honest legacy baselines and actor context in three existing coordinator RPCs. Browser access revoked; service role reads only. **Applied to shared development via MCP on 10 October 2026, version `20261010034216`; local and focused shared checks passed** |
+| `migrations/0026_venue_setup_turnaround.sql` | SCRUM-59: `venues.setup_minutes` and `venues.turnaround_minutes`, `integer NOT NULL DEFAULT 0`, each checked to be a multiple of 15 from 0 to 1020 (`venues_setup_minutes_valid`, `venues_turnaround_minutes_valid`). Existing venues read 0 / 0. Safe to re-run. Access unchanged (0016). Verify with `verify_venue_setup_turnaround.sql`. **Not yet applied to shared development** |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
@@ -131,6 +132,14 @@ Red result), and again after, when it should print
 required columns, status and decision consistency, the venue foreign key and
 server-only access. The script rolls back all rows and needs no Supabase Auth
 user.
+
+The venue setup and turnaround columns are verified by
+[`verify_venue_setup_turnaround.sql`](verify_venue_setup_turnaround.sql).
+Run it once before `0026`, when it should stop at the missing column (the Red
+result), and again after, when it should print
+`SCRUM-59 verify: all venue setup and turnaround cases passed`. It covers the
+0 / 0 default, both limits and the refused values 20, -15 and 1035. The script
+rolls back all rows.
 
 The coordinator transition function is verified by
 [`verify_event_request_status_transitions.sql`](verify_event_request_status_transitions.sql).
