@@ -74,4 +74,6 @@ Only the coordinator on the **latest** assignment row (ordered by `id`) may star
 - Whole service: `pytest` 340 passed, 0 failed, 0 skipped; `ruff check .` clean. Supabase and the auth service are faked in these runs.
 - `0026` applied twice to the same disposable DB without error (safe to re-run). `database/verify_event_request_status_history.sql` (SCRUM-48) still prints `ALL EVENT STATUS HISTORY VERIFICATIONS PASSED` after `0026`.
 
-**Not yet done:** applying `0026` to shared development and a live API check; frontend control; PR CI; human review of these test cases (`testing.md` §10).
+**Shared development, 13 October 2026:** before applying, the live `advance_event_request_by_coordinator` matched `0025` (no newer change to overwrite). `0026` applied via MCP as `20261013134214 event_request_planning`. Read-only checks afterwards: definition contains the Approved → Planning move and the `planning` source; `anon` and `authenticated` cannot execute; `service_role` can; not `SECURITY DEFINER`. The rolled-back verification script was **not** run on shared (the MCP SQL tool is used read-only), so AC1-X1/AC4-N7 are proven locally only.
+
+**Not yet done:** a live API call against shared; frontend control; PR CI; human review of these test cases (`testing.md` §10).
