@@ -47,13 +47,24 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0024_venue_booking_decisions.sql` | SCRUM-15: `venue_booking_refusals` append-only log of refused approvals (who, when, reason codes, conflicting block and booking ids), plus server-only `decide_venue_booking_request` (locks the venue row, then the request row; approves, rejects with a required reason, or records a refusal for `venue_unavailable` / `outside_operating_slots` / `active_block` / `booking_conflict`) and `create_venue_block` (same venue lock). Errors: `P0002` not found, `55000` already decided, `22023` invalid decision. RLS on and no browser-role access. Verify with `verify_venue_booking_decisions.sql`. Applied to shared development on 8 October 2026 through the SQL Editor; afterwards the secret key reads `venue_booking_refusals`, the publishable key gets `401` on the table and on `decide_venue_booking_request`, and an unknown request id returns `P0002` without writing |
 
 | `migrations/0025_event_request_status_history.sql` | SCRUM-48: immutable event status history, atomic insert/update triggers, honest legacy baselines and actor context in three existing coordinator RPCs. Browser access revoked; service role reads only. **Applied to shared development via MCP on 10 October 2026, version `20261010034216`; local and focused shared checks passed** |
+| `migrations/0027_equipment_reservation_requirements.sql` | SCRUM-13: `equipment_reservations.requirement_id uuid NOT NULL` referencing `equipment_requirements` (numbered past 0025 and 0026, taken by SCRUM-48 and SCRUM-58). Two indexes (outstanding quantity per requirement, per-event listing) and the server-only `reserve_equipment` RPC: locks the requirement then the equipment row, re-checks the row's status, the requirement's outstanding quantity and the units held on the busiest day of the hold window, then inserts with `event_request_id` copied from the requirement. `P0002` not found, `P0004` refused. Verify with `verify_equipment_reservation_writes.sql`. Not yet applied to shared development (owner step) |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
 SQL Editor — it exercises the CHECK constraints and both foreign keys
 (including the refusal paths) and prints
 `ALL EQUIPMENT RESERVATION VERIFICATIONS PASSED` on success, rolling back so
-no data is left behind.
+no data is left behind. From SCRUM-13's `0027` on, the script also needs `0027`
+applied: every reservation it inserts names a requirement.
+
+`0027` must be applied before the SCRUM-13 endpoints work: until
+`reserve_equipment` exists, `POST /equipment-reservations` returns `500`.
+Before applying, confirm the table is empty
+(`SELECT count(*) FROM equipment_reservations;` must be 0) — the migration
+refuses to run otherwise rather than deleting rows. Its behavioural checks are
+in [`verify_equipment_reservation_writes.sql`](verify_equipment_reservation_writes.sql),
+run after `0027`; the AC3-N2 two-session race needs two SQL sessions as that
+script's footer describes.
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
