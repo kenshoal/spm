@@ -6,7 +6,7 @@ Test catalogue for the equipment-reservation story, designed **before implementa
 
 Companion catalogues: [scrum_10_testcases.md](scrum_10_testcases.md) (availability rules and the `equipment_reservations` table this story writes to), [scrum_33_testcases.md](scrum_33_testcases.md) (the equipment requirements reserved against) and [scrum_39_testcases.md](scrum_39_testcases.md) (its AC7, the Technical Support read of reservations, was deferred to this story).
 
-> **Status: implemented, unit and API Green on the branch.** The scenario-form ACs, decisions D1 to D10 and the recommended answers to Q1 to Q5 were approved by Yang Xue (story owner) on 12 October 2026. J6 and J7 were moved to SCRUM-64 by agreement between Yang Xue and Tiong Heng Rui on 13 October 2026. Migration `0027` is written but **not yet applied to shared development**: the DB cases, the AC3-N2 two-session race and the AC3-X1 integration check remain owner steps until it is. The AI-drafted cases still need a team-member review (testing.md §10); record the reviewer under "Review" before the story is marked Done.
+> **Status: implemented, unit and API Green on the branch.** The scenario-form ACs, decisions D1 to D10 and the recommended answers to Q1 to Q5 were approved by Yang Xue (story owner) on 12 October 2026. J6 and J7 were moved to SCRUM-64 by agreement between Yang Xue and Tiong Heng Rui on 13 October 2026. Migration `0027` was applied to shared development on 14 October 2026; the DB verify scripts, the AC3-N2 two-session race and the AC3-X1 integration check are the remaining owner steps. The AI-drafted cases still need a team-member review (testing.md §10); record the reviewer under "Review" before the story is marked Done.
 
 ## Story contract
 
@@ -231,7 +231,7 @@ Unless stated: `REQ1`, `R(P10, 6, Tue 13 → Wed 14)` so **A = 4** for `RES`.
 
 ## Latest execution record
 
-**Run 14 October 2026: Green (unit and API; implementation on the branch).** Branch `feat/scrum-13-reserve-equipment` at `288daa9` (dev at `11dae05` plus this story's commits). Environment: macOS (Darwin 24.6.0) on Yang's Mac, Python 3.14.2 in `backend/equipmentService/.venv`, dependencies from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `ReservationStore` for Supabase; authService and venueService stubbed at `httpx.get`. Migration `0027` is not applied to shared development, so the DB-layer cases and AC3-X1 are not executed yet.
+**Run 14 October 2026: Green (unit and API; implementation on the branch).** Branch `feat/scrum-13-reserve-equipment` at `288daa9` (dev at `11dae05` plus this story's commits). Environment: macOS (Darwin 24.6.0) on Yang's Mac, Python 3.14.2 in `backend/equipmentService/.venv`, dependencies from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `ReservationStore` for Supabase; authService and venueService stubbed at `httpx.get`. Migration `0027` was applied to shared development on 14 October 2026, after this run; the DB-layer cases and AC3-X1 are not executed yet.
 
 Commands from `backend/equipmentService/`:
 - `pytest -q` → **323 passed, 0 failed, 0 skipped** (one pre-existing starlette `DeprecationWarning` from the test client, present before this story).
