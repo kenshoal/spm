@@ -1,12 +1,12 @@
 # SCRUM-13 Test Cases: Reserve Equipment for an Event
 
-Last reviewed: 13 October 2026
+Last reviewed: 14 October 2026
 
 Test catalogue for the equipment-reservation story, designed **before implementation** (testing.md §2). It covers **AC1 to AC5, the whole story**. The two Jira criteria about flagging reservations for review (J6, J7) moved to SCRUM-64, owned by Tiong Heng Rui, on 13 October 2026; see the AC review and "Excluded".
 
 Companion catalogues: [scrum_10_testcases.md](scrum_10_testcases.md) (availability rules and the `equipment_reservations` table this story writes to), [scrum_33_testcases.md](scrum_33_testcases.md) (the equipment requirements reserved against) and [scrum_39_testcases.md](scrum_39_testcases.md) (its AC7, the Technical Support read of reservations, was deferred to this story).
 
-> **Status: approved for implementation.** The scenario-form ACs, decisions D1 to D10 and the recommended answers to Q1 to Q5 were approved by Yang Xue (story owner) on 12 October 2026. J6 and J7 were moved to SCRUM-64 by agreement between Yang Xue and Tiong Heng Rui on 13 October 2026. Tests are written and Red; no production behaviour exists yet. The AI-drafted cases still need a team-member review (testing.md §10); record the reviewer under "Review" before the story is marked Done.
+> **Status: implemented, unit and API Green on the branch.** The scenario-form ACs, decisions D1 to D10 and the recommended answers to Q1 to Q5 were approved by Yang Xue (story owner) on 12 October 2026. J6 and J7 were moved to SCRUM-64 by agreement between Yang Xue and Tiong Heng Rui on 13 October 2026. Migration `0027` is written but **not yet applied to shared development**: the DB cases, the AC3-N2 two-session race and the AC3-X1 integration check remain owner steps until it is. The AI-drafted cases still need a team-member review (testing.md §10); record the reviewer under "Review" before the story is marked Done.
 
 ## Story contract
 
@@ -64,6 +64,7 @@ None on the event or the requirement. A reservation is created once; it has no s
 | D4 | **Availability is per row:** row total − units reserved on the row's busiest day in the hold window, using SCRUM-10's functions unchanged. Spare units on a different row of the same type do not help (the caller picks the row). |
 | D5 | **Stored period** follows SCRUM-10's contract: `collection_date` = `start_date − 1` (one more day, `TRANSFER_DAYS`, if the row is based in another building from `venue_id`); `return_date` = `end_date` (Q&A #5; #113 says the team proposes the return date). |
 | D6 | **Race safety:** the Python pre-check produces the shortfall numbers; `reserve_equipment` repeats the status, peak and outstanding-quantity checks under the row lock. A check that fails only under the lock → 409 "Equipment no longer available". |
+| D6a | **The requirement row is locked too** (added 14 October 2026, story decision P1): `reserve_equipment` locks the `equipment_requirements` row `FOR UPDATE` before the `equipment` row, so two reservations against the same requirement from different catalogue rows cannot both pass the D3 check. Lock order is requirement → equipment; no other function locks equipment then requirement, so the two orders cannot deadlock. |
 | D7 | **Migration `0027`** adds `requirement_id uuid NOT NULL REFERENCES equipment_requirements (id)`. The RPC copies `event_request_id` from the requirement; the caller cannot set it. |
 | D8 | **Reserving does not change the requirement's arrangement status.** Technical Support still moves it with SCRUM-33's `PATCH …/arrangement` (Q&A #90: the Coordinator judges readiness). |
 | D9 | **Read:** `GET /equipment-reservations/by-event/{event_request_id}`, Technical Support only, oldest first (`created_at`, then `id`). |
@@ -226,9 +227,24 @@ Unless stated: `REQ1`, `R(P10, 6, Tue 13 → Wed 14)` so **A = 4** for `RES`.
 | `backend/equipmentService/tests/test_reservations_api.py` | API cases for `POST /equipment-reservations` and `GET /equipment-reservations/by-event/{id}` |
 | `backend/equipmentService/tests/reservations_support.py` | `ReservationStore` (fake Supabase that applies filters and simulates `reserve_equipment`), `Services` (authService and venueService stub), shared data |
 | `database/verify_equipment_reservation_writes.sql` | DB cases AC1-N9, AC2-N2, AC3-N1, AC4-H2; manual two-session steps for AC3-N2 |
-| `backend/equipmentService/app/availability.py` | Interface stub `row_available(...)` that raises `NotImplementedError`, so the unit cases fail for the missing behaviour rather than on import |
+| `backend/equipmentService/app/availability.py` | `row_hold` and `row_available` — the implemented per-row rule; `check_availability` counts through `row_available`, so the reserve path and SCRUM-10's check share one rule (AC5-X1) |
 
 ## Latest execution record
+
+**Run 14 October 2026: Green (unit and API; implementation on the branch).** Branch `feat/scrum-13-reserve-equipment` at `288daa9` (dev at `11dae05` plus this story's commits). Environment: macOS (Darwin 24.6.0) on Yang's Mac, Python 3.14.2 in `backend/equipmentService/.venv`, dependencies from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `ReservationStore` for Supabase; authService and venueService stubbed at `httpx.get`. Migration `0027` is not applied to shared development, so the DB-layer cases and AC3-X1 are not executed yet.
+
+Commands from `backend/equipmentService/`:
+- `pytest -q` → **323 passed, 0 failed, 0 skipped** (one pre-existing starlette `DeprecationWarning` from the test client, present before this story).
+- `ruff check .` → all checks passed.
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC3-P1, AC3-P2, AC3-P4, AC3-B1–B6, AC5-X1 | Green | 13 runs pass | Pass | `288daa9`, local | Claude (Sonnet 5.5), 14 Oct 2026 | `pytest -q tests/test_reservation_rules.py` |
+| AC1-H1, AC1-P1–P3, AC1-B1–B4, AC1-N1–N8, AC1-X1, AC1-X2, AC2-P1–P4, AC2-X1, AC2-N1, AC3-H1, AC3-H2, AC3-P3, AC4-H1, AC4-H3, AC4-P1–P4, AC4-N1, AC4-X1–X3, AC5-H1, AC5-B1–B3, AC5-P1–P3, AC5-N1 | Green | 58 runs pass | Pass | `288daa9`, local | Claude (Sonnet 5.5), 14 Oct 2026 | `pytest -q tests/test_reservations_api.py` |
+| AC1-N9, AC2-N2, AC3-N1, AC4-H2 | Planned | — | Not executed | — | — | `database/verify_equipment_reservation_writes.sql` after `0027` is applied; expected Red before that (column `requirement_id` / function `reserve_equipment` missing) |
+| AC3-N2 | Planned | — | Not executed | — | — | Manual, two SQL sessions; steps at the end of the verify script |
+| AC3-X1 | Planned | — | Not executed | — | — | Manual integration on the full stack once `0027` is applied |
+| SCRUM-10/16/33/45 regression | Green | 252 existing tests pass | Pass | `288daa9`, local | Claude (Sonnet 5.5), 14 Oct 2026 | `pytest -q` |
 
 **Run 12 October 2026: Red (tests written, behaviour not implemented).** `dev` at `dd0036b` plus the uncommitted SCRUM-13 test files. Environment: Linux workspace VM on Yang's Mac, Python 3.13.15 in a scratch virtual environment outside the repo, dependencies from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `ReservationStore` for Supabase; authService and venueService stubbed at `httpx.get`. `POST /equipment-reservations` and `GET /equipment-reservations/by-event/{id}` do not exist yet; `row_available` is a stub.
 
