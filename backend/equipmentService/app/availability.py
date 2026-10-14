@@ -131,3 +131,21 @@ def check_availability(
             "shortfall": max(0, item.quantity - available),
         }
     return result
+
+
+def row_available(
+    *,
+    row: EquipmentRow,
+    reservations: Sequence[Reservation],
+    start_date: date,
+    end_date: date,
+    event_venue: Venue,
+    venues: Sequence[Venue],
+    transfer_days: int = TRANSFER_DAYS,
+) -> int:
+    """Units of one catalogue row free for its whole hold window (SCRUM-13 D4).
+
+    Interface stub for the SCRUM-13 Red run; see
+    docs/testcases/scrum_13_testcases.md.
+    """
+    raise NotImplementedError
