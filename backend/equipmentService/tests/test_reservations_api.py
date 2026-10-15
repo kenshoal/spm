@@ -351,6 +351,21 @@ def test_database_failure_is_server_error(
     assert store.reservations() == before
 
 
+# AC1-N12 (negative): a type mismatch caught only under the lock (D12) is a 422, not a 500
+def test_type_mismatch_under_lock_is_unprocessable(
+    api: TestClient, store: ReservationStore
+) -> None:
+    store.rpc_error = api_error("22023")
+    before = store.reservations()
+
+    response = reserve(api)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Equipment type does not match the requirement"}
+    assert store.writes == []
+    assert store.reservations() == before
+
+
 # AC1-X1 (cross-cutting): reserving requires a session
 def test_reserving_requires_a_session(
     api: TestClient, store: ReservationStore, services: Services
