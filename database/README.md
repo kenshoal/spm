@@ -48,7 +48,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0025_event_request_status_history.sql` | SCRUM-48: immutable event status history, atomic insert/update triggers, honest legacy baselines and actor context in three existing coordinator RPCs. Browser access revoked; service role reads only. **Applied to shared development via MCP on 10 October 2026, version `20261010034216`; local and focused shared checks passed** |
 | `migrations/0026_event_request_planning.sql` | SCRUM-58: replaces `advance_event_request_by_coordinator` from `0025` with one added move, Approved → Planning, recorded in status history as `coordinator.planning`. Lock, latest-assignment check and grants unchanged. Verify with `verify_event_request_planning.sql`. **Applied to shared development via MCP on 13 October 2026, version `20261013134214`**, after checking the live function still matched `0025`. Full verification ran on a disposable local cluster; on shared, only read-only checks (definition, grants) were run |
 | `migrations/0027_equipment_reservation_requirements.sql` | SCRUM-13: `equipment_reservations.requirement_id uuid NOT NULL` referencing `equipment_requirements` (numbered past 0025 and 0026, taken by SCRUM-48 and SCRUM-58). Two indexes (outstanding quantity per requirement, per-event listing) and the server-only `reserve_equipment` RPC: locks the requirement then the equipment row, re-checks the row's status, the requirement's outstanding quantity and the units held on the busiest day of the hold window, then inserts with `event_request_id` copied from the requirement. `P0002` not found, `P0004` refused. Verify with `verify_equipment_reservation_writes.sql`. **Applied to shared development on 14 October 2026 through the SQL Editor, after confirming the table was empty** |
-| `migrations/0028_reserve_equipment_type_check.sql` | SCRUM-13 D12: replaces `reserve_equipment` from `0027` with one added check under the lock: the catalogue row's type must match the requirement's (trimmed, whitespace collapsed, case ignored), else SQLSTATE `22023`, which equipmentService maps to 422. `0027` is not edited because it is applied to shared development. Grants restated (service role only). Verify with `verify_equipment_reservation_writes.sql`. **Not yet applied to shared development**; verified on a disposable local PostgreSQL 16 cluster on 15 October 2026 |
+| `migrations/0028_reserve_equipment_type_check.sql` | SCRUM-13 D12: replaces `reserve_equipment` from `0027` with one added check under the lock: the catalogue row's type must match the requirement's (trimmed, whitespace collapsed, case ignored), else SQLSTATE `22023`, which equipmentService maps to 422. `0027` is not edited because it is applied to shared development. Grants restated (service role only). Verify with `verify_equipment_reservation_writes.sql`. **Applied to shared development on 15 October 2026 through the SQL Editor**: before it, the verify script stopped at AC1-N10 (expected Red); after it, both verify scripts passed and the grants were `service_role` and the owner only. Also verified on a disposable local PostgreSQL 16 cluster the same day |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
@@ -68,12 +68,14 @@ run after `0027` and `0028`; the AC3-N2 two-session race needs two SQL
 sessions as that script's footer describes and, because it commits fixture
 rows, runs on a disposable migrated database rather than shared development.
 
-`0028` (SCRUM-13 D12) must be applied after `0027`. Before it is applied,
+`0028` (SCRUM-13 D12) must be applied after `0027`. It was applied to shared
+development on 15 October 2026 through the SQL Editor; do not apply it again
+there, and retain the file for fresh environments. Before it is applied,
 `verify_equipment_reservation_writes.sql` stops at the AC1-N10 line, which is
-the expected Red. After applying it on shared development, run both verify
-scripts and confirm the grants with
+the expected Red. After applying it, run both verify scripts and confirm the
+grants with
 `SELECT grantee, privilege_type FROM information_schema.routine_privileges WHERE routine_name = 'reserve_equipment';`
-(`service_role` and the owner only), then record the apply date here.
+(`service_role` and the owner only).
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
