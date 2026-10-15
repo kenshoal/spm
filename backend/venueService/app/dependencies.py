@@ -93,3 +93,18 @@ def require_venue_viewer(
     if set(principal.roles).isdisjoint({"event_coordinator", "venue_staff"}):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     return principal
+
+
+VENUE_LOCATION_READERS = frozenset(
+    {"event_coordinator", "venue_staff", "technical_support"}
+)
+
+
+def require_venue_location_reader(
+    principal: Annotated[Principal, Depends(require_authenticated)],
+) -> Principal:
+    """Venue id, name and building only (SCRUM-13 D11): Technical Support needs
+    them to work out equipment transfer days, and nothing else in the catalogue."""
+    if set(principal.roles).isdisjoint(VENUE_LOCATION_READERS):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return principal
