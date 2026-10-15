@@ -101,3 +101,13 @@ test("redirects to sign-in when the session has expired", async () => {
 
   await expect(assignCoordinator("request-1", {}, form("coord-1"))).rejects.toThrow("NEXT_REDIRECT");
 });
+
+// AC1-H2 (happy): a refused assignment names the Event Coordinator Lead as the role that may assign
+test("tells a caller who cannot assign that only the Event Coordinator Lead can", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+  const state = await assignCoordinator("request-1", {}, form("coord-1"));
+
+  expect(state).toEqual({ message: "Only an Event Coordinator Lead can assign coordinators." });
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});

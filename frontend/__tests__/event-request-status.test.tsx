@@ -121,17 +121,18 @@ test("shows that a submitted request has an assigned coordinator", () => {
   render(<StatusProgress status="Submitted" coordinatorAssigned />);
 
   expect(screen.getByText(/coordinator has been assigned/i)).toBeDefined();
-  expect(screen.queryByText(/waiting for an Event Operations Manager/i)).toBeNull();
+  expect(screen.queryByText(/waiting for an Event Coordinator Lead/i)).toBeNull();
   expect(screen.getByRole("listitem", { current: "step" }).textContent).toContain(
     "Submitted",
   );
 });
 
-// Purpose: An unassigned submission still tells the organiser what it is waiting for.
+// AC1-H1 (happy): an unassigned submission tells the organiser it waits for the Event Coordinator Lead, not the old role name
 test("shows that a submitted request is waiting when no coordinator is assigned", () => {
   render(<StatusProgress status="Submitted" coordinatorAssigned={false} />);
 
-  expect(screen.getByText(/waiting for an Event Operations Manager/i)).toBeDefined();
+  expect(screen.getByText(/waiting for an Event Coordinator Lead/i)).toBeDefined();
+  expect(screen.queryByText(/Operations Manager/i)).toBeNull();
 });
 
 // Purpose: Approval and completion stages are announced as done as the event advances.

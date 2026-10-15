@@ -42,7 +42,7 @@ export async function assignCoordinator(
     return {
       message:
         response.status === 403
-          ? "Only an Event Operations Manager can assign coordinators."
+          ? "Only an Event Coordinator Lead can assign coordinators."
           : response.status === 404
             ? "This request no longer exists. Refresh the page."
             : "The coordinator could not be assigned. Please try again.",

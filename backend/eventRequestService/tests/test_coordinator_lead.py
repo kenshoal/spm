@@ -1,6 +1,9 @@
 """SCRUM-62 AC2 and AC5: new requests wait for the Event Coordinator Lead and are
 never assigned automatically; a coordinator can act on, or even see, only their
 own events. Both rules already held; these tests pin them down."""
+from uuid import uuid4
+
+import httpx
 import pytest
 from fastapi import Header
 from fastapi.testclient import TestClient
@@ -157,3 +160,43 @@ def test_assigned_coordinator_can_see_the_event() -> None:
 
     assert response.status_code == 200
     assert response.json()["id"] == event_request_id
+
+
+# AC1-H4 (happy): a caller who is not the Lead is told that only the Event Coordinator Lead can assign, not the old role name
+def test_refusal_names_the_event_coordinator_lead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setattr(
+        httpx,
+        "get",
+        lambda *args, **kwargs: httpx.Response(
+            200,
+            json={
+                "id": str(uuid4()),
+                "email": None,
+                "role": "event_coordinator",
+                "roles": ["event_coordinator"],
+            },
+        ),
+    )
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        app = create_app(
+            FakeEventRequestRepository(), FakeCoordinatorAssignmentRepository()
+        )
+        with TestClient(app) as client:
+            response = client.get(
+                "/event-requests/awaiting-assignment",
+                headers={"Authorization": "Bearer valid-token"},
+            )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == (
+        "Only an Event Coordinator Lead can assign a Coordinator"
+    )

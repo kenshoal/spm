@@ -35,3 +35,13 @@ test("is left out of production builds so the credentials never reach a live sit
 
   expect(container.innerHTML).toBe("");
 });
+
+// AC1-H3 (happy): the Lead's test account is labelled Event Coordinator Lead while its seeded email, which names the internal role id, is unchanged
+test("labels the lead's test account as Event Coordinator Lead", () => {
+  vi.stubEnv("NODE_ENV", "development");
+  render(<TestAccounts />);
+
+  expect(screen.getByText("Event Coordinator Lead")).toBeTruthy();
+  expect(screen.queryByText("Event Operations Manager")).toBeNull();
+  expect(screen.getByText("event_operations_manager@example.com")).toBeTruthy();
+});
