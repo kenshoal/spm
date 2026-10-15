@@ -18,11 +18,12 @@ USER_ID = "11111111-1111-1111-1111-111111111111"
 URL = "/equipment/availability-check"
 AUTH = {"Authorization": "Bearer staff-token"}
 
+# The shape of venueService GET /venues/locations (SCRUM-13 D11).
 VENUES_JSON: list[dict[str, Any]] = [
-    {"id": "v-big", "name": "Search Big Hall", "location": "Search Wing", "status": "available"},
-    {"id": "v-small", "name": "Search Small Room", "location": "Search Wing", "status": "available"},
-    {"id": "v-closed", "name": "Search Closed Hall", "location": "Search Wing", "status": "blocked"},
-    {"id": "v-harbour", "name": "Harbour Room", "location": "Harbour Block", "status": "available"},
+    {"id": "v-big", "name": "Search Big Hall", "location": "Search Wing"},
+    {"id": "v-small", "name": "Search Small Room", "location": "Search Wing"},
+    {"id": "v-closed", "name": "Search Closed Hall", "location": "Search Wing"},
+    {"id": "v-harbour", "name": "Harbour Room", "location": "Harbour Block"},
 ]
 
 
@@ -69,7 +70,7 @@ def result(requested: int, available: int, shortfall: int) -> dict[str, int]:
 
 
 class Services:
-    """Stubs authService /auth/me and venueService GET /venues."""
+    """Stubs authService /auth/me and venueService GET /venues/locations."""
 
     def __init__(self) -> None:
         self.roles = ["technical_support"]
@@ -84,7 +85,7 @@ class Services:
             return httpx.Response(
                 200, json={"id": USER_ID, "role": self.roles[0], "roles": self.roles}
             )
-        if url.rstrip("/").endswith("/venues"):
+        if url.rstrip("/").endswith("/venues/locations"):
             if self.venues_error is not None:
                 raise self.venues_error
             return self.venues_response
@@ -92,7 +93,9 @@ class Services:
 
     @property
     def venue_calls(self) -> list[tuple[str, dict[str, str]]]:
-        return [c for c in self.calls if c[0].rstrip("/").endswith("/venues")]
+        return [
+            c for c in self.calls if c[0].rstrip("/").endswith("/venues/locations")
+        ]
 
 
 @pytest.fixture

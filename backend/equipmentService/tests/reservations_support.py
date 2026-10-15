@@ -9,8 +9,8 @@ this folder on sys.path), like ``requirements_support``.
   query. A router that forgets a filter reads the wrong rows and the test
   fails. ``reserve_equipment`` is simulated: it copies the event from the
   requirement and stores the row, as the database function will.
-* ``Services`` stubs authService ``/auth/me`` and venueService ``/venues``
-  at ``httpx.get``, the seam ``deps.py`` and ``venues_client.py`` use.
+* ``Services`` stubs authService ``/auth/me`` and venueService
+  ``GET /venues/locations`` (SCRUM-13 D11) at ``httpx.get``, the seam ``deps.py`` and ``venues_client.py`` use.
 
 Case IDs trace to docs/testcases/scrum_13_testcases.md.
 """
@@ -42,15 +42,12 @@ S4 = "e1300000-0000-4000-8000-000000000005"  # Speaker x4, store stock
 PD = "e1300000-0000-4000-8000-000000000006"  # Projector x10, status per test
 PL = "e1300000-0000-4000-8000-000000000007"  # type "projector " (odd spacing)
 
+# The shape of venueService GET /venues/locations (D11): id, name, location.
 VENUES_JSON: list[dict[str, Any]] = [
-    {"id": "v-big", "name": "Search Big Hall", "location": "Search Wing",
-     "status": "available"},
-    {"id": "v-small", "name": "Search Small Room", "location": "Search Wing",
-     "status": "available"},
-    {"id": "v-closed", "name": "Search Closed Hall", "location": "Search Wing",
-     "status": "blocked"},
-    {"id": "v-harbour", "name": "Harbour Room", "location": "Harbour Block",
-     "status": "available"},
+    {"id": "v-big", "name": "Search Big Hall", "location": "Search Wing"},
+    {"id": "v-small", "name": "Search Small Room", "location": "Search Wing"},
+    {"id": "v-closed", "name": "Search Closed Hall", "location": "Search Wing"},
+    {"id": "v-harbour", "name": "Harbour Room", "location": "Harbour Block"},
 ]
 
 
@@ -310,7 +307,11 @@ class ReservationStore:
 
 
 class Services:
-    """Stubs authService ``/auth/me`` and venueService ``GET /venues``."""
+    """Stubs authService ``/auth/me`` and venueService ``GET /venues/locations``.
+
+    Role-blind: it answers whatever the caller's role (F2). venueService's
+    real role check is covered by ``test_venue_contract.py``.
+    """
 
     def __init__(self) -> None:
         self.roles = ["technical_support"]
@@ -327,7 +328,7 @@ class Services:
                 200,
                 json={"id": self.user_id, "role": self.roles[0], "roles": self.roles},
             )
-        if url.rstrip("/").endswith("/venues"):
+        if url.rstrip("/").endswith("/venues/locations"):
             if self.venues_error is not None:
                 raise self.venues_error
             return self.venues_response
@@ -335,4 +336,6 @@ class Services:
 
     @property
     def venue_calls(self) -> list[str]:
-        return [c for c in self.calls if c.rstrip("/").endswith("/venues")]
+        return [
+            c for c in self.calls if c.rstrip("/").endswith("/venues/locations")
+        ]
