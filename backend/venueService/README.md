@@ -56,6 +56,7 @@ turnaround gaps belong to M5-1.
 | --- | --- |
 | Maintain the venue catalogue | `POST /venues`, `GET /venues/{id}`, `PATCH /venues/{id}`, `GET /venues` |
 | Search and filter venues | `GET /venues/search` |
+| Venue locations for equipment placement (SCRUM-13 D11) | `GET /venues/locations` |
 | Check venue suitability | `POST /venues/{id}/suitability` |
 | Create a venue block | `POST /venues/{venue_id}/blocks` |
 | List a venue's blocks | `GET /venues/{venue_id}/blocks` |
@@ -70,6 +71,14 @@ and is used by the unit tests and standalone development; that data is lost
 when the service stops. All routes verify the bearer token with `authService`;
 reads require `event_coordinator` or `venue_staff`, while create and update
 operations require `venue_staff`.
+
+`GET /venues/locations` returns `[{"id", "name", "location"}]` for every venue,
+blocked venues included, and also admits `technical_support`. It exists so
+equipmentService can work out equipment transfer days (SCRUM-10 availability
+check, SCRUM-13 reservations) with the Technical Support caller's token,
+without giving Technical Support the rest of the catalogue: every other venue
+route keeps its guard. Agreed with the SCRUM-39 and venue-catalogue owners on
+15 October 2026.
 
 `POST /venues/{id}/suitability` compares an event's stated requirements
 (expected attendance, layout, operating slot, facilities, accessibility)
