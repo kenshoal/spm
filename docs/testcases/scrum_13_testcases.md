@@ -8,7 +8,7 @@ Companion catalogues: [scrum_10_testcases.md](scrum_10_testcases.md) (availabili
 
 > **Status: implemented, unit and API Green on the branch.** The scenario-form ACs, decisions D1 to D10 and the recommended answers to Q1 to Q5 were approved by Yang Xue (story owner) on 12 October 2026. J6 and J7 were moved to SCRUM-64 by agreement between Yang Xue and Tiong Heng Rui on 13 October 2026. Migration `0027` was applied to shared development on 14 October 2026; the DB verify scripts, the AC3-N2 two-session race and the AC3-X1 integration check are the remaining owner steps. The AI-drafted cases still need a team-member review (testing.md §10); record the reviewer under "Review" before the story is marked Done.
 >
-> **15 October 2026, review round:** a teammate review found that the reservation endpoint fails against the real venueService (F1) and that `reserve_equipment` does not check the equipment type (F3). Decisions D11 and D12 and the cases AC1-X3 to X7, AC1-N10 to N13 and L1 were added for the fixes; see "Disclosures" and the plan `docs/superpowers/plans/2026-10-15-scrum-13-review-fixes.md`.
+> **15 October 2026, review round:** a teammate review found that the reservation endpoint fails against the real venueService (F1) and that `reserve_equipment` does not check the equipment type (F3). Decisions D11 and D12 and the cases AC1-X3 to X7, AC1-N10 to N13 and L1 were added for the fixes and are Green locally and on a disposable database; `0028` on shared Supabase, the live run (L1, AC3-X1) and PR CI are the remaining owner steps; see "Disclosures" and the plan `docs/superpowers/plans/2026-10-15-scrum-13-review-fixes.md`.
 
 ## Story contract
 
@@ -262,6 +262,35 @@ Recorded 15 October 2026, after the teammate review.
 - **F6, Red commits pushed.** `afc544c`, `6268726` and `ca03bed` committed Red tests on their own, against commits.md §4. They are already on the shared branch and are left as they are; from this round each test is committed with the change that makes it pass.
 
 ## Latest execution record
+
+**Run 15 October 2026: review fixes (D11, D12) Red then Green, locally and on a disposable database.** Branch `feat/scrum-13-reserve-equipment`; Green results at `2822a9f` (dev `6b36647` merged in at `8a91d14`). Each fix was test-first: the tests were written and run Red, the fix was made, and test and fix were committed together (commits.md §4). Run by Claude (Cowork) for Yang Xue.
+
+Environments, kept separate as testing.md §8 requires:
+- **Local, mocked:** Linux (aarch64) workspace VM on Yang's Mac, Python 3.12.14 in a scratch virtual environment outside the repo, dependencies from each service's `pyproject.toml` (`.[dev]`).
+- **Local, cross-service:** same VM; `tests/test_venue_contract.py` starts the real venueService (in-memory store) in a subprocess and a fake authService over HTTP; equipmentService in-process with `ReservationStore`.
+- **Disposable PostgreSQL:** PostgreSQL 16.15 cluster created for this run in the Cowork cloud workspace (Ubuntu), migrations `0001`–`0028` applied on top of the team's auth test doubles (`anon`, `authenticated`, `service_role`, `auth.users`, as `database/tests/bootstrap_event_status_history.py`), then discarded. **Not shared Supabase.**
+
+Commands and totals at `2822a9f`:
+- equipmentService `pytest -q` → **330 passed, 0 failed** (323 before this round + AC1-N12, AC1-N13 and 5 cross-service tests); `ruff check .` clean.
+- venueService `pytest -q` → **371 passed, 0 failed** (360 before + 11); `ruff check .` clean.
+- equipmentService `pytest -q tests/test_venue_contract.py` → 5 passed in under 1 s.
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC1-X3, AC1-X5 | Red | `403` for `technical_support`; `404` "Venue not found" for `venue_staff`, `event_coordinator` and multi-role (the path matched `GET /venues/{venue_id}`): 6 failed | Fail (expected) | `00e0571` + new test file, Local, mocked | Claude (Cowork), 15 Oct 2026 | `backend/venueService`: `pytest -q tests/test_venue_locations.py`. The refusal and no-session cases and AC1-X4 already passed (5) |
+| AC1-X3, AC1-X4, AC1-X5 | Green | 11 passed | Pass | `98b6eaa` and `2822a9f`, Local, mocked | Claude (Cowork), 15 Oct 2026 | As above |
+| AC1-X6, AC1-X7 | Red | `502` "Venue service unavailable" (F1 reproduced, with Part A already in place): 4 failed; AC1-X4 cross-service passed | Fail (expected) | `98b6eaa` + new test file, Local, cross-service | Claude (Cowork), 15 Oct 2026 | `pytest -q tests/test_venue_contract.py` |
+| Stub change (SCRUM-10 and SCRUM-13 API suites) | Red | Stubs updated to `/venues/locations` before the client: 46 failed with `AssertionError: unexpected GET …/venues` | Fail (expected) | `98b6eaa` + working tree, Local, mocked | Claude (Cowork), 15 Oct 2026 | `pytest -q` |
+| AC1-X4, AC1-X6, AC1-X7 | Green | 5 passed | Pass | `7879164` and `2822a9f`, Local, cross-service | Claude (Cowork), 15 Oct 2026 | `pytest -q tests/test_venue_contract.py` |
+| AC1-N12 | Red | `500` "Database operation failed" | Fail (expected) | `7879164` + working tree, Local, mocked | Claude (Cowork), 15 Oct 2026 | `pytest -q tests/test_reservations_api.py` |
+| AC1-N13 | Red | `IndexError: list index out of range` | Fail (expected) | `8fb14f3` + working tree, Local, mocked | Claude (Cowork), 15 Oct 2026 | As above |
+| AC1-N12, AC1-N13 and every 14 Oct unit and API case | Green | 73 passed (13 unit, 60 API) | Pass | `2822a9f`, Local, mocked | Claude (Cowork), 15 Oct 2026 | `pytest -q tests/test_reservation_rules.py tests/test_reservations_api.py` |
+| AC1-N10 | Red | Script stopped at `AC1-N10: a Speaker row must not be reserved against a Projector requirement` (the function stored the row) | Fail (expected) | Migrations `0001`–`0027`, verify script at `8fb14f3`, Disposable PostgreSQL 16.15 | Claude (Cowork), 15 Oct 2026 | `verify_equipment_reservation_writes.sql` |
+| AC1-N9, AC1-N10, AC1-N11, AC2-N2, AC3-N1, AC4-H2 | Green | `ALL EQUIPMENT RESERVATION WRITE VERIFICATIONS PASSED`; `0028` re-run safe | Pass | `8fb14f3`, migrations `0001`–`0028`, Disposable PostgreSQL 16.15 | Claude (Cowork), 15 Oct 2026 | Supplementary only; shared Supabase is the environment of record for these rows (below). SCRUM-10's `verify_equipment_reservations.sql` also passed. `routine_privileges` for `reserve_equipment`: `service_role` and the owner only |
+| AC3-N2 | Green | Session 2 waited on the lock, then failed with `P0004` ("exceeds requirement"); 6 units reserved in total | Pass | `8fb14f3`, migrations `0001`–`0028`, Disposable PostgreSQL 16.15 | Claude (Cowork), 15 Oct 2026 | Race test, local by team convention (`database/README.md`). Two `psql` sessions; session 1 held its transaction open with `pg_sleep(2)`. Re-run after `0028`, which changed the function. The teammate's earlier disposable-PostgreSQL run (before `0028`) is not committed on the branch, so it is not recorded here |
+| AC1-N9, AC1-N10, AC1-N11, AC2-N2, AC3-N1, AC4-H2 | Planned | — | Not executed | — | — | **Shared Supabase dev, SQL Editor**: owner step. Run the verify script once before applying `0028` (expected Red at AC1-N10), apply `0028`, run both verify scripts, check the grants, and screenshot into `docs/testcases/screenshots/scrum_13/` (plan §6.5) |
+| AC3-X1, L1 | Planned | — | Not executed | — | — | **Live stack on shared Supabase**: owner step after `0028` is applied (plan §8.4) |
+| PR CI | Planned | — | Not executed | — | — | GitHub Actions on the PR head once pushed |
 
 **Run 14 October 2026: Green (unit and API; implementation on the branch).** Branch `feat/scrum-13-reserve-equipment` at `48638ce` (dev at `11dae05` plus this story's commits; corrected 15 October 2026 from `288daa9`, a pre-rebase commit no branch contains). Environment: macOS (Darwin 24.6.0) on Yang's Mac, Python 3.14.2 in `backend/equipmentService/.venv`, dependencies from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `ReservationStore` for Supabase; authService and venueService stubbed at `httpx.get`. Migration `0027` was applied to shared development on 14 October 2026, after this run; the DB-layer cases and AC3-X1 are not executed yet.
 
