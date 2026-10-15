@@ -67,6 +67,15 @@ def decide_review(
     return service.decide(str(event_request_id), caller_id, payload)
 
 
+@router.post("/{event_request_id}/planning", response_model=EventRequestResponse)
+def start_planning(
+    event_request_id: UUID,
+    caller_id: CallerDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    return service.start_planning(str(event_request_id), caller_id)
+
+
 @router.post(
     "/{event_request_id}/cancellation", response_model=EventRequestResponse
 )
