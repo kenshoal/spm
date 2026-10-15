@@ -1,12 +1,14 @@
 # SCRUM-13 Test Cases: Reserve Equipment for an Event
 
-Last reviewed: 14 October 2026
+Last reviewed: 15 October 2026
 
 Test catalogue for the equipment-reservation story, designed **before implementation** (testing.md §2). It covers **AC1 to AC5, the whole story**. The two Jira criteria about flagging reservations for review (J6, J7) moved to SCRUM-64, owned by Tiong Heng Rui, on 13 October 2026; see the AC review and "Excluded".
 
 Companion catalogues: [scrum_10_testcases.md](scrum_10_testcases.md) (availability rules and the `equipment_reservations` table this story writes to), [scrum_33_testcases.md](scrum_33_testcases.md) (the equipment requirements reserved against) and [scrum_39_testcases.md](scrum_39_testcases.md) (its AC7, the Technical Support read of reservations, was deferred to this story).
 
 > **Status: implemented, unit and API Green on the branch.** The scenario-form ACs, decisions D1 to D10 and the recommended answers to Q1 to Q5 were approved by Yang Xue (story owner) on 12 October 2026. J6 and J7 were moved to SCRUM-64 by agreement between Yang Xue and Tiong Heng Rui on 13 October 2026. Migration `0027` was applied to shared development on 14 October 2026; the DB verify scripts, the AC3-N2 two-session race and the AC3-X1 integration check are the remaining owner steps. The AI-drafted cases still need a team-member review (testing.md §10); record the reviewer under "Review" before the story is marked Done.
+>
+> **15 October 2026, review round:** a teammate review found that the reservation endpoint fails against the real venueService (F1) and that `reserve_equipment` does not check the equipment type (F3). Decisions D11 and D12 and the cases AC1-X3 to X7, AC1-N10 to N13 and L1 were added for the fixes; see "Disclosures" and the plan `docs/superpowers/plans/2026-10-15-scrum-13-review-fixes.md`.
 
 ## Story contract
 
@@ -35,6 +37,8 @@ Jira criteria read on 12 October 2026.
 | Included | `GET /equipment-reservations/by-event/{event_request_id}`: Technical Support lists an event's reservations | SCRUM-13 (closes SCRUM-39 AC7) |
 | Included | Migration `0027`: `requirement_id` column on `equipment_reservations`; RPC `reserve_equipment` that locks the row and re-checks before inserting | SCRUM-13 |
 | Included | A pure row-availability function in `app/availability.py`, reusing SCRUM-10's `hold_window`, `needs_transfer` and `committed_peak` | SCRUM-13 |
+| Included | `GET /venues/locations` in venueService: every venue's `id`, `name` and `location`, readable by Technical Support (D11). equipmentService (this story and SCRUM-10's availability check) reads it instead of `GET /venues` | SCRUM-13 (fixes SCRUM-10's live path) |
+| Included | Migration `0028`: `reserve_equipment` checks the equipment type against the requirement under the lock (D12) | SCRUM-13 |
 | Excluded | Flagging a reservation for review when the event is rescheduled, a requirement changes, or reserved equipment is marked damaged or unavailable | SCRUM-64 (J6, J7; Q&A #16, #114), moved 13 October 2026. SCRUM-64 reads the rows this story stores in `equipment_reservations` (linked by `equipment_id` and `requirement_id`) |
 | Excluded | Releasing or cancelling a reservation; releasing on event cancellation | Q4; backlog E1-2 |
 | Excluded | Moving the requirement's arrangement status | SCRUM-33 `PATCH …/arrangement` (D8) |
@@ -52,9 +56,9 @@ None on the event or the requirement. A reservation is created once; it has no s
 ### Persistence and atomicity
 
 - The API computes the hold window and a pre-check (for the shortfall report), then calls `reserve_equipment`. The RPC locks the `equipment` row (`FOR UPDATE`), re-checks status, the committed peak in the window and the requirement's outstanding quantity, then inserts. A refusal under the lock writes nothing.
-- Error codes follow the team convention: `P0002` not found → 404, `P0004` conflict → 409.
+- Error codes follow the team convention: `P0002` not found → 404, `P0004` conflict → 409. From `0028`, `22023` (type mismatch under the lock, D12) → 422.
 
-### Decisions (proposed)
+### Decisions
 
 | ID | Decision |
 | --- | --- |
@@ -68,7 +72,9 @@ None on the event or the requirement. A reservation is created once; it has no s
 | D7 | **Migration `0027`** adds `requirement_id uuid NOT NULL REFERENCES equipment_requirements (id)`. The RPC copies `event_request_id` from the requirement; the caller cannot set it. |
 | D8 | **Reserving does not change the requirement's arrangement status.** Technical Support still moves it with SCRUM-33's `PATCH …/arrangement` (Q&A #90: the Coordinator judges readiness). |
 | D9 | **Read:** `GET /equipment-reservations/by-event/{event_request_id}`, Technical Support only, oldest first (`created_at`, then `id`). |
-| D10 | **Messages:** 404 "Equipment requirement not found" / "Equipment not found" / "Venue not found"; 422 "Equipment type does not match the requirement"; 409 "Equipment not available", "Exceeds the equipment requirement", "Equipment no longer available"; shortfall 409 body `{"detail": {"message": "Insufficient equipment available", "requested": Q, "available": A, "shortfall": Q − A}}`. |
+| D10 | **Messages:** 404 "Equipment requirement not found" / "Equipment not found" / "Venue not found"; 422 "Equipment type does not match the requirement"; 409 "Equipment not available", "Exceeds the equipment requirement", "Equipment no longer available"; shortfall 409 body `{"detail": {"message": "Insufficient equipment available", "requested": Q, "available": A, "shortfall": Q − A}}`. Amended 15 October 2026: the RPC's `22023` (D12) also maps to 422 "Equipment type does not match the requirement"; an empty RPC result maps to 500 "Database operation failed". |
+| D11 | **Venue-locations contract** (added 15 October 2026). venueService exposes a read-only `GET /venues/locations` returning `[{"id", "name", "location"}]` for every venue, blocked venues included (a blocked room still locates the stock stored in it). Allowed for `technical_support`, `event_coordinator` and `venue_staff`; every other venue route keeps its guard, so Technical Support still gets 403 on `/venues`, `/venues/search`, `/venues/{id}`, blocks, suitability and booking routes. equipmentService calls it with the caller's token for this story and SCRUM-10's availability check. Rejected: adding `technical_support` to `require_venue_viewer` (grants the whole catalogue), a service credential (no service auth exists), reading `public.venues` directly (crosses the service boundary), copying venue buildings (goes stale). **Agreed by Jaren (SCRUM-39) and koeiloo23 / Kennedy (venue catalogue), 15 October 2026**; adds "venue locations (id, name, building)" to Technical Support's row in the SCRUM-39 role matrix. |
+| D12 | **Type check under the lock** (added 15 October 2026). `reserve_equipment` (migration `0028`) refuses a catalogue row whose type differs from the requirement's, comparing as Python's `norm()` does: surrounding spaces trimmed, internal whitespace collapsed, case ignored. It raises SQLSTATE `22023` (`invalid_parameter_value`, a bad request rather than a lost race), which equipmentService maps to 422 "Equipment type does not match the requirement". The check runs after both rows are locked and before the status check, the same order as the API (D10). Known limit: SQL `lower()` and Python `casefold()` differ for a few non-ASCII letters (for example "ß"); equipment types are ASCII in practice. |
 
 ### Open questions
 
@@ -122,7 +128,9 @@ Dates are October 2026: **Fri 9, Sat 10, Sun 11, Mon 12, Tue 13, Wed 14, Thu 15,
 | Unit | `pytest tests/test_reservation_rules.py -q` | Pure row-availability function, no mocks |
 | API | `pytest tests/test_reservations_api.py -q` | Fake Supabase that holds requirements, rows and reservations; authService and venueService stubbed at `httpx.get` (as SCRUM-10) |
 | Whole service | `pytest -q` from `backend/equipmentService/` | SCRUM-10, -16, -33, -45 regression |
-| DB (manual) | `database/verify_equipment_reservation_writes.sql` in the Supabase SQL editor after `0027` | One transaction, rolled back. AC3-N2 needs two SQL sessions |
+| venueService | `pytest -q tests/test_venue_locations.py` from `backend/venueService/` | AC1-X3 to X5 (D11) |
+| Cross-service | `pytest -q tests/test_venue_contract.py` from `backend/equipmentService/` | AC1-X4, X6, X7. Starts the real venueService in a subprocess (in-memory store) and a fake authService; marker `cross_service`, included in plain `pytest` and CI |
+| DB (manual) | `database/verify_equipment_reservation_writes.sql` in the Supabase SQL editor after `0027` and `0028` | One transaction, rolled back. AC3-N2 runs on a disposable PostgreSQL database (team convention for race tests, `database/README.md`) |
 | Lint | `ruff check .` | |
 
 ## Acceptance-criterion test matrix
@@ -152,6 +160,16 @@ Layers: **Unit** = the row-availability function called directly; **API** = Fast
 | AC1-N9 | AC1 | The stored reservation must name a real requirement | Negative | `0027` applied | Run the script | Insert with unknown `requirement_id`; with `NULL` | `23503`; `23502` | No row | DB |
 | AC1-X1 | AC1 | Reserving requires a session | Cross-cutting | No `Authorization` header | Send `RES` | — | `401` | Nothing stored; no table queried | API |
 | AC1-X2 | AC1 | Roles other than Technical Support may not reserve | Cross-cutting | authService returns the role | Send `RES` (parametrized) | `event_coordinator`; `venue_staff`; `attendee` | `403` "Insufficient permissions" each | Nothing stored; no table queried | API |
+| AC1-N10 | AC1 | The RPC refuses a row of another type under the lock (D12) | Negative | `0028` applied; Projector requirement; `VERIFY-13 Speaker` row ×10 | Call `reserve_equipment` with the Speaker row | Quantity 1 | `22023` | No row inserted for the Speaker row | DB |
+| AC1-N11 | AC1 | The RPC treats a type differing only by case and spacing as the same type (D12) | Partition | `0028` applied; row typed `'  verify-13   PROJECTOR '` | Call `reserve_equipment` with that row | Quantity 1 | Row returned | — | DB |
+| AC1-N12 | AC1 | A type mismatch caught only under the lock is a 422, not a 500 | Negative | `REQ1`, `P10`; the fake RPC raises `22023` | Send `RES` | — | `422` "Equipment type does not match the requirement" | No reservation row | API |
+| AC1-N13 | AC1 | An empty RPC result is a clean 500 | Negative | `REQ1`, `P10`; the fake RPC returns `[]` | Send `RES` | — | `500` "Database operation failed" | — | API |
+| AC1-X3 | AC1 | Technical Support reads venue locations, and only id, name and location (D11) | Cross-cutting | venueService, in-memory store; two buildings, one blocked venue | `GET /venues/locations` as `technical_support`; also as `venue_staff` (route declared before `/{venue_id}`) | — | `200`; every seeded venue, blocked one included; each item's keys exactly `id`, `name`, `location`; no capacity, facilities, status or timestamps | — | API (venueService) |
+| AC1-X4 | AC1 | Technical Support still cannot read the venue catalogue (D11) | Cross-cutting | As AC1-X3 | As `technical_support`: `GET /venues`, `/venues/search`, `/venues/{id}`, `/venues/{id}/blocks`, `POST /venues/{id}/suitability`, `GET /booking-requests`; and `GET /venues` against the real venueService over HTTP | — | `403` each | — | API (venueService); cross-service |
+| AC1-X5 | AC1 | Who may read venue locations (D11) | Cross-cutting | As AC1-X3 | `GET /venues/locations` (parametrized) | `event_coordinator`; `venue_staff`; `event_operations_manager` + `technical_support` → allowed. `attendee`; `event_organiser`; `event_operations_manager` → refused. No session | `200` each allowed; `403` "Insufficient permissions" each refused; `401` without a session | — | API (venueService) |
+| AC1-X6 | AC1, AC4 | Reserving works against the real venueService and its real role check (F1 regression) | Cross-cutting | venueService running for real (subprocess, in-memory store); fake authService over HTTP; equipmentService in-process with `ReservationStore` | `POST /equipment-reservations` as `technical_support` with `PH10`; with `PS10`; with `venue_id: "v-missing"` | Venue ids from the real service | `201` with collection `2026-10-12` (transfer day from real venue data); `201` with collection `2026-10-13`; `404` "Venue not found" | Nothing stored on the 404 | Cross-service |
+| AC1-X7 | AC1 (SCRUM-10 regression) | SCRUM-10's availability check works against the real venueService | Cross-cutting | As AC1-X6 | `POST /equipment/availability-check` as `technical_support`, one Projector item | — | `200` (not `502`); `available` is a number | — | Cross-service |
+| L1 | AC1–AC5 | Live authenticated workflow on the shared database | Integration | Branch head with `0028` applied; `docker compose up`; seeded test accounts; rows prefixed `MANUAL-13` | Steps L1-1 to L1-12 in the review-fixes plan §8.4 | — | Locations 200 and catalogue 403 for Technical Support; availability check 200; reservation 201 with the transfer day; list 200; over-reserve 409; type mismatch 422 (API) and `22023` (RPC); venue staff 403 | `MANUAL-13` rows cleaned up afterwards | Integration |
 
 ### AC2: only working equipment can be reserved
 
@@ -225,13 +243,27 @@ Unless stated: `REQ1`, `R(P10, 6, Tue 13 → Wed 14)` so **A = 4** for `RES`.
 | --- | --- |
 | `backend/equipmentService/tests/test_reservation_rules.py` | Unit cases for `row_available` |
 | `backend/equipmentService/tests/test_reservations_api.py` | API cases for `POST /equipment-reservations` and `GET /equipment-reservations/by-event/{id}` |
-| `backend/equipmentService/tests/reservations_support.py` | `ReservationStore` (fake Supabase that applies filters and simulates `reserve_equipment`), `Services` (authService and venueService stub), shared data |
-| `database/verify_equipment_reservation_writes.sql` | DB cases AC1-N9, AC2-N2, AC3-N1, AC4-H2; manual two-session steps for AC3-N2 |
+| `backend/equipmentService/tests/reservations_support.py` | `ReservationStore` (fake Supabase that applies filters and simulates `reserve_equipment`), `Services` (authService and venueService stub; from 15 October 2026 it answers `GET /venues/locations`), shared data |
+| `backend/venueService/tests/test_venue_locations.py` | AC1-X3 to X5: the `GET /venues/locations` contract and that Technical Support's catalogue access is not widened |
+| `backend/equipmentService/tests/test_venue_contract.py` | AC1-X4, X6, X7: equipmentService against the real venueService and its real role check |
+| `backend/equipmentService/tests/test_availability_check.py` | SCRUM-10's venue stub, updated to `GET /venues/locations` with this story's D11 |
+| `database/verify_equipment_reservation_writes.sql` | DB cases AC1-N9, AC1-N10, AC1-N11, AC2-N2, AC3-N1, AC4-H2; manual two-session steps for AC3-N2 |
 | `backend/equipmentService/app/availability.py` | `row_hold` and `row_available` — the implemented per-row rule; `check_availability` counts through `row_available`, so the reserve path and SCRUM-10's check share one rule (AC5-X1) |
+
+## Disclosures
+
+Recorded 15 October 2026, after the teammate review.
+
+- **F1, venue reads refused (fixed by D11).** equipmentService forwarded the Technical Support token to venueService `GET /venues`, which since `6859656 fix(auth): restrict resource reads by role` (4 October 2026) admits only `event_coordinator` and `venue_staff`. venueService answered 403 and equipmentService reported 502 "Venue service unavailable", so every real `POST /equipment-reservations` failed. SCRUM-10's `POST /equipment/availability-check` (merged, Done) was broken the same way from 4 October until this fix.
+- **F2, why CI missed it.** Both equipmentService venue stubs returned 200 for `/venues` whatever the caller's role, so they agreed with equipmentService rather than with venueService. AC1-X6 and AC1-X7 now run venueService's real permission code.
+- **F3, type not checked in the database (fixed by D12).** `reserve_equipment` in `0027` did not compare the row's type with the requirement's; only the API did. Any other caller of the function could store one type against another type's requirement.
+- **F4, evidence corrections.** The 14 October run cited `288daa9`, a pre-rebase commit no branch contains; it is corrected to `48638ce`. The 14 October Green runs were written and run by GLM (via Claude Code), run by Yang Xue, not by "Claude (Sonnet 5.5)".
+- **F5, environments kept apart.** A disposable-PostgreSQL pass is not recorded as shared-Supabase verification (testing.md §8). AC3-N2 runs on a disposable database by team convention; the other DB cases run on shared Supabase.
+- **F6, Red commits pushed.** `afc544c`, `6268726` and `ca03bed` committed Red tests on their own, against commits.md §4. They are already on the shared branch and are left as they are; from this round each test is committed with the change that makes it pass.
 
 ## Latest execution record
 
-**Run 14 October 2026: Green (unit and API; implementation on the branch).** Branch `feat/scrum-13-reserve-equipment` at `288daa9` (dev at `11dae05` plus this story's commits). Environment: macOS (Darwin 24.6.0) on Yang's Mac, Python 3.14.2 in `backend/equipmentService/.venv`, dependencies from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `ReservationStore` for Supabase; authService and venueService stubbed at `httpx.get`. Migration `0027` was applied to shared development on 14 October 2026, after this run; the DB-layer cases and AC3-X1 are not executed yet.
+**Run 14 October 2026: Green (unit and API; implementation on the branch).** Branch `feat/scrum-13-reserve-equipment` at `48638ce` (dev at `11dae05` plus this story's commits; corrected 15 October 2026 from `288daa9`, a pre-rebase commit no branch contains). Environment: macOS (Darwin 24.6.0) on Yang's Mac, Python 3.14.2 in `backend/equipmentService/.venv`, dependencies from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `ReservationStore` for Supabase; authService and venueService stubbed at `httpx.get`. Migration `0027` was applied to shared development on 14 October 2026, after this run; the DB-layer cases and AC3-X1 are not executed yet.
 
 Commands from `backend/equipmentService/`:
 - `pytest -q` → **323 passed, 0 failed, 0 skipped** (one pre-existing starlette `DeprecationWarning` from the test client, present before this story).
@@ -239,12 +271,12 @@ Commands from `backend/equipmentService/`:
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC3-P1, AC3-P2, AC3-P4, AC3-B1–B6, AC5-X1 | Green | 13 runs pass | Pass | `288daa9`, local | Claude (Sonnet 5.5), 14 Oct 2026 | `pytest -q tests/test_reservation_rules.py` |
-| AC1-H1, AC1-P1–P3, AC1-B1–B4, AC1-N1–N8, AC1-X1, AC1-X2, AC2-P1–P4, AC2-X1, AC2-N1, AC3-H1, AC3-H2, AC3-P3, AC4-H1, AC4-H3, AC4-P1–P4, AC4-N1, AC4-X1–X3, AC5-H1, AC5-B1–B3, AC5-P1–P3, AC5-N1 | Green | 58 runs pass | Pass | `288daa9`, local | Claude (Sonnet 5.5), 14 Oct 2026 | `pytest -q tests/test_reservations_api.py` |
+| AC3-P1, AC3-P2, AC3-P4, AC3-B1–B6, AC5-X1 | Green | 13 runs pass | Pass | `48638ce`, Local, mocked | GLM (via Claude Code), run by Yang Xue, 14 Oct 2026 | `pytest -q tests/test_reservation_rules.py` |
+| AC1-H1, AC1-P1–P3, AC1-B1–B4, AC1-N1–N8, AC1-X1, AC1-X2, AC2-P1–P4, AC2-X1, AC2-N1, AC3-H1, AC3-H2, AC3-P3, AC4-H1, AC4-H3, AC4-P1–P4, AC4-N1, AC4-X1–X3, AC5-H1, AC5-B1–B3, AC5-P1–P3, AC5-N1 | Green | 58 runs pass | Pass | `48638ce`, Local, mocked | GLM (via Claude Code), run by Yang Xue, 14 Oct 2026 | `pytest -q tests/test_reservations_api.py` |
 | AC1-N9, AC2-N2, AC3-N1, AC4-H2 | Planned | — | Not executed | — | — | `database/verify_equipment_reservation_writes.sql` after `0027` is applied; expected Red before that (column `requirement_id` / function `reserve_equipment` missing) |
 | AC3-N2 | Planned | — | Not executed | — | — | Manual, two SQL sessions; steps at the end of the verify script |
 | AC3-X1 | Planned | — | Not executed | — | — | Manual integration on the full stack once `0027` is applied |
-| SCRUM-10/16/33/45 regression | Green | 252 existing tests pass | Pass | `288daa9`, local | Claude (Sonnet 5.5), 14 Oct 2026 | `pytest -q` |
+| SCRUM-10/16/33/45 regression | Green | 252 existing tests pass | Pass | `48638ce`, Local, mocked | GLM (via Claude Code), run by Yang Xue, 14 Oct 2026 | `pytest -q` |
 
 **Run 12 October 2026: Red (tests written, behaviour not implemented).** `dev` at `dd0036b` plus the uncommitted SCRUM-13 test files. Environment: Linux workspace VM on Yang's Mac, Python 3.13.15 in a scratch virtual environment outside the repo, dependencies from `pyproject.toml` (`.[dev]`). Dependencies **fully mocked**: `ReservationStore` for Supabase; authService and venueService stubbed at `httpx.get`. `POST /equipment-reservations` and `GET /equipment-reservations/by-event/{id}` do not exist yet; `row_available` is a stub.
 
