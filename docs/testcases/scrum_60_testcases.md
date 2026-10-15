@@ -75,7 +75,7 @@ Cases for AC2–AC4 are designed with increments 2 and 3.
 | AC6-P3 | Green | Event in `Safety Review` listed in the Lead's assignments | Pass | as above | Claude for Jaren, 15 Oct 2026 | Added during build: `Safety Review` is in flight, so the coordinator can be reassigned. Red: empty list |
 | AC6-X3 | Green | Owner reads the event, status `Safety Review` | Pass | as above | Claude for Jaren, 15 Oct 2026 | Added during build. Red: `ValidationError`, status not in `EventRequestStatus` |
 | AC6-P2 | Green | Status list has eleven entries; `Safety Review` in the in-progress tab and progress bar (8 steps); coordinator gets cancellation only | Pass | as above | Claude for Jaren, 15 Oct 2026 | Red: status-list test. Five existing progress-bar and tab tests updated for the eighth step |
-| AC1-X1, AC6-N1, AC6-X1, AC6-X2 | Written | Red on shared before `0029`: `23514 staff_roles_role_check` for `safety_officer`, rolled back | Not run green | — | Claude for Jaren, 15 Oct 2026 | `database/verify_safety_review.sql`; green run after `0029` is applied |
+| AC1-X1, AC6-N1, AC6-X1, AC6-X2 | Green | Role accepted, unknown role refused; coordinator `Confirmed` refused `P0004` from Safety Review and Planning with no status or history change; cancel from Safety Review recorded `coordinator.cancellation`; anon/authenticated cannot execute | Pass | shared development after `0029` | Claude for Jaren, 15 Oct 2026 | `database/verify_safety_review.sql`, rolled back. Red before `0029`: `23514 staff_roles_role_check` |
 
 **Local evidence, 15 October 2026:**
 
@@ -83,6 +83,6 @@ Cases for AC2–AC4 are designed with increments 2 and 3.
 - `backend/eventRequestService`: `ruff check .` clean; `pytest` 343 passed.
 - `frontend`: `npm run typecheck` and `npm run lint` clean; `npx vitest run` 308 passed.
 
-**Shared development:** live constraints are `event_requests_status_check` and `staff_roles_role_check`; the live coordinator function is `0026` (last migration `20261013134214`), so `0029` replaces nothing newer. `0029` not applied yet.
+**Shared development, 15 October 2026:** before applying, the live constraints were `event_requests_status_check` and `staff_roles_role_check` and the live coordinator function was `0026` (last migration `20261013134214`), so `0029` replaced nothing newer. `0029` applied via MCP as `20261015155038 safety_review_status`. `verify_safety_review.sql` then passed; afterwards no `verify SCRUM-60` rows and no `safety_officer` role rows remained.
 
-**Not yet done:** apply `0029` and run `verify_safety_review.sql` green; PR CI; human review of these test cases.
+**Not yet done:** PR CI; human review of these test cases; seeding `safety_officer@example.com` (register it, then re-run `seed_test_accounts.sql`).
