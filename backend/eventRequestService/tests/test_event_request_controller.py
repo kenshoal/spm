@@ -20,6 +20,7 @@ CANCEL_SOURCE_STATUSES = {
     "Changes Requested",
     "Approved",
     "Planning",
+    "Safety Review",
     "Confirmed",
 }
 
@@ -1150,3 +1151,25 @@ def test_attendee_view_rejects_unrelated_roles() -> None:
         response = client.get("/event-requests/public-events")
 
     assert response.status_code == 403
+
+
+# AC6-X3 (cross-cutting, SCRUM-60): an event waiting for its safety check
+# still reads back for its organiser, with the new status.
+def test_owner_reads_event_in_safety_review() -> None:
+    caller_id = str(uuid4())
+    event_requests = FakeEventRequestRepository()
+    application = create_app(event_requests, FakeCoordinatorAssignmentRepository())
+    application.dependency_overrides[
+        event_request_controller.get_authenticated_caller
+    ] = lambda: event_request_controller.AuthenticatedCaller(
+        id=caller_id, roles=("event_organiser",)
+    )
+    event_request_id = submit_event_request(event_requests)
+    event_requests.rows[event_request_id]["organiser_id"] = caller_id
+    event_requests.rows[event_request_id]["status"] = "Safety Review"
+
+    with TestClient(application) as client:
+        response = client.get(f"/event-requests/{event_request_id}")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "Safety Review"

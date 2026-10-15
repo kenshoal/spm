@@ -49,6 +49,7 @@ function makeRequest(status: EventRequestStatus): EventRequest {
 }
 
 // Purpose: The coordinator's action buttons mirror the backend transition windows per status.
+// AC6-P2 (partition, SCRUM-60): Safety Review offers cancellation only, never confirm or complete.
 test("offers only the actions each status allows", () => {
   expect(coordinatorActions("Draft")).toEqual(["cancellation"]);
   expect(coordinatorActions("Submitted")).toEqual(["review", "cancellation"]);
@@ -56,6 +57,7 @@ test("offers only the actions each status allows", () => {
   expect(coordinatorActions("Changes Requested")).toEqual(["cancellation"]);
   expect(coordinatorActions("Approved")).toEqual(["cancellation"]);
   expect(coordinatorActions("Planning")).toEqual(["cancellation"]);
+  expect(coordinatorActions("Safety Review")).toEqual(["cancellation"]);
   expect(coordinatorActions("Confirmed")).toEqual(["completion", "cancellation"]);
   expect(coordinatorActions("Completed")).toEqual([]);
   expect(coordinatorActions("Cancelled")).toEqual([]);
