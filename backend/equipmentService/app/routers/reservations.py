@@ -203,6 +203,10 @@ def reserve_equipment(
 
     data = response.data
     if isinstance(data, list):  # PostgREST may return the row wrapped in a list
+        if not data:  # not reachable with the current function; never a 500 trace
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR, "Database operation failed"
+            )
         data = data[0]
     return ReservationOut.model_validate(data)
 

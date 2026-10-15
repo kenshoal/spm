@@ -366,6 +366,18 @@ def test_type_mismatch_under_lock_is_unprocessable(
     assert store.reservations() == before
 
 
+# AC1-N13 (negative): an empty result from reserve_equipment is a clean 500
+def test_empty_reservation_result_is_server_error(
+    api: TestClient, store: ReservationStore
+) -> None:
+    store.rpc_result = []
+
+    response = reserve(api)
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Database operation failed"}
+
+
 # AC1-X1 (cross-cutting): reserving requires a session
 def test_reserving_requires_a_session(
     api: TestClient, store: ReservationStore, services: Services
