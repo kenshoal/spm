@@ -14,6 +14,17 @@
 --
 -- Not ready raises P0005 with the outstanding items as a JSON array in DETAIL,
 -- so the API can say what is missing without a second, racy read.
+--
+-- Lock protocol (agreed with SCRUM-64/60, 16 Oct 2026): a gate locks ONLY the
+-- event row, FOR UPDATE, and reads everything else unlocked, so it never waits
+-- on anything while holding the event. Writers that can make an event unready
+-- lock their own rows first and reach the event last, through the FK KEY SHARE
+-- taken when they insert a row referencing it; that conflicts with FOR UPDATE,
+-- so they either commit before the gate reads or wait until it commits. Locking
+-- requirements here as well deadlocked against reserve_equipment (requirement
+-- -> equipment -> event), shown by test_safety_review_concurrency.py.
+-- Known gap: venue_booking_requests.event_request_id has no FK, so a booking
+-- created mid-handover is not serialised by this.
 
 CREATE OR REPLACE FUNCTION public.send_event_request_for_safety_review(
     p_event_request_id uuid,
@@ -53,13 +64,6 @@ BEGIN
         RAISE EXCEPTION 'transition not allowed from status %', v_current.status
             USING ERRCODE = 'P0004';
     END IF;
-
-    -- Hold the bookings and requirements read below until commit, so a pending
-    -- booking cannot be decided, or a requirement reserved against, mid-check.
-    PERFORM 1 FROM public.venue_booking_requests
-    WHERE event_request_id = p_event_request_id ORDER BY id FOR SHARE;
-    PERFORM 1 FROM public.equipment_requirements
-    WHERE event_request_id = p_event_request_id ORDER BY id FOR SHARE;
 
     IF NOT EXISTS (
         SELECT 1 FROM public.venue_booking_requests

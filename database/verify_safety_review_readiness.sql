@@ -1,5 +1,5 @@
 -- SCRUM-58 AC2/AC3a: real Postgres evidence for Planning -> Safety Review; every fixture rolls back.
--- Run after 0030. Requires an existing auth user. Prints ALL SAFETY REVIEW READINESS VERIFICATIONS PASSED.
+-- Run after 0039. Requires an existing auth user. Prints ALL SAFETY REVIEW READINESS VERIFICATIONS PASSED.
 BEGIN;
 
 -- Fixture helpers live in pg_temp and vanish with the rollback.
