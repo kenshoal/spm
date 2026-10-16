@@ -95,7 +95,7 @@ Decisions behind the rules: a booking can only be `pending`, `approved` or `reje
 
 ### Design
 
-A new function, `send_event_request_for_safety_review` (migration `0030_send_for_safety_review.sql`), not another branch in `advance_event_request_by_coordinator`: only this move has readiness rules, and the shared function (`0025`/`0026`/`0029`) stays untouched. It locks the event row, checks assignment (`P0003`) before status (`P0004`) before readiness, so nobody else learns what an event is missing. Booking and requirement rows are held `FOR SHARE` during the check. Not ready raises `P0005` with the outstanding items as JSON in `DETAIL`; the API returns them from that same refusal rather than a second read. Endpoint: `POST /event-requests/{id}/safety-review`.
+A new function, `send_event_request_for_safety_review` (migration `0039_send_for_safety_review.sql`; first written as `0030`, renumbered on 16 Oct because SCRUM-64 holds `0030`–`0033` and `0035`–`0038` and SCRUM-60 holds `0034`), not another branch in `advance_event_request_by_coordinator`: only this move has readiness rules, and the shared function (`0025`/`0026`/`0029`) stays untouched. It locks the event row, checks assignment (`P0003`) before status (`P0004`) before readiness, so nobody else learns what an event is missing. It locks nothing else (see Lock protocol below). Not ready raises `P0005` with the outstanding items as JSON in `DETAIL`; the API returns them from that same refusal rather than a second read. Endpoint: `POST /event-requests/{id}/safety-review`.
 
 ### Allowed transition (added)
 
@@ -137,13 +137,39 @@ A new function, `send_event_request_for_safety_review` (migration `0030_send_for
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC2-H1 … AC4-N11 (14 DB cases) | Green | As expected for all 14 | Pass | branch on `8897646`, **disposable local PostgreSQL 16** | Claude for Tate, 16 Oct 2026 | `psql -f database/verify_safety_review_readiness.sql` printed `ALL SAFETY REVIEW READINESS VERIFICATIONS PASSED`, 0 fixture rows left. Red before `0030`: function does not exist |
+| AC2-H1 … AC4-N11 (14 DB cases) | Green | As expected for all 14 | Pass | branch on `8897646`, **disposable local PostgreSQL 16** | Claude for Tate, 16 Oct 2026 | `psql -f database/verify_safety_review_readiness.sql` printed `ALL SAFETY REVIEW READINESS VERIFICATIONS PASSED`, 0 fixture rows left. Red before the migration: function does not exist |
 | AC2-H2 … AC3-X1 (21 tests) | Green | As expected | Pass | as above, repositories and auth faked | Claude for Tate, 16 Oct 2026 | `tests/test_event_safety_review.py` (19), `tests/test_supabase_repository.py` (2). Red: 19 × `404` (route missing), 2 × `AttributeError` (method missing) |
 
-- **Database setup:** fresh cluster, then `database/tests/bootstrap_event_status_history.py --disposable` (database named `scrum48_*`), then migrations `0001`, `0016_venues`, `0018_venue_booking_requests`, `0020_equipment_reservations`, `0021_equipment_requirements`, `0027`, `0028`, `0026`, `0029`, `0030`. `0030` applied twice without error.
-- **Planted-bug check:** counting rejected bookings as a venue → AC3-N3 failed; accepting one unit short → AC3-B1 failed. Real `0030` restored → passed.
+- **Database setup:** fresh cluster, then `database/tests/bootstrap_event_status_history.py --disposable` (database named `scrum48_*`), then migrations `0001`, `0016_venues`, `0018_venue_booking_requests`, `0020_equipment_reservations`, `0021_equipment_requirements`, `0027`, `0028`, `0026`, `0029` and this migration (then numbered `0030`). It applied twice without error. Now scripted as `database/tests/bootstrap_safety_review.py --disposable`.
+- **Planted-bug check:** counting rejected bookings as a venue → AC3-N3 failed; accepting one unit short → AC3-B1 failed. Real migration restored → passed.
 - **Regression on the same DB:** `verify_event_request_planning.sql`, `verify_event_request_status_history.sql` (SCRUM-48) and `verify_safety_review.sql` (SCRUM-60) all still pass.
 - **Whole service:** `pytest` 364 passed (343 on PR #62's branch + 21 new), 0 failed, 0 skipped; `ruff check .` clean.
 - **Test-helper finding:** `P0004`, the team's "transition not allowed" code, is also PL/pgSQL's built-in `assert_failure`, which `EXCEPTION WHEN OTHERS` does not catch. Handlers that must catch it need `WHEN SQLSTATE 'P0004'`.
 
-**Not yet done:** apply `0030` to shared development (needs PR #62's `0029`, already applied there per Jaren's doc; not rechecked — the Supabase connection needs signing in again); live API check; "Send for safety review" button in the frontend; AC3b; PR CI; human review of these test cases (`testing.md` §10). Not checked: that `service_role` has `SELECT` and row-lock rights on `venue_booking_requests`, `venues`, `equipment_requirements` and `equipment_reservations` on shared. The local run used a superuser.
+**Not yet done:** apply `0039` to shared development (needs PR #62's `0029`, already applied there per Jaren's doc; not rechecked — the Supabase connection needs signing in again); live API check; "Send for safety review" button in the frontend; AC3b; PR CI; human review of these test cases (`testing.md` §10). Not checked: that `service_role` has `SELECT` and row-lock rights on `venue_booking_requests`, `venues`, `equipment_requirements` and `equipment_reservations` on shared. The local run used a superuser.
+
+### Lock protocol and concurrency — 16 October 2026
+
+Heng Rui (SCRUM-64) pointed out that the first version could deadlock: it locked the event row and then requirement and booking rows `FOR SHARE`, while `reserve_equipment` locks requirement → equipment and only then reaches the event through the FK on its insert. Test AC2-X2 reproduced it against that version (`ERROR: 40P01: deadlock detected`).
+
+Agreed protocol, sent to SCRUM-64/60 on 16 Oct:
+
+- **Gates** (this handover; SCRUM-60's approval) lock **only the event row, `FOR UPDATE`, first**, then read children unlocked. A gate never waits on anything while holding the event, so it cannot be part of a deadlock cycle.
+- **Writers that can make an event unready** (reservation inserts, new requirements, SCRUM-64 review flags) take their own locks first and reach the event **last**, through the FK `KEY SHARE` of inserting a row that references `event_requests`. That conflicts with `FOR UPDATE`, so a writer either commits before the gate reads (the gate sees its row) or waits until the gate commits (the row lands on a Safety Review event, where SCRUM-60's approval re-check catches it).
+- **Depends on:** gates staying on `FOR UPDATE` (not `FOR NO KEY UPDATE`), and SCRUM-64's `arrangement_reviews.event_request_id` having a real FK to `event_requests` (asked Heng Rui).
+- **Known gap:** `venue_booking_requests.event_request_id` has no FK, so a booking created mid-handover is not serialised. To raise with the venue owners; not fixed here.
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC2-X2 | AC2 | A reservation in flight does not deadlock with the gate | Cross-cutting | Disposable DB from `bootstrap_safety_review.py`; Planning event, approved booking, Projector requirement 3, matching equipment | Session A: `BEGIN`, lock the requirement `FOR UPDATE` (reserve_equipment's first lock), sleep, run the real `reserve_equipment` for 3, `COMMIT`. Session B, once A is sleeping: send for safety review | — | No `40P01`; A commits; B refuses with `P0005` `equipment_not_reserved` (reservation not yet committed); a later send succeeds | Event stays Planning until the later send | DB (two connections) |
+| AC3-X2 | AC3a | A writer that reached the event first makes the gate wait, and the gate then sees its row | Cross-cutting | As AC2-X2, no requirement | A: `BEGIN`, insert a Projector requirement (3), sleep, `COMMIT`. B, once A is sleeping: send | — | B observed waiting on a lock; then `P0005` listing required 3, reserved 0 | Event stays Planning; no Safety Review history row | DB (two connections) |
+| AC3-X3 | AC3a | When the gate goes first, a writer waits and then completes | Cross-cutting | As AC2-X2, no requirement (ready) | B: `BEGIN`, send, sleep, `COMMIT`. A, once B is sleeping: insert a requirement | — | A observed waiting on a lock; both succeed; event Safety Review; exactly one Safety Review history row | No deadlock | DB (two connections) |
+| AC3-X4 | AC3b | A review flag raised during the handover is seen or waits, as in AC3-X2/X3 | Cross-cutting | SCRUM-64's `arrangement_reviews` and `get_outstanding_arrangement_reviews` | As AC3-X2 and AC3-X3 with a flag insert | — | As AC3-X2/X3 | — | DB (two connections) |
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC2-X2 | Green | Red on the first version: `40P01 deadlock detected`. After the fix: no deadlock, A committed, B `P0005`, later send → Safety Review | Pass | this branch, disposable local PostgreSQL 16 | Claude for Tate, 16 Oct 2026 | `python3 database/tests/test_safety_review_concurrency.py --dsn … --psql …`; 3 tests OK in each of 5 consecutive runs on a fresh cluster |
+| AC3-X2, AC3-X3 | Green | As expected | Pass | as above | Claude for Tate, 16 Oct 2026 | Pass against both versions: they prove the protocol's waiting behaviour, not the bug |
+| AC3-X4 | Planned | — | Blocked | — | — | Needs SCRUM-64's branch (local and unpushed as of 16 Oct) |
+
+After the fix, on the same fresh cluster: `verify_safety_review_readiness.sql`, `verify_event_request_planning.sql`, `verify_event_request_status_history.sql` and `verify_safety_review.sql` all printed their PASSED lines.
