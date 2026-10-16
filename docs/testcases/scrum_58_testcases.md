@@ -77,3 +77,73 @@ Only the coordinator on the **latest** assignment row (ordered by `id`) may star
 **Shared development, 13 October 2026:** before applying, the live `advance_event_request_by_coordinator` matched `0025` (no newer change to overwrite). `0026` applied via MCP as `20261013134214 event_request_planning`. Read-only checks afterwards: definition contains the Approved → Planning move and the `planning` source; `anon` and `authenticated` cannot execute; `service_role` can; not `SECURITY DEFINER`. The rolled-back verification script was **not** run on shared (the MCP SQL tool is used read-only), so AC1-X1/AC4-N7 are proven locally only.
 
 **Not yet done:** a live API call against shared; frontend control; PR CI; human review of these test cases (`testing.md` §10).
+
+## Increment: send for safety review (AC2, AC3a) — 16 October 2026
+
+Branch `feat/scrum-58-safety-review`, based on Jaren's `feat/scrum-60-safety-check` (PR #62, `8897646`), which adds the `Safety Review` status (migration `0029`). This branch cannot merge before PR #62.
+
+### Approved contract update
+
+Jaren (SCRUM-60 owner) answered the AC2 question on 15–16 October: the status is **Safety Review**, and only the Safety Officer moves an event to `Confirmed` (SCRUM-60 AC3/AC6). The story owner (Tate) approved the wording and rules below on 16 October 2026.
+
+| Jira AC | Outcome | Approved wording |
+| --- | --- | --- |
+| AC2 (send once booked and reserved) | **Clarified** (was Parked) | **AC2:** Given a Planning event assigned to me with at least one approved venue booking, no pending booking, and every equipment requirement's reservations adding up to its full quantity, when I send it for safety review, then it becomes `Safety Review` and the status history records me (role `event_coordinator`, source `coordinator.safety_review`). Rejected bookings are ignored. An event with no equipment requirements is ready. |
+| AC3 (say what is missing, don't send) | **Split** | **AC3a:** Otherwise it is refused with `409` and a list of every outstanding item (no venue booked; each pending booking by venue; each under-reserved requirement with reserved and required counts), each with a plain-language message, and nothing changes. **AC3b (parked):** items marked for review also block, once SCRUM-64 builds the flag. |
+
+Decisions behind the rules: a booking can only be `pending`, `approved` or `rejected` and cannot be withdrawn, so counting rejected bookings would block an event forever. "Reserved" uses SCRUM-13's reservations, not Technical Support's manual `arranged` status, which can be set independently.
+
+### Design
+
+A new function, `send_event_request_for_safety_review` (migration `0030_send_for_safety_review.sql`), not another branch in `advance_event_request_by_coordinator`: only this move has readiness rules, and the shared function (`0025`/`0026`/`0029`) stays untouched. It locks the event row, checks assignment (`P0003`) before status (`P0004`) before readiness, so nobody else learns what an event is missing. Booking and requirement rows are held `FOR SHARE` during the check. Not ready raises `P0005` with the outstanding items as JSON in `DETAIL`; the API returns them from that same refusal rather than a second read. Endpoint: `POST /event-requests/{id}/safety-review`.
+
+### Allowed transition (added)
+
+| From | To | Who | Otherwise |
+| --- | --- | --- | --- |
+| Planning | Safety Review | Latest assigned coordinator, when ready | `409` `P0005` with outstanding list if not ready; `409` `P0004` from any other status; `403` `P0003` for anyone else; `404` `P0002` if missing |
+
+### Test case specification (added)
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC2-H1 | AC2 | Ready event moves to Safety Review; one history row names the coordinator | Happy | Disposable DB (see Evidence); Planning event, `scrum58-coordinator` assigned | Call the function | 1 approved booking; Projector requirement 3, reservations 2 + 1 | `Safety Review`; one history row `Planning → Safety Review`, actor, `event_coordinator`, `coordinator.safety_review` | Rolled back | DB |
+| AC2-P1 | AC2 | No equipment needed is ready | Partition | As AC2-H1 | Call the function | 1 approved booking, no requirements | `Safety Review` | Rolled back | DB |
+| AC2-P2 | AC2 | A rejected booking is ignored beside an approved one | Partition | As AC2-H1 | Call the function | 1 rejected + 1 approved booking | `Safety Review` | Rolled back | DB |
+| AC3-N1 | AC3a | A pending booking blocks, even beside an approved one, and is named | Negative | As AC2-H1 | Call the function | approved Hall E + pending Hall F | `P0005`; outstanding = `[venue_booking_pending, booking id, "Hall F"]` | Event and history unchanged | DB |
+| AC3-N2 | AC3a | No booking at all blocks | Negative | As AC2-H1 | Call the function | no bookings | `P0005`; `[no_venue_booking]` | Unchanged | DB |
+| AC3-N3 | AC3a | Only rejected bookings means no venue | Negative | As AC2-H1 | Call the function | 1 rejected booking | `P0005`; `[no_venue_booking]` | Unchanged | DB |
+| AC3-B1 | AC3a | One unit short blocks | Boundary | As AC2-H1 | Call the function | Microphone 3 required, 2 reserved | `P0005`; `equipment_not_reserved`, required 3, reserved 2 | Unchanged | DB |
+| AC3-B2 | AC3a | Nothing reserved is reported as 0 | Boundary | As AC2-H1 | Call the function | Speaker 3 required, none reserved | `P0005`; reserved 0, required 3 | Unchanged | DB |
+| AC3-N4 | AC3a | Every outstanding item is listed at once, venue first | Negative | As AC2-H1 | Call the function | pending booking + Stage light 1 of 4 | `P0005`; two items, venue then equipment | Unchanged | DB |
+| AC2-N1 | AC2 | A ready event not in Planning is refused | Negative | As AC2-H1 | Call the function | Approved, approved booking | `P0004` | Unchanged | DB |
+| AC2-N2 | AC2 | Sending twice is refused | Negative | As AC2-H1 | Call twice | ready event | second call `P0004` | No second history row | DB |
+| AC4-N9 | AC4 | Another coordinator is refused before readiness is checked | Negative | As AC2-H1 | Call as `other-coordinator` | unready event | `P0003` | Unchanged | DB |
+| AC4-N10 | AC4 | Missing event | Negative | As AC2-H1 | Call with a random id | — | `P0002` | — | DB |
+| AC4-N11 | AC4 | Browser roles cannot call the function | Negative | As AC2-H1 | `has_function_privilege` | — | `anon`, `authenticated` false; `service_role` true | — | DB |
+| AC2-H2 | AC2 | The endpoint moves a ready Planning event | Happy | `make_assigned_client(status="Planning")` | POST `/safety-review` as `coord-1` | — | 200, body and stored status `Safety Review` | — | API |
+| AC3-N5 | AC3a | The refusal lists every item with a message | Negative | As AC2-H2, fake reports all three kinds | POST as `coord-1` | no venue; Hall F pending; Microphone 2 of 3 | 409, `detail` + `outstanding` with `message` per item | Status stays Planning | API |
+| AC2-P3…P11 | AC2 | Every other status is refused without an outstanding list | Partition | As AC2-H2 with the given status | POST as `coord-1` | Submitted, Under Review, Changes Requested, Approved, Rejected, Safety Review, Confirmed, Completed, Cancelled | 409, no `outstanding` | Status unchanged | API |
+| AC2-N3 | AC2 | Missing request is the service's 404 | Negative | Empty fake | POST | id `…0001` | 404 with "was not found" | — | API |
+| AC4-N12 | AC4 | Non-assigned coordinator gets 403 and no outstanding list | Negative | Assigned to `coord-2`, unready | POST as `coord-1` | — | 403, no `outstanding` | Status unchanged | API |
+| AC4-N13 | AC4 | Reassigned-away coordinator refused | Negative | `coord-1` then `coord-2` | POST as `coord-1` | — | 403 | Unchanged | API |
+| AC4-N14 | AC4 | No coordinator assigned | Negative | No assignment | POST as `coord-1` | — | 403 | Unchanged | API |
+| AC4-N15 | AC4 | No session | Negative | Real auth dependency | POST, no header | — | 401 | — | API |
+| AC4-N16…N18 | AC4 | Organiser, operations manager and Safety Officer cannot send | Negative | Auth stubbed to the role | POST | the three roles | 403 | Unchanged | API |
+| AC2-X1 | AC2 | Repository calls the new RPC with the caller's identity | Cross-cutting | `httpx.MockTransport` | `send_for_safety_review` | `request-1`, `coord-1` | POST `/rest/v1/rpc/send_event_request_for_safety_review`, single-object Accept | — | Unit |
+| AC3-X1 | AC3a | Repository keeps `P0005` and PostgREST's `details` | Cross-cutting | Mock returns 400 with code and details | `send_for_safety_review` | details `[{"kind": "no_venue_booking"}]` | `EventRequestRpcError` with errcode and details | — | Unit |
+
+### Evidence (local, 16 October 2026)
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC2-H1 … AC4-N11 (14 DB cases) | Green | As expected for all 14 | Pass | branch on `8897646`, **disposable local PostgreSQL 16** | Claude for Tate, 16 Oct 2026 | `psql -f database/verify_safety_review_readiness.sql` printed `ALL SAFETY REVIEW READINESS VERIFICATIONS PASSED`, 0 fixture rows left. Red before `0030`: function does not exist |
+| AC2-H2 … AC3-X1 (21 tests) | Green | As expected | Pass | as above, repositories and auth faked | Claude for Tate, 16 Oct 2026 | `tests/test_event_safety_review.py` (19), `tests/test_supabase_repository.py` (2). Red: 19 × `404` (route missing), 2 × `AttributeError` (method missing) |
+
+- **Database setup:** fresh cluster, then `database/tests/bootstrap_event_status_history.py --disposable` (database named `scrum48_*`), then migrations `0001`, `0016_venues`, `0018_venue_booking_requests`, `0020_equipment_reservations`, `0021_equipment_requirements`, `0027`, `0028`, `0026`, `0029`, `0030`. `0030` applied twice without error.
+- **Planted-bug check:** counting rejected bookings as a venue → AC3-N3 failed; accepting one unit short → AC3-B1 failed. Real `0030` restored → passed.
+- **Regression on the same DB:** `verify_event_request_planning.sql`, `verify_event_request_status_history.sql` (SCRUM-48) and `verify_safety_review.sql` (SCRUM-60) all still pass.
+- **Whole service:** `pytest` 364 passed (343 on PR #62's branch + 21 new), 0 failed, 0 skipped; `ruff check .` clean.
+- **Test-helper finding:** `P0004`, the team's "transition not allowed" code, is also PL/pgSQL's built-in `assert_failure`, which `EXCEPTION WHEN OTHERS` does not catch. Handlers that must catch it need `WHEN SQLSTATE 'P0004'`.
+
+**Not yet done:** apply `0030` to shared development (needs PR #62's `0029`, already applied there per Jaren's doc; not rechecked — the Supabase connection needs signing in again); live API check; "Send for safety review" button in the frontend; AC3b; PR CI; human review of these test cases (`testing.md` §10). Not checked: that `service_role` has `SELECT` and row-lock rights on `venue_booking_requests`, `venues`, `equipment_requirements` and `equipment_reservations` on shared. The local run used a superuser.
