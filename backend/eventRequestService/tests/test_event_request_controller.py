@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -29,6 +30,9 @@ class FakeEventRequestRepository:
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
         self.coordinator_assignment_rows: list[dict[str, Any]] = []
+        # What send_event_request_for_safety_review would find outstanding per
+        # event; the readiness rules themselves are proven in the database.
+        self.safety_review_outstanding: dict[str, list[dict[str, Any]]] = {}
         self.review_decision_rows: list[dict[str, Any]] = []
         self.change_request_rows: list[dict[str, Any]] = []
 
@@ -172,6 +176,36 @@ class FakeEventRequestRepository:
             raise EventRequestRpcError("not allowed", errcode="P0004")
 
         row["status"] = to_status
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
+    def send_for_safety_review(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]:
+        """Mirrors send_event_request_for_safety_review: not found, assignment,
+        Planning, then readiness, all before any write."""
+        row = self.rows.get(event_request_id)
+        if row is None:
+            raise EventRequestRpcError("not found", errcode="P0002")
+
+        assignments = [
+            assignment
+            for assignment in self.coordinator_assignment_rows
+            if assignment["event_request_id"] == event_request_id
+        ]
+        latest = max(assignments, key=lambda assignment: assignment["id"], default=None)
+        if latest is None or latest["coordinator_id"] != coordinator_id:
+            raise EventRequestRpcError("not assigned", errcode="P0003")
+        if row["status"] != "Planning":
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+
+        outstanding = self.safety_review_outstanding.get(event_request_id, [])
+        if outstanding:
+            raise EventRequestRpcError(
+                "not ready", errcode="P0005", details=json.dumps(outstanding)
+            )
+
+        row["status"] = "Safety Review"
         row["updated_at"] = datetime.now(UTC).isoformat()
         return dict(row)
 

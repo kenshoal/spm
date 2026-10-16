@@ -40,6 +40,10 @@ class EventRequestRepository(Protocol):
         self, event_request_id: str, coordinator_id: str, to_status: str
     ) -> dict[str, Any]: ...
 
+    def send_for_safety_review(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]: ...
+
     def decide_by_coordinator(
         self,
         event_request_id: str,
@@ -100,12 +104,20 @@ class EventRequestRpcError(SupabaseRepositoryError):
 
     errcode carries the Postgres ERRCODE the function raised (P0002 not
     found, P0003 not the assigned coordinator, P0004 transition not
-    allowed) so callers can map failures without parsing message text.
+    allowed, P0005 not ready for safety review) so callers can map failures
+    without parsing message text. details is the DETAIL the function set, if
+    any: for P0005, the outstanding items as a JSON array.
     """
 
-    def __init__(self, message: str, errcode: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        errcode: str | None = None,
+        details: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.errcode = errcode
+        self.details = details
 
 
 class SupabaseEventRequestRepository:
@@ -281,6 +293,27 @@ class SupabaseEventRequestRepository:
             ) from error
         return response.json()
 
+    def send_for_safety_review(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]:
+        try:
+            response = self._client.post(
+                "/rpc/send_event_request_for_safety_review",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_coordinator_id": coordinator_id,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
+
     def decide_by_coordinator(
         self,
         event_request_id: str,
@@ -433,12 +466,13 @@ class SupabaseEventRequestRepository:
     @staticmethod
     def _rpc_rejection(response: httpx.Response) -> EventRequestRpcError:
         try:
-            errcode = response.json().get("code")
+            body = response.json()
         except ValueError:
-            errcode = None
+            body = {}
         return EventRequestRpcError(
             "Supabase rejected the coordinator status transition",
-            errcode=errcode,
+            errcode=body.get("code"),
+            details=body.get("details"),
         )
 
     def update_for_organiser(

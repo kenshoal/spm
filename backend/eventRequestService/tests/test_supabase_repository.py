@@ -580,3 +580,55 @@ def test_get_organisation_id_returns_none_without_membership() -> None:
     repository = repository_capturing([], [])
 
     assert repository.get_organisation_id("user-1") is None
+
+
+# AC2-X1 (cross-cutting): sending for safety review calls its own RPC with the caller's identity
+def test_send_for_safety_review_posts_expected_rpc_request() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        captured["accept"] = request.headers.get("accept")
+        return httpx.Response(200, json=response_row(status="Safety Review"))
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+    row = repository.send_for_safety_review("request-1", "coord-1")
+
+    assert captured["path"] == "/rest/v1/rpc/send_event_request_for_safety_review"
+    assert captured["body"] == {
+        "p_event_request_id": "request-1",
+        "p_coordinator_id": "coord-1",
+    }
+    assert captured["accept"] == "application/vnd.pgrst.object+json"
+    assert row["status"] == "Safety Review"
+
+
+# AC3-X1 (cross-cutting): a not-ready refusal keeps P0005 and the outstanding list PostgREST returns in details
+def test_safety_review_refusal_carries_outstanding_details() -> None:
+    outstanding = '[{"kind": "no_venue_booking"}]'
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                400,
+                json={
+                    "code": "P0005",
+                    "message": "event request is not ready for safety review",
+                    "details": outstanding,
+                    "hint": None,
+                },
+            )
+        ),
+    )
+
+    with pytest.raises(EventRequestRpcError) as exc_info:
+        repository.send_for_safety_review("request-1", "coord-1")
+
+    assert exc_info.value.errcode == "P0005"
+    assert exc_info.value.details == outstanding
