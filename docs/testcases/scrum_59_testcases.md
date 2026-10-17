@@ -17,7 +17,7 @@ The acceptance criteria were reviewed against Week 7 Customer Change #1 (*Venue 
 
 ## Increment scope
 
-- **Included:** two venue attributes, `setup_minutes` and `turnaround_minutes`; setting them on create and changing them on update; returning them wherever a venue is returned; migration `0026_venue_setup_turnaround.sql`.
+- **Included:** two venue attributes, `setup_minutes` and `turnaround_minutes`; setting them on create and changing them on update; returning them wherever a venue is returned; migration `0043_venue_setup_turnaround.sql`.
 - **Excluded:** using the times in availability or conflict checks, and marking bookings that now overlap (SCRUM-20); converting bookings, blocks and operating slots from AM / PM / Night to 15-minute times (a separate backlog item, #131). Bookings and blocks remain slot-based until that item is done.
 - **Actors and access:** only Venue Staff can create a venue or change its times (403 otherwise). Event Coordinators and Venue Staff can read them (existing venue read access). Browser roles still have no direct table access.
 - **Persistence:** both columns are `integer NOT NULL DEFAULT 0` with a check constraint; the API applies the same rule and returns 422 before anything is stored.
@@ -46,7 +46,7 @@ The acceptance criteria were reviewed against Week 7 Customer Change #1 (*Venue 
 | AC2-H1 | AC2 | Coordinators see the times wherever a venue is read | Happy | Venue with 30 / 45; signed in as Event Coordinator | `GET /venues/{id}`, `GET /venues`, `GET /venues/search` | — | Each response has `setup_minutes` 30 and `turnaround_minutes` 45 | — | API |
 | AC3-H1 | AC3 | Changing the times leaves bookings and blocks alone | Happy | Venue with an approved request, a pending request and an active block | `PATCH` both times | 60, 60 | 200 | Both requests and the block are identical before and after | API |
 | AC4-H1 | AC4 | A venue created without the times starts at 0 | Happy | Signed in as Venue Staff | `POST /venues` without either time | — | 201; both 0 | — | API |
-| AC4-DB1 | AC1, AC4 | The migration defaults existing venues and enforces the rule | Happy / Negative | Throwaway `postgres:16-alpine` with 0016 and an existing venue row | Apply 0026 twice; update the row | 30 / 45; 20; -15; 1035 | Existing row reads 0 / 0; 30 / 45 accepted; 20, -15 and 1035 refused by the check constraints | Re-run raises no error | DB |
+| AC4-DB1 | AC1, AC4 | The migration defaults existing venues and enforces the rule | Happy / Negative | Throwaway `postgres:16-alpine` with 0016 and an existing venue row | Apply 0043 twice; update the row | 30 / 45; 20; -15; 1035 | Existing row reads 0 / 0; 30 / 45 accepted; 20, -15 and 1035 refused by the check constraints | Re-run raises no error | DB |
 
 | AC1-H4 | AC1 | The form sends both times as numbers | Happy | Venue form | Submit with both times | 30, 45 | Payload has 30 and 45; no errors | — | Unit |
 | AC1-P2 | AC1, AC4 | A blank time means none | Partition | Venue form | Submit with blank times | `" "`, `""` | Payload has 0 and 0; no errors | — | Unit |
@@ -73,7 +73,7 @@ Build: backend increment at `95b447c` (13 October); frontend increment as an unc
 | AC2-H1 | Green | Event Coordinator sees 30 / 45 on detail, list and search | Pass | same | same | Red first (`KeyError`), then Green |
 | AC3-H1 | Green | Approved and pending requests and the active block are identical before and after the update | Pass | same | same | Also passed before the change, because unknown fields were ignored; meaningful once the fields exist |
 | AC4-H1 | Green | A venue created without the times reads 0 / 0 | Pass | same | same | Red first (`KeyError`), then Green |
-| AC4-DB1 | Green | Before 0026 the script stopped at the first read of the new columns (Red); 0026 applied twice without error; the pre-existing venue reads 0 / 0; 30 / 45, 0 and 1020 stored; 20, -15 and 1035 refused; all rolled back | Pass | same | same | Throwaway `postgres:16-alpine` with 0016 and one existing venue; `database/verify_venue_setup_turnaround.sql` |
+| AC4-DB1 | Green | Before 0043 the script stopped at the first read of the new columns (Red); 0043 applied twice without error; the pre-existing venue reads 0 / 0; 30 / 45, 0 and 1020 stored; 20, -15 and 1035 refused; all rolled back | Pass | same | same | Throwaway `postgres:16-alpine` with 0016 and one existing venue; `database/verify_venue_setup_turnaround.sql` |
 | AC1-H4, AC1-P2, AC1-B2, AC1-N3, AC1-N4 | Green | Times parsed as numbers, blank sent as 0, limits accepted, invalid values reported on both fields, invalid text echoed as typed | Pass | 239b5f6 + working tree, local | Claude Code, 17 Oct 2026 | Red first (fields `undefined`), then Green: `frontend/__tests__/venue-form.test.ts` |
 | AC1-H5, AC1-H6 | Green | Both inputs offered (number, step 15, 0–1020, start at 0); edit form prefilled with 30 / 45 | Pass | same | same | Red first (no such label), then Green: `frontend/__tests__/venues.test.tsx` |
 | AC2-H2, AC4-H2 | Green | Search results show "30 min" / "45 min", and "None" for 0 | Pass | same | same | Red first, then Green: `frontend/__tests__/venue-search.test.tsx` |
@@ -86,9 +86,10 @@ Build: backend increment at `95b447c` (13 October); frontend increment as an unc
 | Story tests | `pytest tests/test_venue_setup_turnaround.py` in `python:3.12-slim` | 39 passed | Before the change: 35 failed, 4 passed (AC1-X1 × 3, AC3-H1) |
 | Backend regression | `pytest` (whole venueService suite) in `python:3.12-slim` | 399 passed | Includes SCRUM-12, 15, 23, 30 and 32 tests |
 | Lint | `ruff check .` in `python:3.12-slim` | All checks passed | — |
-| Database | `postgres:16-alpine` throwaway container; 0016, 0026 (twice); `verify_venue_setup_turnaround.sql` | Passed | Not yet applied to shared development |
+| Database | `postgres:16-alpine` throwaway container; 0016, 0043 (twice); `verify_venue_setup_turnaround.sql` | Passed | Not yet applied to shared development |
 | Frontend unit | `npx vitest run` (Node 22) | 31 files, 325 passed | Was 307 before this increment; the 18 new cases failed first. Existing fixtures in `venue-actions`, `venue-blocks`, `venue-suitability` and `venues` tests gained the two fields, because the form now sends and echoes them |
 | Frontend static checks | `npm run typecheck`, `npm run lint`, `npm run build` | Clean; compiled successfully | — |
 | End-to-end | `CI=1 npx playwright test` against the Node mock services | 37 passed | Whole suite, including the new SCRUM-59 journey |
+| Post-merge regression (17 Oct) | After `chore: merge dev into feat/scrum-59-venue-setup-turnaround` and renumbering the migration to `0043` (dev had taken 0026–0028, 0041 and 0042): `pytest` and `ruff` in `python:3.12-slim`; `0043` + `verify_venue_setup_turnaround.sql` on a throwaway `postgres:16-alpine`; `npx vitest run`, `npm run typecheck`, `npm run lint`, `npm run build`, `CI=1 npx playwright test` | Story 39 passed; venueService 449 passed; ruff clean; DB Red then Green, re-run safe, existing venue 0 / 0; vitest 32 files, 349 passed; typecheck, lint and build clean; playwright 39 passed | Includes dev's SCRUM-13, SCRUM-58 and SCRUM-61 changes. The first typecheck after the merge reported stale Next route types; it passed once `next build` regenerated them |
 
 Shared development, browser, pull-request CI and reviewer approval: not yet run.
