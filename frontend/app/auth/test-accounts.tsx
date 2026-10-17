@@ -7,7 +7,7 @@ const testAccounts = [
   { role: "Attendee", email: "attendee@example.com" },
   { role: "Event Coordinator", email: "event_coordinator1@example.com" },
   { role: "Event Coordinator", email: "event_coordinator2@example.com" },
-  { role: "Event Operations Manager", email: "event_operations_manager@example.com" },
+  { role: "Event Coordinator Lead", email: "event_operations_manager@example.com" },
   { role: "Event Organiser", email: "event_organiser@example.com" },
   { role: "Technical Support", email: "technical_support@example.com" },
   { role: "Venue Staff", email: "venue_staff@example.com" },

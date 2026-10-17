@@ -55,7 +55,7 @@ export function StatusProgress({
       ? coordinatorAssigned === true
         ? "A coordinator has been assigned and can begin review."
         : coordinatorAssigned === false
-          ? "Waiting for an Event Operations Manager to assign a coordinator."
+          ? "Waiting for an Event Coordinator Lead to assign a coordinator."
           : STATUS_DESCRIPTIONS.Submitted
       : STATUS_DESCRIPTIONS[status];
 
