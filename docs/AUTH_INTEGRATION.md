@@ -53,7 +53,7 @@ This covers SCRUM-45's "viewed by an authorised user" acceptance criterion: read
 Two ways to assign roles:
 
 1. **Bootstrap (one-off)**: add the initial admin role to `staff_roles` using the Supabase SQL Editor.
-2. **Ongoing**: `PATCH /auth/users/{user_id}/role` on authService with an admin's Bearer token and body `{"role": ...}`. An Event Operations Manager may assign only `event_coordinator`. The endpoint requires `SUPABASE_SECRET_KEY` and returns `503` when unset, `404` for unknown users, and `403` for disallowed assignments.
+2. **Ongoing**: `PATCH /auth/users/{user_id}/role` on authService with an admin's Bearer token and body `{"role": ...}`. An Event Coordinator Lead (role id `event_operations_manager`) may assign only `event_coordinator`. The endpoint requires `SUPABASE_SECRET_KEY` and returns `503` when unset, `404` for unknown users, and `403` for disallowed assignments.
 
 Target `user_id` values come from that user's `/auth/me` response (or the Supabase dashboard user list).
 

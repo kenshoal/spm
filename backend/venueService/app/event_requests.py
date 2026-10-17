@@ -51,13 +51,14 @@ class EventRequestClient:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, UNAVAILABLE)
         return body
 
-    def snapshot_for_coordinator(
+    def require_coordinator(
         self, event_request_id: str, token: str, coordinator_id: str
-    ) -> EventSnapshot:
-        """Return the event's snapshot if ``coordinator_id`` is its current Coordinator.
+    ) -> None:
+        """Raise unless ``coordinator_id`` is the event's current Coordinator.
 
         A 200 from ``GET /event-requests/{id}`` alone is not proof: the owning
-        organiser receives it too. The assignment is the authority.
+        organiser receives it too. The assignment is the authority, and it is
+        read again on every call so a reassignment takes effect at once.
         """
 
         assignment = self._get(f"/event-requests/{event_request_id}/coordinator", token)
@@ -67,6 +68,12 @@ class EventRequestClient:
         if assigned != coordinator_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
 
+    def snapshot_for_coordinator(
+        self, event_request_id: str, token: str, coordinator_id: str
+    ) -> EventSnapshot:
+        """Return the event's snapshot if ``coordinator_id`` is its Coordinator."""
+
+        self.require_coordinator(event_request_id, token, coordinator_id)
         event = self._get(f"/event-requests/{event_request_id}", token)
         return EventSnapshot(
             event_name=event.get("event_name"),

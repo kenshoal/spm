@@ -106,3 +106,11 @@ class Venue(VenueBase):
     status: VenueStatus = VenueStatus.AVAILABLE
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
+
+
+class VenueLocation(BaseModel):
+    """The minimum venue facts other services need to place equipment (SCRUM-13 D11)."""
+
+    id: str
+    name: str
+    location: str

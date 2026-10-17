@@ -45,16 +45,40 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0022_monotonic_event_request_updated_at_trigger.sql` | Makes the shared event-request update trigger monotonic, including multiple writes in one transaction |
 | `migrations/0023_venue_blocks.sql` | `venue_blocks` table for SCRUM-23 with its `block_reason` and `block_status` enums, a foreign key to `venues` and a per-venue index. **Reference snapshot** of the table created by hand in the dashboard (safe to re-run: it skips existing objects), plus RLS on and `REVOKE ALL` from `anon` and `authenticated`, so only venueService's secret key can read block reasons. Applied to shared development on 6 October 2026 through the SQL Editor; afterwards `has_table_privilege` returns false for `anon` and `authenticated`, and the publishable key gets `401` (`42501`) while venueService still reads both existing blocks |
 | `migrations/0024_venue_booking_decisions.sql` | SCRUM-15: `venue_booking_refusals` append-only log of refused approvals (who, when, reason codes, conflicting block and booking ids), plus server-only `decide_venue_booking_request` (locks the venue row, then the request row; approves, rejects with a required reason, or records a refusal for `venue_unavailable` / `outside_operating_slots` / `active_block` / `booking_conflict`) and `create_venue_block` (same venue lock). Errors: `P0002` not found, `55000` already decided, `22023` invalid decision. RLS on and no browser-role access. Verify with `verify_venue_booking_decisions.sql`. Applied to shared development on 8 October 2026 through the SQL Editor; afterwards the secret key reads `venue_booking_refusals`, the publishable key gets `401` on the table and on `decide_venue_booking_request`, and an unknown request id returns `P0002` without writing |
-
 | `migrations/0025_event_request_status_history.sql` | SCRUM-48: immutable event status history, atomic insert/update triggers, honest legacy baselines and actor context in three existing coordinator RPCs. Browser access revoked; service role reads only. **Applied to shared development via MCP on 10 October 2026, version `20261010034216`; local and focused shared checks passed** |
+| `migrations/0026_event_request_planning.sql` | SCRUM-58: replaces `advance_event_request_by_coordinator` from `0025` with one added move, Approved → Planning, recorded in status history as `coordinator.planning`. Lock, latest-assignment check and grants unchanged. Verify with `verify_event_request_planning.sql`. **Applied to shared development via MCP on 13 October 2026, version `20261013134214`**, after checking the live function still matched `0025`. Full verification ran on a disposable local cluster; on shared, only read-only checks (definition, grants) were run |
 | `migrations/0026_venue_setup_turnaround.sql` | SCRUM-59: `venues.setup_minutes` and `venues.turnaround_minutes`, `integer NOT NULL DEFAULT 0`, each checked to be a multiple of 15 from 0 to 1020 (`venues_setup_minutes_valid`, `venues_turnaround_minutes_valid`). Existing venues read 0 / 0. Safe to re-run. Access unchanged (0016). Verify with `verify_venue_setup_turnaround.sql`. **Not yet applied to shared development** |
+| `migrations/0027_equipment_reservation_requirements.sql` | SCRUM-13: `equipment_reservations.requirement_id uuid NOT NULL` referencing `equipment_requirements` (numbered past 0025 and 0026, taken by SCRUM-48 and SCRUM-58). Two indexes (outstanding quantity per requirement, per-event listing) and the server-only `reserve_equipment` RPC: locks the requirement then the equipment row, re-checks the row's status, the requirement's outstanding quantity and the units held on the busiest day of the hold window, then inserts with `event_request_id` copied from the requirement. `P0002` not found, `P0004` refused. Verify with `verify_equipment_reservation_writes.sql`. **Applied to shared development on 14 October 2026 through the SQL Editor, after confirming the table was empty** |
+| `migrations/0028_reserve_equipment_type_check.sql` | SCRUM-13 D12: replaces `reserve_equipment` from `0027` with one added check under the lock: the catalogue row's type must match the requirement's (trimmed, whitespace collapsed, case ignored), else SQLSTATE `22023`, which equipmentService maps to 422. `0027` is not edited because it is applied to shared development. Grants restated (service role only). Verify with `verify_equipment_reservation_writes.sql`. **Applied to shared development on 15 October 2026 through the SQL Editor**: before it, the verify script stopped at AC1-N10 (expected Red); after it, both verify scripts passed and the grants were `service_role` and the owner only. Also verified on a disposable local PostgreSQL 16 cluster the same day |
+| `migrations/0041_booking_request_cancelled_status.sql` | SCRUM-61: adds the `cancelled` value to `booking_request_status`. Its own file because Postgres cannot use a new enum value in the transaction that adds it. **Not yet applied to shared development** |
+| `migrations/0042_cancel_venue_booking_request.sql` | SCRUM-61: `cancelled_by` and `cancelled_at` on `venue_booking_requests`, the decision-consistency constraint extended for `cancelled`, a new `cancelled_consistent` constraint, and the server-only `cancel_venue_booking_request` function (ERRCODE `P0002` not found, `55000` not pending or approved, `22023` no user). Run after 0041. **Not yet applied to shared development** |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
 SQL Editor — it exercises the CHECK constraints and both foreign keys
 (including the refusal paths) and prints
 `ALL EQUIPMENT RESERVATION VERIFICATIONS PASSED` on success, rolling back so
-no data is left behind.
+no data is left behind. From SCRUM-13's `0027` on, the script also needs `0027`
+applied: every reservation it inserts names a requirement.
+
+`0027` was applied to shared development on 14 October 2026 through the SQL
+Editor (the reservations table was confirmed empty first). Do not apply it
+again there; retain the file for fresh environments — it must be applied
+before the SCRUM-13 endpoints work, since `POST /equipment-reservations`
+returns `500` until `reserve_equipment` exists. Its behavioural checks are
+in [`verify_equipment_reservation_writes.sql`](verify_equipment_reservation_writes.sql),
+run after `0027` and `0028`; the AC3-N2 two-session race needs two SQL
+sessions as that script's footer describes and, because it commits fixture
+rows, runs on a disposable migrated database rather than shared development.
+
+`0028` (SCRUM-13 D12) must be applied after `0027`. It was applied to shared
+development on 15 October 2026 through the SQL Editor; do not apply it again
+there, and retain the file for fresh environments. Before it is applied,
+`verify_equipment_reservation_writes.sql` stops at the AC1-N10 line, which is
+the expected Red. After applying it, run both verify scripts and confirm the
+grants with
+`SELECT grantee, privilege_type FROM information_schema.routine_privileges WHERE routine_name = 'reserve_equipment';`
+(`service_role` and the owner only).
 
 `0011` was applied to the shared Supabase development project via MCP on 22
 September 2026. Do not apply it again there; retain the file for fresh
@@ -127,7 +151,8 @@ table. The script rolls back all test rows.
 The booking-request table is verified by
 [`verify_venue_booking_requests.sql`](verify_venue_booking_requests.sql).
 Run it once before `0018`, when it should stop with a missing-table error (the
-Red result), and again after, when it should print
+Red result), and again after (and after `0041` and `0042`, which add the
+`AC4-D1` to `AC4-D8` cases for SCRUM-61), when it should print
 `ALL VENUE BOOKING REQUEST VERIFICATIONS PASSED`. It covers dates, slots,
 required columns, status and decision consistency, the venue foreign key and
 server-only access. The script rolls back all rows and needs no Supabase Auth
@@ -179,7 +204,6 @@ reassignment and server-only table/function access. It requires one Supabase
 Auth user and rolls back all verification data.
 
 ## Event status history contract (SCRUM-48)
-
 Migration `0025` was **applied to shared development on 10 October 2026** after
 explicit requester approval, as MCP migration `20261010034216`
 (`event_request_status_history`). Do not reapply it there. It created 12 labelled

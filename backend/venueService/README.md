@@ -66,10 +66,11 @@ SCRUM-20. Schema: `database/migrations/0026_venue_setup_turnaround.sql`.
 | --- | --- |
 | Maintain the venue catalogue | `POST /venues`, `GET /venues/{id}`, `PATCH /venues/{id}`, `GET /venues` |
 | Search and filter venues | `GET /venues/search` |
+| Venue locations for equipment placement (SCRUM-13 D11) | `GET /venues/locations` |
 | Check venue suitability | `POST /venues/{id}/suitability` |
 | Create a venue block | `POST /venues/{venue_id}/blocks` |
 | List a venue's blocks | `GET /venues/{venue_id}/blocks` |
-| Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}` |
+| Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}`, `GET /booking-requests/event/{event_request_id}`, `POST /booking-requests/{id}/cancel` |
 | Decide a booking request | `POST /booking-requests/{id}/decision`, `GET /booking-requests/{id}/refusals` |
 
 Venues are stored in the Supabase `public.venues` table
@@ -80,6 +81,14 @@ and is used by the unit tests and standalone development; that data is lost
 when the service stops. All routes verify the bearer token with `authService`;
 reads require `event_coordinator` or `venue_staff`, while create and update
 operations require `venue_staff`.
+
+`GET /venues/locations` returns `[{"id", "name", "location"}]` for every venue,
+blocked venues included, and also admits `technical_support`. It exists so
+equipmentService can work out equipment transfer days (SCRUM-10 availability
+check, SCRUM-13 reservations) with the Technical Support caller's token,
+without giving Technical Support the rest of the catalogue: every other venue
+route keeps its guard. Agreed with the SCRUM-39 and venue-catalogue owners on
+15 October 2026.
 
 `POST /venues/{id}/suitability` compares an event's stated requirements
 (expected attendance, layout, operating slot, facilities, accessibility)
@@ -209,6 +218,17 @@ one belongs to a later story. Venue Staff list the queue
 request; a Coordinator lists (`/mine`, newest first) and opens only their own,
 and another Coordinator's request returns 404. A request for a blocked venue or
 for past dates is accepted at submission.
+
+An event can have several booking requests, one per venue (SCRUM-61).
+`GET /booking-requests/event/{event_request_id}` lists all of an event's
+requests, oldest first, with each one's status: Venue Staff may read any event,
+a Coordinator only an event they are currently assigned to (checked with
+eventRequestService on every call), and no other role may. `POST
+/booking-requests/{id}/cancel` cancels one pending or approved request; only the
+event's current Coordinator may, the event's other requests are untouched, and
+cancelling an approved request frees its slots at once. Rejected and cancelled
+requests cannot be cancelled again (409). "Changing" a booking is cancelling it
+and requesting again. The `cancelled` status needs migrations 0041 and 0042.
 
 ## Run locally
 

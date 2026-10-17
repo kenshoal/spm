@@ -25,6 +25,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["cross_service: starts venueService in a subprocess"]
 
 [tool.ruff]
 line-length = 88

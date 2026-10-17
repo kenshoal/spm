@@ -160,6 +160,7 @@ class FakeEventRequestRepository:
 
         allowed = (
             (to_status == "Under Review" and row["status"] == "Submitted")
+            or (to_status == "Planning" and row["status"] == "Approved")
             or (to_status == "Completed" and row["status"] == "Confirmed")
             or (
                 to_status == "Cancelled"

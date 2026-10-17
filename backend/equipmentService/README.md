@@ -33,8 +33,9 @@ Mutations are Postgres functions (RPCs) in the shared database, defined in [`dat
 | `update_equipment_quantity` | Locks the row (`FOR UPDATE`), appends old/new quantities to `equipment_quantity_history`, updates the row; returns it |
 | `transition_equipment_status` | Locks the row, updates `operational_status`, appends to `equipment_status_history` |
 | `transition_equipment_requirement` | Locks the `equipment_requirements` row, refuses a stale expected status, applies one allowed arrangement transition (`requested → in_progress/arranged`, `in_progress ↔ arranged`, `in_progress → in_progress` only with a non-blank note) and records who/when. `P0002` unknown id, `P0004` disallowed/stale/blank-note update |
+| `reserve_equipment` | Locks the `equipment_requirements` row, then the `equipment` row (SCRUM-13 D6a), re-checks the row's status, the requirement's outstanding quantity and the units held on the busiest day of `[p_collection_date, p_return_date]`, then inserts with `event_request_id` copied from the requirement. `P0002` unknown requirement/equipment, `P0004` refused under the lock |
 
-The first three raise with ERRCODE `P0002` when the equipment id is unknown; the service maps that code to `404 Equipment not found` (`app/rpc_errors.py`) rather than matching error-message text. The requirement function maps `P0002` to `404 Equipment requirement not found` and `P0004` to `409 Transition not allowed`. Any other RPC failure maps to `500`.
+The first three raise with ERRCODE `P0002` when the equipment id is unknown; the service maps that code to `404 Equipment not found` (`app/rpc_errors.py`) rather than matching error-message text. The requirement function maps `P0002` to `404 Equipment requirement not found` and `P0004` to `409 Transition not allowed`. `reserve_equipment` maps `P0002` to `404 Equipment or requirement not found` (only reachable in a race with a delete) and `P0004` to `409 Equipment no longer available`. Any other RPC failure maps to `500`.
 
 Note: `transition_equipment_status` did not exist in the live database until migration `0002` — `PATCH /equipment/{id}/status` fails with `500` until it is applied.
 
@@ -49,7 +50,7 @@ Note: `transition_equipment_status` did not exist in the live database until mig
 | GET | `/equipment/{id}/status` | Current status plus computed `available` flag (only `AVAILABLE` is in service). `available` means working; `available_quantity` is `total_owned_quantity` minus the units reserved today (Singapore time, SCRUM-10), so fully reserved stock shows `available: true, available_quantity: 0` |
 | PATCH | `/equipment/{id}/status` | Atomic transition (`technical_support` only): body `{ "new_status": ..., "reason": ... }`; records who/when in history |
 | GET | `/equipment/{id}/status/history` | Audit trail, newest first |
-| POST | `/equipment/availability-check` | Check how many units of each requested type could be committed to an event (SCRUM-10; `technical_support` only, read-only — nothing is booked). Body: `{ "start_date": "2026-10-14", "end_date": "2026-10-14", "venue_id": "v-big", "items": [{ "type": "Projector", "quantity": 5 }] }`. Response `200`: one `{ "requested", "available", "shortfall" }` entry per requested type, keyed by the type string as sent — a shortfall is still `200`, never `409`. Excludes non-`AVAILABLE` rows, units reserved on the busiest overlapping day of the hold (`start_date − 1` plus one transfer day when the row's building differs from the venue's), and honours the D-1 → Return Day hold. Errors: `422` invalid body, `401`/`403` no session/role, `404` unknown venue, `502` venueService unreachable, `500` database failure. Needs migration `0019` (`equipment_reservations`) applied |
+| POST | `/equipment/availability-check` | Check how many units of each requested type could be committed to an event (SCRUM-10; `technical_support` only, read-only — nothing is booked). Body: `{ "start_date": "2026-10-14", "end_date": "2026-10-14", "venue_id": "v-big", "items": [{ "type": "Projector", "quantity": 5 }] }`. Response `200`: one `{ "requested", "available", "shortfall" }` entry per requested type, keyed by the type string as sent — a shortfall is still `200`, never `409`. Excludes non-`AVAILABLE` rows, units reserved on the busiest overlapping day of the hold (`start_date − 1` plus one transfer day when the row's building differs from the venue's), and honours the D-1 → Return Day hold. Calls venueService `GET /venues/locations` with the caller's token (SCRUM-13 D11). Errors: `422` invalid body, `401`/`403` no session/role, `404` unknown venue, `502` venueService unreachable or refusing, `500` database failure. Needs migration `0019` (`equipment_reservations`) applied |
 
 Valid statuses: `AVAILABLE`, `DAMAGED`, `UNDER_REPAIR`, `UNDER_MAINTENANCE`, `RETIRED`.
 
@@ -65,9 +66,20 @@ An assigned Event Coordinator records what equipment an event needs; Technical S
 | GET | `/equipment-requirements/{id}` | One requirement, every field (same readers; an unassigned Coordinator gets the same 404 as a missing requirement) |
 | PATCH | `/equipment-requirements/{id}/arrangement` | `technical_support` only. Body: `{ "expected_status", "status", "support_note?" }`. The database function applies the transition under a row lock and refuses disallowed or stale updates (`409`); a blank or omitted note keeps the existing note. `404` unknown id, `422` invalid body |
 
+### Equipment reservations (SCRUM-13)
+
+Technical Support reserves units of one catalogue row against a recorded equipment requirement, so the same units are never committed to two overlapping holds. The row offers `total_owned_quantity` minus the units already committed on its busiest day inside its own hold window (`start_date − 1`, one more day when the row's building differs from the venue's); a requirement may not be over-reserved. Reserving does not change the requirement's arrangement status (SCRUM-33's `PATCH …/arrangement` does that). Needs migration `0027` (`requirement_id` and `reserve_equipment`) — until it is applied, the POST returns `500`.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/equipment-reservations` | Reserve units of one row against one requirement (`technical_support` only). Body: `{ "requirement_id", "equipment_id", "quantity", "start_date", "end_date", "venue_id" }`; extra fields forbidden — the event comes from the requirement and the creator from the token. Check order: `404` "Equipment requirement not found" / "Equipment not found", `422` "Equipment type does not match the requirement", `409` "Equipment not available", `409` "Exceeds the equipment requirement", `404` "Venue not found", `409` shortfall `detail` `{ "message": "Insufficient equipment available", "requested": Q, "available": A, "shortfall": Q − A }` — then `reserve_equipment` re-checks under the lock (`409` "Equipment no longer available"). `201` with the stored row: `id`, `requirement_id`, `event_request_id`, `equipment_id`, `quantity`, `collection_date` (hold start), `return_date` (event end), `created_by`, `created_at`. Calls venueService `GET /venues/locations` with the caller's token (D11). Also `401`/`403` no session/role, `422` invalid body, `502` venueService unreachable or refusing, `500` database failure |
+| GET | `/equipment-reservations/by-event/{event_request_id}` | One event's reservations, oldest first (`created_at`, then `id`; `technical_support` only). `200` with the stored rows, `[]` when the event has none. Also `422` malformed id, `401`/`403`, `500` database failure |
+
 ## Test
 
 ```powershell
 ruff check .
 pytest
 ```
+
+`tests/test_venue_contract.py` (marker `cross_service`) starts the real venueService from `../venueService` in a subprocess with in-memory storage, plus a fake authService, and checks the reservation and availability-check endpoints against venueService's real role check. It needs no network or database and runs in plain `pytest` and CI; skip it offline with `pytest -m "not cross_service"`.

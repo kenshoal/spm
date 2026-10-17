@@ -184,6 +184,25 @@ createServer(async (request, response) => {
     return send(response, 200, [...bookings.values()].filter((b) => b.status === wanted).sort((a, b) => a.created_at.localeCompare(b.created_at)));
   }
 
+  // Mirrors venueService's SCRUM-61 reads and cancel so the coordinator's event page
+  // can be driven in a browser. The mock does not check the event's assignment; the
+  // real service does (venueService's own tests and the real-stack check cover that).
+  const eventBookings = url.pathname.match(/^\/booking-requests\/event\/([^/]+)$/);
+  if (eventBookings && request.method === "GET") {
+    if (role !== "venue_staff" && role !== "event_coordinator") return send(response, 403, { detail: "Insufficient permissions" });
+    const eventId = decodeURIComponent(eventBookings[1]);
+    return send(response, 200, [...bookings.values()].filter((b) => b.event_request_id === eventId).sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  }
+  const cancelPath = url.pathname.match(/^\/booking-requests\/([^/]+)\/cancel$/);
+  if (cancelPath && request.method === "POST") {
+    if (role !== "event_coordinator") return send(response, 403, { detail: "Insufficient permissions" });
+    const booking = bookings.get(decodeURIComponent(cancelPath[1]));
+    if (!booking) return send(response, 404, { detail: "Booking request not found" });
+    if (!["pending", "approved"].includes(booking.status)) return send(response, 409, { detail: "Booking request cannot be cancelled" });
+    Object.assign(booking, { status: "cancelled", cancelled_by: "playwright-coordinator", cancelled_at: new Date().toISOString() });
+    return send(response, 200, booking);
+  }
+
   const decisionPath = url.pathname.match(/^\/booking-requests\/([^/]+)\/decision$/);
   if (decisionPath && request.method === "POST") {
     if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
