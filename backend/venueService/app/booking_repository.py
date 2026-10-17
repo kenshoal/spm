@@ -21,6 +21,7 @@ class BookingRequestStore(Protocol):
         self, status: BookingRequestStatus | str
     ) -> list[BookingRequest]: ...
     def list_for_requester(self, user_id: str) -> list[BookingRequest]: ...
+    def list_for_event(self, event_request_id: str) -> list[BookingRequest]: ...
 
 
 class BookingRequestRepository:
@@ -54,6 +55,13 @@ class BookingRequestRepository:
         ]
         ordered = sorted(own, key=lambda row: row[:2], reverse=True)
         return [item for _, _, item in ordered]
+
+    def list_for_event(self, event_request_id: str) -> list[BookingRequest]:
+        matching = [
+            item for item in self._items if item.event_request_id == event_request_id
+        ]
+        # sorted() is stable, so equal timestamps keep submission order.
+        return sorted(matching, key=lambda item: item.created_at)
 
     def clear(self) -> None:
         self._items.clear()

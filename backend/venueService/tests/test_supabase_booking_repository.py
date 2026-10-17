@@ -197,3 +197,23 @@ def test_supabase_backend_selects_the_supabase_booking_store(
 
     get_settings.cache_clear()
     _supabase_booking_repository.cache_clear()
+
+
+# AC3-X2 (cross-cutting): one event's rows are requested oldest first
+def test_list_for_event_asks_for_the_events_rows_oldest_first() -> None:
+    api = FakeDataAPI(200, [_row()])
+
+    result = api.repo().list_for_event(EVENT_ID)
+
+    params = api.requests[0].url.params
+    assert params["event_request_id"] == f"eq.{EVENT_ID}"
+    assert params["order"] == "created_at.asc,id.asc"
+    assert [item.id for item in result] == [BOOKING_ID]
+
+
+# AC3-X2 (cross-cutting): a malformed event id is answered without calling Supabase
+def test_list_for_event_with_a_malformed_id_returns_nothing_without_querying() -> None:
+    api = FakeDataAPI()
+
+    assert api.repo().list_for_event("not-a-uuid") == []
+    assert api.requests == []

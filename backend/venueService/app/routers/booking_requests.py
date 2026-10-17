@@ -8,6 +8,7 @@ nothing; deciding it belongs to a later story.
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -91,6 +92,27 @@ def list_my_booking_requests(
     """The caller's own requests, newest first."""
 
     return bookings.list_for_requester(principal.user_id)
+
+
+# Declared before "/{booking_id}"; the two-segment path cannot clash with it.
+@router.get("/event/{event_request_id}", response_model=list[BookingRequest])
+def list_event_booking_requests(
+    event_request_id: UUID,
+    principal: ReaderDep,
+    token: TokenDep,
+    bookings: BookingRepoDep,
+    events: EventClientDep,
+) -> list[BookingRequest]:
+    """Every venue booking of one event, oldest first, with its status.
+
+    Venue Staff read any event. A Coordinator reads only the events they are
+    currently assigned to, checked with eventRequestService on every call.
+    """
+
+    event_id = str(event_request_id)
+    if "venue_staff" not in principal.roles:
+        events.require_coordinator(event_id, token, principal.user_id)
+    return bookings.list_for_event(event_id)
 
 
 @router.get("/{booking_id}", response_model=BookingRequest)

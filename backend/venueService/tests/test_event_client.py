@@ -95,3 +95,20 @@ def test_malformed_assignment_is_a_bad_gateway(body: object) -> None:
         client.snapshot_for_coordinator(EVENT_ID, "abc", CALLER)
 
     assert error.value.status_code == 502
+
+
+# AC3-N1 (negative): only the assignment is read, and another coordinator is "not found"
+def test_require_coordinator_reads_only_the_assignment() -> None:
+    client, seen = client_for(ok_handler(CALLER))
+
+    client.require_coordinator(EVENT_ID, "abc", CALLER)
+
+    assert [request.url.path for request in seen] == [
+        f"/event-requests/{EVENT_ID}/coordinator"
+    ]
+    assert seen[0].headers["authorization"] == "Bearer abc"
+
+    other, _ = client_for(ok_handler(OTHER))
+    with pytest.raises(HTTPException) as error:
+        other.require_coordinator(EVENT_ID, "abc", CALLER)
+    assert (error.value.status_code, error.value.detail) == (404, "Event request not found")

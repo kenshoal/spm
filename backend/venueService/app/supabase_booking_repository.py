@@ -94,3 +94,16 @@ class SupabaseBookingRepository:
             },
         )
         return [BookingRequest.model_validate(row) for row in rows]
+
+    def list_for_event(self, event_request_id: str) -> list[BookingRequest]:
+        if not _is_uuid(event_request_id):
+            return []
+        rows = self._request(
+            "GET",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "select": "*",
+                "order": "created_at.asc,id.asc",
+            },
+        )
+        return [BookingRequest.model_validate(row) for row in rows]
