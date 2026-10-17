@@ -48,11 +48,20 @@ The acceptance criteria were reviewed against Week 7 Customer Change #1 (*Venue 
 | AC4-H1 | AC4 | A venue created without the times starts at 0 | Happy | Signed in as Venue Staff | `POST /venues` without either time | — | 201; both 0 | — | API |
 | AC4-DB1 | AC1, AC4 | The migration defaults existing venues and enforces the rule | Happy / Negative | Throwaway `postgres:16-alpine` with 0016 and an existing venue row | Apply 0026 twice; update the row | 30 / 45; 20; -15; 1035 | Existing row reads 0 / 0; 30 / 45 accepted; 20, -15 and 1035 refused by the check constraints | Re-run raises no error | DB |
 
-Frontend cases (form, display and end-to-end) are added with the frontend increment.
+| AC1-H4 | AC1 | The form sends both times as numbers | Happy | Venue form | Submit with both times | 30, 45 | Payload has 30 and 45; no errors | — | Unit |
+| AC1-P2 | AC1, AC4 | A blank time means none | Partition | Venue form | Submit with blank times | `" "`, `""` | Payload has 0 and 0; no errors | — | Unit |
+| AC1-B2 | AC1 | The form accepts values at and next to the limits | Boundary | Venue form | Submit each value | 0, 15, 1005, 1020 | Sent as numbers; no errors | — | Unit |
+| AC1-N3 | AC1 | The form reports invalid times before sending | Negative / Boundary | Venue form | Submit each value | -15, 14, 20, 1021, 1035, 12.5, abc | "Enter minutes in steps of 15, from 0 to 1020." on both fields | Nothing sent to venueService | Unit |
+| AC1-N4 | AC1 | An invalid time is echoed back as typed | Negative | Venue form | Submit an invalid time | 20 | The echoed value is "20" | Not replaced by the stored value | Unit |
+| AC1-H5 | AC1, AC4 | The new venue form offers both inputs | Happy | Signed in as Venue Staff | Open the new venue form | — | "Setup time (minutes)" and "Turnaround time (minutes)": number inputs, step 15, 0–1020, starting at 0 | — | UI |
+| AC1-H6 | AC1 | The edit form starts from the stored times | Happy | Venue with 30 / 45 | Open the edit form | — | Inputs show 30 and 45 | — | UI |
+| AC2-H2 | AC2 | Search results show both times | Happy | Venue with 30 / 45 | Render the coordinator's search results | — | "Setup 30 min", "Turnaround 45 min" | — | UI |
+| AC4-H2 | AC4 | A time that was never set reads "None" | Happy | Venue with 0 / 0 | Render the search results | — | "Setup None", "Turnaround None" | — | UI |
+| AC1-H7, AC2-H3 | AC1, AC2 | Venue Staff set the times and a coordinator sees them | Happy | Mock venue API; `venue@example.com` / `test-password-123`; coordinator session cookie | 1. Add a venue with setup 20 → error. 2. Correct to 30 / 45 and save. 3. Edit turnaround to 60. 4. As coordinator, search the venue's location | 20; 30 / 45; 60 | Error shown for 20; card reads "Setup: 30 min · Turnaround: 45 min", then "… 60 min"; search result shows 30 min and 60 min | No venue saved with 20 | E2E |
 
 ## Latest execution record
 
-Build: backend increment as an uncommitted working tree on `feat/scrum-59-venue-setup-turnaround` at `11dae05` (13 October). Executed with Claude Code, pending human review. Frontend cases are not executed yet.
+Build: backend increment at `95b447c` (13 October); frontend increment as an uncommitted working tree on `feat/scrum-59-venue-setup-turnaround` at `239b5f6` (17 October). Executed with Claude Code, pending human review.
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -65,6 +74,10 @@ Build: backend increment as an uncommitted working tree on `feat/scrum-59-venue-
 | AC3-H1 | Green | Approved and pending requests and the active block are identical before and after the update | Pass | same | same | Also passed before the change, because unknown fields were ignored; meaningful once the fields exist |
 | AC4-H1 | Green | A venue created without the times reads 0 / 0 | Pass | same | same | Red first (`KeyError`), then Green |
 | AC4-DB1 | Green | Before 0026 the script stopped at the first read of the new columns (Red); 0026 applied twice without error; the pre-existing venue reads 0 / 0; 30 / 45, 0 and 1020 stored; 20, -15 and 1035 refused; all rolled back | Pass | same | same | Throwaway `postgres:16-alpine` with 0016 and one existing venue; `database/verify_venue_setup_turnaround.sql` |
+| AC1-H4, AC1-P2, AC1-B2, AC1-N3, AC1-N4 | Green | Times parsed as numbers, blank sent as 0, limits accepted, invalid values reported on both fields, invalid text echoed as typed | Pass | 239b5f6 + working tree, local | Claude Code, 17 Oct 2026 | Red first (fields `undefined`), then Green: `frontend/__tests__/venue-form.test.ts` |
+| AC1-H5, AC1-H6 | Green | Both inputs offered (number, step 15, 0–1020, start at 0); edit form prefilled with 30 / 45 | Pass | same | same | Red first (no such label), then Green: `frontend/__tests__/venues.test.tsx` |
+| AC2-H2, AC4-H2 | Green | Search results show "30 min" / "45 min", and "None" for 0 | Pass | same | same | Red first, then Green: `frontend/__tests__/venue-search.test.tsx` |
+| AC1-H7, AC2-H3 | Green | Journey passed: 20 refused, 30 / 45 saved, turnaround edited to 60, coordinator search shows 30 min and 60 min | Pass | same | same | `frontend/e2e/venue-catalogue.spec.ts` against the Node mock services (`e2e/support/venue-api.mjs`, which now applies the same 0–1020 / 15-minute rule). Written after the implementation, as an end-to-end journey |
 
 ### Local validation evidence
 
@@ -74,5 +87,8 @@ Build: backend increment as an uncommitted working tree on `feat/scrum-59-venue-
 | Backend regression | `pytest` (whole venueService suite) in `python:3.12-slim` | 399 passed | Includes SCRUM-12, 15, 23, 30 and 32 tests |
 | Lint | `ruff check .` in `python:3.12-slim` | All checks passed | — |
 | Database | `postgres:16-alpine` throwaway container; 0016, 0026 (twice); `verify_venue_setup_turnaround.sql` | Passed | Not yet applied to shared development |
+| Frontend unit | `npx vitest run` (Node 22) | 31 files, 325 passed | Was 307 before this increment; the 18 new cases failed first. Existing fixtures in `venue-actions`, `venue-blocks`, `venue-suitability` and `venues` tests gained the two fields, because the form now sends and echoes them |
+| Frontend static checks | `npm run typecheck`, `npm run lint`, `npm run build` | Clean; compiled successfully | — |
+| End-to-end | `CI=1 npx playwright test` against the Node mock services | 37 passed | Whole suite, including the new SCRUM-59 journey |
 
 Shared development, browser, pull-request CI and reviewer approval: not yet run.
