@@ -37,7 +37,7 @@ Expected change to scope: a new `cancelled` status (migration), one new read and
 | Included | `GET /booking-requests/event/{event_request_id}`: all bookings of one event | SCRUM-61 |
 | Included | `POST /booking-requests/{id}/cancel`: cancel one pending or approved booking | SCRUM-61 |
 | Included | A "Venue bookings" panel on the coordinator's event page, with a Cancel action | SCRUM-61 |
-| Stretch | A "Request a venue" form in that panel. SCRUM-32 has no submit screen, so without it AC1 is API-only. Dropped first if time runs short | SCRUM-61 |
+| Stretch (not built) | A "Request a venue" form in that panel. SCRUM-32 has no submit screen, so without it AC1 is API-only. Dropped first if time runs short | SCRUM-61 |
 | Excluded | Replacing a venue after it becomes unavailable | SCRUM-63 |
 | Excluded | Holds that expire, and clash checks against holds | SCRUM-18, SCRUM-20 |
 | Excluded | Setup and turnaround time | SCRUM-59 |
@@ -143,7 +143,8 @@ Results from 17 October 2026 on Kennedy's machine against branch `feat/scrum-61-
 | AC1-X2 (added) | Red then Green | Red: the insert sent `cancelled_by` and `cancelled_at`. Green after excluding them | Pass (local, mocked Data API) | `test_create_does_not_send_the_cancel_columns`. Found while reviewing the work: without it, submitting would fail on a database where 0042 is not applied yet. Not in the approved matrix; added as a SCRUM-32 regression guard |
 | AC4-D1 to AC4-D8 | Red then Green | Red: stopped at AC4-D1 with `22P02` (`cancelled` was not yet an enum value). Green: the script printed `ALL VENUE BOOKING REQUEST VERIFICATIONS PASSED` | Pass (throwaway Postgres 16) | `database/verify_venue_booking_requests.sql`. **Not run on shared development**: 0041 and 0042 are not applied there |
 | AC4-D6 (earlier cases) | Green | The 44 SCRUM-32 cases and the new ones all passed; AC5-N13 now uses an unknown value `archived` | Pass (throwaway Postgres 16) | Migrations also applied twice without error, and the script left 0 rows |
-| AC3-U1 to AC3-U3, AC3-E1, AC4-U1 to AC4-U3, AC4-E1 | Planned | Not started | Not executed | Frontend panel, scheduled after the backend |
+| AC3-U1 to AC3-U3, AC4-U1 to AC4-U3 | Red then Green | Red: the new modules did not exist (import error). Green: as expected | Pass (local) | `frontend/__tests__/event-venue-bookings.test.tsx` (15 tests): the list, empty and failed-load states, venue-name fallback, Cancel only on pending and approved, and the cancel action's POST, revalidation and error messages |
+| AC3-E1, AC4-E1 | Written after the code (not Red first) | As expected | Pass (local, Chrome, mock venue API) | `frontend/e2e/event-venue-bookings.spec.ts`: two bookings listed with their statuses, cancel one while the other stays, and declining the confirmation cancels nothing. Fault checks: a mock that cancels every booking of the event, and a mislabelled status, each made a browser test fail |
 
 ## Latest verification
 
@@ -152,6 +153,17 @@ Results from 17 October 2026 on Kennedy's machine against branch `feat/scrum-61-
 | Lint | `ruff check .` | All checks passed |
 | New backend tests | `pytest tests/test_booking_requests_by_event.py tests/test_booking_requests_cancel.py -q` | 29 passed |
 | Whole venueService suite | `pytest -q` (the CI command; also run with `python -m pytest`) | 410 passed, 10 skipped (the untracked live-database file) |
+
+**Frontend (17 October 2026, `frontend/`, Kennedy's machine).**
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Lint | `npm run lint` | Clean |
+| Type check | `npm run typecheck` | Clean |
+| Unit and component tests | `npm test` | 322 passed (32 files); 15 are new |
+| Browser tests, full suite | `npx playwright test` through a temporary config selecting the installed Google Chrome (`channel: "chrome"`), as for SCRUM-12 | 38 passed, including the 2 new |
+
+The browser tests run against the **mock** venue API in `e2e/support/venue-api.mjs`, extended with `GET /booking-requests/event/{id}` and `POST /booking-requests/{id}/cancel`. The mock does not check the event's assignment; the real service's rule is covered only by the backend tests. A check of the screen against the real services (Docker Compose and the shared development database, after 0041 and 0042 are applied) is **Not executed**.
 
 **Database verification (throwaway Postgres 16, not shared development).** A `postgres:16-alpine` container had the roles `anon`, `authenticated` and `service_role` created, then migrations 0016, 0018, 0023 and 0024 applied. Red: `verify_venue_booking_requests.sql` stopped at `AC4-D1` (`22P02`, `cancelled` not an enum value). Then 0041 and 0042 were applied (each also applied a second time, with only "already exists, skipping" notices) and the script printed `ALL VENUE BOOKING REQUEST VERIFICATIONS PASSED` twice. The container was removed. This does not exercise Supabase-specific behaviour such as PostgREST error mapping.
 
