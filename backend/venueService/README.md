@@ -50,6 +50,16 @@ Approved requests make their venue, dates and slots unavailable: dated
 `booking_conflicts`. Pending and rejected requests reserve nothing. Setup and
 turnaround gaps belong to M5-1.
 
+### SCRUM-59 setup and turnaround time
+
+Each venue has `setup_minutes` and `turnaround_minutes`: minutes in 15-minute
+increments from 0 to 1020 (the 07:00–24:00 window; Week 7 Change #1, discussion
+#131). Both default to 0, meaning none. Venue Staff set them on `POST /venues`
+and change either on `PATCH /venues/{id}`; any other value, a non-number or
+`null` returns 422. They are returned wherever a venue is read. Changing them
+does not touch booking requests or blocks; applying them to conflict checks is
+SCRUM-20. Schema: `database/migrations/0043_venue_setup_turnaround.sql`.
+
 ### Existing endpoints
 
 | Capability | Endpoints |

@@ -188,7 +188,8 @@ test("shows Suitable with no mismatch list", () => {
 const venue: Venue = {
   id: "v1", name: "Riverside Hall", location: "East Wing", max_capacity: 120,
   facilities: ["Projector"], accessibility_features: [], supported_layouts: ["theatre"],
-  operating_slots: ["AM", "PM"], status: "available", created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
+  operating_slots: ["AM", "PM"], setup_minutes: 0, turnaround_minutes: 0,
+  status: "available", created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
 };
 
 // AC3-H3 (happy): the check form starts from what the coordinator searched for.

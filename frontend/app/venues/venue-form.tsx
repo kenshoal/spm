@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { layoutLabel, ROOM_LAYOUTS, SLOTS } from "@/lib/venue-options";
+import { layoutLabel, MAX_PREP_MINUTES, PREP_MINUTES_STEP, ROOM_LAYOUTS, SLOTS } from "@/lib/venue-options";
 import type { Venue } from "@/lib/venues";
 import { createVenue, updateVenue, type VenueFormState } from "./actions";
 
@@ -40,6 +40,9 @@ export function VenueForm({ venue }: { venue?: Venue }) {
             </select>
           </label>
         ) : null}
+        <label className={labelClass}>Setup time (minutes)<input name="setup_minutes" type="number" min={0} max={MAX_PREP_MINUTES} step={PREP_MINUTES_STEP} defaultValue={values ? values.setup_minutes : venue?.setup_minutes ?? 0} className={inputClass} /><FieldError message={errors.setup_minutes} /></label>
+        <label className={labelClass}>Turnaround time (minutes)<input name="turnaround_minutes" type="number" min={0} max={MAX_PREP_MINUTES} step={PREP_MINUTES_STEP} defaultValue={values ? values.turnaround_minutes : venue?.turnaround_minutes ?? 0} className={inputClass} /><FieldError message={errors.turnaround_minutes} /></label>
+        <p className="-mt-3 text-xs text-[#718078] sm:col-span-2">Time to prepare the venue before an event and reset it after, in steps of {PREP_MINUTES_STEP} minutes. Use 0 for none.</p>
         <div className="sm:col-span-2"><label className={labelClass}>Facilities<input name="facilities" defaultValue={values ? values.facilities : venue?.facilities.join(", ")} placeholder="Projector, WiFi, Stage" className={inputClass} /></label><p className="mt-1 text-xs text-[#718078]">Separate items with commas.</p></div>
         <div className="sm:col-span-2"><label className={labelClass}>Accessibility features<input name="accessibility_features" defaultValue={values ? values.accessibility_features : venue?.accessibility_features.join(", ")} placeholder="Ramp access, Hearing loop" className={inputClass} /></label><p className="mt-1 text-xs text-[#718078]">Separate items with commas.</p></div>
       </div>
