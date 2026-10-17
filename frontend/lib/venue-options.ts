@@ -12,3 +12,12 @@ export type VenueStatus = "available" | "blocked";
 export function layoutLabel(layout: RoomLayout): string {
   return layout.charAt(0).toUpperCase() + layout.slice(1);
 }
+
+// SCRUM-59: setup and turnaround times are minutes in 15-minute steps
+// (discussion #131), up to the 1020-minute 07:00-24:00 window. 0 means none.
+export const PREP_MINUTES_STEP = 15;
+export const MAX_PREP_MINUTES = 1020;
+
+export function prepTimeLabel(minutes: number): string {
+  return minutes > 0 ? `${minutes} min` : "None";
+}

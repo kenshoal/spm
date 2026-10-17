@@ -59,6 +59,9 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0037_arrangement_review_notification_outbox.sql` | SCRUM-64 atomic per-new-review notification snapshot; private enqueue trigger, service SELECT only and no historical backfill. **Prepared, not applied to shared Supabase**. |
 | `migrations/0038_arrangement_review_notification_delivery.sql` | SCRUM-64 current-recipient aggregate and narrow service-only attempt/acceptance/completion RPCs, durable per-recipient progress and fair pending index. **Prepared, not applied to shared Supabase**. |
 | `migrations/0040_arrangement_review_safety_recheck_lock_compatibility.sql` | Replaces only the private safety-target helper: whole-batch membership snapshot with no child row locks, preserving errors, replay, private privileges and atomic reviews/outbox. Trusted caller owns the event lock. **Prepared, not applied to shared Supabase**. |
+| `migrations/0041_booking_request_cancelled_status.sql` | SCRUM-61: adds the `cancelled` value to `booking_request_status`. Its own file because Postgres cannot use a new enum value in the transaction that adds it. **Not yet applied to shared development** |
+| `migrations/0042_cancel_venue_booking_request.sql` | SCRUM-61: `cancelled_by` and `cancelled_at` on `venue_booking_requests`, the decision-consistency constraint extended for `cancelled`, a new `cancelled_consistent` constraint, and the server-only `cancel_venue_booking_request` function (ERRCODE `P0002` not found, `55000` not pending or approved, `22023` no user). Run after 0041. **Not yet applied to shared development** |
+| `migrations/0043_venue_setup_turnaround.sql` | SCRUM-59: `venues.setup_minutes` and `venues.turnaround_minutes`, `integer NOT NULL DEFAULT 0`, each checked to be a multiple of 15 from 0 to 1020 (`venues_setup_minutes_valid`, `venues_turnaround_minutes_valid`). Existing venues read 0 / 0. Safe to re-run. Access unchanged (0016). Verify with `verify_venue_setup_turnaround.sql`. **Not yet applied to shared development** |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
@@ -158,11 +161,20 @@ table. The script rolls back all test rows.
 The booking-request table is verified by
 [`verify_venue_booking_requests.sql`](verify_venue_booking_requests.sql).
 Run it once before `0018`, when it should stop with a missing-table error (the
-Red result), and again after, when it should print
+Red result), and again after (and after `0041` and `0042`, which add the
+`AC4-D1` to `AC4-D8` cases for SCRUM-61), when it should print
 `ALL VENUE BOOKING REQUEST VERIFICATIONS PASSED`. It covers dates, slots,
 required columns, status and decision consistency, the venue foreign key and
 server-only access. The script rolls back all rows and needs no Supabase Auth
 user.
+
+The venue setup and turnaround columns are verified by
+[`verify_venue_setup_turnaround.sql`](verify_venue_setup_turnaround.sql).
+Run it once before `0043`, when it should stop at the missing column (the Red
+result), and again after, when it should print
+`SCRUM-59 verify: all venue setup and turnaround cases passed`. It covers the
+0 / 0 default, both limits and the refused values 20, -15 and 1035. The script
+rolls back all rows.
 
 The coordinator transition function is verified by
 [`verify_event_request_status_transitions.sql`](verify_event_request_status_transitions.sql).
@@ -475,6 +487,17 @@ boundaries, including a disposable directory outage. They do not perform HTTP or
 real-user authentication. `verify_notifications.sql` separately checks the
 receiver's stored unique identity.
 
+After merged 0041 has committed and 0042/0043 are installed, run the separate
+`psql -X -v ON_ERROR_STOP=1 -f database/verify_arrangement_review_cancelled_venues.sql`
+check. It calls the actual cancellation RPC, verifies that later significant
+changes exclude the cancelled booking but still flag an approved sibling and
+eligible equipment, and preserves the earlier review/job and lifecycle/resource
+snapshots. Cancellation is not a review acknowledgement: existing outstanding
+reviews remain visible in the shared reader until authorised staff clear the
+named review. Consumers must not hide that work based on current booking status.
+The check rolls back; it extends the nine existing review SQL checks to ten without changing their
+historical results or proving HTTP authentication.
+
 **Rollout boundary:** apply the still-unapplied feature files 0030–0033 and
 0035–0038 plus 0040 in **one reviewed database transaction**, or hold all affected writes
 until the entire stack is installed. Otherwise a flag writer could create reviews
@@ -531,7 +554,10 @@ for migration in \
   0036_arrangement_review_safety_rechecks.sql \
   0037_arrangement_review_notification_outbox.sql \
   0038_arrangement_review_notification_delivery.sql \
-  0040_arrangement_review_safety_recheck_lock_compatibility.sql
+  0040_arrangement_review_safety_recheck_lock_compatibility.sql \
+  0041_booking_request_cancelled_status.sql \
+  0042_cancel_venue_booking_request.sql \
+  0043_venue_setup_turnaround.sql
 do
   psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
     -f "database/migrations/$migration" || exit 1
@@ -543,17 +569,25 @@ do
     -f "database/verify_arrangement_review_$check.sql" || exit 1
 done
 
+# Additional post-merge cancellation compatibility check; fixtures roll back.
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -f database/verify_arrangement_review_cancelled_venues.sql || exit 1
+
 # Commits labelled fixtures: owned disposable cluster only, discard afterwards.
 python3 database/tests/test_arrangement_review_lock_compatibility.py \
   --dsn "$SCRUM64_TEST_DSN" --disposable || exit 1
 ```
 
-The loop applies 27 supplemental files after the guarded bootstrap, including the
-genuine change-request schema/timestamp prerequisites needed for cause lookup.
+The loop applies 30 supplemental files after the guarded bootstrap, including the
+genuine change-request schema/timestamp prerequisites needed for cause lookup and
+the merged booking-cancellation/setup migrations 0041–0043. Each file uses its
+own `psql` invocation: 0041 must commit its new enum value before 0042 uses it.
+Do not combine those two migrations in one transaction. This is separate from
+the atomic SCRUM-64 feature rollout described above.
 This is the bounded SCRUM-64 verification fixture, not a complete deployment of
 all project migrations. Each verification script rolls back its own fixtures.
 The database schema, bootstrap identity and concurrency fixtures remain until
-the owned cluster is removed. The nine SQL checks roll back their own fixtures;
+the owned cluster is removed. The nine existing SQL checks and the separate cancellation check roll back their own fixtures;
 the Python concurrency harness above commits labelled fixtures and must never
 run on shared Supabase. Use `--psql /path/to/psql-wrapper` if needed.
 

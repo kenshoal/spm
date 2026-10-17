@@ -280,9 +280,9 @@ createServer(async (request, response) => {
 
   if (coordinatorMatch) {
     if (request.method === "POST") {
-      // Assignment is an Operations Manager command.
+      // Assignment is an Event Coordinator Lead command.
       if (user.role !== "event_operations_manager") {
-        send(response, 403, { detail: "Only an Event Operations Manager can assign a Coordinator" });
+        send(response, 403, { detail: "Only an Event Coordinator Lead can assign a Coordinator" });
         return;
       }
       if (!record) {

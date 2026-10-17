@@ -129,7 +129,7 @@ class CoordinatorAssignmentService:
 
     def list_current_assignments(self) -> list[CurrentAssignmentResponse]:
         """In-flight requests that have a Coordinator, with the current one —
-        what an Operations Manager needs to find a request to reassign."""
+        what the Event Coordinator Lead needs to find a request to reassign."""
         in_flight = [
             request
             for status in _IN_FLIGHT_STATUSES

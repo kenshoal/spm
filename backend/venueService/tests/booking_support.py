@@ -8,10 +8,13 @@ two reads the client makes and records every call it receives.
 from __future__ import annotations
 
 import re
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
 
+from app.booking_models import BookingRequest
+from app.booking_repository import booking_repository
 from app.dependencies import Principal, require_authenticated, require_venue_staff
 from app.event_requests import EventRequestClient, get_event_client
 from app.main import app
@@ -113,3 +116,22 @@ def submit_body(venue_id: str, /, **overrides: Any) -> dict[str, Any]:
     }
     body.update(overrides)
     return {key: value for key, value in body.items() if value is not OMIT}
+
+
+BASE_TIME = datetime(2030, 1, 1, tzinfo=UTC)
+
+
+def seed_booking(minutes: int = 0, **overrides: Any) -> BookingRequest:
+    """Store a booking request directly, so any status can be set up."""
+
+    fields: dict[str, Any] = {
+        "venue_id": "venue-1",
+        "requested_by": COORDINATOR,
+        "event_request_id": EVENT,
+        "start_date": date(2030, 1, 10),
+        "end_date": date(2030, 1, 10),
+        "slots": ["AM"],
+        "created_at": BASE_TIME + timedelta(minutes=minutes),
+    }
+    fields.update(overrides)
+    return booking_repository.create(BookingRequest(**fields))

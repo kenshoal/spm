@@ -1,5 +1,5 @@
 import type { SuitabilityFormValues } from "@/lib/venue-suitability";
-import { layoutLabel, type Venue } from "@/lib/venues";
+import { layoutLabel, prepTimeLabel, type Venue } from "@/lib/venues";
 import { SuitabilityCheck } from "./suitability-check";
 
 const NO_REQUIREMENTS: SuitabilityFormValues = {
@@ -24,6 +24,8 @@ export function VenueResults({ venues, requirements = NO_REQUIREMENTS }: { venue
               <dt className="text-[#718078]">Facilities</dt><dd className="text-[#273832]">{venue.facilities.join(", ") || "None recorded"}</dd>
               <dt className="text-[#718078]">Accessibility</dt><dd className="text-[#273832]">{venue.accessibility_features.join(", ") || "None recorded"}</dd>
               <dt className="text-[#718078]">Slots</dt><dd className="text-[#273832]">{venue.operating_slots.join(", ")}</dd>
+              <dt className="text-[#718078]">Setup</dt><dd className="text-[#273832]">{prepTimeLabel(venue.setup_minutes)}</dd>
+              <dt className="text-[#718078]">Turnaround</dt><dd className="text-[#273832]">{prepTimeLabel(venue.turnaround_minutes)}</dd>
             </dl>
             <SuitabilityCheck venueId={venue.id} defaults={requirements} />
           </article>
