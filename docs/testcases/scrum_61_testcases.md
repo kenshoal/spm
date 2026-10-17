@@ -132,7 +132,30 @@ Expected change to scope: a new `cancelled` status (migration), one new read and
 
 ### Latest execution record
 
-Nothing has been run for this story yet.
+Results from 17 October 2026 on Kennedy's machine against branch `feat/scrum-61-several-venues` (commits `50b8698` and `fd3e93a` plus the uncommitted cancel work), by Claude Code. Environment for the backend runs: Python 3.13, in-memory stores, authService overridden, eventRequestService faked at the HTTP boundary. Real services were **not** involved.
+
+| ID | Automation status | Actual result | Execution status | Remarks and evidence |
+| --- | --- | --- | --- | --- |
+| AC3-H1, AC3-H2, AC3-P1, AC3-P2, AC3-B1, AC3-N1 to AC3-N5, AC3-X1 | Red then Green | Red: 404 on the missing route. Green: as expected | Pass (local) | `tests/test_booking_requests_by_event.py` (11 tests). AC3-P1 was extended to four statuses once `cancelled` existed |
+| AC3-N1 (client), AC3-X2 | Red then Green | Red: the new client and store methods did not exist | Pass (local) | `tests/test_event_client.py::test_require_coordinator_reads_only_the_assignment`, `tests/test_supabase_booking_repository.py::test_list_for_event_*` |
+| AC4-H1, AC4-H2, AC4-N1 to AC4-N7, AC4-X1 to AC4-X3 | Red then Green | Red: the new store errors and status did not exist (collection error). Green: as expected | Pass (local) | `tests/test_booking_requests_cancel.py` (12 tests) |
+| AC4-X4 | Red then Green | As expected | Pass (local, mocked Data API) | `tests/test_supabase_booking_repository.py::test_cancel_*` |
+| AC1-X2 (added) | Red then Green | Red: the insert sent `cancelled_by` and `cancelled_at`. Green after excluding them | Pass (local, mocked Data API) | `test_create_does_not_send_the_cancel_columns`. Found while reviewing the work: without it, submitting would fail on a database where 0042 is not applied yet. Not in the approved matrix; added as a SCRUM-32 regression guard |
+| AC4-D1 to AC4-D8 | Red then Green | Red: stopped at AC4-D1 with `22P02` (`cancelled` was not yet an enum value). Green: the script printed `ALL VENUE BOOKING REQUEST VERIFICATIONS PASSED` | Pass (throwaway Postgres 16) | `database/verify_venue_booking_requests.sql`. **Not run on shared development**: 0041 and 0042 are not applied there |
+| AC4-D6 (earlier cases) | Green | The 44 SCRUM-32 cases and the new ones all passed; AC5-N13 now uses an unknown value `archived` | Pass (throwaway Postgres 16) | Migrations also applied twice without error, and the script left 0 rows |
+| AC3-U1 to AC3-U3, AC3-E1, AC4-U1 to AC4-U3, AC4-E1 | Planned | Not started | Not executed | Frontend panel, scheduled after the backend |
+
+## Latest verification
+
+| Check | Command (run from `backend/venueService`) | Result |
+| --- | --- | --- |
+| Lint | `ruff check .` | All checks passed |
+| New backend tests | `pytest tests/test_booking_requests_by_event.py tests/test_booking_requests_cancel.py -q` | 29 passed |
+| Whole venueService suite | `pytest -q` (the CI command; also run with `python -m pytest`) | 410 passed, 10 skipped (the untracked live-database file) |
+
+**Database verification (throwaway Postgres 16, not shared development).** A `postgres:16-alpine` container had the roles `anon`, `authenticated` and `service_role` created, then migrations 0016, 0018, 0023 and 0024 applied. Red: `verify_venue_booking_requests.sql` stopped at `AC4-D1` (`22P02`, `cancelled` not an enum value). Then 0041 and 0042 were applied (each also applied a second time, with only "already exists, skipping" notices) and the script printed `ALL VENUE BOOKING REQUEST VERIFICATIONS PASSED` twice. The container was removed. This does not exercise Supabase-specific behaviour such as PostgREST error mapping.
+
+**Mutation check (manual, 17 October 2026).** Eleven one-line faults were injected one at a time and each made at least one test fail: the by-event read with the assignment check skipped, with its event filter ignored, with newest first, with the assignment compared with `==`, and with staff also checked as coordinators; and cancel with a rejected booking cancellable, without the assignment check, without recording `cancelled_by`, with approved bookings uncancellable, cancelling every booking of the event, and deciding by requester instead of assignment.
 
 ## Disclosures
 
