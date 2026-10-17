@@ -1,7 +1,7 @@
--- Run after 0016_venues.sql and 0026_venue_setup_turnaround.sql.
+-- Run after 0016_venues.sql and 0043_venue_setup_turnaround.sql.
 -- Case IDs match docs/testcases/scrum_59_testcases.md (AC4-DB1).
 -- Every change is rolled back, so this leaves no venue data behind. Before
--- 0026 is applied it stops at the first statement that needs the columns,
+-- 0043 is applied it stops at the first statement that needs the columns,
 -- which is the intended Red result.
 
 BEGIN;

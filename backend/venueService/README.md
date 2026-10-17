@@ -58,7 +58,7 @@ increments from 0 to 1020 (the 07:00–24:00 window; Week 7 Change #1, discussio
 and change either on `PATCH /venues/{id}`; any other value, a non-number or
 `null` returns 422. They are returned wherever a venue is read. Changing them
 does not touch booking requests or blocks; applying them to conflict checks is
-SCRUM-20. Schema: `database/migrations/0026_venue_setup_turnaround.sql`.
+SCRUM-20. Schema: `database/migrations/0043_venue_setup_turnaround.sql`.
 
 ### Existing endpoints
 
