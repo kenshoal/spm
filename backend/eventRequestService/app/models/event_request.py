@@ -27,6 +27,7 @@ class EventRequestStatus(str, Enum):
     CHANGES_REQUESTED = "Changes Requested"
     APPROVED = "Approved"
     PLANNING = "Planning"
+    SAFETY_REVIEW = "Safety Review"
     CONFIRMED = "Confirmed"
     COMPLETED = "Completed"
     CANCELLED = "Cancelled"

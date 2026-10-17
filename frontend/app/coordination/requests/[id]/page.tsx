@@ -11,6 +11,7 @@ import {
 import { AppShell, workspaceLinks } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { RequestDetails } from "../../../components/request-details";
+import { ArrangementReviewPanel, ArrangementReviewLoading } from "../../../components/arrangement-review-panel";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
@@ -70,6 +71,7 @@ async function CoordinatorRequestView({ id }: { id: string }) {
       <Link href="/coordination/requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to assigned requests</Link>
       <RequestDetails request={request} coordinatorAssigned />
       <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
+      <Suspense fallback={<ArrangementReviewLoading />}><ArrangementReviewPanel eventId={id} /></Suspense>
       <div className="mt-5">
         <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
       </div>

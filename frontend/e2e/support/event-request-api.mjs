@@ -6,6 +6,8 @@ const assignments = [];
 const reviewDecisions = [];
 const changeRequests = [];
 const statusHistory = [];
+// Prepared UI fixture storage only; real permissions and clear atomicity have separate API/PG tests.
+const arrangementReviews = new Map();
 let nextHistoryId = 1;
 let nextAssignmentId = 1;
 let nextDecisionId = 1;
@@ -19,6 +21,8 @@ const SESSIONS = {
   "coordinator-session": { id: "playwright-coordinator", role: "event_coordinator" },
   "other-coordinator-session": { id: "other-coordinator", role: "event_coordinator" },
   "ops-session": { id: "playwright-ops", role: "event_operations_manager" },
+  "venue-session": { id: "playwright-venue", role: "venue_staff" },
+  "tech-session": { id: "playwright-tech", role: "technical_support" },
 };
 
 const CANCEL_SOURCES = new Set([
@@ -117,9 +121,12 @@ createServer(async (request, response) => {
   // Confirmed, which the venue/ops stories own on other branches).
   if (url.pathname === "/__seed" && request.method === "POST") {
     const body = await readJson(request);
-    const { coordinator_id, review_decision, ...recordOverrides } = body;
+    const { coordinator_id, review_decision, arrangement_reviews, ...recordOverrides } = body;
     const record = recordFields({ ...recordOverrides, status: body.status ?? "Submitted" });
     records.set(record.id, record);
+    for (const review of arrangement_reviews ?? []) {
+      arrangementReviews.set(review.id, { ...review, event_request_id: record.id, cleared_at: null, cleared_by: null });
+    }
     recordHistory(record, null, null, "history.recording_started", "baseline");
     if (coordinator_id) {
       assignments.push({
@@ -180,6 +187,26 @@ createServer(async (request, response) => {
     records.set(record.id, record);
     recordHistory(record, null, user, "event_request.created", "created");
     send(response, 201, record);
+    return;
+  }
+
+  // AC5-X9 UI canned endpoints: these simple query/storage responses do not establish backend authorisation.
+  const arrangementEventMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/arrangement-reviews$/);
+  if (request.method === "GET" && arrangementEventMatch) {
+    send(response, 200, [...arrangementReviews.values()].filter((row) => row.event_request_id === arrangementEventMatch[1] && row.cleared_at === null));
+    return;
+  }
+  if (request.method === "GET" && url.pathname === "/arrangement-reviews") {
+    send(response, 200, [...arrangementReviews.values()].filter((row) => row.arrangement === url.searchParams.get("arrangement") && row.cleared_at === null));
+    return;
+  }
+  const arrangementClearMatch = url.pathname.match(/^\/arrangement-reviews\/([^/]+)\/clear$/);
+  if (request.method === "POST" && arrangementClearMatch) {
+    const row = arrangementReviews.get(arrangementClearMatch[1]);
+    if (!row) { send(response, 404, { detail: { code: "ARRANGEMENT_REVIEW_NOT_FOUND" } }); return; }
+    const cleared = { ...row, cleared_at: "2026-10-16T03:00:00Z", cleared_by: user.id };
+    arrangementReviews.set(row.id, cleared);
+    send(response, 200, cleared);
     return;
   }
 

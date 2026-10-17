@@ -82,4 +82,29 @@ ruff check .
 pytest
 ```
 
-`tests/test_venue_contract.py` (marker `cross_service`) starts the real venueService from `../venueService` in a subprocess with in-memory storage, plus a fake authService, and checks the reservation and availability-check endpoints against venueService's real role check. It needs no network or database and runs in plain `pytest` and CI; skip it offline with `pytest -m "not cross_service"`.
+`tests/test_venue_contract.py` (marker `cross_service`) starts the real venueService from `../venueService` in a subprocess with in-memory storage, plus a fake authService, and checks the reservation and availability-check endpoints against venueService's real role check. It needs no external network or shared database, but requires local loopback HTTP ports. It runs in plain `pytest` and CI; skip it where loopback ports are unavailable with `pytest -m "not cross_service"`.
+
+## Arrangement reviews after unavailability (SCRUM-64, in progress)
+
+Prepared migration `database/migrations/0033_arrangement_review_equipment_unavailability.sql`
+requires the arrangement-review schema from 0030, the exact upstream Safety
+Review prerequisite 0029 and the existing equipment/reservation migrations
+through 0028. It is **not applied to shared Supabase**.
+The existing Technical Support `PATCH /equipment/{id}/status` and its verified
+actor remain unchanged. Its normal status-history insert now supplies a stored
+UUID cause to a private review trigger. Actual transitions to DAMAGED,
+UNDER_REPAIR, UNDER_MAINTENANCE or RETIRED flag exact-equipment reservations whose
+return date is today or later in Singapore, excluding Draft/terminal events.
+Equal-status calls, creation history and availability restoration add no flags;
+restoration never clears existing reviews. A flag failure rolls back the status
+and history together. No reservations, event statuses or API responses change.
+
+Use the `database/README.md` reviewed transaction rollout and guarded
+disposable setup, including
+`psql -X -v ON_ERROR_STOP=1 -f database/verify_arrangement_review_unavailability.sql`.
+Notification delivery is provided by migrations 0037/0038 and the
+eventRequestService durable relay; see its README for startup and the database
+README for transactional rollout. Shared readiness remains pending. Review inserts acquire
+an implicit event foreign-key lock while the status RPC owns the equipment lock;
+future event-to-equipment gates need a jointly verified lock protocol. Concurrent
+arrangement creation and future gate races are not solved by this increment.

@@ -34,7 +34,8 @@ function makeRequest(status: EventRequestStatus): EventRequest {
 }
 
 // Purpose: Every backend status is representable — the UI never drops a workflow state.
-test("covers all ten event request statuses", () => {
+// AC5-X8 (cross-cutting): the recognised status universe retains the approved Safety Review state.
+test("covers all eleven event request statuses", () => {
   expect(EVENT_REQUEST_STATUSES).toEqual([
     "Draft",
     "Submitted",
@@ -42,6 +43,7 @@ test("covers all ten event request statuses", () => {
     "Changes Requested",
     "Approved",
     "Planning",
+    "Safety Review",
     "Confirmed",
     "Completed",
     "Cancelled",
@@ -50,6 +52,7 @@ test("covers all ten event request statuses", () => {
 });
 
 // Purpose: Each status lands in exactly one tab — or only under All once closed.
+// AC5-X8 (cross-cutting): the expanded status universe remains visible without duplicate grouping.
 test("groups every status into exactly one tab plus all", () => {
   const requests = EVENT_REQUEST_STATUSES.map(makeRequest);
   const groups = groupRequests(requests);
@@ -65,6 +68,7 @@ test("groups every status into exactly one tab plus all", () => {
       "Changes Requested",
       "Approved",
       "Planning",
+      "Safety Review",
       "Confirmed",
       "Completed",
     ]),
@@ -80,8 +84,9 @@ test("files Completed requests under the completed tab", () => {
 });
 
 // Purpose: Requests stay visible as they advance past Submitted into coordination.
+// AC5-X8 (cross-cutting): Safety Review remains in progress until its separate decision workflow.
 test("keeps in-progress statuses visible after leaving Submitted", () => {
-  const inProgress = ["Under Review", "Changes Requested", "Approved", "Planning", "Confirmed"] as const;
+  const inProgress = ["Under Review", "Changes Requested", "Approved", "Planning", "Safety Review", "Confirmed"] as const;
   const groups = groupRequests(inProgress.map(makeRequest));
 
   expect(groups.submitted).toEqual([]);
@@ -148,39 +153,43 @@ test("marks Confirmed as current with earlier stages done", () => {
 });
 
 // Purpose: A draft still previews the entire journey before submission.
+// AC5-X8 (cross-cutting): adding Safety Review retains the full future journey from Draft.
 test("shows the full upcoming journey for a draft", () => {
   render(<StatusProgress status="Draft" />);
 
-  expect(screen.getAllByRole("listitem")).toHaveLength(7);
+  expect(screen.getAllByRole("listitem")).toHaveLength(8);
   expect(screen.getByRole("listitem", { current: "step" }).textContent).toContain("Draft");
-  expect(screen.getAllByRole("listitem")[6].textContent).toContain("Not reached yet: Completed");
+  expect(screen.getAllByRole("listitem")[7].textContent).toContain("Not reached yet: Completed");
   expect(screen.getByText(/Not submitted yet/)).toBeDefined();
 });
 
 // Purpose: Clarification keeps the current review stage and all later stages visible.
+// AC5-X8 (cross-cutting): clarification still shows the complete journey including the future safety stage.
 test("shows the full journey while clarification is requested", () => {
   render(<StatusProgress status="Changes Requested" />);
 
   const stages = screen.getAllByRole("listitem").map((item) => item.textContent);
-  expect(stages).toHaveLength(7);
+  expect(stages).toHaveLength(8);
   expect(stages[2]).toContain("Current stage: Under Review");
-  expect(stages[6]).toContain("Not reached yet: Completed");
+  expect(stages[7]).toContain("Not reached yet: Completed");
   expect(screen.getByText(/clarification response/i)).toBeDefined();
 });
 
 // Purpose: A rejected outcome retains the whole journey and marks its stages as not reached.
+// AC5-X8 (cross-cutting): a rejected event retains all milestone context without implying completion.
 test("shows the full journey and an explicit notice for rejected", () => {
   render(<StatusProgress status="Rejected" />);
 
-  expect(screen.getAllByRole("listitem")).toHaveLength(7);
+  expect(screen.getAllByRole("listitem")).toHaveLength(8);
   expect(screen.getByText(/later stages shown below were not reached/i)).toBeDefined();
 });
 
 // Purpose: A cancelled outcome keeps the normal lifecycle visible for context.
+// AC5-X8 (cross-cutting): a cancelled event retains all milestone context without implying completion.
 test("shows the full journey and an explicit notice for cancelled", () => {
   render(<StatusProgress status="Cancelled" />);
 
-  expect(screen.getAllByRole("listitem")).toHaveLength(7);
+  expect(screen.getAllByRole("listitem")).toHaveLength(8);
   expect(screen.getByText(/ended as cancelled/i)).toBeDefined();
 });
 

@@ -26,6 +26,34 @@ the API keeps its complete chronological record. **Refresh status and history**
 refreshes the whole detail view through the same server loader. Existing workflow
 actions continue to refresh their detail pages after a successful change.
 
+## Arrangement reviews (SCRUM-64)
+
+The assigned coordinator's detail page streams an **Outstanding arrangement
+reviews** panel with full recorded reasons, target/cause IDs and times. Domain
+staff use `/arrangement-reviews?arrangement=venue_booking` (`venue_staff`) or
+`arrangement=equipment_reservation` (`technical_support`). These are role-wide
+queues; the full event ticket remains coordinator-only. Empty work and a failed
+read have distinct messages, and **Refresh reviews** reloads the protected view.
+
+Staff must tick **I have checked this arrangement against the recorded change**
+before **Mark reviewed** submits the named review. The server action verifies the
+current role and sends a bodyless clear request; the backend remains authoritative
+for stale/domain refusals. This acknowledges that review only, preserves newer
+causes and changes no booking, reservation or event status. The MVP shows UUID
+references and recorded evidence, not a booking/reservation editor or independent
+resource-availability validation.
+
+The inbox renders `arrangement_needs_review` with its domain, target and complete
+reason. Verified matching staff roles link to their domain queue, otherwise a
+coordinator role links to the event detail. Links are constructed internally,
+never taken from a payload URL. Protected destination APIs recheck access.
+
+Run authService (8001), eventRequestService (8003) and notificationService (8005),
+with the prepared migration stack, before `npm run dev`. Frontend server-only
+`NOTIFICATION_API_URL` defaults to `http://127.0.0.1:8005`. Durable delivery also
+requires the event service's `NOTIFICATION_SERVICE_URL`; see its README. Local
+mocked browser checks do not prove shared Supabase delivery or real authentication.
+
 ## Workspaces
 
 | Role | Lands on | Pages |
@@ -33,8 +61,8 @@ actions continue to refresh their detail pages after a successful change.
 | Event Organiser | `/event-requests` | create, edit, submit and track requests |
 | Event Coordinator | `/coordination/requests` | assigned requests, status transitions, `/venues/search` |
 | Event Operations Manager | `/operations/assignments` | assign and reassign coordinators (SCRUM-14) |
-| Venue Staff | `/venues` | venue catalogue (SCRUM-30), `/venues/search` (SCRUM-9) |
-| Technical Support | `/equipment` | equipment catalogue (SCRUM-45) and status (SCRUM-16) |
+| Venue Staff | `/venues` | venue catalogue (SCRUM-30), `/venues/search` (SCRUM-9), venue review queue |
+| Technical Support | `/equipment` | equipment catalogue (SCRUM-45), status (SCRUM-16) and equipment review queue |
 
 Venue search (`/venues/search`) is open to both Event Coordinators and Venue
 Staff. A page-level fetch failure shows an "unavailable" banner instead of a

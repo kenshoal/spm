@@ -1,5 +1,7 @@
+from datetime import UTC
 from typing import Any, NoReturn
 
+from app.models.arrangement_review import ArrangementReviewResponse
 from app.models.event_request import (
     EventChangeDecision,
     EventChangeRequestCreate,
@@ -14,7 +16,18 @@ from app.models.event_request import (
     EventStatusHistoryResponse,
 )
 from app.repositories import EventRequestRepository
-from app.repositories.event_request_repository import EventRequestRpcError
+from app.repositories.event_request_repository import (
+    EventRequestRpcError,
+    SupabaseRepositoryError,
+)
+
+
+class ArrangementReviewActionError(Exception):
+    """A locked review mutation was refused without exposing storage details."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 class EventRequestNotFoundError(Exception):
@@ -74,6 +87,57 @@ class EventRequestService:
 
     def __init__(self, repository: EventRequestRepository) -> None:
         self.repository = repository
+
+    def list_arrangement_reviews(
+        self, event_request_id: str
+    ) -> list[ArrangementReviewResponse]:
+        """Outstanding work uses the same persisted rows as future readiness reads."""
+        try:
+            rows = self.repository.list_arrangement_reviews(event_request_id)
+        except SupabaseRepositoryError as error:
+            raise SupabaseRepositoryError("Arrangement reviews unavailable") from error
+        return self._outstanding_arrangement_reviews(rows)
+
+    def list_arrangement_reviews_for_arrangement(
+        self, arrangement: str
+    ) -> list[ArrangementReviewResponse]:
+        """A staff queue spans events but remains scoped to one authorised domain."""
+        try:
+            rows = self.repository.list_arrangement_reviews_for_arrangement(arrangement)
+        except SupabaseRepositoryError as error:
+            raise SupabaseRepositoryError("Arrangement reviews unavailable") from error
+        return self._outstanding_arrangement_reviews(rows)
+
+    def clear_arrangement_review(
+        self, review_id: str, actor_id: str, allowed_arrangements: list[str]
+    ) -> ArrangementReviewResponse:
+        """The database rechecks domain and stale state while locking the exact row."""
+        try:
+            row = self.repository.clear_arrangement_review(
+                review_id, actor_id, allowed_arrangements
+            )
+        except EventRequestRpcError as error:
+            if error.errcode in {"P0002", "P0003", "P0004"}:
+                raise ArrangementReviewActionError(error.errcode) from error
+            raise SupabaseRepositoryError("Arrangement reviews unavailable") from error
+        except SupabaseRepositoryError as error:
+            raise SupabaseRepositoryError("Arrangement reviews unavailable") from error
+        return ArrangementReviewResponse.model_validate(row)
+
+    @staticmethod
+    def _outstanding_arrangement_reviews(
+        rows: list[dict[str, Any]],
+    ) -> list[ArrangementReviewResponse]:
+        outstanding = (
+            ArrangementReviewResponse.model_validate(row)
+            for row in rows
+            if row["cleared_at"] is None
+        )
+        return sorted(
+            outstanding,
+            key=lambda review: (review.raised_at.astimezone(UTC), review.id),
+            reverse=True,
+        )
 
     def list_status_history(self, event_request_id: str) -> list[EventStatusHistoryResponse]:
         """Sort deterministically even when several entries have equal timestamps."""
