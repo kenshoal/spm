@@ -139,7 +139,7 @@ def test_empty_queue_returns_an_empty_list() -> None:
 def test_unknown_status_filter_is_refused() -> None:
     as_user(STAFF, "venue_staff")
 
-    response = client.get("/booking-requests", params={"status": "cancelled"})
+    response = client.get("/booking-requests", params={"status": "archived"})
 
     assert response.status_code == 422
 

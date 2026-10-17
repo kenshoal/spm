@@ -1,5 +1,6 @@
--- Run after 0016_venues.sql and 0018_venue_booking_requests.sql.
--- Case IDs match docs/testcases/scrum_32_testcases.md.
+-- Run after 0016_venues.sql, 0018_venue_booking_requests.sql, 0041 and 0042.
+-- Case IDs match docs/testcases/scrum_32_testcases.md (AC1 to AC6) and
+-- docs/testcases/scrum_61_testcases.md (AC4-D1 to AC4-D8).
 -- Every mutation is rolled back, so this leaves no venue or request data
 -- behind. Before 0018 is applied it stops at the first statement that needs
 -- the table, which is the intended Red result.
@@ -423,10 +424,128 @@ BEGIN
         '23514'
     );
 
-    -- AC5-N13: an unknown status value is refused.
+    -- AC5-N13: an unknown status value is refused. ('cancelled' became a real
+    -- status in 0041, so another unknown value is used.)
     PERFORM pg_temp.expect_request_failure(
-        'AC5-N13', '{"status": "cancelled"}', '22P02'
+        'AC5-N13', '{"status": "archived"}', '22P02'
     );
+
+    -- AC4-D1, AC4-D2: a cancelled request needs both cancelled_by and cancelled_at.
+    PERFORM pg_temp.expect_request_failure(
+        'AC4-D1',
+        jsonb_build_object('status', 'cancelled', 'cancelled_at', now()),
+        '23514'
+    );
+    PERFORM pg_temp.expect_request_failure(
+        'AC4-D2',
+        jsonb_build_object('status', 'cancelled', 'cancelled_by', ctx.decider_id),
+        '23514'
+    );
+
+    -- AC4-D3: only a cancelled request may carry cancelled_by and cancelled_at.
+    PERFORM pg_temp.expect_request_failure(
+        'AC4-D3',
+        jsonb_build_object(
+            'cancelled_by', ctx.decider_id, 'cancelled_at', now()
+        ),
+        '23514'
+    );
+
+    -- AC4-D4: a cancelled request carries no decision reason.
+    PERFORM pg_temp.expect_request_failure(
+        'AC4-D4',
+        jsonb_build_object(
+            'status', 'cancelled',
+            'cancelled_by', ctx.decider_id,
+            'cancelled_at', now(),
+            'decision_reason', 'Because'
+        ),
+        '23514'
+    );
+
+    -- AC4-D5: a request cancelled before any decision, and one cancelled after
+    -- approval (decider and time kept), are both accepted.
+    PERFORM pg_temp.new_request(jsonb_build_object(
+        'status', 'cancelled',
+        'cancelled_by', ctx.decider_id,
+        'cancelled_at', now()
+    ));
+    PERFORM pg_temp.new_request(jsonb_build_object(
+        'status', 'cancelled',
+        'cancelled_by', ctx.decider_id,
+        'cancelled_at', now(),
+        'decided_by', ctx.decider_id,
+        'decided_at', now()
+    ));
+
+    -- AC4-D6: the function cancels a pending request and records who and when.
+    v_id := pg_temp.new_request();
+    PERFORM public.cancel_venue_booking_request(v_id, ctx.decider_id);
+    IF NOT EXISTS (
+        SELECT 1 FROM public.venue_booking_requests r
+        WHERE r.id = v_id AND r.status = 'cancelled'
+          AND r.cancelled_by = ctx.decider_id AND r.cancelled_at IS NOT NULL
+          AND r.decided_by IS NULL
+    ) THEN
+        RAISE EXCEPTION 'AC4-D6: a pending request was not cancelled correctly';
+    END IF;
+
+    -- AC4-D7: the function cancels an approved request and keeps its decision.
+    v_approved := pg_temp.new_request(jsonb_build_object(
+        'status', 'approved',
+        'decided_by', ctx.decider_id,
+        'decided_at', now()
+    ));
+    PERFORM public.cancel_venue_booking_request(v_approved, ctx.requester_id);
+    IF NOT EXISTS (
+        SELECT 1 FROM public.venue_booking_requests r
+        WHERE r.id = v_approved AND r.status = 'cancelled'
+          AND r.cancelled_by = ctx.requester_id
+          AND r.decided_by = ctx.decider_id
+    ) THEN
+        RAISE EXCEPTION 'AC4-D7: an approved request was not cancelled correctly';
+    END IF;
+
+    -- AC4-D8: the function refuses a rejected or already cancelled request, an
+    -- unknown request and a missing user, and is closed to browser roles.
+    v_id := pg_temp.new_request(jsonb_build_object(
+        'status', 'rejected',
+        'decided_by', ctx.decider_id,
+        'decided_at', now(),
+        'decision_reason', 'Not available'
+    ));
+    PERFORM pg_temp.expect_failure(
+        'AC4-D8 rejected',
+        format('SELECT public.cancel_venue_booking_request(%L, %L)', v_id, ctx.decider_id),
+        '55000'
+    );
+    PERFORM pg_temp.expect_failure(
+        'AC4-D8 already cancelled',
+        format('SELECT public.cancel_venue_booking_request(%L, %L)', v_approved, ctx.decider_id),
+        '55000'
+    );
+    PERFORM pg_temp.expect_failure(
+        'AC4-D8 unknown',
+        format('SELECT public.cancel_venue_booking_request(%L, %L)', gen_random_uuid(), ctx.decider_id),
+        'P0002'
+    );
+    PERFORM pg_temp.expect_failure(
+        'AC4-D8 no user',
+        format('SELECT public.cancel_venue_booking_request(%L, NULL)', v_id),
+        '22023'
+    );
+    FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+        IF has_function_privilege(
+            role_name, 'public.cancel_venue_booking_request(uuid, uuid)', 'EXECUTE'
+        ) THEN
+            RAISE EXCEPTION 'AC4-D8: % can execute cancel_venue_booking_request', role_name;
+        END IF;
+    END LOOP;
+    IF NOT has_function_privilege(
+        'service_role', 'public.cancel_venue_booking_request(uuid, uuid)', 'EXECUTE'
+    ) THEN
+        RAISE EXCEPTION 'AC4-D8: service_role cannot execute cancel_venue_booking_request';
+    END IF;
 
     -- AC4-X1: none of the above changed the venue row.
     IF (SELECT to_jsonb(v) FROM public.venues v WHERE v.id = ctx.venue_id)
