@@ -1,6 +1,30 @@
 # SCRUM-64 execution handoff — 17 October 2026
 
-## Publication candidate — 17 October 2026
+## Post-dev merge verification — 17 October 2026
+
+Merge commit `a03c991c562fa26b1ecdbf6522fbc55d343ea49d` combines the published SCRUM-64 branch with remote `dev` at `754f34c` (merged SCRUM-58/62 planning/lead changes, SCRUM-61 multi-venue cancellation and SCRUM-59 setup/turnaround). The only manual conflict was the database README migration table; both complete sets of migration/setup information were retained. Production code merged automatically. Devon reviewed the combined coordinator page, status tracker, role/assignment handling and approved-only flag predicate; no further production behaviour fix was justified.
+
+Vera added one native compatibility specification,AC1-P3, and strengthened the existingAC5-X9 browser journey. The real service-role cancellation RPC leaves old review/job evidence intact and produces no new ordinary flag for the cancelled booking. A subsequent significant change still flags its approved sibling and eligible equipment exactly. The shared reader retains old uncleared evidence. Cancellation is not an acknowledgement and does not silently clear/hide outstanding work. Explicit safety targets remain membership-based; no implicit cancellation filter was added toAC7.
+
+Observed checks against the merged implementation:
+
+| Check | Exact command/environment | Observed result |
+| --- | --- | --- |
+| Event-request backend | From service directory: `SCRUM64_NOTIFICATION_RUNTIME=/tmp/scrum64-notification-runtime/bin/python .venv/bin/python -m pytest -q -p no:cacheprovider` |384 passed,no skips,6.21s; two existing dependency deprecation warnings. |
+| Venue backend regression | From venueService: `../eventRequestService/.venv/bin/python -m pytest -q -p no:cacheprovider` |449 passed,1.44s; two existing dependency warnings. Venue has no own virtual environment, so the compatible existing runtime was used with venueService as working directory. |
+| Frontend regression | `npm test -- --run` |363 passed across36 files. |
+| Lint and types | Both affected backend services: Ruff with `--no-cache`; frontend `npm run lint`, `npm run typecheck`; final changed browser file targeted ESLint | Passed. |
+| Full production-build browser suite | `npx playwright test --reporter=list` |41 passed,18.1s; actual Next production build/Chromium, simulated Auth/APIs. Strengthened existing journey proves booking/review panels coexist, cancelled booking remains visible without Cancel, exact review clearing and reload preserve both booking snapshots and lifecycle/history. |
+| Fresh bounded schema | Guarded empty owned PostgreSQL16 bootstrap plus30 supplemental files: prior27 plus0041–0043 | Passed, including unchanged nine SQL scripts and three native concurrency methods (4.351s).0041 committed in its own invocation before0042 consumed its new enum value. |
+| New actual cancellation oracle | `psql -X -v ON_ERROR_STOP=1 -d <owned-local-dsn> -f database/verify_arrangement_review_cancelled_venues.sql` | Passed with ROLLBACK; SHA256 `1fcfbf7d6b55ea55f031d8c4a7540cf1c8f3cf84103e5b571ccb5d47cf3c47cc`. This is additional Green compatibility coverage, not a manufactured Red/fix. |
+
+The README now reproduces30 migrations, ten SQL review checks (nine existing plus the separate cancellation script) and the three-method concurrency harness. Local logs are `/tmp/scrum64-postmerge-{backend,frontend,venue,e2e,lint,types}.log` and `/tmp/scrum64-dev-compat/{setup-and-regression,cancelled-venues}.log`. The catalogue now contains79 specification IDs:77 Green and2 Planned; the higher whole-suite totals include upstream stories and are not SCRUM-64-only counts.
+
+The latest verified Telegram proposal is Jaren message2168: saved immutable decision/targets, an event-first privileged decision transaction and a shared ordinary-readiness function owned by Tate. That proposed readiness helper and the actual saved-decision caller were not implemented in this merge. Real authenticated shared-database integration and reviewed rollout remain outstanding. No Jira edits or shared Supabase writes were made. Earlier publication results and pending-CI statements below are historical; new PR CI must be checked against the updated pushed head.
+
+Final independent audit matched68 production-owned paths and29 Vera-owned test/catalogue paths. New and changed tests retain their case-purpose labels. The owned PostgreSQL container was stopped and automatically removed; no shared data was touched. The browser log also contains the previously seen non-failing destination-stream-closed-early and colour warnings; no product-failure attribution is inferred from them.
+
+## Earlier publication candidate — 17 October 2026
 
 The user authorised committing, pushing and opening a PR into `dev`. Implementation commit `cd9e0ea` contains the reviewed68 implementation/test/setup paths; story evidence is committed separately. The refreshed remote `dev` still matched the starting commit `bf4aed5`, so no merge or conflict resolution was needed. All41 production and28 test fingerprints matched the prior independent handoffs before staging. The credential-shaped value in `.env.example` was confirmed to be the existing `sb_secret_your-server-only-key` placeholder; no local `.env`, secret or generated output was staged.
 
