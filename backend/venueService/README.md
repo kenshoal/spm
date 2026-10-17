@@ -60,7 +60,7 @@ turnaround gaps belong to M5-1.
 | Check venue suitability | `POST /venues/{id}/suitability` |
 | Create a venue block | `POST /venues/{venue_id}/blocks` |
 | List a venue's blocks | `GET /venues/{venue_id}/blocks` |
-| Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}` |
+| Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}`, `GET /booking-requests/event/{event_request_id}`, `POST /booking-requests/{id}/cancel` |
 | Decide a booking request | `POST /booking-requests/{id}/decision`, `GET /booking-requests/{id}/refusals` |
 
 Venues are stored in the Supabase `public.venues` table
@@ -208,6 +208,17 @@ one belongs to a later story. Venue Staff list the queue
 request; a Coordinator lists (`/mine`, newest first) and opens only their own,
 and another Coordinator's request returns 404. A request for a blocked venue or
 for past dates is accepted at submission.
+
+An event can have several booking requests, one per venue (SCRUM-61).
+`GET /booking-requests/event/{event_request_id}` lists all of an event's
+requests, oldest first, with each one's status: Venue Staff may read any event,
+a Coordinator only an event they are currently assigned to (checked with
+eventRequestService on every call), and no other role may. `POST
+/booking-requests/{id}/cancel` cancels one pending or approved request; only the
+event's current Coordinator may, the event's other requests are untouched, and
+cancelling an approved request frees its slots at once. Rejected and cancelled
+requests cannot be cancelled again (409). "Changing" a booking is cancelling it
+and requesting again. The `cancelled` status needs migrations 0041 and 0042.
 
 ## Run locally
 

@@ -17,7 +17,12 @@ from app.booking_models import (
     BookingRequestCreate,
     BookingRequestStatus,
 )
-from app.booking_repository import BookingRequestStore, get_booking_repository
+from app.booking_repository import (
+    BookingNotCancellableError,
+    BookingRequestNotFoundError,
+    BookingRequestStore,
+    get_booking_repository,
+)
 from app.dependencies import (
     Principal,
     bearer_token,
@@ -127,3 +132,33 @@ def get_booking_request(
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking request not found")
     return booking
+
+
+@router.post("/{booking_id}/cancel", response_model=BookingRequest)
+def cancel_booking_request(
+    booking_id: str,
+    principal: CoordinatorDep,
+    token: TokenDep,
+    bookings: BookingRepoDep,
+    events: EventClientDep,
+) -> BookingRequest:
+    """Cancel one pending or approved booking; the event's other bookings stay.
+
+    Only the event's current Coordinator can cancel, checked again here, so a
+    reassignment moves the right with the event, not with the requester.
+    """
+
+    booking = bookings.get(booking_id)
+    if booking is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking request not found")
+    events.require_coordinator(booking.event_request_id, token, principal.user_id)
+    try:
+        return bookings.cancel(booking_id, principal.user_id)
+    except BookingRequestNotFoundError:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Booking request not found"
+        ) from None
+    except BookingNotCancellableError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Booking request cannot be cancelled"
+        ) from None

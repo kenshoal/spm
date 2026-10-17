@@ -79,7 +79,7 @@ def test_venue_staff_list_any_events_bookings(events: FakeEventService) -> None:
     assert events.calls == []
 
 
-# AC3-P1 (partition): bookings of every status are listed
+# AC3-P1 (partition): bookings of all four statuses are listed
 def test_every_status_is_listed(events: FakeEventService) -> None:
     pending = seed_booking(minutes=0)
     accepted = approved(minutes=1)
@@ -91,12 +91,20 @@ def test_every_status_is_listed(events: FakeEventService) -> None:
         decided_at=BASE_TIME,
     )
 
+    cancelled = seed_booking(
+        minutes=3,
+        status=BookingRequestStatus.CANCELLED,
+        cancelled_by=COORDINATOR,
+        cancelled_at=BASE_TIME,
+    )
+
     items = by_event().json()
 
     assert [(item["id"], item["status"]) for item in items] == [
         (pending.id, "pending"),
         (accepted.id, "approved"),
         (rejected.id, "rejected"),
+        (cancelled.id, "cancelled"),
     ]
 
 
