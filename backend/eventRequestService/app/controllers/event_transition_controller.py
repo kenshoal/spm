@@ -13,6 +13,7 @@ from app.controllers.event_request_controller import (
 )
 from app.models.event_request import (
     EventRequestResponse,
+    EventRequestStatus,
     EventReviewDecision,
     SafetyDecision,
     SafetyReviewResponse,
@@ -112,6 +113,20 @@ def complete_event(
     service: ServiceDependency,
 ) -> EventRequestResponse:
     return service.complete(str(event_request_id), caller_id)
+
+
+@router.get("/safety-queue", response_model=list[EventRequestResponse])
+def safety_queue(
+    caller: AuthenticatedDependency,
+    event_requests: Annotated[EventRequestService, Depends(get_event_request_service)],
+) -> list[EventRequestResponse]:
+    """SCRUM-60 AC2: events waiting for a safety check, longest-waiting first.
+    The status change bumps updated_at, so it stands for "entered Safety Review".
+    Venue and equipment details come from their own services."""
+    if SAFETY_OFFICER_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    waiting = event_requests.list_by_status(EventRequestStatus.SAFETY_REVIEW)
+    return sorted(waiting, key=lambda request: request.updated_at)
 
 
 @router.post(
