@@ -197,6 +197,76 @@ class SafetyReviewConcurrencyTest(unittest.TestCase):
             "1",
         )
 
+    def flag_insert(self, event_id):
+        """A SCRUM-64 review flag: references the event through its FK, so it reaches the event last."""
+        return (
+            "INSERT INTO public.arrangement_reviews (event_request_id, arrangement, arrangement_id, trigger_id, "
+            f"trigger_type, reason) VALUES ('{event_id}', 'venue_booking', gen_random_uuid(), gen_random_uuid(), "
+            "'safety_recheck', 'Race recheck')"
+        )
+
+    # AC3-X4 (cross-cutting): a review flag raised just before the handover makes it wait, then refuse
+    # with the flag listed
+    def test_handover_waits_for_uncommitted_flag_and_refuses(self):
+        event_id = self.planning_event()
+        writer_app, gate_app = f"race-flag-{event_id}", f"race-gate-{event_id}"
+        writer = self.start(writer_app, f"""
+            BEGIN;
+            {self.flag_insert(event_id)};
+            SELECT pg_sleep(1.5);
+            COMMIT;
+        """)
+        gate = None
+        try:
+            self.wait_for(writer_app, "wait_event='PgSleep'", writer, "its flag insert")
+            gate = self.start(gate_app, f"SELECT status FROM public.send_event_request_for_safety_review('{event_id}', '{COORDINATOR}');")
+            self.wait_for(gate_app, "wait_event_type='Lock'", gate, "a wait on the event lock")
+            writer_code, writer_error = self.finish(writer)
+            gate_code, gate_error = self.finish(gate)
+        finally:
+            for process in (writer, gate):
+                if process is not None and process.poll() is None:
+                    process.terminate()
+                    process.communicate(timeout=5)
+
+        self.assert_no_deadlock(gate_error, writer_error)
+        self.assertEqual(writer_code, 0, writer_error)
+        self.assertNotEqual(gate_code, 0)
+        self.assertIn("P0005", gate_error)
+        self.assertIn('"kind": "arrangement_needs_review"', gate_error)
+        self.assertIn("Race recheck", gate_error)
+        self.assertEqual(self.sql(f"SELECT status FROM public.event_requests WHERE id='{event_id}';"), "Planning")
+
+    # AC3-X5 (cross-cutting): when the handover goes first, a flag waits for it and lands on the Safety
+    # Review event, where SCRUM-60's approval check finds it
+    def test_flag_waits_for_handover_then_lands(self):
+        event_id = self.planning_event()
+        writer_app, gate_app = f"race-flag-{event_id}", f"race-gate-{event_id}"
+        gate = self.start(gate_app, f"""
+            BEGIN;
+            SELECT status FROM public.send_event_request_for_safety_review('{event_id}', '{COORDINATOR}');
+            SELECT pg_sleep(1.5);
+            COMMIT;
+        """)
+        writer = None
+        try:
+            self.wait_for(gate_app, "wait_event='PgSleep'", gate, "its event lock")
+            writer = self.start(writer_app, f"{self.flag_insert(event_id)};")
+            self.wait_for(writer_app, "wait_event_type='Lock'", writer, "a wait on the event lock")
+            gate_code, gate_error = self.finish(gate)
+            writer_code, writer_error = self.finish(writer)
+        finally:
+            for process in (gate, writer):
+                if process is not None and process.poll() is None:
+                    process.terminate()
+                    process.communicate(timeout=5)
+
+        self.assert_no_deadlock(gate_error, writer_error)
+        self.assertEqual(gate_code, 0, gate_error)
+        self.assertEqual(writer_code, 0, writer_error)
+        self.assertEqual(self.sql(f"SELECT status FROM public.event_requests WHERE id='{event_id}';"), "Safety Review")
+        self.assertEqual(self.sql(f"SELECT count(*) FROM public.get_outstanding_arrangement_reviews('{event_id}');"), "1")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
