@@ -45,6 +45,7 @@ def create_app(
     repository: EventRequestRepository | None = None,
     coordinator_repository: CoordinatorAssignmentRepository | None = None,
     outbox_relay: OutboxRelay | None = None,
+    registration_repository: object | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
