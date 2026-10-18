@@ -35,6 +35,11 @@ class FakeEventRequestRepository:
         self.safety_review_outstanding: dict[str, list[dict[str, Any]]] = {}
         self.review_decision_rows: list[dict[str, Any]] = []
         self.change_request_rows: list[dict[str, Any]] = []
+        self.safety_officer_ids: set[str] = set()
+        self.safety_review_rows: list[dict[str, Any]] = []
+        # SCRUM-64 stand-ins: arrangements as (event, kind, id), and review flags.
+        self.arrangements: set[tuple[str, str, str]] = set()
+        self.arrangement_review_rows: list[dict[str, Any]] = []
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()
@@ -260,6 +265,93 @@ class FakeEventRequestRepository:
             for row in reversed(self.review_decision_rows)
             if row["event_request_id"] == event_request_id
         ]
+
+    def decide_safety_review(
+        self,
+        event_request_id: str,
+        officer_id: str,
+        decision: str,
+        reason: str | None,
+        targets: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Mirror decide_safety_review (0034) for API behaviour tests."""
+        row = self.rows.get(event_request_id)
+        if row is None:
+            raise EventRequestRpcError("not found", errcode="P0002")
+        if officer_id not in self.safety_officer_ids:
+            raise EventRequestRpcError("not a safety officer", errcode="P0003")
+        if row["status"] != "Safety Review":
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+        if decision not in {"approved", "changes_requested"} or (
+            decision == "changes_requested" and not (reason or "").strip()
+        ):
+            raise EventRequestRpcError("invalid decision", errcode="22023")
+        # 0045: a target outside this event is invalid input, not a missing event.
+        if any(
+            (event_request_id, target["arrangement"], target["id"]) not in self.arrangements
+            for target in targets
+        ):
+            raise EventRequestRpcError("target not in event", errcode="22023")
+        # 0045: approval waits until every review flag on the event is cleared.
+        outstanding = [
+            {
+                "kind": "arrangement_needs_review",
+                "review_id": review["id"],
+                "arrangement": review["arrangement"],
+                "arrangement_id": review["arrangement_id"],
+                "reason": review["reason"],
+            }
+            for review in self.arrangement_review_rows
+            if review["event_request_id"] == event_request_id
+            and review["cleared_at"] is None
+        ]
+        if decision == "approved" and outstanding:
+            raise EventRequestRpcError(
+                "not ready", errcode="P0005", details=json.dumps(outstanding)
+            )
+        review_id = str(uuid4())
+        for target in targets:
+            self.arrangement_review_rows.append(
+                {
+                    "id": str(uuid4()),
+                    "event_request_id": event_request_id,
+                    "arrangement": target["arrangement"],
+                    "arrangement_id": target["id"],
+                    "trigger_type": "safety_recheck",
+                    "trigger_id": review_id,
+                    "reason": reason,
+                    "cleared_at": None,
+                }
+            )
+        self.safety_review_rows.append(
+            {
+                "id": review_id,
+                "event_request_id": event_request_id,
+                "decision": decision,
+                "reason": reason,
+                "targets": targets,
+                "decided_by": officer_id,
+                "decided_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        row["status"] = "Confirmed" if decision == "approved" else "Planning"
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
+    def list_safety_reviews(self, event_request_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(row)
+            for row in reversed(self.safety_review_rows)
+            if row["event_request_id"] == event_request_id
+        ]
+
+    def latest_coordinator_id(self, event_request_id: str) -> str | None:
+        matches = [
+            row
+            for row in self.coordinator_assignment_rows
+            if row["event_request_id"] == event_request_id
+        ]
+        return max(matches, key=lambda row: row["id"])["coordinator_id"] if matches else None
 
     def create_change_request(
         self,

@@ -15,6 +15,7 @@ afterEach(cleanup);
 
 vi.mock("@/app/coordination/actions", () => ({
   startEventRequestReview: vi.fn().mockResolvedValue({}),
+  startEventPlanning: vi.fn().mockResolvedValue({}),
   cancelEventRequest: vi.fn().mockResolvedValue({}),
   completeEventRequest: vi.fn().mockResolvedValue({}),
   resumeEventRequestReview: vi.fn().mockResolvedValue({}),
@@ -26,6 +27,7 @@ import {
   completeEventRequest,
   decideEventRequest,
   resumeEventRequestReview,
+  startEventPlanning,
   startEventRequestReview,
 } from "@/app/coordination/actions";
 
@@ -55,7 +57,7 @@ test("offers only the actions each status allows", () => {
   expect(coordinatorActions("Submitted")).toEqual(["review", "cancellation"]);
   expect(coordinatorActions("Under Review")).toEqual(["cancellation"]);
   expect(coordinatorActions("Changes Requested")).toEqual(["cancellation"]);
-  expect(coordinatorActions("Approved")).toEqual(["cancellation"]);
+  expect(coordinatorActions("Approved")).toEqual(["planning", "cancellation"]);
   expect(coordinatorActions("Planning")).toEqual(["cancellation"]);
   expect(coordinatorActions("Safety Review")).toEqual(["cancellation"]);
   expect(coordinatorActions("Confirmed")).toEqual(["completion", "cancellation"]);
@@ -165,5 +167,25 @@ test("submits the reason supplied for requested clarification", async () => {
       {},
       expect.any(FormData),
     ),
+  );
+});
+
+// AC1-P9 (partition): the planning action is offered for Approved events and for no other status
+test("offers start planning only on approved events", () => {
+  for (const status of EVENT_REQUEST_STATUSES) {
+    expect(coordinatorActions(status).includes("planning")).toBe(status === "Approved");
+  }
+  expect(coordinatorActions("Approved")[0]).toBe("planning");
+});
+
+// AC1-H2 (happy): the coordinator starts planning with one click and no confirmation dialog
+test("starts planning immediately without a confirmation dialog", async () => {
+  render(<TransitionButton eventRequestId="request-6" kind="planning" />);
+
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Start planning" }));
+
+  await waitFor(() =>
+    expect(startEventPlanning).toHaveBeenCalledWith("request-6", {}, expect.anything()),
   );
 });

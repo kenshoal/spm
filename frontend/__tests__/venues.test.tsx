@@ -18,6 +18,8 @@ const venue: Venue = {
   accessibility_features: ["Ramp access"],
   supported_layouts: ["theatre"],
   operating_slots: ["AM", "PM"],
+  setup_minutes: 30,
+  turnaround_minutes: 45,
   status: "available",
   created_at: "2026-09-13T03:00:00Z",
   updated_at: "2026-09-14T03:00:00Z",
@@ -69,6 +71,8 @@ test("an invalid capacity echoed after a failed edit submission overrides the st
       accessibility_features: venue.accessibility_features.join(", "),
       supported_layouts: venue.supported_layouts,
       operating_slots: venue.operating_slots,
+      setup_minutes: String(venue.setup_minutes),
+      turnaround_minutes: String(venue.turnaround_minutes),
       status: venue.status,
     },
   });
@@ -83,4 +87,26 @@ test("an invalid capacity echoed after a failed edit submission overrides the st
   // its <label>, so once it's showing, the label's accessible name is "Maximum
   // capacityEnter a whole number greater than zero." — matched with a substring.
   expect((screen.getByLabelText(/Maximum capacity/) as HTMLInputElement).value).toBe("-3");
+});
+
+// AC1-H5 (happy): SCRUM-59 the new venue form asks for setup and turnaround minutes, starting at 0
+test("new venue form offers setup and turnaround minutes in steps of 15", () => {
+  render(<VenueForm />);
+
+  for (const label of ["Setup time (minutes)", "Turnaround time (minutes)"]) {
+    const input = screen.getByLabelText(label) as HTMLInputElement;
+    expect(input.type).toBe("number");
+    expect(input.step).toBe("15");
+    expect(input.min).toBe("0");
+    expect(input.max).toBe("1020");
+    expect(input.value).toBe("0");
+  }
+});
+
+// AC1-H6 (happy): SCRUM-59 editing starts from the venue's current setup and turnaround minutes
+test("edit form is prefilled with the setup and turnaround minutes", () => {
+  render(<VenueForm venue={venue} />);
+
+  expect((screen.getByLabelText("Setup time (minutes)") as HTMLInputElement).value).toBe("30");
+  expect((screen.getByLabelText("Turnaround time (minutes)") as HTMLInputElement).value).toBe("45");
 });

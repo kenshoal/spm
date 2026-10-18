@@ -748,3 +748,32 @@ def test_refusal_leaves_existing_reservations_unchanged(
     assert listed.status_code == 200
     assert listed.json() == [held]
     assert store.writes == []
+
+
+# AC2-H6 (happy, SCRUM-60): the Safety Officer lists an event's reservations for
+# its safety check.
+def test_safety_officer_lists_event_reservations(
+    api: TestClient, store: ReservationStore, services: Services
+) -> None:
+    row = reservation(P10, 2, TUE13, WED14, requirement_id=REQ1, event=E1)
+    store.reserve(row)
+    services.roles = ["safety_officer"]
+
+    response = api.get(f"{URL}/by-event/{E1}", headers=AUTH)
+
+    assert response.status_code == 200
+    assert response.json() == [row]
+
+
+# AC2-N3 (negative, SCRUM-60): reading is all the Safety Officer can do; reserving
+# stays Technical Support's.
+def test_safety_officer_cannot_reserve(
+    api: TestClient, store: ReservationStore, services: Services
+) -> None:
+    before = list(store.rows.get("equipment_reservations", []))
+    services.roles = ["safety_officer"]
+
+    response = reserve(api)
+
+    assert response.status_code == 403
+    assert_nothing_stored(store, before)

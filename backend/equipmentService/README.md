@@ -62,7 +62,7 @@ An assigned Event Coordinator records what equipment an event needs; Technical S
 | --- | --- | --- |
 | POST | `/equipment-requirements` | Record one requirement (`event_coordinator` assigned to the event only). Body: `{ "event_request_id", "equipment_type", "quantity", "technical_requirements?" }`; extra fields forbidden. The type is matched against non-retired catalogue rows ignoring case and extra spaces and stored in the catalogue's spelling; quantity is a whole number 1..2147483647; technical requirements are optional, at most 2,000 characters (blank stored as NULL). `201` with the stored row (`status: requested`, event snapshot, `recorded_by` from the token). Errors: `422` invalid body or unknown type, `404` not the assigned Coordinator (indistinguishable from a missing event), `409` event Cancelled/Completed/Rejected, `401`/`403` no session/role, `502` eventRequestService unavailable, `500` database failure. Needs migration `0021` |
 | GET | `/equipment-requirements` | Technical Support's review queue: every event's requirements with one status (default `requested`, `?status=` to choose), oldest first |
-| GET | `/equipment-requirements/by-event/{event_request_id}` | One event's requirements, oldest first (assigned `event_coordinator` or any `technical_support`) |
+| GET | `/equipment-requirements/by-event/{event_request_id}` | One event's requirements, oldest first (assigned `event_coordinator`, or any `technical_support` or `safety_officer`) |
 | GET | `/equipment-requirements/{id}` | One requirement, every field (same readers; an unassigned Coordinator gets the same 404 as a missing requirement) |
 | PATCH | `/equipment-requirements/{id}/arrangement` | `technical_support` only. Body: `{ "expected_status", "status", "support_note?" }`. The database function applies the transition under a row lock and refuses disallowed or stale updates (`409`); a blank or omitted note keeps the existing note. `404` unknown id, `422` invalid body |
 
@@ -73,7 +73,7 @@ Technical Support reserves units of one catalogue row against a recorded equipme
 | Method | Path | Description |
 | --- | --- | --- |
 | POST | `/equipment-reservations` | Reserve units of one row against one requirement (`technical_support` only). Body: `{ "requirement_id", "equipment_id", "quantity", "start_date", "end_date", "venue_id" }`; extra fields forbidden — the event comes from the requirement and the creator from the token. Check order: `404` "Equipment requirement not found" / "Equipment not found", `422` "Equipment type does not match the requirement", `409` "Equipment not available", `409` "Exceeds the equipment requirement", `404` "Venue not found", `409` shortfall `detail` `{ "message": "Insufficient equipment available", "requested": Q, "available": A, "shortfall": Q − A }` — then `reserve_equipment` re-checks under the lock (`409` "Equipment no longer available"). `201` with the stored row: `id`, `requirement_id`, `event_request_id`, `equipment_id`, `quantity`, `collection_date` (hold start), `return_date` (event end), `created_by`, `created_at`. Calls venueService `GET /venues/locations` with the caller's token (D11). Also `401`/`403` no session/role, `422` invalid body, `502` venueService unreachable or refusing, `500` database failure |
-| GET | `/equipment-reservations/by-event/{event_request_id}` | One event's reservations, oldest first (`created_at`, then `id`; `technical_support` only). `200` with the stored rows, `[]` when the event has none. Also `422` malformed id, `401`/`403`, `500` database failure |
+| GET | `/equipment-reservations/by-event/{event_request_id}` | One event's reservations, oldest first (`created_at`, then `id`; `technical_support` or `safety_officer`, read-only). `200` with the stored rows, `[]` when the event has none. Also `422` malformed id, `401`/`403`, `500` database failure |
 
 ## Test
 
@@ -82,4 +82,29 @@ ruff check .
 pytest
 ```
 
-`tests/test_venue_contract.py` (marker `cross_service`) starts the real venueService from `../venueService` in a subprocess with in-memory storage, plus a fake authService, and checks the reservation and availability-check endpoints against venueService's real role check. It needs no network or database and runs in plain `pytest` and CI; skip it offline with `pytest -m "not cross_service"`.
+`tests/test_venue_contract.py` (marker `cross_service`) starts the real venueService from `../venueService` in a subprocess with in-memory storage, plus a fake authService, and checks the reservation and availability-check endpoints against venueService's real role check. It needs no external network or shared database, but requires local loopback HTTP ports. It runs in plain `pytest` and CI; skip it where loopback ports are unavailable with `pytest -m "not cross_service"`.
+
+## Arrangement reviews after unavailability (SCRUM-64, in progress)
+
+Prepared migration `database/migrations/0033_arrangement_review_equipment_unavailability.sql`
+requires the arrangement-review schema from 0030, the exact upstream Safety
+Review prerequisite 0029 and the existing equipment/reservation migrations
+through 0028. It is **not applied to shared Supabase**.
+The existing Technical Support `PATCH /equipment/{id}/status` and its verified
+actor remain unchanged. Its normal status-history insert now supplies a stored
+UUID cause to a private review trigger. Actual transitions to DAMAGED,
+UNDER_REPAIR, UNDER_MAINTENANCE or RETIRED flag exact-equipment reservations whose
+return date is today or later in Singapore, excluding Draft/terminal events.
+Equal-status calls, creation history and availability restoration add no flags;
+restoration never clears existing reviews. A flag failure rolls back the status
+and history together. No reservations, event statuses or API responses change.
+
+Use the `database/README.md` reviewed transaction rollout and guarded
+disposable setup, including
+`psql -X -v ON_ERROR_STOP=1 -f database/verify_arrangement_review_unavailability.sql`.
+Notification delivery is provided by migrations 0037/0038 and the
+eventRequestService durable relay; see its README for startup and the database
+README for transactional rollout. Shared readiness remains pending. Review inserts acquire
+an implicit event foreign-key lock while the status RPC owns the equipment lock;
+future event-to-equipment gates need a jointly verified lock protocol. Concurrent
+arrangement creation and future gate races are not solved by this increment.

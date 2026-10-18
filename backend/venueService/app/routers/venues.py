@@ -28,6 +28,7 @@ from app.booking_notifications import (
 from app.booking_repository import BookingRequestStore, get_booking_repository
 from app.dependencies import (
     Principal,
+    require_block_reader,
     require_venue_location_reader,
     require_venue_staff,
     require_venue_viewer,
@@ -59,13 +60,14 @@ BookingRepoDep = Annotated[BookingRequestStore, Depends(get_booking_repository)]
 @router.get("/{venue_id}/blocks", response_model=list[VenueBlock])
 def list_venue_blocks(
     venue_id: str,
-    principal: VenueStaffDep,
+    principal: Annotated[Principal, Depends(require_block_reader)],
     repo: RepoDep,
     blocks: BlockRepoDep,
 ) -> list[VenueBlock]:
     """List all recorded blocks for a venue, including lifted blocks.
 
-    Venue Staff only: reasons are internal planning information.
+    Venue Staff and the Safety Officer only: reasons are internal planning
+    information (SCRUM-60 AC2).
     """
     del principal
     if repo.get(venue_id) is None:

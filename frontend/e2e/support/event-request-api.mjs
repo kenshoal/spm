@@ -6,6 +6,8 @@ const assignments = [];
 const reviewDecisions = [];
 const changeRequests = [];
 const statusHistory = [];
+// Prepared UI fixture storage only; real permissions and clear atomicity have separate API/PG tests.
+const arrangementReviews = new Map();
 let nextHistoryId = 1;
 let nextAssignmentId = 1;
 let nextDecisionId = 1;
@@ -19,7 +21,11 @@ const SESSIONS = {
   "coordinator-session": { id: "playwright-coordinator", role: "event_coordinator" },
   "other-coordinator-session": { id: "other-coordinator", role: "event_coordinator" },
   "ops-session": { id: "playwright-ops", role: "event_operations_manager" },
+  "venue-session": { id: "playwright-venue", role: "venue_staff" },
+  "tech-session": { id: "playwright-tech", role: "technical_support" },
+  "safety-session": { id: "playwright-safety", role: "safety_officer" },
 };
+const safetyReviews = [];
 
 const CANCEL_SOURCES = new Set([
   "Submitted",
@@ -117,9 +123,12 @@ createServer(async (request, response) => {
   // Confirmed, which the venue/ops stories own on other branches).
   if (url.pathname === "/__seed" && request.method === "POST") {
     const body = await readJson(request);
-    const { coordinator_id, review_decision, ...recordOverrides } = body;
+    const { coordinator_id, review_decision, arrangement_reviews, ...recordOverrides } = body;
     const record = recordFields({ ...recordOverrides, status: body.status ?? "Submitted" });
     records.set(record.id, record);
+    for (const review of arrangement_reviews ?? []) {
+      arrangementReviews.set(review.id, { ...review, event_request_id: record.id, cleared_at: null, cleared_by: null });
+    }
     recordHistory(record, null, null, "history.recording_started", "baseline");
     if (coordinator_id) {
       assignments.push({
@@ -183,6 +192,26 @@ createServer(async (request, response) => {
     return;
   }
 
+  // AC5-X9 UI canned endpoints: these simple query/storage responses do not establish backend authorisation.
+  const arrangementEventMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/arrangement-reviews$/);
+  if (request.method === "GET" && arrangementEventMatch) {
+    send(response, 200, [...arrangementReviews.values()].filter((row) => row.event_request_id === arrangementEventMatch[1] && row.cleared_at === null));
+    return;
+  }
+  if (request.method === "GET" && url.pathname === "/arrangement-reviews") {
+    send(response, 200, [...arrangementReviews.values()].filter((row) => row.arrangement === url.searchParams.get("arrangement") && row.cleared_at === null));
+    return;
+  }
+  const arrangementClearMatch = url.pathname.match(/^\/arrangement-reviews\/([^/]+)\/clear$/);
+  if (request.method === "POST" && arrangementClearMatch) {
+    const row = arrangementReviews.get(arrangementClearMatch[1]);
+    if (!row) { send(response, 404, { detail: { code: "ARRANGEMENT_REVIEW_NOT_FOUND" } }); return; }
+    const cleared = { ...row, cleared_at: "2026-10-16T03:00:00Z", cleared_by: user.id };
+    arrangementReviews.set(row.id, cleared);
+    send(response, 200, cleared);
+    return;
+  }
+
   if (url.pathname === "/event-requests" && request.method === "GET") {
     if (user.role === "event_organiser") {
       send(
@@ -234,6 +263,39 @@ createServer(async (request, response) => {
     return;
   }
 
+  // SCRUM-60: mirrors eventRequestService's safety queue and decision. The real
+  // rules (role re-check, P0004/P0005, SCRUM-64 flags) are covered by its own
+  // tests and the database verification.
+  if (url.pathname === "/event-requests/safety-queue" && request.method === "GET") {
+    if (user.role !== "safety_officer") return send(response, 403, { detail: "Insufficient permissions" });
+    send(response, 200, [...records.values()].filter((r) => r.status === "Safety Review")
+      .sort((a, b) => a.updated_at.localeCompare(b.updated_at)));
+    return;
+  }
+  const safetyDecisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/safety-decision$/);
+  if (safetyDecisionMatch && request.method === "POST") {
+    if (user.role !== "safety_officer") return send(response, 403, { detail: "Insufficient permissions" });
+    const target = records.get(decodeURIComponent(safetyDecisionMatch[1]));
+    if (!target) return send(response, 404, { detail: "Event request not found" });
+    if (target.status !== "Safety Review") return send(response, 409, { detail: "Not waiting for a safety check" });
+    const body = await readJson(request);
+    const previous = target.status;
+    target.status = body.decision === "approved" ? "Confirmed" : "Planning";
+    target.updated_at = new Date().toISOString();
+    safetyReviews.unshift({
+      id: randomUUID(), event_request_id: target.id, decision: body.decision, reason: body.reason ?? null,
+      targets: body.targets ?? [], decided_by: user.id, decided_at: target.updated_at,
+    });
+    recordHistory(target, previous, user, `safety.${body.decision === "approved" ? "approval" : "changes_requested"}`);
+    send(response, 200, target);
+    return;
+  }
+  const safetyReviewsMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/safety-reviews$/);
+  if (safetyReviewsMatch && request.method === "GET") {
+    const eventId = decodeURIComponent(safetyReviewsMatch[1]);
+    send(response, 200, safetyReviews.filter((review) => review.event_request_id === eventId));
+    return;
+  }
   const historyMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/status-history$/);
   const coordinatorMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/coordinator$/);
   const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|resume-review|cancellation|completion)$/);
@@ -253,9 +315,9 @@ createServer(async (request, response) => {
 
   if (coordinatorMatch) {
     if (request.method === "POST") {
-      // Assignment is an Operations Manager command.
+      // Assignment is an Event Coordinator Lead command.
       if (user.role !== "event_operations_manager") {
-        send(response, 403, { detail: "Only an Event Operations Manager can assign a Coordinator" });
+        send(response, 403, { detail: "Only an Event Coordinator Lead can assign a Coordinator" });
         return;
       }
       if (!record) {

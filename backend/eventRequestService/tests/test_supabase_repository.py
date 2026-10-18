@@ -632,3 +632,56 @@ def test_safety_review_refusal_carries_outstanding_details() -> None:
 
     assert exc_info.value.errcode == "P0005"
     assert exc_info.value.details == outstanding
+
+
+# AC4a-X2 (cross-cutting, SCRUM-60): the decision, reason and targets reach the
+# database function unchanged.
+def test_decide_safety_review_posts_expected_rpc_request() -> None:
+    captured: list[httpx.Request] = []
+    repository = repository_capturing(captured, response_row(status="Planning"))
+    targets = [{"arrangement": "venue_booking", "id": "booking-1"}]
+
+    row = repository.decide_safety_review(
+        "request-1", "officer-1", "changes_requested", "Exit routes missing.", targets
+    )
+
+    assert captured[0].url.path == "/rest/v1/rpc/decide_safety_review"
+    assert json.loads(captured[0].content) == {
+        "p_event_request_id": "request-1",
+        "p_officer_id": "officer-1",
+        "p_decision": "changes_requested",
+        "p_reason": "Exit routes missing.",
+        "p_targets": targets,
+    }
+    assert row["status"] == "Planning"
+
+
+# AC4a-X3 (cross-cutting, SCRUM-60): one event's safety reviews, newest first.
+def test_list_safety_reviews_scopes_and_orders_query() -> None:
+    captured: list[httpx.Request] = []
+    repository = repository_capturing(captured, [])
+
+    assert repository.list_safety_reviews("request-1") == []
+    assert captured[0].url.path == "/rest/v1/safety_reviews"
+    assert dict(captured[0].url.params) == {
+        "event_request_id": "eq.request-1",
+        "order": "decided_at.desc,id.desc",
+        "select": "*",
+    }
+
+
+# AC4b-X1 (cross-cutting, SCRUM-60): the notice goes to the latest assignment's
+# coordinator, not the first one.
+def test_latest_coordinator_id_reads_newest_assignment() -> None:
+    captured: list[httpx.Request] = []
+    repository = repository_capturing(captured, [{"coordinator_id": "coord-2"}])
+
+    assert repository.latest_coordinator_id("request-1") == "coord-2"
+    assert captured[0].url.path == "/rest/v1/event_coordinator_assignments"
+    assert dict(captured[0].url.params) == {
+        "event_request_id": "eq.request-1",
+        "order": "id.desc",
+        "limit": "1",
+        "select": "coordinator_id",
+    }
+

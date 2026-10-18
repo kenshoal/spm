@@ -23,7 +23,7 @@ from supabase import Client
 
 from app.availability import EquipmentRow, Venue, norm, row_available, row_hold
 from app.db import get_client
-from app.deps import TECHNICAL_SUPPORT_ROLE, User, require_role
+from app.deps import SAFETY_OFFICER_ROLE, TECHNICAL_SUPPORT_ROLE, User, require_role
 from app.reservations import reservation_from_row
 from app.rpc_errors import reservation_rpc_error_to_http
 from app.venues_client import fetch_venues
@@ -32,6 +32,10 @@ router = APIRouter(prefix="/equipment-reservations", tags=["equipment reservatio
 
 ClientDep = Annotated[Client, Depends(get_client)]
 StaffDep = Annotated[User, Depends(require_role(TECHNICAL_SUPPORT_ROLE))]
+# SCRUM-60 AC2: the Safety Officer reads an event's reservations. Read-only.
+ReaderDep = Annotated[
+    User, Depends(require_role(TECHNICAL_SUPPORT_ROLE, SAFETY_OFFICER_ROLE))
+]
 
 EQUIPMENT_COLUMNS = "id, type, total_owned_quantity, home_location, operational_status"
 
@@ -214,7 +218,7 @@ def reserve_equipment(
 @router.get("/by-event/{event_request_id}", response_model=list[ReservationOut])
 def list_event_reservations(
     event_request_id: UUID,
-    _user: StaffDep,
+    _user: ReaderDep,
     client: ClientDep,
 ) -> list[ReservationOut]:
     """One event's reservations, oldest first (D9); closes SCRUM-39 AC7."""

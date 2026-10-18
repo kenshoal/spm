@@ -35,6 +35,7 @@ function makeRequest(status: EventRequestStatus): EventRequest {
 
 // Purpose: Every backend status is representable — the UI never drops a workflow state.
 // AC6-P2 (partition, SCRUM-60): Safety Review sits between Planning and Confirmed.
+// AC5-X8 (cross-cutting): the recognised status universe retains the approved Safety Review state.
 test("covers all eleven event request statuses", () => {
   expect(EVENT_REQUEST_STATUSES).toEqual([
     "Draft",
@@ -52,6 +53,7 @@ test("covers all eleven event request statuses", () => {
 });
 
 // Purpose: Each status lands in exactly one tab — or only under All once closed.
+// AC5-X8 (cross-cutting): the expanded status universe remains visible without duplicate grouping.
 test("groups every status into exactly one tab plus all", () => {
   const requests = EVENT_REQUEST_STATUSES.map(makeRequest);
   const groups = groupRequests(requests);
@@ -83,6 +85,7 @@ test("files Completed requests under the completed tab", () => {
 });
 
 // Purpose: Requests stay visible as they advance past Submitted into coordination.
+// AC5-X8 (cross-cutting): Safety Review remains in progress until its separate decision workflow.
 test("keeps in-progress statuses visible after leaving Submitted", () => {
   const inProgress = [
     "Under Review",
@@ -131,17 +134,18 @@ test("shows that a submitted request has an assigned coordinator", () => {
   render(<StatusProgress status="Submitted" coordinatorAssigned />);
 
   expect(screen.getByText(/coordinator has been assigned/i)).toBeDefined();
-  expect(screen.queryByText(/waiting for an Event Operations Manager/i)).toBeNull();
+  expect(screen.queryByText(/waiting for an Event Coordinator Lead/i)).toBeNull();
   expect(screen.getByRole("listitem", { current: "step" }).textContent).toContain(
     "Submitted",
   );
 });
 
-// Purpose: An unassigned submission still tells the organiser what it is waiting for.
+// AC1-H1 (happy): an unassigned submission tells the organiser it waits for the Event Coordinator Lead, not the old role name
 test("shows that a submitted request is waiting when no coordinator is assigned", () => {
   render(<StatusProgress status="Submitted" coordinatorAssigned={false} />);
 
-  expect(screen.getByText(/waiting for an Event Operations Manager/i)).toBeDefined();
+  expect(screen.getByText(/waiting for an Event Coordinator Lead/i)).toBeDefined();
+  expect(screen.queryByText(/Operations Manager/i)).toBeNull();
 });
 
 // AC6-P2 (partition, SCRUM-60): an event waiting for its safety check shows that step as current.
@@ -169,6 +173,7 @@ test("marks Confirmed as current with earlier stages done", () => {
 });
 
 // Purpose: A draft still previews the entire journey before submission.
+// AC5-X8 (cross-cutting): adding Safety Review retains the full future journey from Draft.
 test("shows the full upcoming journey for a draft", () => {
   render(<StatusProgress status="Draft" />);
 
@@ -179,6 +184,7 @@ test("shows the full upcoming journey for a draft", () => {
 });
 
 // Purpose: Clarification keeps the current review stage and all later stages visible.
+// AC5-X8 (cross-cutting): clarification still shows the complete journey including the future safety stage.
 test("shows the full journey while clarification is requested", () => {
   render(<StatusProgress status="Changes Requested" />);
 
@@ -190,6 +196,7 @@ test("shows the full journey while clarification is requested", () => {
 });
 
 // Purpose: A rejected outcome retains the whole journey and marks its stages as not reached.
+// AC5-X8 (cross-cutting): a rejected event retains all milestone context without implying completion.
 test("shows the full journey and an explicit notice for rejected", () => {
   render(<StatusProgress status="Rejected" />);
 
@@ -198,6 +205,7 @@ test("shows the full journey and an explicit notice for rejected", () => {
 });
 
 // Purpose: A cancelled outcome keeps the normal lifecycle visible for context.
+// AC5-X8 (cross-cutting): a cancelled event retains all milestone context without implying completion.
 test("shows the full journey and an explicit notice for cancelled", () => {
   render(<StatusProgress status="Cancelled" />);
 

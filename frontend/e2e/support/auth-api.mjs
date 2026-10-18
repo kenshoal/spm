@@ -52,6 +52,10 @@ createServer(async (request, response) => {
       send(response, 200, { id: "playwright-venue", email: "venue@example.com", role: "venue_staff", roles: ["venue_staff"] });
       return;
     }
+    if (request.headers.authorization === "Bearer safety-session") {
+      send(response, 200, { id: "playwright-safety", email: "safety@example.com", role: "safety_officer", roles: ["safety_officer"] });
+      return;
+    }
     if (request.headers.authorization === "Bearer tech-session") {
       send(response, 200, { id: "playwright-tech", email: "tech@example.com", role: "technical_support", roles: ["technical_support"] });
       return;

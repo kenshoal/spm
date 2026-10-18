@@ -20,6 +20,7 @@ class BookingRequestStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    CANCELLED = "cancelled"
 
 
 class BookingRequestCreate(BaseModel):
@@ -67,4 +68,6 @@ class BookingRequest(BaseModel):
     suggested_alternative: str | None = None
     decided_by: str | None = None
     decided_at: datetime | None = None
+    cancelled_by: str | None = None
+    cancelled_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)

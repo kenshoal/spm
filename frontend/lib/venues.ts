@@ -1,7 +1,7 @@
 import { getJson } from "./api";
 import type { RoomLayout, Slot, VenueStatus } from "./venue-options";
 
-export { ROOM_LAYOUTS, SLOTS, layoutLabel } from "./venue-options";
+export { ROOM_LAYOUTS, SLOTS, layoutLabel, prepTimeLabel } from "./venue-options";
 export type { RoomLayout, Slot, VenueStatus } from "./venue-options";
 
 export interface Venue {
@@ -13,6 +13,8 @@ export interface Venue {
   accessibility_features: string[];
   supported_layouts: RoomLayout[];
   operating_slots: Slot[];
+  setup_minutes: number;
+  turnaround_minutes: number;
   status: VenueStatus;
   created_at: string;
   updated_at: string;
