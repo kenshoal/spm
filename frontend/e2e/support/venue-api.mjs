@@ -12,6 +12,7 @@ const SESSIONS = {
   "ops-session": "event_operations_manager",
   "venue-session": "venue_staff",
   "tech-session": "technical_support",
+  "safety-session": "safety_officer",
 };
 
 function send(response, status, body) {
@@ -140,7 +141,10 @@ createServer(async (request, response) => {
   // venueService's own tests and database verification.
   const blockPath = url.pathname.match(/^\/venues\/([^/]+)\/blocks$/);
   if (blockPath) {
-    if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
+    // SCRUM-60: the Safety Officer reads blocks as restrictions; only Venue Staff write.
+    if (role !== "venue_staff" && !(role === "safety_officer" && request.method === "GET")) {
+      return send(response, 403, { detail: "Insufficient permissions" });
+    }
     const venueId = decodeURIComponent(blockPath[1]);
     if (!venues.has(venueId)) return send(response, 404, { detail: "Venue not found" });
     if (request.method === "GET") return send(response, 200, [...blocks.values()].filter((b) => b.venue_id === venueId));
@@ -189,7 +193,7 @@ createServer(async (request, response) => {
   // real service does (venueService's own tests and the real-stack check cover that).
   const eventBookings = url.pathname.match(/^\/booking-requests\/event\/([^/]+)$/);
   if (eventBookings && request.method === "GET") {
-    if (role !== "venue_staff" && role !== "event_coordinator") return send(response, 403, { detail: "Insufficient permissions" });
+    if (!["venue_staff", "event_coordinator", "safety_officer"].includes(role)) return send(response, 403, { detail: "Insufficient permissions" });
     const eventId = decodeURIComponent(eventBookings[1]);
     return send(response, 200, [...bookings.values()].filter((b) => b.event_request_id === eventId).sort((a, b) => a.created_at.localeCompare(b.created_at)));
   }
