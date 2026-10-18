@@ -7,6 +7,8 @@ import { requireAccessToken, requireRole } from "@/lib/auth";
 export interface TransitionState {
   message?: string;
   errors?: { reason?: string };
+  // SCRUM-58 AC3: what still blocks sending for safety review, one line each.
+  outstanding?: string[];
 }
 
 export type ReviewDecision = "Approved" | "Changes Requested" | "Rejected";
@@ -16,7 +18,7 @@ const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
 async function transition(
   eventRequestId: string,
-  path: "review" | "planning" | "resume-review" | "cancellation" | "completion",
+  path: "review" | "planning" | "safety-review" | "resume-review" | "cancellation" | "completion",
 ): Promise<TransitionState> {
   await requireRole("event_coordinator");
   const token = await requireAccessToken();
@@ -33,6 +35,13 @@ async function transition(
     return { message: "That could not be done. Please try again." };
   }
   if (response.status === 401) redirect("/auth");
+  if (response.status === 409) {
+    // Only the safety-review refusal carries a list; any other 409 is a stale status.
+    const outstanding = await outstandingMessages(response);
+    if (outstanding.length > 0) {
+      return { message: "This event isn't ready for safety review yet.", outstanding };
+    }
+  }
   if (!response.ok) {
     return {
       message:
@@ -47,6 +56,18 @@ async function transition(
   revalidatePath(`/coordination/requests/${eventRequestId}`);
   revalidatePath("/event-requests");
   return {};
+}
+
+async function outstandingMessages(response: Response): Promise<string[]> {
+  try {
+    const body = (await response.json()) as { outstanding?: unknown };
+    if (!Array.isArray(body.outstanding)) return [];
+    return body.outstanding
+      .map((item) => String((item as { message?: unknown }).message ?? "").trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 export async function startEventRequestReview(
@@ -67,6 +88,16 @@ export async function startEventPlanning(
   void previousState;
   void formData;
   return transition(eventRequestId, "planning");
+}
+
+export async function sendForSafetyReview(
+  eventRequestId: string,
+  previousState: TransitionState,
+  formData: FormData,
+): Promise<TransitionState> {
+  void previousState;
+  void formData;
+  return transition(eventRequestId, "safety-review");
 }
 
 export async function resumeEventRequestReview(

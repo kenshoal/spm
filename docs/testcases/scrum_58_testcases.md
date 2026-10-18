@@ -234,3 +234,24 @@ AC3b was approved as parked on 16 October ("items marked for review also block")
 - **`service_role`:** AC4-X1 ran as `service_role` on the local fixture. The fixture's grants are not proven equal to shared Supabase's.
 
 **Not yet done:** apply `0039` and `0046` to shared development (after PR #63's schema and Jaren's `0045`); live API check; the "Send for safety review" button; PR CI; human review of these test cases (`testing.md` §10).
+
+## Increment: "Send for safety review" button (AC2, AC3) — 19 October 2026
+
+The assigned coordinator's request page offers **Send for safety review** on Planning events only, beside **Cancel event**. One click, no confirmation dialog (like **Start planning**). If the event is not ready, the page shows "This event isn't ready for safety review yet." followed by a list of every outstanding item, using the backend's messages. A `409` without a list (status already moved on) shows the existing stale-status message; `403` shows the assigned-coordinator message; `401` sends the user to sign in.
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC2-P13 | AC2 | The action is offered on Planning only, first | Partition | — | `coordinatorActions` for every status | all statuses | `safety-review` only for Planning, before cancellation | — | Unit |
+| AC2-H3 | AC2 | One click sends, no dialog | Happy | Action mocked | Click **Send for safety review** | `request-7` | Action called with the event id; no alertdialog | — | Component |
+| AC3-N11 | AC3 | Not ready shows the message and every item as a list | Negative | Action returns message + 2 items | Click the button | Hall F pending; Microphone 2 of 3 | Alert with the message and two list items in order | — | Component |
+| AC2-H4 | AC2 | The action posts to `/safety-review` with the session and refreshes status pages | Happy | `fetch` stubbed 200 | `sendForSafetyReview("request/9")` | — | POST `…/request%2F9/safety-review` with Bearer token; `{}`; three paths revalidated | — | Unit |
+| AC3-N12 | AC3 | A not-ready 409 returns each item's message | Negative | `fetch` stubbed 409 with `outstanding` | Call the action | no venue; one review | `{message, outstanding: [2 messages]}` | Nothing revalidated | Unit |
+| AC2-N4 | AC2 | A 409 without a list is a stale status | Negative | `fetch` stubbed 409, no list | Call the action | — | Stale-status message | Nothing revalidated | Unit |
+| AC4-N20 | AC4 | A non-assigned coordinator gets the assignment message | Negative | `fetch` stubbed 403 | Call the action | — | Assigned-coordinator message | Nothing revalidated | Unit |
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC2-P13 … AC4-N20 (7 tests) | Green | As expected | Pass | this branch, local Node, mocks | Claude for Tate, 19 Oct 2026 | Red first: 8 failures (7 new tests plus the existing per-status test, whose Planning expectation changed from `["cancellation"]` to `["safety-review", "cancellation"]`), all because the action and button did not exist |
+
+- Whole frontend: `npm test` 38 files, 385 passed, 0 failed; `npm run lint` clean; `npm run typecheck` clean; `npm run build` succeeded.
+- Mocks prove the control and the action's request and error mapping, not the real API. **Not yet done:** a browser run against the running API (no Playwright journey added), PR CI, human review of these test cases.
