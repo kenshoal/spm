@@ -42,6 +42,7 @@ from app.services.event_request_service import (
 from app.services.event_transition_service import (
     DecisionReasonRequiredError,
     EventTransitionService,
+    SafetyApprovalBlockedError,
     SafetyDecisionInvalidError,
     TransitionForbiddenError,
     TransitionNotAllowedError,
@@ -206,6 +207,15 @@ def create_app(
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": str(error)},
+        )
+
+    @application.exception_handler(SafetyApprovalBlockedError)
+    async def safety_approval_blocked(
+        request: Request, error: SafetyApprovalBlockedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error), "outstanding": error.outstanding},
         )
 
     @application.exception_handler(SafetyDecisionInvalidError)

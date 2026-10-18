@@ -61,6 +61,8 @@ def safety_fixture(
     events.rows[event_request_id]["status"] = status
     assign_coordinator(assignments, event_request_id, COORDINATOR)
     events.safety_officer_ids.add(OFFICER)
+    for target in TARGETS:
+        events.arrangements.add((event_request_id, target["arrangement"], target["id"]))
 
     app = create_app(events, assignments)
     app.dependency_overrides[get_authenticated_caller] = override
@@ -298,3 +300,91 @@ def test_missing_event_is_reported() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] != "Not Found"  # the service's 404, not a missing route
+
+
+def flag(events: FakeEventRequestRepository, event_request_id: str, cleared: bool = False) -> dict:
+    """An arrangement review raised on the event by SCRUM-64 (e.g. an event change)."""
+    review = {
+        "id": str(uuid4()),
+        "event_request_id": event_request_id,
+        "arrangement": "venue_booking",
+        "arrangement_id": TARGETS[0]["id"],
+        "trigger_type": "event_change",
+        "trigger_id": str(uuid4()),
+        "reason": "Attendance changed from 120 to 300.",
+        "cleared_at": "2026-10-18T09:00:00+00:00" if cleared else None,
+    }
+    events.arrangement_review_rows.append(review)
+    return review
+
+
+# AC4c-H1 (happy, SCRUM-60 2b): asking for changes marks each chosen arrangement
+# for review, linked to the saved decision and carrying its reason.
+def test_changes_flag_each_target_for_review() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+
+    response = decide(
+        client,
+        event_request_id,
+        {"decision": "changes_requested", "reason": REASON, "targets": TARGETS},
+    )
+
+    assert response.status_code == 200
+    [review] = events.safety_review_rows
+    flags = events.arrangement_review_rows
+    assert sorted((f["arrangement"], f["arrangement_id"]) for f in flags) == sorted(
+        (t["arrangement"], t["id"]) for t in TARGETS
+    )
+    assert {(f["trigger_type"], f["trigger_id"], f["reason"]) for f in flags} == {
+        ("safety_recheck", review["id"], REASON)
+    }
+
+
+# AC4c-N1 (negative): a target from another event is refused, and nothing is
+# written: no decision, no flags, status unchanged.
+def test_target_from_another_event_is_refused() -> None:
+    client, events, event_request_id, spy = safety_fixture()
+    foreign = {"arrangement": "venue_booking", "id": str(uuid4())}
+    events.arrangements.add((str(uuid4()), foreign["arrangement"], foreign["id"]))
+
+    response = decide(
+        client,
+        event_request_id,
+        {"decision": "changes_requested", "reason": REASON, "targets": [TARGETS[0], foreign]},
+    )
+
+    assert response.status_code == 422
+    assert_unchanged(events, event_request_id)
+    assert events.arrangement_review_rows == []
+    assert spy.safety_changes == []
+
+
+# AC6-N4 (negative): approval is refused while any arrangement is still marked
+# for review, and the response lists what is outstanding.
+def test_approval_refused_while_reviews_outstanding() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+    review = flag(events, event_request_id)
+
+    response = decide(client, event_request_id, {"decision": "approved"})
+
+    assert response.status_code == 409
+    [item] = response.json()["outstanding"]
+    assert (item["kind"], item["review_id"], item["arrangement_id"]) == (
+        "arrangement_needs_review",
+        review["id"],
+        review["arrangement_id"],
+    )
+    assert item["message"]
+    assert_unchanged(events, event_request_id)
+
+
+# AC6-P2 (partition): cleared reviews no longer block approval.
+def test_cleared_reviews_do_not_block_approval() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+    flag(events, event_request_id, cleared=True)
+
+    response = decide(client, event_request_id, {"decision": "approved"})
+
+    assert response.status_code == 200
+    assert events.rows[event_request_id]["status"] == "Confirmed"
+

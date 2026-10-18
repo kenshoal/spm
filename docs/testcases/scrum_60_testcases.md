@@ -140,3 +140,23 @@ Cases for AC2 are designed with increment 3.
 
 **Not yet done:** increment 2b (SCRUM-64 flags, approval re-checks); increment 3 (queue and page); PR CI; human review.
 
+## Test case specification (increment 2b: SCRUM-64 connection)
+
+Branch `feat/scrum-60-safety-review-flags`, built on `feat/scrum-60-safety-check` with SCRUM-64's `feat/scrum-64-arrangement-review` (`a7ea77d`) merged in; it can only merge after PR #63. Agreed with Heng Rui in messages 2198 and 2206. Migration `0045` replaces `decide_safety_review`. Approval also needs SCRUM-58's ordinary readiness check; that part stays open until Tate publishes it.
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC4c-H1 | AC4c | Asking for changes flags each chosen arrangement, linked to the saved decision and its reason | Happy | Event in `Safety Review` with two arrangements | `POST /safety-decision` | `changes_requested`, reason, both targets | 200; one flag per target, `safety_recheck`, `trigger_id` = the review id, reason as saved | — | API (fake) |
+| AC4c-N1 | AC4c | A target from another event is refused | Negative | As AC4c-H1, plus another event's booking | `POST /safety-decision` | one own target, one foreign | 422 | No review, no flags, no notice, status unchanged | API (fake) |
+| AC6-N4 | AC6 | Approval is refused while a review is outstanding, listing it | Negative | Event with an uncleared flag | `POST /safety-decision` | `approved` | 409 with `outstanding` item `arrangement_needs_review` (review id, arrangement, message) | Status unchanged, no review | API |
+| AC6-P2 | AC6 | A cleared review does not block approval | Partition | Event with a cleared flag | `POST /safety-decision` | `approved` | 200 `Confirmed` | — | API (fake) |
+| AC4c-X1 | AC4c | The real function flags the target with the saved decision id and reason and enqueues its notice | Cross-cutting | `0030`–`0045`; event with one booking | Call `decide_safety_review` | `changes_requested` | `Planning`; one `safety_recheck` flag with `trigger_id` = `safety_reviews.id`; one notification outbox row | — | DB |
+| AC4c-X2 | AC4c | The real function refuses another event's booking | Negative | Another event's booking | Call | that booking as target | `22023` | No review, no flag, status unchanged | DB |
+| AC6-X6 | AC6 | The real function refuses approval with an outstanding review on a cancelled booking | Negative | Uncleared flag on a cancelled booking | Call | `approved` | `P0005`; DETAIL lists the review | No review, status unchanged | DB |
+| AC6-X7 | AC6 | A failed flag write rolls back the decision and status | Negative | Fault trigger on the flag insert | Call | `changes_requested` | Error raised | No review, status unchanged | DB |
+| AC6-X8 | AC6 | A cleared review does not block approval | Partition | Cleared flag | Call | `approved` | `Confirmed` | — | DB |
+
+The fake-backed API cases (AC4c-H1, AC4c-N1, AC6-P2) check the API contract only; the fake mirrors `0045`. The behaviour itself is proved by the DB cases.
+
+**Local evidence, 18 October 2026:** `backend/eventRequestService` `pytest` 419 passed, 1 skipped (SCRUM-64's tests included), `ruff check .` clean. Red: AC6-N4 failed (no `P0005` mapping) before `SafetyApprovalBlockedError`. DB cases written in `database/verify_safety_review_arrangement_reviews.sql`, not yet run: they need a database with SCRUM-64's migrations, which shared development does not have.
+
