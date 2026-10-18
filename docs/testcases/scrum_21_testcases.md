@@ -58,7 +58,7 @@ An event is registrable only while `status = 'Confirmed'` and `registration_open
 
 ## Test case specification
 
-Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_registration_api.py`), D = DB (`database/verify_event_registrations.sql`).
+Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_registration_api.py`), R = repository (`tests/test_registration_repository.py`), D = DB (`database/verify_event_registrations.sql`, `database/verify_event_registrations_race.sh`). AC4-N2, AC5-N3 and the repository rows were added during the build; they add no new behaviour beyond the approved ACs.
 
 | ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -88,10 +88,25 @@ Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_regi
 | AC5-H2 | AC5 | Attendee lists own registrations | Happy | Attendee A registered for two events | GET `/attendee/registrations` as A | — | Only A's, newest first | — | A |
 | AC5-N1 | AC5 | Another attendee's registrations are not shown | Negative | A registered | GET as B | — | Empty list | — | A |
 | AC5-N2 | AC5 | Duplicate registration (D5) | Negative | A already registered | POST again | — | 409 `already_registered` | Still one row | A + D |
-| AC5-X1 | AC5 | Other roles cannot register | Cross-cutting | Open event | POST as organiser, coordinator, operations manager | `event_organiser`; `event_coordinator`; `event_operations_manager` | 403 | No row | A |
+| AC5-X1 | AC5 | Other roles cannot register, and cannot call the three read endpoints either | Cross-cutting | Open event | POST as organiser, coordinator, operations manager; GET the three read endpoints as organiser and coordinator | `event_organiser`; `event_coordinator`; `event_operations_manager` | 403 | No row | A |
 | AC5-X2 | AC5 | No session | Cross-cutting | Real auth dependency | Each of the four endpoints with no header | — | 401 | — | A |
 | AC5-X3 | AC5 | Browser roles cannot reach the function or table | Cross-cutting | Local cluster with `0029` | `has_function_privilege`, `has_table_privilege` | `anon`, `authenticated` | false; `service_role` can execute | — | D |
+| AC4-N2 | AC4 | The database refusal wins when the last place is taken between the pre-check and the write | Negative | Pre-check read says a place is free, the table already holds the last registration | POST registration | capacity 1, 1 registered | 409 `event_full` | Still one row | A |
+| AC4-N2 | AC4 | A database refusal carries its SQLSTATE and message (`P0002`, `P0004` x3) | Negative | Mocked Supabase RPC | `register` | the four refusals | `RegistrationRpcError` with `errcode` and `reason` | — | R |
+| AC5-N3 | AC5 | A Supabase outage is a 502 / repository error, never a refusal or a success | Negative | Repository raises `SupabaseRepositoryError`; mocked 500/503; network error | POST registration; `register` | — | 502; `SupabaseRepositoryError` (not `RegistrationRpcError`) | No row | A + R |
+| AC1-X1 | AC1 | The event query selects no internal columns | Cross-cutting | Mocked Supabase | `get_event` | — | `select` equals the public-view columns | — | R |
+| AC5-H1 / AC5-H2 | AC5 | The RPC payload and the attendee list query are correct | Happy | Mocked Supabase | `register`; `list_for_attendee` | — | RPC body has event, attendee, `p_now`; list filtered by attendee, newest first | — | R |
+| AC4-B2 / AC4-B3 | AC4 | Only `Registered` rows are counted, per event; zero when none | Boundary | Mocked Supabase | `count_active_for_events` | — | `{e1: 2, e2: 1, e3: 0}`; empty id list makes no call | — | R |
 
 ## Latest execution record
 
-_Filled in as each layer turns Green._
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC1-X1, AC2-P1…P9, AC3-B1…B6, AC3-N1, AC3-X1, AC4-B1…B3, AC4-N1 (unit) | Green | 27 passed | Pass | branch on `0846c22`, local | Claude for Yang, 18 Oct 2026 | `tests/test_registration_rules.py`. Red before: 27 failed with `NotImplementedError`. Mutations (closes inclusive, opens exclusive, capacity `>`) each fail the intended tests |
+| AC1-H1/H2/X1/P1…P9/N1, AC2-H1/P1…P9, AC3-N1/N2/B5, AC4-B1/B2/N2, AC5-H1/H2/N1/N2/N3/X1/X2 (API) | Green | 43 passed (4 of them parametrised over endpoints/roles) | Pass | as above, repository faked | Claude for Yang, 18 Oct 2026 | `tests/test_registration_api.py`. Red before: 41 failed, all FastAPI route-level 404 |
+| Repository rows | Green | 12 passed | Pass | as above, mocked Supabase transport | Claude for Yang, 18 Oct 2026 | `tests/test_registration_repository.py` |
+| AC5-H1, AC5-N2, AC3-B1…B6, AC3-N1, AC4-B1/B2/N1, AC2-X1, AC5-X3 (DB) | Green | `ALL EVENT REGISTRATION VERIFICATIONS PASSED`; re-running 0029 is safe | Pass | **disposable local PostgreSQL 16** built by `database/tests/bootstrap_event_status_history.py` + `0026` + `0029` | Claude for Yang, 18 Oct 2026 | `psql -f database/verify_event_registrations.sql`. Red before `0029`: `type "public.event_registrations" does not exist`. Not run on shared Supabase (`0029` not applied there) |
+| AC4-X1 (DB race) | Green | `RACE VERIFICATION PASSED`: one row stored, the second session refused with `event full` | Pass | as above | Claude for Yang, 18 Oct 2026 | `database/verify_event_registrations_race.sh`; leaves one Cancelled fixture event behind (status history is immutable) |
+| Whole service | Green | `pytest -q`: 422 passed (340 before the story); `ruff check .`: clean | Pass | local | Claude for Yang, 18 Oct 2026 | Not run: PR CI, shared-database checks, browser (no frontend in this increment) |
+
+Still open: PO confirmation of D3, D5 and D8; teammate review of these AI-drafted cases (`testing.md` §10); applying `0029` to shared development; increment 2 (frontend and Playwright journey) after SCRUM-60.
