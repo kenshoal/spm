@@ -67,6 +67,10 @@ class FakeRegistrationRepository:
         return [dict(r) for r in self.events.values() if r["status"] == "Confirmed"]
 
     def count_active(self, event_id: str) -> int:
+        return self._stored_count(event_id)
+
+    def _stored_count(self, event_id: str) -> int:
+        """The table's real count; register uses this so a subclass can fake a stale read."""
         return sum(
             1
             for r in self.registrations
@@ -106,7 +110,7 @@ class FakeRegistrationRepository:
             raise RegistrationRpcError(
                 "already registered", "P0004", "already registered"
             )
-        if self.count_active(event_id) >= capacity:
+        if self._stored_count(event_id) >= capacity:
             raise RegistrationRpcError("event full", "P0004", "event full")
         self._clock += 1
         row = {

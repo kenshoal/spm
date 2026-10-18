@@ -1,6 +1,18 @@
-"""Registration persistence (SCRUM-21). Stub: the real repository follows the Red tests."""
+"""Registration persistence through Supabase's Data API (SCRUM-21)."""
 
+from datetime import datetime
+from typing import Any, Protocol
+
+import httpx
+
+from app.config import Settings
 from app.repositories.event_request_repository import SupabaseRepositoryError
+
+# Only what the public view needs: internal planning columns are never fetched.
+EVENT_COLUMNS = (
+    "id,status,event_name,purpose,description,proposed_date_times,"
+    "registration_opens_at,registration_closes_at,registration_capacity"
+)
 
 
 class RegistrationRpcError(SupabaseRepositoryError):
@@ -17,3 +29,144 @@ class RegistrationRpcError(SupabaseRepositoryError):
         super().__init__(message)
         self.errcode = errcode
         self.reason = reason
+
+
+class RegistrationRepository(Protocol):
+    def get_event(self, event_id: str) -> dict[str, Any] | None: ...
+
+    def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]: ...
+
+    def list_confirmed_events(self) -> list[dict[str, Any]]: ...
+
+    def count_active(self, event_id: str) -> int: ...
+
+    def count_active_for_events(self, event_ids: list[str]) -> dict[str, int]: ...
+
+    def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]: ...
+
+    def register(
+        self, event_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
+
+class SupabaseRegistrationRepository:
+    def __init__(
+        self,
+        supabase_url: str,
+        secret_key: str,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        headers = {"apikey": secret_key}
+        # Legacy service-role keys are JWTs; new sb_secret keys use apikey only.
+        if not secret_key.startswith("sb_secret_"):
+            headers["Authorization"] = f"Bearer {secret_key}"
+        self._client = httpx.Client(
+            base_url=f"{supabase_url.rstrip('/')}/rest/v1",
+            headers=headers,
+            timeout=10,
+            transport=transport,
+        )
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> "SupabaseRegistrationRepository":
+        return cls(
+            str(settings.supabase_url),
+            settings.supabase_secret_key.get_secret_value(),
+        )
+
+    def get_event(self, event_id: str) -> dict[str, Any] | None:
+        rows = self._get(
+            "/event_requests", {"select": EVENT_COLUMNS, "id": f"eq.{event_id}"}
+        )
+        return rows[0] if rows else None
+
+    def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]:
+        if not event_ids:
+            return []
+        return self._get(
+            "/event_requests",
+            {"select": EVENT_COLUMNS, "id": f"in.({','.join(event_ids)})"},
+        )
+
+    def list_confirmed_events(self) -> list[dict[str, Any]]:
+        return self._get(
+            "/event_requests",
+            {
+                "select": EVENT_COLUMNS,
+                "status": "eq.Confirmed",
+                "order": "registration_opens_at.asc.nullslast",
+            },
+        )
+
+    def count_active(self, event_id: str) -> int:
+        return self.count_active_for_events([event_id]).get(event_id, 0)
+
+    def count_active_for_events(self, event_ids: list[str]) -> dict[str, int]:
+        counts = {event_id: 0 for event_id in event_ids}
+        if not event_ids:
+            return counts
+        rows = self._get(
+            "/event_registrations",
+            {
+                "select": "event_request_id",
+                "status": "eq.Registered",
+                "event_request_id": f"in.({','.join(event_ids)})",
+            },
+        )
+        for row in rows:
+            counts[row["event_request_id"]] += 1
+        return counts
+
+    def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]:
+        return self._get(
+            "/event_registrations",
+            {
+                "select": "id,event_request_id,attendee_id,status,created_at",
+                "attendee_id": f"eq.{attendee_id}",
+                "order": "created_at.desc",
+            },
+        )
+
+    def register(
+        self, event_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        try:
+            response = self._client.post(
+                "/rpc/register_for_event",
+                json={
+                    "p_event_request_id": event_id,
+                    "p_attendee_id": attendee_id,
+                    "p_now": now.isoformat(),
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the registration"
+            ) from error
+        if response.status_code >= 500:
+            raise SupabaseRepositoryError("Supabase could not complete the registration")
+        if response.is_error:
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            raise RegistrationRpcError(
+                "Supabase rejected the registration",
+                errcode=body.get("code"),
+                reason=body.get("message"),
+            )
+        return response.json()
+
+    def _get(self, path: str, params: dict[str, str]) -> list[dict[str, Any]]:
+        try:
+            response = self._client.get(path, params=params)
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the registration lookup"
+            ) from error
+        return response.json()
+
+    def close(self) -> None:
+        self._client.close()

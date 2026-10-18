@@ -22,6 +22,8 @@ from registration_support import (
     make_unauthenticated_client,
 )
 
+from app.repositories import SupabaseRepositoryError
+
 NOT_FOUND = {"detail": "Event not found", "code": "event_not_found"}
 
 
@@ -318,3 +320,38 @@ def test_attendee_endpoints_require_a_session(method: str, path: str) -> None:
         response = getattr(client, method)(path)
 
     assert response.status_code == 401
+
+
+# AC4-N2 (negative): the database is authoritative — if the last place is taken
+# between the pre-check and the write, the attendee still gets 409 event_full
+def test_database_refusal_after_precheck_maps_to_event_full() -> None:
+    class RacingRepository(FakeRegistrationRepository):
+        def count_active(self, event_id: str) -> int:
+            return 0  # the pre-check sees a free place...
+
+    repo = RacingRepository()
+    event_id = add_event(repo, registration_capacity=1)
+    fill(repo, event_id, 1)  # ...but the table already holds the last registration
+
+    with make_client(repo) as client:
+        response = client.post(register_path(event_id))
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "event_full"
+    assert len(repo.registrations) == 1
+
+
+# AC5-N3 (negative): an unavailable database is a 502, not a false success
+def test_repository_failure_is_a_bad_gateway() -> None:
+    class DownRepository(FakeRegistrationRepository):
+        def register(self, event_id, attendee_id, now):  # type: ignore[no-untyped-def]
+            raise SupabaseRepositoryError("down")
+
+    repo = DownRepository()
+    event_id = add_event(repo)
+
+    with make_client(repo) as client:
+        response = client.post(register_path(event_id))
+
+    assert response.status_code == 502
+    assert repo.registrations == []
