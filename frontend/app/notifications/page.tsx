@@ -5,7 +5,7 @@ import { listNotifications, type AppNotification } from "@/lib/notifications";
 import { AppShell, workspaceLinks } from "../components/app-shell";
 import { NotificationList } from "./notification-list";
 
-async function NotificationData() {
+async function NotificationData({ roles }: { roles: readonly string[] }) {
   let notifications: AppNotification[];
   try {
     notifications = await listNotifications();
@@ -22,7 +22,7 @@ async function NotificationData() {
   return (
     <div className="space-y-4">
       <p className="text-sm font-semibold text-[#34463f]">{unread === 0 ? "You're all caught up." : `${unread} unread`}</p>
-      <NotificationList notifications={notifications} />
+      <NotificationList notifications={notifications} roles={roles} />
     </div>
   );
 }
@@ -41,7 +41,7 @@ export default async function NotificationsPage() {
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[#68776f] sm:text-base">Updates on the event requests you&apos;re responsible for.</p>
       </div>
       <Suspense fallback={<Loading />}>
-        <NotificationData />
+        <NotificationData roles={user.roles} />
       </Suspense>
     </AppShell>
   );

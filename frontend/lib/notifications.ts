@@ -25,10 +25,27 @@ export async function listNotifications(): Promise<AppNotification[]> {
 // Each known type links to the view its recipient can open: the Organiser's own
 // request page, or the assigned Coordinator's coordination page. A type added by
 // another story still shows, with a generic message and no guessed link.
-export function describeNotification(notification: AppNotification): NotificationSummary {
+export function describeNotification(notification: AppNotification, roles: readonly string[] = []): NotificationSummary {
   const requestId = notification.payload.event_request_id;
   const id = typeof requestId === "string" && requestId ? encodeURIComponent(requestId) : null;
   switch (notification.event_type) {
+    case "arrangement_needs_review": {
+      const domain = notification.payload.arrangement;
+      const label = domain === "venue_booking" ? "Venue booking" : domain === "equipment_reservation" ? "Equipment reservation" : "Arrangement";
+      const staffRole = domain === "venue_booking" ? "venue_staff" : domain === "equipment_reservation" ? "technical_support" : null;
+      const target = notification.payload.arrangement_id;
+      const reason = notification.payload.reason;
+      // Use verified capabilities and constructed internal paths, never payload.href.
+      const href = staffRole && roles.includes(staffRole)
+        ? `/arrangement-reviews?arrangement=${domain}`
+        : roles.includes("event_coordinator") && id ? `/coordination/requests/${id}` : null;
+      return {
+        message: `${label} needs review.`,
+        href,
+        detail: [typeof target === "string" && target ? `Arrangement: ${target}` : null,
+          typeof reason === "string" && reason.trim() ? reason : null].filter(Boolean).join(" · "),
+      };
+    }
     case "event_request_submitted":
       return { message: "Your event request was submitted.", href: id && `/event-requests/${id}/edit` };
     case "coordinator_assigned":

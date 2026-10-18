@@ -5,6 +5,9 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.controllers.arrangement_review_controller import (
+    router as arrangement_review_router,
+)
 from app.controllers.coordinator_assignment_controller import (
     router as coordinator_assignment_router,
 )
@@ -16,6 +19,10 @@ from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
+)
+from app.services.arrangement_review_notification_relay import (
+    ArrangementReviewNotificationRelay,
+    build_arrangement_review_notification_relay,
 )
 from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentNotAllowedError,
@@ -46,19 +53,23 @@ def create_app(
     repository: EventRequestRepository | None = None,
     coordinator_repository: CoordinatorAssignmentRepository | None = None,
     outbox_relay: OutboxRelay | None = None,
+    arrangement_review_relay: ArrangementReviewNotificationRelay | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-        relay_task = (
-            asyncio.create_task(outbox_relay.run_forever())
-            if outbox_relay is not None
-            else None
-        )
-        yield
-        if relay_task is not None:
-            relay_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await relay_task
+        relay_tasks = [
+            asyncio.create_task(relay.run_forever())
+            for relay in (outbox_relay, arrangement_review_relay)
+            if relay is not None
+        ]
+        try:
+            yield
+        finally:
+            for task in relay_tasks:
+                task.cancel()
+            for task in relay_tasks:
+                with suppress(asyncio.CancelledError):
+                    await task
 
     application = FastAPI(
         title="eventRequestService",
@@ -87,6 +98,7 @@ def create_app(
     application.include_router(coordinator_assignment_router)
     application.include_router(event_transition_router)
     application.include_router(event_request_router)
+    application.include_router(arrangement_review_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(
@@ -223,4 +235,7 @@ def create_app(
 
 # Only the served app relays the outbox; apps built in tests get no relay unless
 # they pass one, so a test run never delivers real events.
-app = create_app(outbox_relay=build_outbox_relay())
+app = create_app(
+    outbox_relay=build_outbox_relay(),
+    arrangement_review_relay=build_arrangement_review_notification_relay(),
+)

@@ -6,6 +6,18 @@ from app.config import Settings
 
 
 class EventRequestRepository(Protocol):
+    def list_arrangement_reviews(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]: ...
+
+    def list_arrangement_reviews_for_arrangement(
+        self, arrangement: str
+    ) -> list[dict[str, Any]]: ...
+
+    def clear_arrangement_review(
+        self, review_id: str, actor_id: str, allowed_arrangements: list[str]
+    ) -> dict[str, Any]: ...
+
     def list_status_history(self, event_request_id: str) -> list[dict[str, Any]]: ...
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]: ...
@@ -152,6 +164,46 @@ class SupabaseEventRequestRepository:
             headers={"Prefer": "return=representation"},
         )
         return rows[0]
+
+    def list_arrangement_reviews(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]:
+        """Use the shared outstanding predicate without changing HTTP visibility."""
+        return self._request_table(
+            "POST",
+            "/rpc/get_outstanding_arrangement_reviews",
+            json={"p_event_request_id": event_request_id},
+        )
+
+    def list_arrangement_reviews_for_arrangement(
+        self, arrangement: str
+    ) -> list[dict[str, Any]]:
+        """Return raw domain-scoped evidence; outstanding/order belong to service."""
+        return self._request_table(
+            "GET", "/arrangement_reviews",
+            params={"arrangement": f"eq.{arrangement}", "select": "*"},
+        )
+
+    def clear_arrangement_review(
+        self, review_id: str, actor_id: str, allowed_arrangements: list[str]
+    ) -> dict[str, Any]:
+        """Only the exact-ID server RPC may write review audit fields."""
+        try:
+            response = self._client.post(
+                "/rpc/clear_arrangement_review",
+                json={
+                    "p_review_id": review_id,
+                    "p_actor_id": actor_id,
+                    "p_allowed_arrangements": allowed_arrangements,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError("Arrangement reviews unavailable") from error
+        return response.json()
 
     def list_status_history(self, event_request_id: str) -> list[dict[str, Any]]:
         """The controller checks SCRUM-39 visibility before this server-only read."""

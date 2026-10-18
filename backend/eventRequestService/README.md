@@ -155,6 +155,142 @@ actor/transaction contract in `database/README.md`; their workflows are not
 implemented by this story. See `docs/testcases/scrum_48_testcases.md` for coverage,
 evidence and remaining review/deployment checks.
 
+## Arrangement review reads (SCRUM-64, in progress)
+
+Existing `Safety Review` rows are recognised in API status validation and
+coordinator in-flight lists, matching PR62 commit
+`889764620ba943e1a53d4a1f4a16585c739c2ab4`. The exact upstream migration
+`database/migrations/0029_safety_review_status.sql` is a prerequisite; it must not
+be reapplied to shared Supabase. This compatibility support does not add a
+Planning-to-Safety-Review transition or a Safety Officer decision workflow.
+
+`GET /event-requests/{id}/arrangement-reviews` lists outstanding review records
+for the currently assigned `event_coordinator`, ordered by absolute timestamp
+and UUID, both descending.
+The response retains the arrangement, trigger, changed fields, reason and audit
+fields. Owners and domain-only staff receive 403 `ARRANGEMENT_REVIEWS_FORBIDDEN`;
+unrelated or former coordinators receive private 404
+`ARRANGEMENT_REVIEWS_NOT_FOUND`. Missing authentication retains the existing 401.
+
+Apply `database/migrations/0030_arrangement_review_reads.sql` and
+`0031_arrangement_review_event_changes.sql`, then
+`0032_arrangement_review_clear.sql` and
+`0033_arrangement_review_equipment_unavailability.sql` and
+`0035_arrangement_review_shared_reads.sql` and
+`0036_arrangement_review_safety_rechecks.sql`,
+`0037_arrangement_review_notification_outbox.sql` and
+`0038_arrangement_review_notification_delivery.sql`, then
+`0040_arrangement_review_safety_recheck_lock_compatibility.sql` for this increment.
+All nine are prepared locally and **not applied to shared Supabase**. Apply the
+unapplied feature stack in one reviewed transaction or hold writes throughout
+rollout; see the database README. Do not reapply prerequisite 0029 or occupy 0034.
+Migration 0039 is Tate's independently published handover work and is not copied
+into this feature stack.
+The server role retains SELECT-only review access and browsers have no access.
+An unavailable table or helper returns 502 `Arrangement reviews unavailable`,
+never an apparently clear empty queue or a fallback to an older read path.
+The coordinator adapter posts only `p_event_request_id` to the server-only
+`get_outstanding_arrangement_reviews` RPC. The SQL/STABLE/INVOKER helper returns
+full outstanding evidence in descending timestamp/UUID order and can be called
+within a server consumer's own transaction, without taking event/resource row
+locks or deciding readiness. Staff domain queues keep their existing table read.
+HTTP results remain subject to the deployment's PostgREST row cap (Supabase
+default: 1,000); paging and 1,000-plus completeness are not verified here. Direct
+SQL has no helper LIMIT. See `database/README.md` for setup and the nine separate
+rolled-back SQL checks.
+
+Migration 0031 records actual significant event updates atomically with reviews
+for current/future approved venue bookings and equipment reservations. Dates and
+attendance affect both domains; venue/equipment text affects its own domain.
+Review reasons retain the relevant before/after values. Equivalent instants,
+outer-trimmed text, unrelated edits and Draft/terminal events create no reviews.
+This adds no public edit route or SCRUM-35 acceptance workflow. The saved
+safety-decision caller and a shared readiness consumer remain separate work;
+lifecycle status is unchanged. Migration 0033 also raises equipment
+reviews from the actual status-history cause recorded by the existing equipment
+status RPC. It affects only current/future reservations of that catalogue UUID;
+restoration does not clear reviews. See `database/README.md` for the shared-lock
+limitations and local SQL commands.
+
+Migration 0036 adds a private explicit-target safety-recheck helper only. A future
+privileged decision transaction must supply and validate the actual saved
+decision UUID, authorised actor and immutable event/target/reason payload. The
+helper validates the complete target set in one unlocked membership snapshot
+before any insert and creates one review per distinct pair; exact replay preserves
+original reason and clear audit. Migration 0040 replaces 0036's child-row locks so
+the future trusted caller can hold only its event `FOR UPDATE` without waiting on
+booking/reservation rows. The caller must acquire that event lock before invoking
+the helper; this is an integration obligation, not a check enforced by the helper. Empty targets create no flags but still require
+valid event/decision identities and a nonblank reason. There is no new HTTP route,
+Safety Officer decision table or lifecycle action. Browser and service roles
+cannot call the writer directly. Current target APIs do not reparent or delete
+arrangements, but the database does not enforce membership immutability. Future
+membership-change/delete writers must participate in the event lock protocol;
+this snapshot is not a lease against arbitrary privileged SQL mutations. See the
+database contract for error, caller and concurrency-verification requirements.
+
+`GET /arrangement-reviews?arrangement=venue_booking` gives `venue_staff` its
+role-wide outstanding venue queue; `arrangement=equipment_reservation` gives
+`technical_support` its equipment queue. The domain is required and no event
+assignment or previous-editor ownership is required for staff. The same newest
+instant/UUID order and full evidence response apply without exposing the event
+ticket. Staff remain forbidden from the coordinator-only event-wide endpoint.
+
+`POST /arrangement-reviews/{review_id}/clear` has no request body. The backend
+derives actor ID and allowed domains from the verified auth-service caller.
+The service-only RPC locks that exact review, rechecks domain and outstanding
+state, writes only `cleared_at`/`cleared_by`, and returns the complete review.
+It does not clear other flags, including newer flags for the same arrangement.
+Responses are 403 `ARRANGEMENT_REVIEW_FORBIDDEN` for an unrelated role/domain,
+404 `ARRANGEMENT_REVIEW_NOT_FOUND` for an absent review and 409
+`ARRANGEMENT_REVIEW_ALREADY_CLEARED` for a repeat. Queue/clear storage failures
+return the same safe 502 message as event reads. Direct table writes remain
+unavailable to caller roles; no resources, statuses or notifications are changed.
+
+## Arrangement-review notification delivery (SCRUM-64)
+
+Migration 0037 enqueues one immutable raised snapshot for each new review in the
+same source transaction; enqueue failure rolls back the source update and flags.
+There is no historical backfill. Migration 0038 stores first accepted timestamps
+per recipient and the last attempt time, behind three service-only RPCs. Review
+and outbox table writes remain unavailable to browser/server REST callers.
+
+The background relay sends `arrangement_needs_review` with full recorded target,
+trigger, reason and changed-field evidence. Its stable `event_id` is UUID5 using
+`NAMESPACE_URL` and `needs-review:{trigger_id}:{arrangement_id}`. A
+`change_request_id` is added only when the trigger is an actual same-event
+Approved change-request record; a generic direct-edit cause never invents one.
+Only HTTP 202 records acceptance. A timeout or other status keeps that recipient
+pending; retries retain the same event identity. The receiver's unique
+`(recipient_id, event_id)` stores one inbox row, not exactly-once HTTP delivery.
+
+Each attempt resolves the latest assigned existing account still holding
+`event_coordinator`, and all current existing same-domain `venue_staff` or
+`technical_support` accounts. Nonempty authoritative `staff_roles` replaces
+metadata; otherwise trusted app metadata uses the auth service's filtered
+string-list, singular-role and attendee fallback rules. This native aggregate
+avoids REST directory pagination loss. Removed staff/former coordinators receive
+no new sends in later attempts; accepted progress remains. Overlapping recipients
+are sent once. Both required groups must exist and all their current members
+must be accepted before publication, so partial delivery and absent groups leave
+durable unresolved work. Recipient selection is an attempt snapshot, not a lock
+across the remote HTTP request.
+
+The relay rotates batches of at most 50 by never/least-recently attempted work,
+then source time/ID. Directory lookup failure retains its attempt stamp and logs
+an unresolved lookup; individual recipient/job failures do not stop later work.
+It runs every 10 seconds when Supabase and `NOTIFICATION_SERVICE_URL` are
+configured. The app lifespan starts it and waits for its bounded in-flight work
+before closing the client on shutdown. With the URL unset, both notification
+relays remain off and queued work is retained.
+
+To run delivery locally, start notificationService on port 8005 using its README,
+set the event service's **server-only**
+`NOTIFICATION_SERVICE_URL=http://127.0.0.1:8005/notifications/events`, then start
+`uvicorn app.main:app --reload --port 8003`. Use the same prepared database for
+both services. Start authService on 8001 and the frontend on 3000 for the protected
+inbox and review UI. This does not apply any migration to shared Supabase.
+
 ## Submission confirmations
 
 When an event request becomes `Submitted`, the database records one
