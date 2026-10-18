@@ -1,4 +1,5 @@
--- Run after 0034_safety_review_decisions.sql (SCRUM-60 increment 2).
+-- Run after 0034_safety_review_decisions.sql and 0044_safety_review_null_inputs.sql
+-- (SCRUM-60 increment 2).
 -- Every change is rolled back. Borrows the two oldest auth users: the first as
 -- organiser and Safety Officer, the second as a user without the role.
 
@@ -80,7 +81,17 @@ BEGIN
             ('AC6-X3 targets not array', v_officer, 'changes_requested', 'x', '{}'::jsonb, '22023'),
             ('AC6-X3 bad target kind', v_officer, 'changes_requested', 'x',
                 '[{"arrangement": "room", "id": "11111111-1111-4111-8111-111111111111"}]'::jsonb,
-                '22023')
+                '22023'),
+            -- AC6-X5: NULL inputs from a direct SQL caller are refused the same way
+            -- (Heng Rui, message 2196).
+            ('AC6-X5 null decision', v_officer, NULL, 'x', '[]'::jsonb, '22023'),
+            ('AC6-X5 null targets', v_officer, 'approved', NULL, NULL::jsonb, '22023'),
+            ('AC6-X5 target without arrangement', v_officer, 'changes_requested', 'x',
+                '[{"id": "11111111-1111-4111-8111-111111111111"}]'::jsonb, '22023'),
+            ('AC6-X5 target without id', v_officer, 'changes_requested', 'x',
+                '[{"arrangement": "venue_booking"}]'::jsonb, '22023'),
+            ('AC6-X5 null target element', v_officer, 'changes_requested', 'x',
+                '[null]'::jsonb, '22023')
         ) AS t(label, officer, decision, reason, targets, errcode)
     LOOP
         BEGIN

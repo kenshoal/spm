@@ -92,6 +92,7 @@ Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate 
 | AC4a-X1 | AC4a | The real function returns the event to Planning and keeps reason and targets | Cross-cutting | As AC3-X1 | Call with `changes_requested` | reason, targets | `Planning`; review row reason and targets equal the input | — | DB |
 | AC1-X2 | AC1 | The real function refuses a caller without the role | Negative | As AC3-X1, caller has no `safety_officer` row | Call | `approved` | `P0003` | Status, history and reviews unchanged | DB |
 | AC6-X3 | AC6 | The real function refuses outside Safety Review and on bad input | Negative | Event in `Planning`; or bad input | Call | `approved`; `rejected`; blank reason; targets `{}` | `P0004`; `22023` ×3 | Nothing written | DB |
+| AC6-X5 | AC6 | NULL inputs from a direct SQL caller are refused before any write | Negative | As AC6-X3 | Call | NULL decision; NULL targets; target without `arrangement`; target without `id`; `[null]` | `22023` each | Nothing written | DB |
 | AC6-X4 | AC6 | Reviews are insert-only and browser roles have no access | Negative | `0034` applied | Privilege checks | — | `service_role` lacks UPDATE/DELETE on `safety_reviews`; `anon`/`authenticated` cannot execute the function or read the table | — | DB |
 
 Cases for AC2 are designed with increment 3.
@@ -130,6 +131,10 @@ Cases for AC2 are designed with increment 3.
 | AC3-X1, AC4a-X1, AC1-X2, AC6-X3, AC6-X4 | Written | — | Not run | — | — | `database/verify_safety_review_decisions.sql`; needs `0034` on a database. The Supabase connection was unavailable on 18 Oct |
 
 **Local evidence, 18 October 2026:** Red first: 24 of 26 API tests failed on the missing route; the two route-404 cases were then tightened to assert the service's 404 and failed until the code existed. Green: `backend/eventRequestService` `pytest` 384 passed, `ruff check .` clean; `backend/authService` 46 passed; `frontend` `vitest` 350 passed, typecheck and lint clean, after merging `dev` (`754f34c`).
+
+**Defect found in review (Heng Rui, message 2196):** in `0034`, `NULL NOT IN (...)` evaluates to NULL, so a NULL decision passed the check and failed later with `23502`, and a target without `arrangement` was saved. Fixed by `0044_safety_review_null_inputs.sql`; AC6-X5 added.
+
+**Known limitation:** the coordinator notice is best-effort: sent once after the decision commits, outside the transaction, with no durable retry. Durable delivery is planned under SCRUM-57.
 
 **Deviation from message 2168:** the coordinator notice is sent after the decision commits (SCRUM-17 pattern), not through the outbox. `event_request_outbox` only accepts submission events for organisers; widening it is out of scope.
 
