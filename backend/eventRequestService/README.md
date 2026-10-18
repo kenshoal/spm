@@ -26,6 +26,7 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `POST` | `/event-requests/{id}/clarification-response` | Owning Organiser answers the current clarification without editing submitted fields |
 | `POST` | `/event-requests/{id}/resume-review` | Assigned Coordinator continues review after the Organiser responds |
 | `POST` | `/event-requests/{id}/cancellation` | Assigned Coordinator cancels a non-terminal request (→ `Cancelled`) |
+| `GET` | `/event-requests/safety-queue` | Safety Officer lists events in `Safety Review`, longest-waiting first (SCRUM-60 AC2) |
 | `POST` | `/event-requests/{id}/safety-decision` | Safety Officer approves (→ `Confirmed`) or asks for changes with a reason and affected arrangements (→ `Planning`; the assigned Coordinator is notified) an event in `Safety Review` (SCRUM-60) |
 | `GET` | `/event-requests/{id}/safety-reviews` | Safety Officer or the assigned Coordinator reads the safety decisions, newest first |
 | `POST` | `/event-requests/{id}/completion` | Assigned Coordinator marks a confirmed event complete (`Confirmed` → `Completed`) |
