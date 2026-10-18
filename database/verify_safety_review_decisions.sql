@@ -13,8 +13,9 @@ DECLARE
     v_event uuid;
     v_status text;
     v_reviews int;
-    v_targets jsonb := '[{"arrangement": "venue_booking",
-                          "id": "11111111-1111-4111-8111-111111111111"}]';
+    v_targets jsonb;
+    v_venue uuid;
+    v_booking uuid;
     v_bad record;
 BEGIN
     SELECT id INTO v_officer FROM auth.users ORDER BY created_at LIMIT 1;
@@ -58,9 +59,23 @@ BEGIN
     END;
 
     -- AC4a-X1: changes_requested returns to Planning and keeps reason and targets.
+    -- The target is a real booking of this event, so the check also holds once
+    -- 0045 validates target membership (Heng Rui, message 2213).
     INSERT INTO public.event_requests (organiser_id, event_name, status)
         VALUES (v_officer, 'verify SCRUM-60 changes', 'Safety Review')
         RETURNING id INTO v_event;
+    INSERT INTO public.venues (name, location, max_capacity, facilities,
+            accessibility_features, supported_layouts, operating_slots)
+        VALUES ('verify SCRUM-60 venue', 'Test wing', 100, '{}', '{}',
+            ARRAY['theatre']::public.room_layout[], ARRAY['AM']::public.booking_slot[])
+        RETURNING id INTO v_venue;
+    INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id,
+            start_date, end_date, slots, status)
+        VALUES (v_venue, v_officer, v_event, current_date + 7, current_date + 7,
+            ARRAY['AM']::public.booking_slot[], 'pending')
+        RETURNING id INTO v_booking;
+    v_targets := jsonb_build_array(
+        jsonb_build_object('arrangement', 'venue_booking', 'id', v_booking));
     PERFORM public.decide_safety_review(
         v_event, v_officer, 'changes_requested', 'Exit routes missing.', v_targets);
     SELECT status INTO v_status FROM public.event_requests WHERE id = v_event;
