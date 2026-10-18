@@ -64,7 +64,37 @@ Migration `0029_safety_review_status.sql` widens the `event_requests` status and
 | AC6-X1 | AC6 | The real function cancels from `Safety Review` and records the coordinator in history | Cross-cutting | As AC6-N1 | Call with `Cancelled` | `Safety Review` | Status `Cancelled`; one history row `Safety Review → Cancelled`, role `event_coordinator` | — | DB |
 | AC6-X2 | AC6 | Browser roles still cannot call the replaced function | Negative | `0029` applied | `has_function_privilege` for `anon`, `authenticated` | — | false for both | — | DB |
 
-Cases for AC2–AC4 are designed with increments 2 and 3.
+## Test case specification (increment 2: decision core)
+
+Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate (SCRUM-58, 2143). Migration `0034_safety_review_decisions.sql` adds the insert-only `safety_reviews` table (decision, reason, targets as saved) and `decide_safety_review(p_event_request_id, p_officer_id, p_decision, p_reason, p_targets)`. Order in one transaction: lock the event `FOR UPDATE` first; `P0002` missing; `P0003` unless `p_officer_id` currently holds `safety_officer`; `P0004` unless the event is in `Safety Review`; `22023` for an unknown decision, a blank reason on `changes_requested`, or targets that are not a JSON array; then insert the review, record the status-history actor (`safety_officer`, `safety.approval` / `safety.changes_requested`) and move to `Confirmed` or `Planning`. No row locks on bookings or reservations. API: `POST /event-requests/{id}/safety-decision` (Safety Officer) and `GET /event-requests/{id}/safety-reviews` (Safety Officer or the assigned coordinator). The coordinator notice (`safety_changes_requested`) is sent after the decision commits, as in SCRUM-17; it is not part of the transaction.
+
+**Deferred to increment 2b, once SCRUM-64 (PR #63) and SCRUM-58's shared readiness function are on `dev`:** calling `private.raise_safety_arrangement_reviews` for `changes_requested` (AC4c), and refusing approval while `get_outstanding_arrangement_reviews` or the readiness check returns items.
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC3-H1 | AC3 | The Safety Officer approves an event in Safety Review | Happy | Event in `Safety Review`, coordinator `coord-1`, officer `safety-1` | `POST /safety-decision` as `safety-1` | `approved` | 200, status `Confirmed`; one review row (`approved`, `decided_by` = `safety-1`) | No coordinator notice | API |
+| AC4a-H1 | AC4a | The Safety Officer asks for changes with a reason and targets | Happy | As AC3-H1 | `POST /safety-decision` | `changes_requested`, reason, one venue booking and one equipment reservation target | 200, status `Planning`; review row keeps the reason and targets exactly as sent | — | API |
+| AC4a-H2 | AC4a | The assigned coordinator reads the reason | Happy | AC4a-H1 done | `GET /safety-reviews` as `coord-1` | — | 200, newest first, reason and targets shown | — | API |
+| AC4a-P1 | AC4a | Asking for changes with no targets is allowed | Partition | As AC3-H1 | `POST /safety-decision` | `changes_requested`, reason, `targets: []` | 200, `Planning`, targets `[]` | — | API |
+| AC4a-N1 | AC4a | Asking for changes without a reason is refused | Negative | As AC3-H1 | `POST /safety-decision` | no reason; reason `"   "` | 422 | Status stays `Safety Review`; no review row | API |
+| AC4a-B1…B3 | AC4a | Reason length boundary | Boundary | As AC3-H1 | `POST /safety-decision` | 1, 2000, 2001 characters | 200, 200, 422 | 2001: nothing changes | API |
+| AC4a-N2 | AC4a | An unknown target kind is refused | Negative | As AC3-H1 | `POST /safety-decision` | arrangement `room` | 422 | Nothing changes | API |
+| AC4a-N3 | AC4a | Someone else cannot read the reasons | Negative | AC4a-H1 done | `GET /safety-reviews` | unassigned coordinator; organiser | 404; 403 | — | API |
+| AC4b-H1 | AC4b | Asking for changes notifies the assigned coordinator | Happy | As AC4a-H1 | `POST /safety-decision` | `changes_requested` | One `safety_changes_requested` notice to `coord-1` with the event id and reason | — | API |
+| AC4b-P1 | AC4b | Approval sends no coordinator notice | Partition | As AC3-H1 | `POST /safety-decision` | `approved` | No notice (the organiser's "confirmed" notice is SCRUM-36) | — | API |
+| AC1-N1…N3 | AC1 | Other roles cannot decide | Negative | As AC3-H1 | `POST /safety-decision` | `event_coordinator`; `event_organiser`; no token | 403; 403; 401 | Status unchanged; no review row | API |
+| AC1-N4 | AC1 | A token that still says Safety Officer after the role was removed is refused by the database | Negative | Fake RPC: `safety-1` no longer an officer | `POST /safety-decision` | `approved` | 403 (`P0003`) | Status unchanged; no review row | API |
+| AC6-P1 | AC6 | A decision outside Safety Review is refused | Partition | Event in each other status | `POST /safety-decision` | `approved` | 409 | Status unchanged; no review row | API |
+| AC6-N1 | AC6 | A repeated decision is refused | Negative | AC3-H1 done (event `Confirmed`) | Approve again | `approved` | 409 | One review row only | API |
+| AC6-N2 | AC6 | Reject is not offered | Negative | As AC3-H1 | `POST /safety-decision` | `rejected` | 422 | Nothing changes | API |
+| AC6-N3 | AC6 | A missing event is reported | Negative | None | `POST /safety-decision` | random id | 404 | — | API |
+| AC3-X1 | AC3 | The real function approves, records history and the review | Cross-cutting | `0034` applied; event in `Safety Review`; officer role row | Call `decide_safety_review` | `approved` | `Confirmed`; history row `Safety Review → Confirmed`, `safety_officer`, `safety.approval`; one review row | — | DB |
+| AC4a-X1 | AC4a | The real function returns the event to Planning and keeps reason and targets | Cross-cutting | As AC3-X1 | Call with `changes_requested` | reason, targets | `Planning`; review row reason and targets equal the input | — | DB |
+| AC1-X2 | AC1 | The real function refuses a caller without the role | Negative | As AC3-X1, caller has no `safety_officer` row | Call | `approved` | `P0003` | Status, history and reviews unchanged | DB |
+| AC6-X3 | AC6 | The real function refuses outside Safety Review and on bad input | Negative | Event in `Planning`; or bad input | Call | `approved`; `rejected`; blank reason; targets `{}` | `P0004`; `22023` ×3 | Nothing written | DB |
+| AC6-X4 | AC6 | Reviews are insert-only and browser roles have no access | Negative | `0034` applied | Privilege checks | — | `service_role` lacks UPDATE/DELETE on `safety_reviews`; `anon`/`authenticated` cannot execute the function or read the table | — | DB |
+
+Cases for AC2 are designed with increment 3.
 
 ## Latest execution record
 
@@ -86,3 +116,22 @@ Cases for AC2–AC4 are designed with increments 2 and 3.
 **Shared development, 15 October 2026:** before applying, the live constraints were `event_requests_status_check` and `staff_roles_role_check` and the live coordinator function was `0026` (last migration `20261013134214`), so `0029` replaced nothing newer. `0029` applied via MCP as `20261015155038 safety_review_status`. `verify_safety_review.sql` then passed; afterwards no `verify SCRUM-60` rows and no `safety_officer` role rows remained.
 
 **Not yet done:** PR CI; human review of these test cases; seeding `safety_officer@example.com` (register it, then re-run `seed_test_accounts.sql`).
+
+### Increment 2 execution record
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC3-H1, AC4b-P1 | Green | 200 `Confirmed`; one `approved` review by `safety-1`; no coordinator notice | Pass | branch after `c117e6a` (dev `754f34c` merged), local, repositories faked | Claude for Jaren, 18 Oct 2026 | `tests/test_safety_review.py` |
+| AC4a-H1, AC4b-H1 | Green | 200 `Planning`; reason and targets kept as sent; one `safety_changes_requested` notice to `coord-1` | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
+| AC4a-H2, AC4a-P1, AC4a-N1…N3, AC4a-B1…B3 | Green | Coordinator reads reasons; `[]` targets accepted; missing/blank reason, 2001 characters and unknown target kind 422 with nothing written; unassigned coordinator 404, organiser 403 | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
+| AC1-N1…N4 | Green | Coordinator and organiser 403, no token 401, removed officer 403 (`P0003`); status unchanged, no review | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
+| AC6-P1, AC6-N1…N3 | Green | 409 from seven other statuses and on a repeated approval (one review kept); `rejected` 422; missing event 404 from the service | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
+| AC4a-X2, AC4a-X3, AC4b-X1 | Green | RPC body, review query and latest-assignment query exactly as specified | Pass | as above | Claude for Jaren, 18 Oct 2026 | `tests/test_supabase_repository.py`; written after the code, then confirmed Red (3 failed) with the repository changes removed |
+| AC3-X1, AC4a-X1, AC1-X2, AC6-X3, AC6-X4 | Written | — | Not run | — | — | `database/verify_safety_review_decisions.sql`; needs `0034` on a database. The Supabase connection was unavailable on 18 Oct |
+
+**Local evidence, 18 October 2026:** Red first: 24 of 26 API tests failed on the missing route; the two route-404 cases were then tightened to assert the service's 404 and failed until the code existed. Green: `backend/eventRequestService` `pytest` 384 passed, `ruff check .` clean; `backend/authService` 46 passed; `frontend` `vitest` 350 passed, typecheck and lint clean, after merging `dev` (`754f34c`).
+
+**Deviation from message 2168:** the coordinator notice is sent after the decision commits (SCRUM-17 pattern), not through the outbox. `event_request_outbox` only accepts submission events for organisers; widening it is out of scope.
+
+**Not yet done:** apply `0034` and run its verify script; increment 2b (SCRUM-64 flags, approval re-checks); increment 3 (queue and page); PR CI; human review.
+
