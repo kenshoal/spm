@@ -38,7 +38,7 @@ awaiting-assignment queue require `event_operations_manager`, and the
 coordinator list and transition commands require `event_coordinator`.
 The service asks authService to verify that token with Supabase, then scopes
 drafts to the returned user ID. A current assignment may be read by the owning
-Event Organiser, an Event Operations Manager, or the currently assigned Event
+Event Organiser, an Event Coordinator Lead, or the currently assigned Event
 Coordinator. Multi-role users are authorised when any assigned role and the
 required request relationship match. The browser cannot choose the organiser or
 coordinator ID; both come from the verified session.

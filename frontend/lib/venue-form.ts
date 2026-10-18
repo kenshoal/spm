@@ -1,4 +1,12 @@
-import { ROOM_LAYOUTS, SLOTS, type RoomLayout, type Slot, type VenueStatus } from "./venue-options";
+import {
+  MAX_PREP_MINUTES,
+  PREP_MINUTES_STEP,
+  ROOM_LAYOUTS,
+  SLOTS,
+  type RoomLayout,
+  type Slot,
+  type VenueStatus,
+} from "./venue-options";
 
 export interface VenuePayload {
   name: string;
@@ -8,6 +16,8 @@ export interface VenuePayload {
   accessibility_features: string[];
   supported_layouts: RoomLayout[];
   operating_slots: Slot[];
+  setup_minutes: number | null;
+  turnaround_minutes: number | null;
   status?: VenueStatus;
 }
 
@@ -23,6 +33,8 @@ export interface VenueFormValues {
   accessibility_features: string;
   supported_layouts: string[];
   operating_slots: string[];
+  setup_minutes: string;
+  turnaround_minutes: string;
   status?: string;
 }
 
@@ -44,6 +56,15 @@ export function splitList(value: string): string[] {
 
 function text(formData: FormData, field: string): string {
   return String(formData.get(field) ?? "").trim();
+}
+
+// Setup or turnaround minutes: blank means none (0); otherwise a whole multiple
+// of 15 from 0 to 1020, or null when invalid.
+function prepMinutes(value: string): number | null {
+  if (!value) return 0;
+  if (!/^\d+$/.test(value)) return null;
+  const minutes = Number(value);
+  return minutes <= MAX_PREP_MINUTES && minutes % PREP_MINUTES_STEP === 0 ? minutes : null;
 }
 
 // Keeps submission order (tests assert on it) while filtering out values
@@ -74,6 +95,8 @@ export function readVenueFormValues(formData: FormData): VenueFormValues {
     accessibility_features: text(formData, "accessibility_features"),
     supported_layouts: formData.getAll("supported_layouts").map(String),
     operating_slots: formData.getAll("operating_slots").map(String),
+    setup_minutes: text(formData, "setup_minutes"),
+    turnaround_minutes: text(formData, "turnaround_minutes"),
   };
   if (formData.has("status")) values.status = text(formData, "status");
   return values;
@@ -93,6 +116,8 @@ export function parseVenueForm(
     accessibility_features: splitList(text(formData, "accessibility_features")),
     supported_layouts: pick(formData, "supported_layouts", ROOM_LAYOUTS),
     operating_slots: pick(formData, "operating_slots", SLOTS),
+    setup_minutes: prepMinutes(text(formData, "setup_minutes")),
+    turnaround_minutes: prepMinutes(text(formData, "turnaround_minutes")),
   };
   if (includeStatus) {
     payload.status = text(formData, "status") === "blocked" ? "blocked" : "available";
@@ -103,6 +128,9 @@ export function parseVenueForm(
   if (!payload.location) errors.location = "Enter the venue location.";
   if (capacity === null || capacity <= 0) errors.max_capacity = "Enter a whole number greater than zero.";
   if (payload.operating_slots.length === 0) errors.operating_slots = "Choose at least one operating slot.";
+  const prepError = `Enter minutes in steps of ${PREP_MINUTES_STEP}, from 0 to ${MAX_PREP_MINUTES}.`;
+  if (payload.setup_minutes === null) errors.setup_minutes = prepError;
+  if (payload.turnaround_minutes === null) errors.turnaround_minutes = prepError;
   return { payload, errors };
 }
 

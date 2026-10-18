@@ -59,6 +59,8 @@ test("creates a venue and redirects to the venue list", async () => {
       accessibility_features: [],
       supported_layouts: [],
       operating_slots: ["AM"],
+      setup_minutes: 0,
+      turnaround_minutes: 0,
     }),
   });
   expect(navigation.revalidatePath).toHaveBeenCalledWith("/venues");
@@ -82,6 +84,10 @@ test("an invalid form never calls fetch and echoes the raw values", async () => 
     accessibility_features: "",
     supported_layouts: [],
     operating_slots: [],
+
+    setup_minutes: "",
+
+    turnaround_minutes: "",
   });
   expect(fetchMock).not.toHaveBeenCalled();
 });
@@ -101,6 +107,10 @@ test("a 403 explains that only Venue Staff can change the catalogue", async () =
     accessibility_features: "",
     supported_layouts: [],
     operating_slots: ["AM"],
+
+    setup_minutes: "",
+
+    turnaround_minutes: "",
   });
 });
 
@@ -129,6 +139,10 @@ test("a backend 422 is worded without referring to highlighted fields", async ()
     accessibility_features: "",
     supported_layouts: [],
     operating_slots: ["AM"],
+
+    setup_minutes: "",
+
+    turnaround_minutes: "",
   });
 });
 
@@ -157,5 +171,9 @@ test("returns a retryable error when the venue service cannot be reached", async
     accessibility_features: "",
     supported_layouts: [],
     operating_slots: ["AM"],
+
+    setup_minutes: "",
+
+    turnaround_minutes: "",
   });
 });

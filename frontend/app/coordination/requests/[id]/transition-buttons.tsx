@@ -5,14 +5,21 @@ import {
   cancelEventRequest,
   completeEventRequest,
   resumeEventRequestReview,
+  startEventPlanning,
   startEventRequestReview,
   type TransitionState,
 } from "../../actions";
 
-type TransitionKind = "review" | "resume-review" | "cancellation" | "completion";
+type TransitionKind =
+  | "review"
+  | "planning"
+  | "resume-review"
+  | "cancellation"
+  | "completion";
 
 const actions = {
   review: startEventRequestReview,
+  planning: startEventPlanning,
   "resume-review": resumeEventRequestReview,
   cancellation: cancelEventRequest,
   completion: completeEventRequest,
@@ -23,6 +30,7 @@ const buttons: Record<
   { label: string; pending: string; destructive?: boolean }
 > = {
   review: { label: "Start review", pending: "Starting review…" },
+  planning: { label: "Start planning", pending: "Starting planning…" },
   "resume-review": { label: "Continue review", pending: "Continuing review…" },
   cancellation: {
     label: "Cancel event",

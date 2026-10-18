@@ -16,7 +16,7 @@ const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
 async function transition(
   eventRequestId: string,
-  path: "review" | "resume-review" | "cancellation" | "completion",
+  path: "review" | "planning" | "resume-review" | "cancellation" | "completion",
 ): Promise<TransitionState> {
   await requireRole("event_coordinator");
   const token = await requireAccessToken();
@@ -57,6 +57,16 @@ export async function startEventRequestReview(
   void previousState;
   void formData;
   return transition(eventRequestId, "review");
+}
+
+export async function startEventPlanning(
+  eventRequestId: string,
+  previousState: TransitionState,
+  formData: FormData,
+): Promise<TransitionState> {
+  void previousState;
+  void formData;
+  return transition(eventRequestId, "planning");
 }
 
 export async function resumeEventRequestReview(

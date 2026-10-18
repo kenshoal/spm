@@ -8,6 +8,7 @@ nothing; deciding it belongs to a later story.
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -16,7 +17,12 @@ from app.booking_models import (
     BookingRequestCreate,
     BookingRequestStatus,
 )
-from app.booking_repository import BookingRequestStore, get_booking_repository
+from app.booking_repository import (
+    BookingNotCancellableError,
+    BookingRequestNotFoundError,
+    BookingRequestStore,
+    get_booking_repository,
+)
 from app.dependencies import (
     Principal,
     bearer_token,
@@ -93,6 +99,27 @@ def list_my_booking_requests(
     return bookings.list_for_requester(principal.user_id)
 
 
+# Declared before "/{booking_id}"; the two-segment path cannot clash with it.
+@router.get("/event/{event_request_id}", response_model=list[BookingRequest])
+def list_event_booking_requests(
+    event_request_id: UUID,
+    principal: ReaderDep,
+    token: TokenDep,
+    bookings: BookingRepoDep,
+    events: EventClientDep,
+) -> list[BookingRequest]:
+    """Every venue booking of one event, oldest first, with its status.
+
+    Venue Staff read any event. A Coordinator reads only the events they are
+    currently assigned to, checked with eventRequestService on every call.
+    """
+
+    event_id = str(event_request_id)
+    if "venue_staff" not in principal.roles:
+        events.require_coordinator(event_id, token, principal.user_id)
+    return bookings.list_for_event(event_id)
+
+
 @router.get("/{booking_id}", response_model=BookingRequest)
 def get_booking_request(
     booking_id: str, principal: ReaderDep, bookings: BookingRepoDep
@@ -105,3 +132,33 @@ def get_booking_request(
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking request not found")
     return booking
+
+
+@router.post("/{booking_id}/cancel", response_model=BookingRequest)
+def cancel_booking_request(
+    booking_id: str,
+    principal: CoordinatorDep,
+    token: TokenDep,
+    bookings: BookingRepoDep,
+    events: EventClientDep,
+) -> BookingRequest:
+    """Cancel one pending or approved booking; the event's other bookings stay.
+
+    Only the event's current Coordinator can cancel, checked again here, so a
+    reassignment moves the right with the event, not with the requester.
+    """
+
+    booking = bookings.get(booking_id)
+    if booking is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking request not found")
+    events.require_coordinator(booking.event_request_id, token, principal.user_id)
+    try:
+        return bookings.cancel(booking_id, principal.user_id)
+    except BookingRequestNotFoundError:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Booking request not found"
+        ) from None
+    except BookingNotCancellableError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Booking request cannot be cancelled"
+        ) from None

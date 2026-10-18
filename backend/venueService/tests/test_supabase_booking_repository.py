@@ -11,7 +11,12 @@ import httpx
 import pytest
 
 from app.booking_models import BookingRequest, BookingRequestStatus
-from app.booking_repository import _supabase_booking_repository, get_booking_repository
+from app.booking_repository import (
+    BookingNotCancellableError,
+    BookingRequestNotFoundError,
+    _supabase_booking_repository,
+    get_booking_repository,
+)
 from app.config import get_settings
 from app.models import Slot
 from app.supabase_booking_repository import SupabaseBookingRepository
@@ -197,3 +202,95 @@ def test_supabase_backend_selects_the_supabase_booking_store(
 
     get_settings.cache_clear()
     _supabase_booking_repository.cache_clear()
+
+
+# AC3-X2 (cross-cutting): one event's rows are requested oldest first
+def test_list_for_event_asks_for_the_events_rows_oldest_first() -> None:
+    api = FakeDataAPI(200, [_row()])
+
+    result = api.repo().list_for_event(EVENT_ID)
+
+    params = api.requests[0].url.params
+    assert params["event_request_id"] == f"eq.{EVENT_ID}"
+    assert params["order"] == "created_at.asc,id.asc"
+    assert [item.id for item in result] == [BOOKING_ID]
+
+
+# AC3-X2 (cross-cutting): a malformed event id is answered without calling Supabase
+def test_list_for_event_with_a_malformed_id_returns_nothing_without_querying() -> None:
+    api = FakeDataAPI()
+
+    assert api.repo().list_for_event("not-a-uuid") == []
+    assert api.requests == []
+
+
+CANCEL_PATH = "/rest/v1/rpc/cancel_venue_booking_request"
+
+
+# AC4-X4 (cross-cutting): cancel calls the database function and returns the updated row
+def test_cancel_calls_the_function_and_returns_the_cancelled_row() -> None:
+    api = FakeDataAPI(
+        200,
+        _row(status="cancelled", cancelled_by=USER_ID, cancelled_at="2026-10-18T01:00:00+00:00"),
+    )
+
+    booking = api.repo().cancel(BOOKING_ID, USER_ID)
+
+    request = api.requests[0]
+    assert request.method == "POST"
+    assert request.url.path == CANCEL_PATH
+    assert json.loads(request.content) == {
+        "p_booking_request_id": BOOKING_ID,
+        "p_cancelled_by": USER_ID,
+    }
+    assert booking.status is BookingRequestStatus.CANCELLED
+    assert booking.cancelled_by == USER_ID
+
+
+# AC4-X4 (cross-cutting): the function's error codes map to the store's errors
+@pytest.mark.parametrize(
+    ("status_code", "code", "expected"),
+    [
+        (404, "P0002", BookingRequestNotFoundError),
+        (409, "55000", BookingNotCancellableError),
+        (500, "XX000", SupabaseRepositoryError),
+    ],
+    ids=["not-found", "not-cancellable", "failure"],
+)
+def test_cancel_maps_function_errors(status_code: int, code: str, expected: type) -> None:
+    api = FakeDataAPI(status_code, {"code": code, "message": "x"})
+
+    with pytest.raises(expected):
+        api.repo().cancel(BOOKING_ID, USER_ID)
+
+
+# AC4-N5 (negative): a malformed id is not found without calling Supabase
+def test_cancel_with_a_malformed_id_does_not_query() -> None:
+    api = FakeDataAPI()
+
+    with pytest.raises(BookingRequestNotFoundError):
+        api.repo().cancel("not-a-uuid", USER_ID)
+    assert api.requests == []
+
+
+# AC4-N7 (negative): a network failure is a repository error
+def test_cancel_network_failure_raises_repository_error() -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("down", request=request)
+
+    repo = SupabaseBookingRepository(URL, KEY, transport=httpx.MockTransport(refuse))
+
+    with pytest.raises(SupabaseRepositoryError):
+        repo.cancel(BOOKING_ID, USER_ID)
+
+
+# AC1-X2 (cross-cutting): a new request does not send the cancel columns, so
+# submitting keeps working on a database where 0042 has not been applied yet
+def test_create_does_not_send_the_cancel_columns() -> None:
+    api = FakeDataAPI(201, [_row()])
+
+    api.repo().create(_booking())
+
+    sent = json.loads(api.requests[0].content)
+    assert "cancelled_by" not in sent
+    assert "cancelled_at" not in sent
