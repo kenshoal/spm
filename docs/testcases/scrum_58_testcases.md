@@ -189,3 +189,48 @@ Agreed protocol, sent to SCRUM-64/60 on 16 Oct:
 | AC3-X4 | Planned | — | Blocked | — | — | Needs SCRUM-64's branch (local and unpushed as of 16 Oct) |
 
 After the fix, on the same fresh cluster: `verify_safety_review_readiness.sql`, `verify_event_request_planning.sql`, `verify_event_request_status_history.sql` and `verify_safety_review.sql` all printed their PASSED lines.
+
+## Increment: shared readiness and outstanding reviews (AC3b) — 19 October 2026
+
+Branch `feat/scrum-58-safety-review`, now merged with Jaren's `feat/scrum-60-safety-review-flags` (`50f3c9e`), which contains PR #62 and Heng Rui's PR #63. Merge order stays PR #63, PR #62, Jaren's flags branch, then this.
+
+### Contract
+
+AC3b was approved as parked on 16 October ("items marked for review also block"). SCRUM-64 now provides the reader, so it is built as approved:
+
+- **AC3b:** Given a Planning event with any outstanding SCRUM-64 review (not cleared, whatever its booking's status, cancelled included), when the coordinator sends it for safety review, then it is refused with `409` and each review is listed with its reason, after the ordinary readiness items, newest first. Nothing changes. Once staff clear the review, the event can be sent.
+- **Shared readiness for SCRUM-60** (asked by Jaren and Heng Rui, 17–18 Oct): the ordinary rules are one function, `private.event_readiness_issues(p_event_request_id uuid) RETURNS jsonb` (migration `0046`), so the Safety Officer's approval refuses on the same rules and in the same item format. `0039`'s rules are unchanged. Cancelled bookings (`0041`) are ignored like rejected ones.
+- **One wording:** the API words every item through one helper, so a refusal reads the same from the handover and from the approval. Jaren's `Still marked for review: <reason>` wording is kept.
+
+### Test case specification (added)
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC3-P1 | AC3a | The shared function returns exactly the handover's ordinary items, and `[]` when ready | Partition | Disposable DB from `bootstrap_safety_review.py` | Call handover and function on the same event | pending Hall P; Microphone 2 of 3 | Same array from both; ready event gives `[]` | Rolled back | DB |
+| AC2-P12 | AC2 | A cancelled booking is ignored beside an approved one | Partition | As AC3-P1 | Send | cancelled + approved booking | `Safety Review` | Rolled back | DB |
+| AC3-N8 | AC3a | Only cancelled bookings means no venue | Negative | As AC3-P1 | Send | 1 cancelled booking | `P0005` `[no_venue_booking]` | Unchanged | DB |
+| AC3-N6 | AC3b | An otherwise ready event with an outstanding review is refused | Negative | As AC3-P1 | Send | approved booking + flag "Attendance changed" | `P0005`, one `arrangement_needs_review` item with review id, arrangement, id, reason | Unchanged | DB |
+| AC3-N7 | AC3b | A review on a cancelled booking still blocks | Negative | As AC3-P1 | Send | approved + cancelled booking, flag on the cancelled one | `P0005` listing that review | Unchanged | DB |
+| AC3-P2 | AC3b | After staff clear the review, the event can be sent | Partition | As AC3-N7 | `clear_arrangement_review`, then send | — | `Safety Review` | — | DB |
+| AC3-N9 | AC3b | Ordinary items first, then reviews newest first | Negative | As AC3-P1 | Send | pending booking; two flags an hour apart | 3 items: pending, newer review, older review | Unchanged | DB |
+| AC4-N19 | AC4 | Browser roles cannot call the shared function | Negative | As AC3-P1 | `has_function_privilege` | — | `anon`, `authenticated` false; `service_role` true | — | DB |
+| AC4-X1 | AC2, AC3b | As `service_role`, the role the API uses, the handover and shared function work | Cross-cutting | As AC3-P1; `SET LOCAL ROLE service_role` | Shared function; send a ready event; send a flagged one | — | `[]`; `Safety Review`; `P0005` listing the review | — | DB |
+| AC3-X4 | AC3b | A flag raised just before the handover makes it wait, then refuse | Cross-cutting | Committed fixtures, disposable DB | A: insert a review, sleep, commit. B: send | — | B waits on a lock, then `P0005` with the review | Event stays Planning | DB (two connections) |
+| AC3-X5 | AC3b | When the handover goes first, a flag waits and lands on the Safety Review event | Cross-cutting | As AC3-X4 | B: send, sleep, commit. A: insert a review | — | A waits on a lock; both succeed; one outstanding review on a Safety Review event, for SCRUM-60's approval to refuse | No deadlock | DB (two connections) |
+| AC3-N10 | AC3b | The API lists a review with its reason in plain words | Negative | Fake reports one review | POST `/safety-review` | reason "Attendance changed" | 409; message `Still marked for review: Attendance changed` | Status stays Planning | API |
+| AC3-X6 | AC3a, AC3b | SCRUM-60's approval refusal words readiness items like the handover | Cross-cutting | — | Build `SafetyApprovalBlockedError` with mixed items | no venue; Microphone 2 of 3; one review | The three handover messages | — | Unit |
+
+### Evidence (local, 19 October 2026)
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC3-P1 … AC4-X1 (9 DB cases) | Green | As expected | Pass | this branch, **fresh disposable PostgreSQL 16**, full combined schema | Claude for Tate, 19 Oct 2026 | `verify_shared_event_readiness.sql` printed `ALL SHARED EVENT READINESS VERIFICATIONS PASSED`. Red before `0046`: the shared function did not exist. Planted bug (reviews left out of the handover) → AC3-N6 failed; real `0046` restored → passed |
+| AC3-X4, AC3-X5 | Green | As expected | Pass | as above | Claude for Tate, 19 Oct 2026 | `test_safety_review_concurrency.py`: 5 tests OK in each of 5 consecutive runs. Red before `0046`: AC3-X4 failed because the handover sent the flagged event (Heng Rui's reported gap) |
+| AC3-N10, AC3-X6 | Green | As expected | Pass | as above, repositories faked | Claude for Tate, 19 Oct 2026 | Red: both failed on wording (review message missing; approval used one message for every item) |
+
+- **Schema:** `python3 database/tests/bootstrap_safety_review.py --dsn … --psql … --disposable` (SCRUM-48 bootstrap, SCRUM-64's supplemental recipe, `0026`, `0034`, `0039`, `0044`–`0046`, each file in its own `psql` call). `--through 0045_safety_review_arrangement_reviews.sql` builds the schema without `0046` for a Red run. `0046` applied twice without error.
+- **Regression on the same DB:** `verify_safety_review_readiness.sql`, `verify_event_request_planning.sql`, `verify_event_request_status_history.sql`, `verify_safety_review.sql`, `verify_safety_review_decisions.sql`, `verify_safety_review_arrangement_reviews.sql`, all ten `verify_arrangement_review_*.sql` checks plus the cancelled-venues check, and Heng Rui's `test_arrangement_review_lock_compatibility.py` (3 OK) all pass. `verify_safety_review_decisions.sql` needs a second auth user; one was added to the local test double before it ran.
+- **Whole service:** `pytest` 446 passed, 1 skipped (SCRUM-64's opt-in notification HTTP test), 0 failed; `ruff check .` clean.
+- **`service_role`:** AC4-X1 ran as `service_role` on the local fixture. The fixture's grants are not proven equal to shared Supabase's.
+
+**Not yet done:** apply `0039` and `0046` to shared development (after PR #63's schema and Jaren's `0045`); live API check; the "Send for safety review" button; PR CI; human review of these test cases (`testing.md` §10).
