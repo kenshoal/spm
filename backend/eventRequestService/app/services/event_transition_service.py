@@ -41,6 +41,8 @@ class TransitionForbiddenError(Exception):
 
 
 def _outstanding_message(item: dict[str, Any]) -> str:
+    """One wording for every P0005 item, so the coordinator reads the same text
+    whether the handover (SCRUM-58) or the approval (SCRUM-60) refused."""
     kind = item.get("kind")
     if kind == "no_venue_booking":
         return "No venue is booked for this event"
@@ -53,6 +55,8 @@ def _outstanding_message(item: dict[str, Any]) -> str:
             f"{item.get('equipment_type')}: "
             f"{item.get('reserved')} of {item.get('required')} reserved"
         )
+    if kind == "arrangement_needs_review":
+        return f"Still marked for review: {item.get('reason', '')}"
     return "Something is still outstanding"
 
 
@@ -93,8 +97,7 @@ class SafetyApprovalBlockedError(Exception):
         super().__init__(f"Event request {event_request_id} cannot be approved yet")
         self.event_request_id = event_request_id
         self.outstanding = [
-            {**item, "message": f"Still marked for review: {item.get('reason', '')}"}
-            for item in outstanding
+            {**item, "message": _outstanding_message(item)} for item in outstanding
         ]
 
 

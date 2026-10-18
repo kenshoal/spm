@@ -230,3 +230,53 @@ def test_send_requires_coordinator_role(
 
     assert response.status_code == 403
     assert event_requests.rows[event_request_id]["status"] == "Planning"
+
+
+# AC3-N10 (negative): an outstanding SCRUM-64 review is listed with its reason in plain words
+def test_send_refused_lists_arrangement_review_with_its_reason() -> None:
+    client, event_requests, event_request_id = make_assigned_client(
+        status="Planning"
+    )
+    review = {
+        "kind": "arrangement_needs_review",
+        "review_id": "rv-1",
+        "arrangement": "venue_booking",
+        "arrangement_id": "b-2",
+        "reason": "Attendance changed",
+    }
+    event_requests.safety_review_outstanding[event_request_id] = [review]
+    with client:
+        response = client.post(
+            safety_review_path(event_request_id), headers=headers("coord-1")
+        )
+
+    assert response.status_code == 409
+    assert response.json()["outstanding"] == [
+        {**review, "message": "Still marked for review: Attendance changed"}
+    ]
+    assert event_requests.rows[event_request_id]["status"] == "Planning"
+
+
+# AC3-X6 (cross-cutting): SCRUM-60's approval refusal words readiness items the same way as the handover
+def test_approval_refusal_words_readiness_and_review_items_like_handover() -> None:
+    from app.services.event_transition_service import SafetyApprovalBlockedError
+
+    items = [
+        {"kind": "no_venue_booking"},
+        {
+            "kind": "equipment_not_reserved",
+            "requirement_id": "r-1",
+            "equipment_type": "Microphone",
+            "required": 3,
+            "reserved": 2,
+        },
+        {"kind": "arrangement_needs_review", "review_id": "rv-1", "reason": "Exit moved"},
+    ]
+
+    error = SafetyApprovalBlockedError("event-1", items)
+
+    assert [item["message"] for item in error.outstanding] == [
+        "No venue is booked for this event",
+        "Microphone: 2 of 3 reserved",
+        "Still marked for review: Exit moved",
+    ]
