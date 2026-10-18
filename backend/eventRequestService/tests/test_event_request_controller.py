@@ -31,6 +31,8 @@ class FakeEventRequestRepository:
         self.coordinator_assignment_rows: list[dict[str, Any]] = []
         self.review_decision_rows: list[dict[str, Any]] = []
         self.change_request_rows: list[dict[str, Any]] = []
+        self.safety_officer_ids: set[str] = set()
+        self.safety_review_rows: list[dict[str, Any]] = []
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()
@@ -226,6 +228,56 @@ class FakeEventRequestRepository:
             for row in reversed(self.review_decision_rows)
             if row["event_request_id"] == event_request_id
         ]
+
+    def decide_safety_review(
+        self,
+        event_request_id: str,
+        officer_id: str,
+        decision: str,
+        reason: str | None,
+        targets: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Mirror decide_safety_review (0034) for API behaviour tests."""
+        row = self.rows.get(event_request_id)
+        if row is None:
+            raise EventRequestRpcError("not found", errcode="P0002")
+        if officer_id not in self.safety_officer_ids:
+            raise EventRequestRpcError("not a safety officer", errcode="P0003")
+        if row["status"] != "Safety Review":
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+        if decision not in {"approved", "changes_requested"} or (
+            decision == "changes_requested" and not (reason or "").strip()
+        ):
+            raise EventRequestRpcError("invalid decision", errcode="22023")
+        self.safety_review_rows.append(
+            {
+                "id": str(uuid4()),
+                "event_request_id": event_request_id,
+                "decision": decision,
+                "reason": reason,
+                "targets": targets,
+                "decided_by": officer_id,
+                "decided_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        row["status"] = "Confirmed" if decision == "approved" else "Planning"
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
+    def list_safety_reviews(self, event_request_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(row)
+            for row in reversed(self.safety_review_rows)
+            if row["event_request_id"] == event_request_id
+        ]
+
+    def latest_coordinator_id(self, event_request_id: str) -> str | None:
+        matches = [
+            row
+            for row in self.coordinator_assignment_rows
+            if row["event_request_id"] == event_request_id
+        ]
+        return max(matches, key=lambda row: row["id"])["coordinator_id"] if matches else None
 
     def create_change_request(
         self,

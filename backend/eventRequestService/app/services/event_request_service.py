@@ -12,6 +12,8 @@ from app.models.event_request import (
     EventRequestUpdate,
     EventReviewDecisionResponse,
     EventStatusHistoryResponse,
+    SafetyDecision,
+    SafetyReviewResponse,
 )
 from app.repositories import EventRequestRepository
 from app.repositories.event_request_repository import EventRequestRpcError
@@ -239,6 +241,25 @@ class EventRequestService:
     ) -> list[EventReviewDecisionResponse]:
         rows = self.repository.list_review_decisions(event_request_id)
         return [EventReviewDecisionResponse.model_validate(row) for row in rows]
+
+    def decide_safety_review(
+        self, event_request_id: str, officer_id: str, payload: SafetyDecision
+    ) -> EventRequestResponse:
+        row = self.repository.decide_safety_review(
+            event_request_id,
+            officer_id,
+            payload.decision,
+            payload.reason,
+            [target.model_dump(mode="json") for target in payload.targets],
+        )
+        return self._row_to_response(row)
+
+    def list_safety_reviews(self, event_request_id: str) -> list[SafetyReviewResponse]:
+        rows = self.repository.list_safety_reviews(event_request_id)
+        return [SafetyReviewResponse.model_validate(row) for row in rows]
+
+    def latest_coordinator_id(self, event_request_id: str) -> str | None:
+        return self.repository.latest_coordinator_id(event_request_id)
 
     def create_change_request(
         self,

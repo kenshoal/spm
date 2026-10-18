@@ -26,6 +26,8 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `POST` | `/event-requests/{id}/clarification-response` | Owning Organiser answers the current clarification without editing submitted fields |
 | `POST` | `/event-requests/{id}/resume-review` | Assigned Coordinator continues review after the Organiser responds |
 | `POST` | `/event-requests/{id}/cancellation` | Assigned Coordinator cancels a non-terminal request (→ `Cancelled`) |
+| `POST` | `/event-requests/{id}/safety-decision` | Safety Officer approves (→ `Confirmed`) or asks for changes with a reason and affected arrangements (→ `Planning`; the assigned Coordinator is notified) an event in `Safety Review` (SCRUM-60) |
+| `GET` | `/event-requests/{id}/safety-reviews` | Safety Officer or the assigned Coordinator reads the safety decisions, newest first |
 | `POST` | `/event-requests/{id}/completion` | Assigned Coordinator marks a confirmed event complete (`Confirmed` → `Completed`) |
 | `POST` | `/event-requests/{id}/change-requests` | Owning Organiser proposes structured changes to an Approved or Planning event |
 | `GET` | `/event-requests/{id}/change-requests` | Owning Organiser or assigned Coordinator reads the amendment history |
@@ -81,6 +83,7 @@ agreed status vocabulary. This service writes only the following transitions:
 | `Under Review` → `Changes Requested`, `Approved`, or `Rejected` | Assigned Coordinator | `POST /{id}/decision` |
 | `Changes Requested` → `Under Review` | Assigned Coordinator, after Organiser response | `POST /{id}/resume-review` |
 | Any non-terminal status → `Cancelled` | Assigned Coordinator | `POST /{id}/cancellation` |
+| `Safety Review` → `Confirmed` or `Planning` | Safety Officer (role re-checked in the database) | `POST /{id}/safety-decision` |
 | `Confirmed` → `Completed` | Assigned Coordinator | `POST /{id}/completion` |
 
 Owned by other stories and **not** implemented here: Planning and Confirmed

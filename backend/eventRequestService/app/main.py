@@ -35,6 +35,7 @@ from app.services.event_request_service import (
 from app.services.event_transition_service import (
     DecisionReasonRequiredError,
     EventTransitionService,
+    SafetyDecisionInvalidError,
     TransitionForbiddenError,
     TransitionNotAllowedError,
 )
@@ -189,6 +190,15 @@ def create_app(
     @application.exception_handler(DecisionReasonRequiredError)
     async def decision_reason_required(
         request: Request, error: DecisionReasonRequiredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(SafetyDecisionInvalidError)
+    async def safety_decision_invalid(
+        request: Request, error: SafetyDecisionInvalidError
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

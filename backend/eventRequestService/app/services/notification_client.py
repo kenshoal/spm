@@ -90,6 +90,37 @@ class NotificationClient:
                 exc_info=True,
             )
 
+    def notify_safety_changes_requested(
+        self, *, event_request_id: str, coordinator_id: str, reason: str
+    ) -> None:
+        """Tell the assigned Coordinator what the Safety Officer wants changed
+        (SCRUM-60 AC4b). Sent once after the decision commits, like the
+        clarification notice; the reason also stays readable on the request."""
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": "safety_changes_requested",
+                    "recipient_id": coordinator_id,
+                    "payload": {
+                        "event_request_id": event_request_id,
+                        "reason": reason,
+                    },
+                },
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify coordinator %s of the safety changes requested on "
+                "event request %s",
+                coordinator_id,
+                event_request_id,
+                exc_info=True,
+            )
+
     def notify_event_request_submitted(
         self, *, event_id: str, organiser_id: str, payload: dict[str, Any]
     ) -> bool:
