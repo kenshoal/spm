@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # SCRUM-21 AC4-X1 (cross-cutting): two sessions race for the last place.
 # Usage: DSN=postgresql://... ./verify_event_registrations_race.sh
-# Needs 0029 applied, an existing auth user, and a disposable database: it commits
-# a fixture, then removes it. Prints RACE VERIFICATION PASSED or exits 1.
+# Needs 0029 applied, an existing auth user, and a DISPOSABLE database: it commits
+# a fixture. Event status history is immutable, so the event cannot be deleted; the
+# script removes the registrations and test users and leaves one Cancelled event
+# named 'VERIFY SCRUM-21 race (left behind)'. Prints RACE VERIFICATION PASSED or exits 1.
 set -euo pipefail
 : "${DSN:?set DSN to the disposable database}"
 PSQL=(psql -X -At -v ON_ERROR_STOP=1 "$DSN")
@@ -19,7 +21,8 @@ B=$("${PSQL[@]}" -c "INSERT INTO auth.users (id) VALUES (gen_random_uuid()) RETU
 cleanup() {
   "${PSQL[@]}" -c "
     DELETE FROM public.event_registrations WHERE event_request_id = '$EVENT';
-    DELETE FROM public.event_requests WHERE id = '$EVENT';
+    UPDATE public.event_requests SET status = 'Cancelled',
+        event_name = 'VERIFY SCRUM-21 race (left behind)' WHERE id = '$EVENT';
     DELETE FROM auth.users WHERE id IN ('$A', '$B');" >/dev/null || true
 }
 trap cleanup EXIT
