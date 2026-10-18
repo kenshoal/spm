@@ -17,6 +17,7 @@ export function workspaceForRoles(roles: string[]): string {
   if (roles.includes("event_operations_manager")) return "/operations/assignments";
   if (roles.includes("venue_staff")) return "/venues";
   if (roles.includes("technical_support")) return "/equipment";
+  if (roles.includes("safety_officer")) return "/safety";
   return "/unauthorised";
 }
 

@@ -388,3 +388,53 @@ def test_cleared_reviews_do_not_block_approval() -> None:
     assert response.status_code == 200
     assert events.rows[event_request_id]["status"] == "Confirmed"
 
+
+def queue(client: TestClient, caller: str = OFFICER):
+    with client:
+        return client.get("/event-requests/safety-queue", headers=as_(caller))
+
+
+# AC2-H1 (happy, increment 3): the Safety Officer sees the events waiting for a
+# check, longest-waiting first, with the details the check needs.
+def test_safety_queue_lists_waiting_events_oldest_first() -> None:
+    client, events, first_id, _ = safety_fixture()
+    second_id = submit_event_request(events)
+    planning_id = submit_event_request(events)
+    events.rows[second_id].update(status="Safety Review", updated_at="2026-10-17T09:00:00+00:00")
+    events.rows[first_id].update(
+        updated_at="2026-10-16T09:00:00+00:00",
+        expected_attendance=300,
+        accessibility_needs="Step-free access to Hall B",
+    )
+    events.rows[planning_id]["status"] = "Planning"
+
+    response = queue(client)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body] == [first_id, second_id]
+    assert (body[0]["expected_attendance"], body[0]["accessibility_needs"]) == (
+        300,
+        "Step-free access to Hall B",
+    )
+
+
+# AC2-P1 (partition): nothing waiting is an empty queue, not an error.
+def test_empty_safety_queue() -> None:
+    client, _, _, _ = safety_fixture("Planning")
+
+    response = queue(client)
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.parametrize("caller", [COORDINATOR, "organiser-1"])
+# AC2-N1 (negative): only Safety Officers see the safety queue.
+def test_only_safety_officers_see_the_queue(caller: str) -> None:
+    client, _, _, _ = safety_fixture()
+
+    response = queue(client, caller)
+
+    assert response.status_code == 403
+

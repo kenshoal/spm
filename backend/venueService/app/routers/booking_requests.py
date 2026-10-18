@@ -27,6 +27,7 @@ from app.dependencies import (
     Principal,
     bearer_token,
     require_booking_reader,
+    require_event_booking_reader,
     require_event_coordinator,
     require_venue_staff,
 )
@@ -41,6 +42,7 @@ CoordinatorDep = Annotated[Principal, Depends(require_event_coordinator)]
 TokenDep = Annotated[str, Depends(bearer_token)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
 ReaderDep = Annotated[Principal, Depends(require_booking_reader)]
+EventReaderDep = Annotated[Principal, Depends(require_event_booking_reader)]
 
 
 @router.post("", response_model=BookingRequest, status_code=status.HTTP_201_CREATED)
@@ -103,19 +105,20 @@ def list_my_booking_requests(
 @router.get("/event/{event_request_id}", response_model=list[BookingRequest])
 def list_event_booking_requests(
     event_request_id: UUID,
-    principal: ReaderDep,
+    principal: EventReaderDep,
     token: TokenDep,
     bookings: BookingRepoDep,
     events: EventClientDep,
 ) -> list[BookingRequest]:
     """Every venue booking of one event, oldest first, with its status.
 
-    Venue Staff read any event. A Coordinator reads only the events they are
-    currently assigned to, checked with eventRequestService on every call.
+    Venue Staff and the Safety Officer read any event. A Coordinator reads only
+    the events they are currently assigned to, checked with eventRequestService
+    on every call.
     """
 
     event_id = str(event_request_id)
-    if "venue_staff" not in principal.roles:
+    if not {"venue_staff", "safety_officer"} & set(principal.roles):
         events.require_coordinator(event_id, token, principal.user_id)
     return bookings.list_for_event(event_id)
 

@@ -95,7 +95,29 @@ Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate 
 | AC6-X5 | AC6 | NULL inputs from a direct SQL caller are refused before any write | Negative | As AC6-X3 | Call | NULL decision; NULL targets; target without `arrangement`; target without `id`; `[null]` | `22023` each | Nothing written | DB |
 | AC6-X4 | AC6 | Reviews are insert-only and browser roles have no access | Negative | `0034` applied | Privilege checks | — | `service_role` lacks UPDATE/DELETE on `safety_reviews`; `anon`/`authenticated` cannot execute the function or read the table | — | DB |
 
-Cases for AC2 are designed with increment 3.
+## Test case specification (increment 3: safety queue and page)
+
+`GET /event-requests/safety-queue` (Safety Officer) lists events in `Safety Review`, ordered by `updated_at` ascending (the status change bumps it, so it stands for "entered Safety Review"). The page `/safety` gathers, per event, its venue bookings, each venue's capacity, layouts and accessibility features, the active blocks overlapping each booking ("restrictions"), and its equipment requirements and reservations. The Safety Officer may read those, role-wide and read-only, in venueService and equipmentService. The coordinator's event page shows the officer's decisions.
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC2-H1 | AC2 | The queue lists waiting events, longest-waiting first, with attendance and accessibility | Happy | Two events in `Safety Review` (different `updated_at`), one in `Planning` | `GET /safety-queue` as officer | — | 200, the two in order, fields present; `Planning` absent | — | API |
+| AC2-P1 | AC2 | Nothing waiting is an empty queue | Partition | Event in `Planning` only | `GET /safety-queue` | — | 200 `[]` | — | API |
+| AC2-N1 | AC2 | Others cannot see the queue | Negative | — | `GET /safety-queue` | coordinator; organiser | 403 | — | API |
+| AC2-H2…H4 | AC2 | The officer reads an event's bookings, a venue and its blocks | Happy | Seeded venue, booking, block | venueService reads as `safety_officer` | — | 200 each; bookings read without an assignment check | — | API (venueService) |
+| AC2-N2 | AC2 | The officer cannot change venues or blocks | Negative | Seeded venue | `PATCH /venues/{id}`; `POST /venues/{id}/blocks` | — | 403 | Nothing changes | API (venueService) |
+| AC2-H5, AC2-H6 | AC2 | The officer reads an event's equipment requirements and reservations | Happy | Seeded rows | equipmentService by-event reads | — | 200; requirements read without an assignment check | — | API (equipmentService) |
+| AC2-N3 | AC2 | The officer cannot reserve equipment | Negative | — | `POST /equipment-reservations` | — | 403 | Nothing stored | API (equipmentService) |
+| AC2-X1 | AC2 | Only active blocks overlapping the booking's dates and slots are restrictions | Cross-cutting | Blocks: overlapping, lifted, other day, other slot | `overlappingBlocks` | — | Only the overlapping one | — | Unit |
+| AC1-X3 | AC1 | The officer lands on, and is offered, the safety queue | Cross-cutting | — | `workspaceForRoles`, `workspaceLinks` | `safety_officer`; `event_coordinator` | `/safety` offered only to the officer | — | Unit |
+| AC3-H2, AC4a-H3, AC4a-N4 | AC3, AC4a | The decision form sends the right payload and refuses bad input locally | Happy, Negative | — | `parseSafetyDecisionForm` | approve; changes with reason and targets; blank or 2001-character reason; `rejected` | Payloads as specified; errors for the bad inputs | — | Unit |
+| AC4a-X2 | AC4a | The form offers each arrangement and both decisions, no Reject | Cross-cutting | One booking, one reservation | Render | — | Two checkboxes, Approve, Ask for changes, no Reject | — | Component |
+| AC3-H3, AC6-N5, AC6-N6, AC4a-N5 | AC3, AC6 | The server action posts, explains a refused approval, reports a stale event and skips the API on bad input | Happy, Negative | Fetch mocked | `decideSafety` | approve 200; 409 with `outstanding`; 409 without; blank reason | Redirect with notice; "Approval refused. …"; "no longer waiting"; no fetch | — | Unit |
+| AC4a-H4, AC4a-P2 | AC4a | The coordinator sees the officer's decisions, or that there are none | Happy, Partition | — | Render `SafetyReviewsPanel` | one review; none | Decision and reason shown; "No safety decision yet." | — | Component |
+| AC2-H5 (E2E), AC4a-H5, AC4b-X1 | AC2, AC4a | Browser: the officer sees attendance, venue capacity below attendance, a restriction and equipment; asks for changes on the booking; the coordinator reads the reason | Happy | Mock APIs seeded | Drive `/safety`, then the coordinator's event page | — | As stated; event leaves the queue | — | E2E (mock APIs) |
+| AC3-H4 | AC3 | Browser: the officer approves; the event leaves the queue | Happy | As above | Approve | — | Notice "Confirmed"; event gone | — | E2E (mock APIs) |
+
+**Local evidence, 18 October 2026 (increment 3, branch `feat/scrum-60-safety-check`):** Red first for every new API and unit case (missing route: 422/403; missing modules). Green: `backend/eventRequestService` 388 passed; `backend/venueService` 453 passed (`tzdata` installed into the local venv for Windows); `backend/equipmentService` 333 passed; `ruff check .` clean in all three. `frontend`: `vitest` 364 passed, typecheck, lint and `npm run build` clean; `npx playwright test` 41 passed (2 new), against the mock APIs in `frontend/e2e/support`, not the real services.
 
 ## Latest execution record
 

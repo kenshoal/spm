@@ -13,6 +13,8 @@ import { ArrowIcon } from "../../../components/icons";
 import { RequestDetails } from "../../../components/request-details";
 import { ArrangementReviewPanel, ArrangementReviewLoading } from "../../../components/arrangement-review-panel";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
+import { SafetyReviewsPanel } from "../../../components/safety-reviews-panel";
+import { listSafetyReviews } from "@/lib/safety";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
 import { ChangeRequestPanel } from "./change-request-panel";
@@ -46,13 +48,16 @@ async function CoordinatorRequestView({ id }: { id: string }) {
   }
 
   const request = result.request;
-  const [decisionResult, changeResult] = await Promise.all([
+  const [decisionResult, changeResult, safetyResult] = await Promise.all([
     listReviewDecisions(id)
       .then((decisions) => ({ decisions, failed: false as const }))
       .catch(() => ({ decisions: [], failed: true as const })),
     listEventChangeRequests(id)
       .then((requests) => ({ requests, failed: false as const }))
       .catch(() => ({ requests: [], failed: true as const })),
+    listSafetyReviews(id)
+      .then((reviews) => ({ reviews, failed: false as const }))
+      .catch(() => ({ reviews: [], failed: true as const })),
   ]);
   const decisions = decisionResult.decisions;
   const latestClarification = decisions.find(
@@ -77,6 +82,13 @@ async function CoordinatorRequestView({ id }: { id: string }) {
         <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
       </div>
       {changeResult.failed ? <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">Change requests are temporarily unavailable. Decisions are disabled until they can be loaded.</div> : <ChangeRequestPanel requests={changeResult.requests} />}
+      {safetyResult.failed ? (
+        <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">The safety check is temporarily unavailable.</div>
+      ) : request.status === "Safety Review" || safetyResult.reviews.length > 0 ? (
+        <div className="mt-5">
+          <SafetyReviewsPanel reviews={safetyResult.reviews} />
+        </div>
+      ) : null}
       <Suspense fallback={<VenueBookingsLoading />}>
         <VenueBookingsPanel eventRequestId={request.id} />
       </Suspense>
