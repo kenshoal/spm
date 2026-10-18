@@ -128,7 +128,7 @@ Cases for AC2 are designed with increment 3.
 | AC1-N1…N4 | Green | Coordinator and organiser 403, no token 401, removed officer 403 (`P0003`); status unchanged, no review | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
 | AC6-P1, AC6-N1…N3 | Green | 409 from seven other statuses and on a repeated approval (one review kept); `rejected` 422; missing event 404 from the service | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
 | AC4a-X2, AC4a-X3, AC4b-X1 | Green | RPC body, review query and latest-assignment query exactly as specified | Pass | as above | Claude for Jaren, 18 Oct 2026 | `tests/test_supabase_repository.py`; written after the code, then confirmed Red (3 failed) with the repository changes removed |
-| AC3-X1, AC4a-X1, AC1-X2, AC6-X3, AC6-X4 | Written | — | Not run | — | — | `database/verify_safety_review_decisions.sql`; needs `0034` on a database. The Supabase connection was unavailable on 18 Oct |
+| AC3-X1, AC4a-X1, AC1-X2, AC6-X3, AC6-X4, AC6-X5 | Green | Approve → `Confirmed` with review and history (`safety_officer`, `safety.approval`); repeat and `Planning` refused `P0004`; changes → `Planning` with reason and targets kept; non-officer `P0003`; every bad or NULL input `22023` with nothing written; `service_role` SELECT only on `safety_reviews`, no browser access | Pass | shared development after `0034` (`20261018031650`) and `0044` (`20261018045424`) | Claude for Jaren, 18 Oct 2026 | `database/verify_safety_review_decisions.sql`, rolled back; no `verify SCRUM-60` rows, reviews or officer roles left. Red before `0034`: `42883` (function missing). Red before `0044`: `AC6-X5 null decision: expected 22023, got 23502` |
 
 **Local evidence, 18 October 2026:** Red first: 24 of 26 API tests failed on the missing route; the two route-404 cases were then tightened to assert the service's 404 and failed until the code existed. Green: `backend/eventRequestService` `pytest` 384 passed, `ruff check .` clean; `backend/authService` 46 passed; `frontend` `vitest` 350 passed, typecheck and lint clean, after merging `dev` (`754f34c`).
 
@@ -138,5 +138,5 @@ Cases for AC2 are designed with increment 3.
 
 **Deviation from message 2168:** the coordinator notice is sent after the decision commits (SCRUM-17 pattern), not through the outbox. `event_request_outbox` only accepts submission events for organisers; widening it is out of scope.
 
-**Not yet done:** apply `0034` and run its verify script; increment 2b (SCRUM-64 flags, approval re-checks); increment 3 (queue and page); PR CI; human review.
+**Not yet done:** increment 2b (SCRUM-64 flags, approval re-checks); increment 3 (queue and page); PR CI; human review.
 

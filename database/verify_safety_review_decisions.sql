@@ -1,7 +1,8 @@
 -- Run after 0034_safety_review_decisions.sql and 0044_safety_review_null_inputs.sql
 -- (SCRUM-60 increment 2).
--- Every change is rolled back. Borrows the two oldest auth users: the first as
--- organiser and Safety Officer, the second as a user without the role.
+-- Every change is rolled back. Borrows the oldest auth user as organiser and
+-- Safety Officer, and the oldest user without that role as the non-officer.
+-- Uses no DELETE or UPDATE, so the Supabase MCP runs it without a confirmation.
 
 BEGIN;
 
@@ -17,13 +18,16 @@ DECLARE
     v_bad record;
 BEGIN
     SELECT id INTO v_officer FROM auth.users ORDER BY created_at LIMIT 1;
-    SELECT id INTO v_other FROM auth.users ORDER BY created_at OFFSET 1 LIMIT 1;
+    SELECT u.id INTO v_other FROM auth.users u
+        WHERE u.id <> v_officer
+          AND NOT EXISTS (SELECT 1 FROM public.staff_roles s
+                          WHERE s.user_id = u.id AND s.role = 'safety_officer')
+        ORDER BY u.created_at LIMIT 1;
     IF v_other IS NULL THEN
-        RAISE EXCEPTION 'Needs at least two auth users';
+        RAISE EXCEPTION 'Needs a second auth user without the safety_officer role';
     END IF;
     INSERT INTO public.staff_roles (user_id, role) VALUES (v_officer, 'safety_officer')
         ON CONFLICT DO NOTHING;
-    DELETE FROM public.staff_roles WHERE user_id = v_other AND role = 'safety_officer';
 
     -- AC3-X1: approval confirms, records the review and the history actor.
     INSERT INTO public.event_requests (organiser_id, event_name, status)
@@ -112,7 +116,9 @@ BEGIN
     END IF;
 
     -- AC6-X3: an event outside Safety Review is refused.
-    UPDATE public.event_requests SET status = 'Planning' WHERE id = v_event;
+    INSERT INTO public.event_requests (organiser_id, event_name, status)
+        VALUES (v_officer, 'verify SCRUM-60 planning', 'Planning')
+        RETURNING id INTO v_event;
     BEGIN
         PERFORM public.decide_safety_review(v_event, v_officer, 'approved', NULL, '[]');
         RAISE EXCEPTION 'AC6-X3: decision accepted from Planning';
