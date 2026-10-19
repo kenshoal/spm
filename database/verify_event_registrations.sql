@@ -1,5 +1,5 @@
 -- SCRUM-21: real Postgres evidence for event registration; every fixture rolls back.
--- Run after 0029. Prints ALL EVENT REGISTRATION VERIFICATIONS PASSED.
+-- Run after 0048. Prints ALL EVENT REGISTRATION VERIFICATIONS PASSED.
 -- The race for the last place (AC4-X1) needs two sessions: verify_event_registrations_race.sh.
 BEGIN;
 DO $$

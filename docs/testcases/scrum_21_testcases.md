@@ -47,7 +47,7 @@ An event is registrable only while `status = 'Confirmed'` and `registration_open
 
 ## Persistence and atomicity
 
-`register_for_event` (migration `0029_event_registrations.sql`) locks the event row `FOR UPDATE`, checks status, window, duplicate and capacity, then inserts. A refusal writes nothing. The function is `service_role` only; `event_registrations` has RLS on and no browser policies.
+`register_for_event` (migration `0048_event_registrations.sql`) locks the event row `FOR UPDATE`, checks status, window, duplicate and capacity, then inserts. A refusal writes nothing. The function is `service_role` only; `event_registrations` has RLS on and no browser policies.
 
 ## Assumptions and open questions
 
@@ -90,7 +90,7 @@ Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_regi
 | AC5-N2 | AC5 | Duplicate registration (D5) | Negative | A already registered | POST again | — | 409 `already_registered` | Still one row | A + D |
 | AC5-X1 | AC5 | Other roles cannot register, and cannot call the three read endpoints either | Cross-cutting | Open event | POST as organiser, coordinator, operations manager; GET the three read endpoints as organiser and coordinator | `event_organiser`; `event_coordinator`; `event_operations_manager` | 403 | No row | A |
 | AC5-X2 | AC5 | No session | Cross-cutting | Real auth dependency | Each of the four endpoints with no header | — | 401 | — | A |
-| AC5-X3 | AC5 | Browser roles cannot reach the function or table | Cross-cutting | Local cluster with `0029` | `has_function_privilege`, `has_table_privilege` | `anon`, `authenticated` | false; `service_role` can execute | — | D |
+| AC5-X3 | AC5 | Browser roles cannot reach the function or table | Cross-cutting | Local cluster with `0048` | `has_function_privilege`, `has_table_privilege` | `anon`, `authenticated` | false; `service_role` can execute | — | D |
 | AC4-N2 | AC4 | The database refusal wins when the last place is taken between the pre-check and the write | Negative | Pre-check read says a place is free, the table already holds the last registration | POST registration | capacity 1, 1 registered | 409 `event_full` | Still one row | A |
 | AC4-N2 | AC4 | A database refusal carries its SQLSTATE and message (`P0002`, `P0004` x3) | Negative | Mocked Supabase RPC | `register` | the four refusals | `RegistrationRpcError` with `errcode` and `reason` | — | R |
 | AC5-N3 | AC5 | A Supabase outage is a 502 / repository error, never a refusal or a success | Negative | Repository raises `SupabaseRepositoryError`; mocked 500/503; network error | POST registration; `register` | — | 502; `SupabaseRepositoryError` (not `RegistrationRpcError`) | No row | A + R |
@@ -109,4 +109,4 @@ Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_regi
 | AC4-X1 (DB race) | Green | `RACE VERIFICATION PASSED`: one row stored, the second session refused with `event full` | Pass | as above | Claude for Yang, 18 Oct 2026 | `database/verify_event_registrations_race.sh`; leaves one Cancelled fixture event behind (status history is immutable) |
 | Whole service | Green | `pytest -q`: 422 passed (340 before the story); `ruff check .`: clean | Pass | local | Claude for Yang, 18 Oct 2026 | Not run: PR CI, shared-database checks, browser (no frontend in this increment) |
 
-Still open: PO confirmation of D3, D5 and D8; teammate review of these AI-drafted cases (`testing.md` §10); applying `0029` to shared development; increment 2 (frontend and Playwright journey) after SCRUM-60.
+Still open: PO confirmation of D3, D5 and D8; teammate review of these AI-drafted cases (`testing.md` §10); applying `0048` to shared development; increment 2 (frontend and Playwright journey) after SCRUM-60.

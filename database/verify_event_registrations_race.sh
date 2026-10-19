@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SCRUM-21 AC4-X1 (cross-cutting): two sessions race for the last place.
 # Usage: DSN=postgresql://... ./verify_event_registrations_race.sh
-# Needs 0029 applied, an existing auth user, and a DISPOSABLE database: it commits
+# Needs 0048 applied, an existing auth user, and a DISPOSABLE database: it commits
 # a fixture. Event status history is immutable, so the event cannot be deleted; the
 # script removes the registrations and test users and leaves one Cancelled event
 # named 'VERIFY SCRUM-21 race (left behind)'. Prints RACE VERIFICATION PASSED or exits 1.
