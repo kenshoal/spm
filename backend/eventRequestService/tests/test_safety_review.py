@@ -438,3 +438,36 @@ def test_only_safety_officers_see_the_queue(caller: str) -> None:
 
     assert response.status_code == 403
 
+
+# AC6-N7 (negative, SCRUM-60 0047): approval also waits for ordinary readiness
+# (SCRUM-58's event_readiness_issues); readiness items come first, then review
+# flags, the same order as the handover refusal.
+def test_approval_refused_until_event_is_ready() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+    events.readiness_issues[event_request_id] = [
+        {"kind": "equipment_not_reserved", "requirement_id": str(uuid4()),
+         "equipment_type": "Wireless microphone", "required": 4, "reserved": 2},
+    ]
+    review = flag(events, event_request_id)
+
+    response = decide(client, event_request_id, {"decision": "approved"})
+
+    assert response.status_code == 409
+    items = response.json()["outstanding"]
+    assert [item["kind"] for item in items] == ["equipment_not_reserved", "arrangement_needs_review"]
+    assert items[0]["message"] == "Wireless microphone: 2 of 4 reserved"
+    assert items[1]["review_id"] == review["id"]
+    assert_unchanged(events, event_request_id)
+
+
+# AC6-P3 (partition): readiness does not block asking for changes, which is how
+# the officer sends an unready event back to planning.
+def test_changes_allowed_while_not_ready() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+    events.readiness_issues[event_request_id] = [{"kind": "no_venue_booking"}]
+
+    response = decide(client, event_request_id, {"decision": "changes_requested", "reason": REASON})
+
+    assert response.status_code == 200
+    assert events.rows[event_request_id]["status"] == "Planning"
+

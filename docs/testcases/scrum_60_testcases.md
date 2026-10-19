@@ -182,3 +182,20 @@ The fake-backed API cases (AC4c-H1, AC4c-N1, AC6-P2) check the API contract only
 
 **Local evidence, 18 October 2026:** `backend/eventRequestService` `pytest` 419 passed, 1 skipped (SCRUM-64's tests included), `ruff check .` clean. Red: AC6-N4 failed (no `P0005` mapping) before `SafetyApprovalBlockedError`. DB cases written in `database/verify_safety_review_arrangement_reviews.sql`, not yet run: they need a database with SCRUM-64's migrations, which shared development does not have.
 
+## Test case specification (increment 2c: readiness on approval)
+
+Branch `feat/scrum-60-approval-readiness`, from Tate's `feat/scrum-58-safety-review` (`2c9dd67`, which includes this story's `0045` branch). Agreed in messages 2233, 2237 and 2238; merge order PR #62 → PR #63 → `0045` branch → Tate's `0039`/`0046` branch → this. Migration `0047` makes approval also call SCRUM-58's `private.event_readiness_issues`.
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC6-N7 | AC6 | Approval is refused until the event is ready; readiness items come before review flags | Negative | Equipment shortfall (2 of 4) and an outstanding flag | `POST /safety-decision` | `approved` | 409; `outstanding` = `equipment_not_reserved` ("Wireless microphone: 2 of 4 reserved"), then `arrangement_needs_review` | Status unchanged, no review | API (fake) |
+| AC6-P3 | AC6 | Readiness does not block asking for changes | Partition | `no_venue_booking` | `POST /safety-decision` | `changes_requested`, reason | 200 `Planning` | — | API (fake) |
+| AC6-X9 | AC6 | The real function refuses approval with no booking | Negative | `0030`–`0047`; event without bookings | Call | `approved` | `P0005`, DETAIL `[{"kind": "no_venue_booking"}]` | No review, status unchanged | DB |
+| AC6-X10 | AC6 | The real function lists readiness items first, then flags | Negative | Approved booking, 2 of 4 reserved, outstanding flag | Call | `approved` | `P0005`; DETAIL = `equipment_not_reserved` (2/4), then the flag | No review | DB |
+| AC6-X11 | AC6 | The real function still allows asking for changes on an unready event | Partition | As AC6-X10 | Call | `changes_requested` | `Planning` | — | DB |
+| AC6-X12 | AC6 | The real function approves a ready event with nothing outstanding | Happy | Approved booking, requirement fully reserved | Call | `approved` | `Confirmed` | — | DB |
+
+The earlier verifiers were updated so their approval cases use a ready event (one approved booking) and so the outstanding-flag case looks for the review item anywhere in the list. `verify_safety_review_decisions.sql` was re-run on shared development (`0044`) after that change and still passes, so it holds before and after `0047`.
+
+**Local evidence, 19 October 2026:** Red: AC6-N7 and AC6-P3 failed before the fake modelled readiness. Green: `backend/eventRequestService` `pytest` 448 passed, 1 skipped, `ruff check .` clean. DB cases written in `database/verify_safety_review_approval_readiness.sql`, not yet run: they need SCRUM-58's `0046` and SCRUM-64's schema, which shared development does not have; Tate's `database/tests/bootstrap_safety_review.py` builds that schema.
+
