@@ -34,7 +34,7 @@ function makeRequest(status: EventRequestStatus): EventRequest {
 }
 
 // Purpose: Every backend status is representable — the UI never drops a workflow state.
-// AC5-X8 (cross-cutting): the recognised status universe retains the approved Safety Review state.
+// AC5-X8, SCRUM-60 AC6-P2 (cross-cutting): the full status universe retains Safety Review between Planning and Confirmed.
 test("covers all eleven event request statuses", () => {
   expect(EVENT_REQUEST_STATUSES).toEqual([
     "Draft",
@@ -86,7 +86,14 @@ test("files Completed requests under the completed tab", () => {
 // Purpose: Requests stay visible as they advance past Submitted into coordination.
 // AC5-X8 (cross-cutting): Safety Review remains in progress until its separate decision workflow.
 test("keeps in-progress statuses visible after leaving Submitted", () => {
-  const inProgress = ["Under Review", "Changes Requested", "Approved", "Planning", "Safety Review", "Confirmed"] as const;
+  const inProgress = [
+    "Under Review",
+    "Changes Requested",
+    "Approved",
+    "Planning",
+    "Safety Review",
+    "Confirmed",
+  ] as const;
   const groups = groupRequests(inProgress.map(makeRequest));
 
   expect(groups.submitted).toEqual([]);
@@ -138,6 +145,17 @@ test("shows that a submitted request is waiting when no coordinator is assigned"
 
   expect(screen.getByText(/waiting for an Event Coordinator Lead/i)).toBeDefined();
   expect(screen.queryByText(/Operations Manager/i)).toBeNull();
+});
+
+// AC6-P2 (partition, SCRUM-60): an event waiting for its safety check shows that step as current.
+test("marks Safety Review as current after Planning", () => {
+  render(<StatusProgress status="Safety Review" />);
+
+  expect(screen.getByRole("listitem", { current: "step" }).textContent).toContain(
+    "Safety Review",
+  );
+  const stages = screen.getAllByRole("listitem").map((item) => item.textContent);
+  expect(stages[4]).toContain("Completed stage: Planning");
 });
 
 // Purpose: Approval and completion stages are announced as done as the event advances.

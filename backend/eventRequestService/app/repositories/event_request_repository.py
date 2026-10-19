@@ -79,6 +79,15 @@ class EventRequestRepository(Protocol):
 
     def list_change_requests(self, event_request_id: str) -> list[dict[str, Any]]: ...
 
+    def decide_safety_review(
+        self, event_request_id: str, officer_id: str, decision: str,
+        reason: str | None, targets: list[dict[str, Any]]
+    ) -> dict[str, Any]: ...
+
+    def list_safety_reviews(self, event_request_id: str) -> list[dict[str, Any]]: ...
+
+    def latest_coordinator_id(self, event_request_id: str) -> str | None: ...
+
     def decide_change_request(
         self, event_request_id: str, change_request_id: str,
         coordinator_id: str, decision: str, reason: str | None
@@ -420,6 +429,49 @@ class SupabaseEventRequestRepository:
                 "p_reason": reason,
             },
         )
+
+    def decide_safety_review(
+        self,
+        event_request_id: str,
+        officer_id: str,
+        decision: str,
+        reason: str | None,
+        targets: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "decide_safety_review",
+            {
+                "p_event_request_id": event_request_id,
+                "p_officer_id": officer_id,
+                "p_decision": decision,
+                "p_reason": reason,
+                "p_targets": targets,
+            },
+        )
+
+    def list_safety_reviews(self, event_request_id: str) -> list[dict[str, Any]]:
+        return self._request_table(
+            "GET",
+            "/safety_reviews",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "decided_at.desc,id.desc",
+                "select": "*",
+            },
+        )
+
+    def latest_coordinator_id(self, event_request_id: str) -> str | None:
+        rows = self._request_table(
+            "GET",
+            "/event_coordinator_assignments",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "id.desc",
+                "limit": "1",
+                "select": "coordinator_id",
+            },
+        )
+        return rows[0]["coordinator_id"] if rows else None
 
     def _call_rpc(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:

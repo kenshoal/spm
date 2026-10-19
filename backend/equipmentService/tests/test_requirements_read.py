@@ -319,3 +319,17 @@ def test_event_service_down_on_coordinator_read(
 
     assert response.status_code == 502
     assert response.json() == {"detail": "Event request service unavailable"}
+
+
+# AC2-H5 (happy, SCRUM-60): the Safety Officer lists an event's requirements for
+# its safety check without being assigned to the event.
+def test_safety_officer_lists_event_requirements(
+    req_api: TestClient, seeded: RequirementsStore, req_events: FakeEventService, as_user
+) -> None:
+    as_user("safety_officer", user_id=TSS)
+
+    response = req_api.get(by_event(), headers=bearer())
+
+    assert response.status_code == 200
+    assert ids(response) == [ROW_A["id"], ROW_B["id"]]
+    assert req_events.requests == []

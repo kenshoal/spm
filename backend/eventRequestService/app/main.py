@@ -42,6 +42,7 @@ from app.services.event_request_service import (
 from app.services.event_transition_service import (
     DecisionReasonRequiredError,
     EventTransitionService,
+    SafetyDecisionInvalidError,
     TransitionForbiddenError,
     TransitionNotAllowedError,
 )
@@ -94,6 +95,8 @@ def create_app(
     # Before event_request_router: routes match in registration order, and its
     # /event-requests/{event_request_id} would otherwise swallow the literal
     # /event-requests/awaiting-assignment and reject it as a malformed UUID.
+    # The same holds for event_transition_router's /event-requests/safety-queue
+    # (SCRUM-60), so keep both routers above event_request_router.
     application.include_router(coordinator_assignment_router)
     application.include_router(event_transition_router)
     application.include_router(event_request_router)
@@ -201,6 +204,15 @@ def create_app(
     @application.exception_handler(DecisionReasonRequiredError)
     async def decision_reason_required(
         request: Request, error: DecisionReasonRequiredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(error)},
+        )
+
+    @application.exception_handler(SafetyDecisionInvalidError)
+    async def safety_decision_invalid(
+        request: Request, error: SafetyDecisionInvalidError
     ) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

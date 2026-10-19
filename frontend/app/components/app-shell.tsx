@@ -34,6 +34,9 @@ export function workspaceLinks(roles: string[]): NavLink[] {
   if (roles.includes("venue_staff") || roles.includes("technical_support")) {
     links.push({ href: "/arrangement-reviews", label: "Arrangement reviews" });
   }
+  if (roles.includes("safety_officer")) {
+    links.push({ href: "/safety", label: "Safety checks" });
+  }
   // Last, so the logo (the first link) still opens the user's main workspace.
   if (links.length > 0) {
     links.push({ href: "/notifications", label: "Notifications" });

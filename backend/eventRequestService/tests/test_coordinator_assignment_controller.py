@@ -514,3 +514,21 @@ def test_current_assignments_require_operations_manager_role(
         get_settings.cache_clear()
 
     assert response.status_code == 403
+
+
+# AC6-P3 (partition, SCRUM-60): an event in Safety Review is still in flight,
+# so the Lead can find it and reassign its Coordinator.
+def test_current_assignments_include_requests_in_safety_review() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        request_id = submit_event_request(event_requests)
+        client.post(
+            f"/event-requests/{request_id}/coordinator",
+            headers=headers(),
+            json={"coordinator_id": "coord-1"},
+        )
+        event_requests.rows[request_id]["status"] = "Safety Review"
+        response = client.get("/event-requests/assignments", headers=headers())
+
+    assert response.status_code == 200
+    assert [row["event_request"]["id"] for row in response.json()] == [request_id]

@@ -49,11 +49,12 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0026_event_request_planning.sql` | SCRUM-58: replaces `advance_event_request_by_coordinator` from `0025` with one added move, Approved → Planning, recorded in status history as `coordinator.planning`. Lock, latest-assignment check and grants unchanged. Verify with `verify_event_request_planning.sql`. **Applied to shared development via MCP on 13 October 2026, version `20261013134214`**, after checking the live function still matched `0025`. Full verification ran on a disposable local cluster; on shared, only read-only checks (definition, grants) were run |
 | `migrations/0027_equipment_reservation_requirements.sql` | SCRUM-13: `equipment_reservations.requirement_id uuid NOT NULL` referencing `equipment_requirements` (numbered past 0025 and 0026, taken by SCRUM-48 and SCRUM-58). Two indexes (outstanding quantity per requirement, per-event listing) and the server-only `reserve_equipment` RPC: locks the requirement then the equipment row, re-checks the row's status, the requirement's outstanding quantity and the units held on the busiest day of the hold window, then inserts with `event_request_id` copied from the requirement. `P0002` not found, `P0004` refused. Verify with `verify_equipment_reservation_writes.sql`. **Applied to shared development on 14 October 2026 through the SQL Editor, after confirming the table was empty** |
 | `migrations/0028_reserve_equipment_type_check.sql` | SCRUM-13 D12: replaces `reserve_equipment` from `0027` with one added check under the lock: the catalogue row's type must match the requirement's (trimmed, whitespace collapsed, case ignored), else SQLSTATE `22023`, which equipmentService maps to 422. `0027` is not edited because it is applied to shared development. Grants restated (service role only). Verify with `verify_equipment_reservation_writes.sql`. **Applied to shared development on 15 October 2026 through the SQL Editor**: before it, the verify script stopped at AC1-N10 (expected Red); after it, both verify scripts passed and the grants were `service_role` and the owner only. Also verified on a disposable local PostgreSQL 16 cluster the same day |
-| `migrations/0029_safety_review_status.sql` | Exact SCRUM-60/PR62 prerequisite: Safety Review status, safety_officer role constraint and cancellation compatibility, adopted unchanged from commit `889764620ba943e1a53d4a1f4a16585c739c2ab4`. Existing shared migration; do not reapply there. No safety decision workflow is added here. |
+| `migrations/0029_safety_review_status.sql` | SCRUM-60 increment 1: adds the `Safety Review` event status (between Planning and Confirmed) and the `safety_officer` staff role, and replaces `advance_event_request_by_coordinator` from `0026` with one change: a coordinator may cancel during `Safety Review`. No coordinator path reaches `Confirmed`. Verify with `verify_safety_review.sql`. Exact prerequisite adopted unchanged from PR62 commit `889764620ba943e1a53d4a1f4a16585c739c2ab4`; existing shared migration, do not reapply there. |
 | `migrations/0030_arrangement_review_reads.sql` | SCRUM-64 first read slice: arrangement review identity/audit constraints and event/time index. RLS enabled; browser access revoked and service role SELECT only. **Prepared, not applied to shared Supabase**. No flag writers, clearing or notification workflow. |
 | `migrations/0031_arrangement_review_event_changes.sql` | SCRUM-64 native event-detail audit trigger raises per-target review work atomically for significant actual edits. Private, non-callable writer; review table remains service-role SELECT only. **Prepared, not applied to shared Supabase**. No clearing or notification workflow. |
 | `migrations/0032_arrangement_review_clear.sql` | SCRUM-64 service-only exact-review clear RPC: row lock, trusted backend domain scope, stale refusal and audit-pair-only update. Review table grants remain SELECT only. **Prepared, not applied to shared Supabase**. |
 | `migrations/0033_arrangement_review_equipment_unavailability.sql` | SCRUM-64 native equipment-history trigger flags exact-equipment current/future reservations for actual unavailable transitions, using a stored history UUID. Existing status RPC/API and SELECT-only review grants unchanged. **Prepared, not applied to shared Supabase**. |
+| `migrations/0034_safety_review_decisions.sql` | SCRUM-60 increment 2: insert-only `safety_reviews` (decision, reason, targets as made; RLS on, `service_role` SELECT only) and the server-only `decide_safety_review` RPC: locks the event row first, `P0002` not found, `P0003` caller not currently a `safety_officer`, `P0004` not in `Safety Review`, `22023` invalid decision, reason or targets; then records the review and history actor and moves to `Confirmed` or `Planning`. No booking/reservation row locks (SCRUM-58 gate protocol). Raising SCRUM-64 arrangement reviews and the approval re-checks follow in a later migration. Verify with `verify_safety_review_decisions.sql`. **Applied to shared development via MCP on 18 October 2026, version `20261018031650`**; read-only grant checks passed afterwards |
 | `migrations/0035_arrangement_review_shared_reads.sql` | SCRUM-64 server-only shared outstanding-evidence function: STABLE INVOKER, full rows/reasons ordered by timestamp and UUID. No locks, readiness verdict or mutation grants. Coordinator adapter uses this RPC; staff domain queues unchanged. **Prepared, not applied to shared Supabase**. |
 | `migrations/0036_arrangement_review_safety_rechecks.sql` | Original SCRUM-64 private explicit-target writer; its child-row locking is replaced by 0040. Preserved unchanged for migration history. **Prepared, not applied to shared Supabase**. |
 | `migrations/0037_arrangement_review_notification_outbox.sql` | SCRUM-64 atomic per-new-review notification snapshot; private enqueue trigger, service SELECT only and no historical backfill. **Prepared, not applied to shared Supabase**. |
@@ -62,6 +63,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0041_booking_request_cancelled_status.sql` | SCRUM-61: adds the `cancelled` value to `booking_request_status`. Its own file because Postgres cannot use a new enum value in the transaction that adds it. **Not yet applied to shared development** |
 | `migrations/0042_cancel_venue_booking_request.sql` | SCRUM-61: `cancelled_by` and `cancelled_at` on `venue_booking_requests`, the decision-consistency constraint extended for `cancelled`, a new `cancelled_consistent` constraint, and the server-only `cancel_venue_booking_request` function (ERRCODE `P0002` not found, `55000` not pending or approved, `22023` no user). Run after 0041. **Not yet applied to shared development** |
 | `migrations/0043_venue_setup_turnaround.sql` | SCRUM-59: `venues.setup_minutes` and `venues.turnaround_minutes`, `integer NOT NULL DEFAULT 0`, each checked to be a multiple of 15 from 0 to 1020 (`venues_setup_minutes_valid`, `venues_turnaround_minutes_valid`). Existing venues read 0 / 0. Safe to re-run. Access unchanged (0016). Verify with `verify_venue_setup_turnaround.sql`. **Not yet applied to shared development** |
+| `migrations/0044_safety_review_null_inputs.sql` | SCRUM-60: replaces `decide_safety_review` from `0034` (not edited, as it is applied) with NULL-safe input checks: a NULL decision, NULL targets or a target without `arrangement` now gets `22023` before any write. In `0034` a target without `arrangement` was saved, because `NULL NOT IN (...)` is NULL. Grants restated. Verify with `verify_safety_review_decisions.sql` (AC6-X5). **Applied to shared development via MCP on 18 October 2026, version `20261018045424`**: the verify script failed at AC6-X5 before it (`23502`) and passed fully after it |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
@@ -219,11 +221,13 @@ Number allocation update, 16 October: Jaren reserved **0034** for his SCRUM-60
 safety decision migration in Telegram discussion #2111 (04:13:21 UTC). Our
 unapplied shared-read migration is now **0035**, with identical SQL and SHA256
 `586a1b54aa92ae2145145f3448a8301696e3780dbcce7587453e45aee954d0a4`.
-Migration 0034 is not present in this checkout and must not be replaced with a
-SCRUM-64 file. The bounded SQL fixture below deliberately tests our independent
-read helper without the external decision migration; a separate pinned-source
-fixture below adds it without changing this checkout's migration ownership.
-Neither fixture is a full safety-workflow deployment. Historical execution records retain their old numbers.
+PR62's 0034 and 0044 are now present through the merge of `dev`; both remain
+owned by SCRUM-60 and retain their recorded shared application history. They must
+not be replaced or renumbered as SCRUM-64 files. The independent 30-file fixture
+below deliberately omits them. The separate 37-file compatibility fixture uses
+the exact reviewed archive versions, including later work not merged here,
+without changing local migration ownership or claiming shared deployment.
+Historical execution records retain their old numbers.
 
 ### Safety decision integration boundary
 
@@ -299,7 +303,8 @@ The helper's own private missing-target contract remains `P0002`. The published
 its trusted input. These are separate caller/helper contracts. Approval and
 handover both check normal readiness followed by outstanding review evidence,
 including retained flags on cancelled bookings. Those caller/lifecycle/gate
-functions remain external story ownership and are not copied into this checkout.
+functions remain SCRUM-60/SCRUM-58 ownership. The merged base contains 0034/0044
+and the initial API/UI; later 0039 and 0045–0047 remain archive-only here.
 A new equipment requirement can commit after handover without a review flag, so
 normal readiness must also be checked at approval; flags alone are insufficient.
 The current published 0047 approval performs that check. Native evidence does not
@@ -445,7 +450,7 @@ After applying 0036 and its 0040 replacement, run
 `psql -X -v ON_ERROR_STOP=1 -f database/verify_arrangement_review_safety_rechecks.sql`
 for explicit targeting, whole-batch refusal, replay/clear preservation, injected
 failure rollback and denied direct app/browser calls. This owner-run check does
-not supply or verify the future saved-decision caller or actual Safety Officer
+not supply or verify the saved-decision caller or actual Safety Officer
 HTTP authorisation.
 The sequential clear script proves stale T1/T2 behaviour, not simultaneous
 session lock waiting. These checks do not prove remote HTTP delivery or
@@ -625,9 +630,11 @@ extracted, reviewed offline source archive** at commit
 `e7888dcfdb19777722583b471b1d31e49da3f9c4`: it must contain `migrations/`
 and the four verifier files. This is one published combined source snapshot,
 including Tate's handover/readiness work; it is not an implicit branch merge.
-Keep its commit, source paths and SHA256 values in the archive manifest. Do not
-copy external migrations into this checkout, replace either owner's SQL or fetch
-new source as a hidden setup step. Once the archive is supplied, setup needs no
+Keep its commit, source paths and SHA256 values in the archive manifest. Local
+0034/0044 now come from merged PR62, but this reproducibility recipe deliberately
+uses the pinned archive for all six listed files. Do not overwrite those applied
+base files, copy later external migrations into this checkout or fetch new source
+as a hidden setup step. Once the archive is supplied, setup needs no
 external network. A future head requires reviewed hashes and fresh evidence.
 
 All entries in this table are from that same pinned commit:
@@ -817,9 +824,10 @@ local venue ACL snippet had SHA256
 It was a local platform-precondition workaround, never a repository migration,
 and is unnecessary with the current 0046 stack.
 
-This optional fixture does not merge external stories into SCRUM-64 or prevent
-its independent review. The saved decision/lifecycle and shared readiness gates
-remain owned by SCRUM-60/SCRUM-58; this checkout supplies their SCRUM-64 helpers.
+This optional fixture does not import the later workflow migrations or prevent
+independent SCRUM-64 review. PR62's initial decision API/UI and 0034/0044 are now
+merged through `dev`; the saved decision/lifecycle and shared readiness gates
+remain owned by SCRUM-60/SCRUM-58. SCRUM-64 supplies their review helpers.
 No production replacement, privileged shim or shared deployment is added here.
 
 ## Event status history contract (SCRUM-48)

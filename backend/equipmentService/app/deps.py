@@ -11,6 +11,7 @@ from app.config import get_settings
 
 TECHNICAL_SUPPORT_ROLE = "technical_support"
 EVENT_COORDINATOR_ROLE = "event_coordinator"
+SAFETY_OFFICER_ROLE = "safety_officer"
 
 
 class User(BaseModel):
