@@ -221,22 +221,25 @@ unapplied shared-read migration is now **0035**, with identical SQL and SHA256
 `586a1b54aa92ae2145145f3448a8301696e3780dbcce7587453e45aee954d0a4`.
 Migration 0034 is not present in this checkout and must not be replaced with a
 SCRUM-64 file. The bounded SQL fixture below deliberately tests our independent
-read helper without the future decision migration; it is not the full safety
-workflow deployment. Historical execution records retain their old numbers.
+read helper without the external decision migration; a separate pinned-source
+fixture below adds it without changing this checkout's migration ownership.
+Neither fixture is a full safety-workflow deployment. Historical execution records retain their old numbers.
 
 ### Safety decision integration boundary
 
-Jaren's proposed `decide_safety_review(event UUID, officer UUID, decision text,
-reason text, targets jsonb)` will own the saved `safety_reviews` decision and
-lifecycle mutation. Targets are objects with `arrangement` (`venue_booking` or
-`equipment_reservation`) and `id` (the booking/reservation UUID). SCRUM-64 will
-map a saved changes-requested decision ID to existing
+Jaren's published `decide_safety_review(event UUID, officer UUID, decision text,
+reason text, targets jsonb)` at PR62 commit
+`4a5bc9349ecb91d260454b6a9db77beea15e5793` owns the saved `safety_reviews`
+decision and lifecycle mutation through external 0034 and its 0044/0045/0047
+replacements. Targets are objects with `arrangement` (`venue_booking` or
+`equipment_reservation`) and `id` (the booking/reservation UUID). The published
+caller maps a saved changes-requested decision ID to existing
 `trigger_type='safety_recheck'`, `trigger_id=<safety_reviews.id>` and the saved
-reason; it will not add duplicate `source`/`source_id` columns. Explicit targets
+reason, without duplicate `source`/`source_id` columns. Explicit targets
 must belong to the same event. Empty targets mean zero arrangement flags; they
 do not discard the decision or its reason. Approval creates no safety-recheck
-flags. These are the integration interpretation of the user's request to
-implement with reference to #2111, not a claim that Jaren has reviewed our reply.
+flags. The SCRUM-64 helper contract remains separate from the saved decision
+and lifecycle responsibilities of SCRUM-60.
 
 Migration 0036 provides only the private transaction-internal writer
 `private.raise_safety_arrangement_reviews(event UUID, decision UUID, targets JSONB,
@@ -276,8 +279,8 @@ must join the event protocol; arbitrary privileged changes are not serialised by
 this helper. No cross-story immutability trigger, deletion guard or FK is added.
 
 This function is `SECURITY INVOKER`, in `private`, with an empty search path and
-EXECUTE revoked from PUBLIC, anon, authenticated and service_role. A future
-trusted decision function must call it in a privileged owner/definer transaction;
+EXECUTE revoked from PUBLIC, anon, authenticated and service_role. A trusted
+decision function must call it in a privileged owner/definer transaction;
 an ordinary service-role invoker wrapper cannot bypass that boundary. No direct
 HTTP endpoint or app-role review-write grant is added. The caller must verify
 the Safety Officer's authority, the actual saved decision and its event, and bind
@@ -285,16 +288,19 @@ the immutable complete target/reason payload to that decision. There is no saved
 decision foreign key or separate replay ledger here: a caller passing additional
 targets on a repeated UUID is not detected by the per-target conflict key.
 
-**Pending:** PR #62 at `8897646` contains the status foundation only, not the
-proposed decision table/RPC. That actual saved caller, role verification and
-lifecycle integration remain outside this helper. SCRUM-60 must save its decision,
-status and targeted reviews atomically, refuse stale decisions and recheck
-outstanding reviews before approval. This compatibility change does not implement
-or prove that approval recheck, a complete readiness verdict or arbitrary writer
-coordination. A new equipment requirement can commit after handover without a
-review flag, so safety approval must also recheck normal readiness or use a
-separately agreed mutation restriction; checking flags alone is insufficient.
-Migration 0034 remains reserved for Jaren's decision work.
+**Published integration boundary:** the optional pinned fixture below uses PR62
+commit `4a5bc9349ecb91d260454b6a9db77beea15e5793`, containing the decision
+foundation, NULL validation and 0045–0047 connections. Its saved changes-requested
+decision calls this private writer with the actual saved UUID in the same
+transaction; invalid or cross-event targets are mapped to caller error `22023`.
+The helper's own private missing-target contract remains `P0002`. Approval and
+handover both check normal readiness followed by outstanding review evidence,
+including retained flags on cancelled bookings. Those caller/lifecycle/gate
+functions remain external story ownership and are not copied into this checkout.
+A new equipment requirement can commit after handover without a review flag, so
+normal readiness must also be checked at approval; flags alone are insufficient.
+The current published 0047 approval performs that check. Native evidence does not
+establish a shared deployment or replace the future membership-writer protocol.
 
 ### Current shared read
 
@@ -600,6 +606,207 @@ committed evidence and preserved resources/lifecycle. They do not test Tate's
 readiness verdict, Jaren's actual caller, arbitrary reparent/delete operations or
 all concurrent arrangement-creation races. The unchanged sequential clears script
 still does not prove simultaneous clears.
+
+### Pinned external safety-workflow compatibility fixture
+
+Use a **different owned empty PostgreSQL 16 cluster** from the independent
+30-file SCRUM-64 fixture above. Run these commands from the repository root.
+The combined fixture loads **37 supplemental migrations**, including local 0026
+Planning support and all six external files below. Every test scope uses this
+same complete schema: 0046 depends on 0039 and 0047 depends on 0046. Selecting
+`decision` does not remove Tate's dependency from the current stack.
+
+Set `SCRUM64_TEST_DSN` to an owned disposable loopback database named
+`scrum48_*`. Set `SCRUM64_EXTERNAL_SQL_DIR` to the **database directory of an
+extracted, reviewed offline source archive** at commit
+`4a5bc9349ecb91d260454b6a9db77beea15e5793`: it must contain `migrations/`
+and the four verifier files. This is one published combined source snapshot,
+including Tate's handover/readiness work; it is not an implicit branch merge.
+Keep its commit, source paths and SHA256 values in the archive manifest. Do not
+copy external migrations into this checkout, replace either owner's SQL or fetch
+new source as a hidden setup step. Once the archive is supplied, setup needs no
+external network. A future head requires reviewed hashes and fresh evidence.
+
+All entries in this table are from that same pinned commit:
+
+| External source relative to the archive's database directory | SHA256 |
+| --- | --- |
+| `migrations/0034_safety_review_decisions.sql` | `4099f1f7a0c60df682d076c0080e7911da05008495313126de0c9e3f79e817aa` |
+| `migrations/0039_send_for_safety_review.sql` | `15c9bcc42cce8c8a948428f9be70ad0ab122501ea72b66dbcc0215ceb7b909a5` |
+| `migrations/0044_safety_review_null_inputs.sql` | `aa2cb9b05e978358b4b634a715ca95fd27284dcf9f7c821132af3993c6301792` |
+| `migrations/0045_safety_review_arrangement_reviews.sql` | `333774e7c9e7fe5831bdf44d308230d15b39e1ff80b2bff4ba4cf536df7b3ff4` |
+| `migrations/0046_shared_event_readiness.sql` | `a6c0f19a3900ae4576a9d6edb5fa11cc3c437f5de086b1e628dd9492e3dc2a3c` |
+| `migrations/0047_safety_review_approval_readiness.sql` | `c0ab8732be85a2c8226e7ae5ab2156f89efb1430e4c479d319773c2817435993` |
+| `verify_safety_review_decisions.sql` | `401938449777cc45827062cf14f08434cbd0eddd82c80b40caee814b3d6f1070` |
+| `verify_safety_review_arrangement_reviews.sql` | `8c7602f5366229bbc0ae38c02a5f818cc32484a4c82d58ace1bbea8e91e5000c` |
+| `verify_shared_event_readiness.sql` | `55803187c95990062be3bda03bb45aaa665d05c61bd0293908984bcf85f6059d` |
+| `verify_safety_review_approval_readiness.sql` | `6f7912f04bc1656b2573a29dada5eb34479d3cf399ce75e1ffbe71a81748abb0` |
+
+0034 requires the event schema, `staff_roles`, exact 0029 safety status/role
+foundation and 0025 actor/history support. The guarded SCRUM-48 bootstrap supplies
+the older event/history migrations. Persisted `staff_roles` is the Safety Officer
+role source for the decision RPC; metadata alone does not satisfy it. The two
+Auth rows and metadata column below extend only the disposable Auth test double,
+not shared Auth or real accounts.
+
+The load order retains 0036 followed by its 0040 lock-compatible replacement.
+0045 connects actual saved decisions to the private review writer and outstanding
+reader; 0046 adds shared normal readiness and the handover review gate; 0047 uses
+both normal readiness and outstanding reviews before approval. 0046's narrowly
+privileged readiness function removes the older fixture's need for a separate
+venue SELECT grant. **Do not apply the historical local ACL workaround here.**
+
+```sh
+: "${SCRUM64_TEST_DSN:?Supply the owned disposable loopback scrum48_* database URL}"
+: "${SCRUM64_EXTERNAL_SQL_DIR:?Supply the pinned archive database directory}"
+python3 - "$SCRUM64_EXTERNAL_SQL_DIR" <<'PY_CHECK' || exit 1
+from pathlib import Path
+import hashlib
+import sys
+archive = Path(sys.argv[1])
+expected = {
+    "migrations/0034_safety_review_decisions.sql": "4099f1f7a0c60df682d076c0080e7911da05008495313126de0c9e3f79e817aa",
+    "migrations/0039_send_for_safety_review.sql": "15c9bcc42cce8c8a948428f9be70ad0ab122501ea72b66dbcc0215ceb7b909a5",
+    "migrations/0044_safety_review_null_inputs.sql": "aa2cb9b05e978358b4b634a715ca95fd27284dcf9f7c821132af3993c6301792",
+    "migrations/0045_safety_review_arrangement_reviews.sql": "333774e7c9e7fe5831bdf44d308230d15b39e1ff80b2bff4ba4cf536df7b3ff4",
+    "migrations/0046_shared_event_readiness.sql": "a6c0f19a3900ae4576a9d6edb5fa11cc3c437f5de086b1e628dd9492e3dc2a3c",
+    "migrations/0047_safety_review_approval_readiness.sql": "c0ab8732be85a2c8226e7ae5ab2156f89efb1430e4c479d319773c2817435993",
+    "verify_safety_review_decisions.sql": "401938449777cc45827062cf14f08434cbd0eddd82c80b40caee814b3d6f1070",
+    "verify_safety_review_arrangement_reviews.sql": "8c7602f5366229bbc0ae38c02a5f818cc32484a4c82d58ace1bbea8e91e5000c",
+    "verify_shared_event_readiness.sql": "55803187c95990062be3bda03bb45aaa665d05c61bd0293908984bcf85f6059d",
+    "verify_safety_review_approval_readiness.sql": "6f7912f04bc1656b2573a29dada5eb34479d3cf399ce75e1ffbe71a81748abb0",
+}
+for name, digest in expected.items():
+    if hashlib.sha256((archive / name).read_bytes()).hexdigest() != digest:
+        raise SystemExit(f"Pinned external source mismatch: {name}")
+PY_CHECK
+
+python3 database/tests/bootstrap_event_status_history.py \
+  --dsn "$SCRUM64_TEST_DSN" --disposable || exit 1
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -c "ALTER TABLE auth.users ADD COLUMN raw_app_meta_data jsonb NOT NULL DEFAULT '{}'::jsonb; INSERT INTO auth.users DEFAULT VALUES" || exit 1
+
+for migration in \
+  0001_baseline.sql \
+  0002_transition_equipment_status.sql \
+  0003_create_equipment_fn.sql \
+  0004_quantity_history.sql \
+  0005_rls_and_function_access.sql \
+  0006_rpc_execute_grants.sql \
+  0016_venues.sql \
+  0017_notifications.sql \
+  0018_venue_booking_requests.sql \
+  0018_event_change_requests.sql \
+  0019_event_change_requests_organiser_index.sql \
+  0020_event_change_request_updated_at.sql \
+  0021_event_change_request_monotonic_updated_at.sql \
+  0020_equipment_reservations.sql \
+  0021_equipment_requirements.sql \
+  0027_equipment_reservation_requirements.sql \
+  0028_reserve_equipment_type_check.sql \
+  0026_event_request_planning.sql \
+  0029_safety_review_status.sql \
+  0030_arrangement_review_reads.sql \
+  0031_arrangement_review_event_changes.sql \
+  0032_arrangement_review_clear.sql \
+  0033_arrangement_review_equipment_unavailability.sql \
+  0034_safety_review_decisions.sql \
+  0035_arrangement_review_shared_reads.sql \
+  0036_arrangement_review_safety_rechecks.sql \
+  0037_arrangement_review_notification_outbox.sql \
+  0038_arrangement_review_notification_delivery.sql \
+  0039_send_for_safety_review.sql \
+  0040_arrangement_review_safety_recheck_lock_compatibility.sql \
+  0041_booking_request_cancelled_status.sql \
+  0042_cancel_venue_booking_request.sql \
+  0043_venue_setup_turnaround.sql \
+  0044_safety_review_null_inputs.sql \
+  0045_safety_review_arrangement_reviews.sql \
+  0046_shared_event_readiness.sql \
+  0047_safety_review_approval_readiness.sql
+do
+  case "$migration" in
+    0034_safety_review_decisions.sql|0039_send_for_safety_review.sql|0044_safety_review_null_inputs.sql|0045_safety_review_arrangement_reviews.sql|0046_shared_event_readiness.sql|0047_safety_review_approval_readiness.sql)
+      source_file="$SCRUM64_EXTERNAL_SQL_DIR/migrations/$migration" ;;
+    *) source_file="database/migrations/$migration" ;;
+  esac
+  psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+    -f "$source_file" || exit 1
+done
+```
+
+Each migration uses its own `psql` invocation: 0041 must commit its enum value
+before 0042 consumes it. This is an isolated fixture recipe, **not** a shared
+rollout command. Retain the reviewed production rollout/write-hold boundary
+above; no shared migration is applied by these instructions. If local PostgreSQL
+is accessed through a wrapper, put its `psql` executable on `PATH` for both the
+bootstrap and direct commands.
+
+#### Published workflow SQL and local integration checks
+
+After all 37 files, optionally run all four exact upstream workflow checks. The
+current decision verifier uses a real target and a ready approval fixture, so it
+is compatible with 0045/0047. Every script rolls its fixtures back:
+
+```sh
+for verification in \
+  verify_safety_review_decisions.sql \
+  verify_safety_review_arrangement_reviews.sql \
+  verify_shared_event_readiness.sql \
+  verify_safety_review_approval_readiness.sql
+do
+  psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+    -f "$SCRUM64_EXTERNAL_SQL_DIR/$verification" || exit 1
+done
+```
+
+The ten independent SCRUM-64 SQL checks and three disposable lock-compatibility
+cases above can also run unchanged against this combined fixture. Run the local
+saved-caller/gate contract checks separately:
+
+```sh
+SCRUM64_INTEGRATION_SCOPE="${SCRUM64_INTEGRATION_SCOPE:-all}"
+case "$SCRUM64_INTEGRATION_SCOPE" in
+  decision|handover|all) ;;
+  *) echo "Scope must be decision, handover or all" >&2; exit 1 ;;
+esac
+python3 database/tests/test_safety_arrangement_integration.py \
+  --dsn "$SCRUM64_TEST_DSN" --disposable --scope "$SCRUM64_INTEGRATION_SCOPE"
+# Add --psql /path/to/psql-wrapper if required.
+```
+
+Scope selects test methods only: `decision` checks the saved caller and approval,
+`handover` checks the handover consumer and `all` checks both. It does not alter
+schema dependencies or assertions. These native checks exercise persisted roles,
+real workflow functions, reviews, history and transactional outbox behaviour;
+they do not prove JWT/HTTP/browser authorisation, shared deployment or PR CI.
+See [`scrum_64_integration_handoff.md`](../docs/testcases/scrum_64_integration_handoff.md)
+for current runner hashes, exact counts and execution status. A passing local
+snapshot is not a claim that the workflow is deployed to shared Supabase.
+
+#### Earlier source/evidence pins (historical only)
+
+Earlier PR62 commit `289a814917dc8a9e4f874b43595285cf7dc68ef9` used the same
+0034 digest `4099f1f7a0c60df682d076c0080e7911da05008495313126de0c9e3f79e817aa`
+and verifier `9627a4da26058dd4fe3f8bfbd18abcf8763b4124f2157185176bbc786179c916`.
+The later `135536cd1e0713052476ef0b17ce78c9c7542a0e` added 0044 NULL validation
+with verifier `879a3644a66540e28565bc0abc51659cc61d3e9645e8c774ad423b3c665ddf65`;
+its decision-only 32-file and full 33-file fixtures predated the 0045–0047
+connections. Tate's earlier 0039 was pinned at
+`bf31002c4928c6d953be89bb7f34e3f257fd883e` (digest unchanged above).
+The original frozen runner was
+`78ad48f8926f703fd86724d3086f9837f0ab43e6ab92e8c8f96210744f33a76e`.
+Those missing-connection failures and initial venue 42501 remain historical
+results; they are not current failures at 4a5bc93. The separately live-verified
+local venue ACL snippet had SHA256
+`4eafc51e7a40f66bdf96b2e637c68e621bd09f3fd02cf896c1952d39c1146724`.
+It was a local platform-precondition workaround, never a repository migration,
+and is unnecessary with the current 0046 stack.
+
+This optional fixture does not merge external stories into SCRUM-64 or prevent
+its independent review. The saved decision/lifecycle and shared readiness gates
+remain owned by SCRUM-60/SCRUM-58; this checkout supplies their SCRUM-64 helpers.
+No production replacement, privileged shim or shared deployment is added here.
 
 ## Event status history contract (SCRUM-48)
 Migration `0025` was **applied to shared development on 10 October 2026** after
