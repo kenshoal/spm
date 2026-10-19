@@ -50,14 +50,22 @@ export interface EquipmentReservation {
 const ARRANGEMENTS: readonly string[] = ["venue_booking", "equipment_reservation"];
 const MAX_REASON = 2000;
 
-// Approval sends only the decision; asking for changes needs a reason and sends
-// the ticked arrangements, each submitted as "<arrangement>:<id>".
+// Approval sends only the decision, and is refused if a reason was typed or an
+// arrangement ticked, so that input is never silently dropped. Asking for
+// changes needs a reason and sends the ticked arrangements, each submitted as
+// "<arrangement>:<id>".
 export function parseSafetyDecisionForm(formData: FormData): {
   payload: SafetyDecisionPayload;
   errors: Record<string, string>;
 } {
   const decision = String(formData.get("decision") ?? "");
-  if (decision === "approved") return { payload: { decision, targets: [] }, errors: {} };
+  if (decision === "approved") {
+    const filledIn = String(formData.get("reason") ?? "").trim() !== "" || formData.getAll("target").length > 0;
+    const errors: Record<string, string> = filledIn
+      ? { decision: "You typed a reason or ticked arrangements. Clear them to approve, or choose Ask for changes." }
+      : {};
+    return { payload: { decision, targets: [] }, errors };
+  }
   if (decision !== "changes_requested") {
     return { payload: { decision: "approved", targets: [] }, errors: { decision: "Choose approve or ask for changes." } };
   }

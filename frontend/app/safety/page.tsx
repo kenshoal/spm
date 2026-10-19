@@ -24,8 +24,12 @@ const DECIDED_MESSAGES: Record<string, string> = {
 interface BookingCheck {
   booking: EventBooking;
   venue: Venue | null;
-  restrictions: VenueBlock[];
+  // null when the venue's blocks could not be loaded: unknown, not "none".
+  restrictions: VenueBlock[] | null;
 }
+
+const NOT_LOADED =
+  "Venue details or restrictions couldn't be loaded. Don't approve until this is fixed.";
 
 interface SafetyCheck {
   event: EventRequest;
@@ -49,7 +53,7 @@ async function loadCheck(event: EventRequest): Promise<SafetyCheck> {
   const checks = await Promise.all(
     live.map(async (booking) => {
       const [venue, blocks] = await Promise.all([getVenue(booking.venue_id), listVenueBlocks(booking.venue_id)]);
-      return { booking, venue, restrictions: overlappingBlocks(blocks ?? [], booking) };
+      return { booking, venue, restrictions: blocks === null ? null : overlappingBlocks(blocks, booking) };
     }),
   );
   return { event, bookings: checks, requirements, reservations };
@@ -99,7 +103,9 @@ function CheckCard({ check }: { check: SafetyCheck }) {
                   {" · "}Accessibility: {venue.accessibility_features.join(", ") || "none recorded"}
                 </p>
               ) : null}
-              {restrictions.length > 0 ? (
+              {venue === null || restrictions === null ? (
+                <p className="mt-1 font-semibold text-[#8e3d35]">{NOT_LOADED}</p>
+              ) : restrictions.length > 0 ? (
                 <ul className="mt-1 text-[#8e3d35]">
                   {restrictions.map((block) => (
                     <li key={block.id}>Restriction: {reasonLabel(block.reason_category)}{block.reason_detail ? ` (${block.reason_detail})` : ""}, {formatBookingDates(block.start_date, block.end_date)} · {block.slots.join(", ")}</li>
@@ -132,7 +138,13 @@ function CheckCard({ check }: { check: SafetyCheck }) {
         </ul>
       )}
 
-      <SafetyDecisionForm eventRequestId={event.id} arrangements={arrangementOptions(check)} />
+      <SafetyDecisionForm
+        eventRequestId={event.id}
+        arrangements={arrangementOptions(check)}
+        approveBlockedReason={
+          check.bookings.some(({ venue, restrictions }) => venue === null || restrictions === null) ? NOT_LOADED : undefined
+        }
+      />
     </article>
   );
 }

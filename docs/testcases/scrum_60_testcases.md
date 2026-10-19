@@ -203,3 +203,18 @@ The earlier verifiers were updated so their approval cases use a ready event (on
 
 **Still to do:** merge in the agreed order (PR #62 → PR #63 → `0045` branch → SCRUM-58's `0039`/`0046` → this branch), apply `0045` and `0047` to shared development in that order, then an authenticated coordinator → Safety Officer journey on the integrated stack.
 
+## Review of PR #62 (Yang Xue, 19 October 2026)
+
+| Finding | Outcome | Cases |
+| --- | --- | --- |
+| Targets from another event are accepted | Valid for PR #62 alone. Membership is enforced in `0045` (SCRUM-64's helper; cross-event target → `22023`, AC4c-N1/AC4c-X2, verified by Heng Rui). It is not repeated in a PR #62 migration, because any number above `0045` would override `0045`/`0047` on a fresh build. PR #62 only stores targets; nothing is flagged from them until `0045`. | AC4c-N1, AC4c-X2 |
+| Duplicate targets accepted | Fixed: the API refuses the same arrangement twice (422); `0047` refuses it in the database too. | AC4a-N6, AC6-X13 |
+| "No restrictions" shown when the venue lookup fails | Fixed: the card says the venue details or restrictions could not be loaded, and Approve is disabled for that event. | AC2-N4 |
+| Approve silently drops a typed reason or ticked arrangements | Fixed: approving with either filled in is refused with a message. | AC3-N2 |
+| Coordinator cannot see which arrangements were flagged | Fixed: the coordinator's Safety check panel lists them (booking venue and dates; equipment reservations by kind, as the coordinator cannot read reservations). | AC4a-H6 |
+| Queue order uses `updated_at` | Kept, with a comment on the trade-off and the upgrade path (latest status-history row). | — |
+| Route order for `/safety-queue` | Comment added in `main.py`. | — |
+| 409 `outstanding` list unused on PR #62 alone | Comment added: it is filled by `0045`/`0047`. | — |
+
+**Evidence, 19 October 2026:** each new case failed first (AC4a-N6: 200; AC3-N2, AC2-N4, AC4a-H6: assertion failures), then passed. `backend/eventRequestService` `pytest` 389 passed, `ruff check .` clean; `frontend` `vitest` 368 passed, typecheck and lint clean; `npx playwright test` 41 passed (mock APIs).
+

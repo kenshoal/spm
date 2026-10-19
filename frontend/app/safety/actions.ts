@@ -53,6 +53,9 @@ export async function decideSafety(
   // redirect() throws, so it stays outside the try above.
   if (response.status === 401) redirect("/auth");
   if (response.status === 409) {
+    // The outstanding list comes from increment 2b (0045/0047, after PR #63):
+    // review flags and readiness items. Until then a 409 only means the event
+    // is no longer waiting.
     const outstanding = (await readBody(response))?.outstanding;
     if (Array.isArray(outstanding) && outstanding.length > 0) {
       const reasons = outstanding.map((item) => String((item as { message?: unknown }).message ?? ""));
