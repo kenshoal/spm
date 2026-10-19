@@ -86,8 +86,8 @@ def test_view_response_has_exactly_the_public_keys() -> None:
 
 
 @pytest.mark.parametrize("status", NON_CONFIRMED,
-                         ids=[f"AC1-P{k}" for k in range(1, 10)])
-# AC1-P1..P9 (partition): an event that isn't Confirmed is reported as not found
+                         ids=[f"AC1-P{k}" for k in range(1, 11)])
+# AC1-P1..P10 (partition): an event that isn't Confirmed is reported as not found
 def test_non_confirmed_event_is_not_found(status: str) -> None:
     repo = FakeRegistrationRepository()
     event_id = add_event(repo, status=status)
@@ -120,8 +120,8 @@ def test_attendee_registers_for_open_event() -> None:
 
 
 @pytest.mark.parametrize("status", NON_CONFIRMED,
-                         ids=[f"AC2-P{k}" for k in range(1, 10)])
-# AC2-P1..P9 (partition): registering for a non-Confirmed event is refused and stores nothing
+                         ids=[f"AC2-P{k}" for k in range(1, 11)])
+# AC2-P1..P10 (partition): registering for a non-Confirmed event is refused and stores nothing
 def test_register_refused_for_non_confirmed_event(status: str) -> None:
     repo = FakeRegistrationRepository()
     event_id = add_event(repo, status=status)

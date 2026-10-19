@@ -32,6 +32,7 @@ NON_CONFIRMED = [
     "Rejected",
     "Approved",
     "Planning",
+    "Safety Review",
     "Completed",
     "Cancelled",
 ]

@@ -65,10 +65,10 @@ Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_regi
 | AC1-H1 | AC1 | Attendee views a Confirmed event | Happy | Confirmed event, capacity 10, 3 registered, open window | GET `/attendee/events/{id}` as an attendee | — | 200, D4 fields, `places_remaining` 7 | — | A |
 | AC1-H2 | AC1 | List shows only Confirmed events with an open window | Happy | Open Confirmed, closed Confirmed, not-yet-open Confirmed, Planning | GET `/attendee/events` | — | Only the open Confirmed event | — | A |
 | AC1-X1 | AC1 | No internal field leaks | Cross-cutting | Confirmed event with organiser, venue, equipment and accessibility data | GET the event; call `to_public_event` | — | Keys equal the D4 whitelist exactly | — | U + A |
-| AC1-P1…P9 | AC1 | Each non-Confirmed status is not visible | Partition | Event in the given status | GET `/attendee/events/{id}` | Draft, Submitted, Under Review, Changes Requested, Rejected, Approved, Planning, Completed, Cancelled | 404 | — | A |
+| AC1-P1…P10 | AC1 | Each non-Confirmed status is not visible | Partition | Event in the given status | GET `/attendee/events/{id}` | Draft, Submitted, Under Review, Changes Requested, Rejected, Approved, Planning, Safety Review, Completed, Cancelled | 404 | — | A |
 | AC1-N1 | AC1 | Unknown id | Negative | Empty repository | GET `/attendee/events/{random}` | — | 404 | — | A |
 | AC2-H1 | AC2 | Register for a Confirmed, open, not-full event | Happy | As AC1-H1 | POST `/attendee/events/{id}/registrations` | — | 201 | — | A |
-| AC2-P1…P9 | AC2 | Register for each non-Confirmed status | Partition | Event in the given status, open window | POST registration | the nine statuses | 404 | No registration row | U + A |
+| AC2-P1…P10 | AC2 | Register for each non-Confirmed status | Partition | Event in the given status, open window | POST registration | the ten statuses (P10 = Safety Review, added 19 Oct with `0029_safety_review_status.sql`) | 404 | No registration row | U + A |
 | AC2-X1 | AC2 | Event cancelled between view and register | Negative | Event Cancelled after being Confirmed | Call `register_for_event` | — | `P0002` | No row | D |
 | AC3-B1 | AC3 | 1 s before `opens_at` | Boundary | Confirmed, capacity free | `check_registration(now = opens - 1 s)` | — | `RegistrationNotOpenError` | — | U |
 | AC3-B2 | AC3 | Exactly at `opens_at` | Boundary | as above | now = opens | — | allowed | — | U |

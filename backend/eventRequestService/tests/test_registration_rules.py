@@ -28,6 +28,7 @@ NON_CONFIRMED = [
     "Rejected",
     "Approved",
     "Planning",
+    "Safety Review",
     "Completed",
     "Cancelled",
 ]
@@ -69,8 +70,8 @@ def test_public_event_has_exactly_the_whitelisted_fields() -> None:
 
 
 @pytest.mark.parametrize("status", NON_CONFIRMED,
-                         ids=[f"AC2-P{k}" for k in range(1, 10)])
-# AC2-P1..P9 (partition): every non-Confirmed status is not visible, even with an open window
+                         ids=[f"AC2-P{k}" for k in range(1, 11)])
+# AC2-P1..P10 (partition): every non-Confirmed status is not visible, even with an open window
 def test_non_confirmed_event_is_not_visible(status: str) -> None:
     with pytest.raises(EventNotVisibleError):
         check_registration(make_event(status=status), INSIDE, registered_count=0)
