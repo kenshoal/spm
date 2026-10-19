@@ -1,6 +1,6 @@
 # SCRUM-31 Test Cases: View Venue Availability
 
-Last reviewed: 19 October 2026
+Last reviewed: 20 October 2026
 
 Status: **approved by the story owner (Kennedy) on 19 October 2026**, including assumptions A1 to A6 as proposed (A1, tentative holds not applicable, and A2, the roles, still to be confirmed with the Product Owner). Q1 and Q2 are left open: Technical Support stays excluded, and the page is reached from venue search only. Nothing has been built yet; results are recorded below as work proceeds.
 
@@ -111,6 +111,7 @@ Results from 19 October 2026 on Kennedy's machine against branch `feat/scrum-31-
 | AC3-H1, AC3-H2, AC3-X1 | Red then Green | As expected | Pass (local) | `test_blocked_wins_over_booked`, `test_cancelled_booking_frees_its_slots`, `test_calendar_agrees_with_venue_search` (4 venues, 10 dates, 3 slots each) |
 | AC4-P1 to AC4-P3 | Red then Green | As expected | Pass (local) | `tests/test_venue_calendar.py` |
 | AC2-X3 | Red then Green | Red: the store method did not exist. Green: as expected. A window-edge case was added after reviewing the plan | Pass (local, mocked Data API for Supabase) | `tests/test_booking_store_calendar.py`, `tests/test_supabase_booking_repository.py` |
+| AC1-H1, AC1-P1, AC1-B1, AC1-B2, AC1-N1, AC1-N6 to AC1-N10, AC1-X1, AC1-X2, AC2-H1, AC2-H2, AC2-P2, AC3-H2, AC3-X1, AC4 | Written after the code | 34 of 34 checks passed, 1 skipped (script output reported by Kennedy, not captured here) | Pass (real stack, 20 October 2026); AC1-P2 **Not executed** live | `scrum31_live_check.py` against the real authService, eventRequestService and venueService with the shared development database. See "Real-stack check" below |
 | AC1-U1 to AC1-U6 | Red then Green | Red: the new modules did not exist (import error). Green: as expected | Pass (local) | `frontend/__tests__/venue-availability.test.tsx` (10 test cases): the table, month links across year ends, the venue picker, unknown venue, failed loads, the role gate and its refusal, and the search-result link |
 | AC1-E1, AC1-U5 (browser) | Written after the code (not Red first) | As expected, after fixing two faults in my own test (a "4 Mar" locator that also matched 14 and 24 Mar, then a word boundary that failed on the row's joined text) | Pass (local, Chrome, mock venue API) | `frontend/e2e/venue-availability.spec.ts`: from a search result a coordinator opens the calendar, sees Booked and Blocked in words, no block reason, and moves to the next month; an organiser is sent to `/unauthorised` |
 
@@ -133,7 +134,27 @@ Results from 19 October 2026 on Kennedy's machine against branch `feat/scrum-31-
 
 Fault checks on the frontend: mislabelling blocked cells as Booked, a mock that ignores blocks, and letting organisers into the page each made a browser test fail.
 
-The browser tests run against the **mock** venue API in `e2e/support/venue-api.mjs`, extended with a copy of the calendar rules. They prove the screen and its wiring, not the real service. The page against the real services (Docker Compose and the shared development database) is **Not executed**.
+The browser tests run against the **mock** venue API in `e2e/support/venue-api.mjs`, extended with a copy of the calendar rules. They prove the screen and its wiring, not the real service. The real-stack check below covers the API. The page itself against the real services is **Not executed**.
+
+**Real-stack check, 20 October 2026.** Run by Kennedy on their machine against branch `feat/scrum-31-venue-availability-view` (commit `3b32d23`) through Docker Compose: the real authService (Supabase Auth), eventRequestService and venueService (Supabase store), and the shared development database. The script signs in as the two coordinator test accounts, venue staff, an organiser, an attendee and technical support, and uses the one venue on shared development. It prints status codes only. Kennedy reported **34 passed, 0 failed, 1 skipped**. Per-line output was pasted; it is summarised here.
+
+| Checks (case IDs) | What was done | Expected | Actual |
+| --- | --- | --- | --- |
+| AC1-H1, AC1-P1 | The coordinator and venue staff read October 2026 | 200; 31 dates; slots in AM, PM, NIGHT order | as expected |
+| AC1-P2 | The safety officer reads the calendar | 200 | **Skipped**: there is no `safety_officer@example.com` account on shared development. Covered only by the local tests |
+| AC1-N8 to AC1-N10, AC1-X1 | Organiser, attendee, technical support; no token | 403, 403, 403; 401 | as expected |
+| AC1-B1, AC1-B2 | February 2028 and February 2027 | 29 and 28 dates | as expected |
+| AC1-N1, AC1-N6, AC1-N7 | Month 13; month missing; unknown venue | 422; 422; 404 | as expected |
+| AC1-X2 | The response keys; the 3 real blocks' ids and detail text | only `venue_id`, `month`, `days`; no block id or detail text in September or October | as expected |
+| AC2-H2, AC4 | September and October 2026, which contain the venue's real blocks | The calendar matches an independent calculation, blocks included | as expected |
+| AC2-P2 | A pending request for 10 Mar 2031, PM | The slot stays open | as expected |
+| AC2-H1 | Venue staff approved a request for 4 and 5 Mar 2031, AM | Both AM cells booked; the days around and the other slots open; the whole month matches an independent calculation | as expected |
+| AC3-X1 | Venue search for the booked and the open day | The booked slot omits the venue; the open day offers it | as expected |
+| AC3-H2 | The coordinator cancelled the approved booking | The slots are open again | as expected |
+
+**Database confirmation after the run (read-only, service role).** The two requests created were both `cancelled` (the approved one keeps its venue staff decider; the pending one has none) and `cancelled_by` is the assigned coordinator. No `pending` or `approved` rows existed anywhere, and the venue still had exactly its 3 existing blocks, so none were created. The 2 cancelled rows remain on shared development (no DELETE grant); they hold no slot.
+
+Not covered live: the screen itself against the real services, the safety officer role, and the failure paths (venue service down). Those are covered only by the local tests.
 
 **Mutation check (manual, 19 October 2026).** Eleven one-line faults were injected one at a time and each made at least one test fail: booked winning over blocked, pending bookings counted as booked, the month's last date dropped, non-operating slots shown as open, a catalogue-blocked venue shown as open, lifted blocks counted, any signed-in user allowed, the window's start and end edges made exclusive, slots in the wrong order, and the Supabase query ignoring the status. Two attempts at the "any signed-in user" fault first broke an import and were discarded; the third, using the real dependency, was killed by the three role-refusal tests.
 
