@@ -30,6 +30,7 @@ _IN_FLIGHT_STATUSES = (
     EventRequestStatus.CHANGES_REQUESTED,
     EventRequestStatus.APPROVED,
     EventRequestStatus.PLANNING,
+    EventRequestStatus.SAFETY_REVIEW,
     EventRequestStatus.CONFIRMED,
 )
 

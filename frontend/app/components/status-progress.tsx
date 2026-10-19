@@ -6,6 +6,7 @@ const MILESTONES = [
   "Under Review",
   "Approved",
   "Planning",
+  "Safety Review",
   "Confirmed",
   "Completed",
 ] as const;
@@ -20,6 +21,7 @@ const STATUS_DESCRIPTIONS: Record<EventRequestStatus, string> = {
   "Changes Requested": "The coordinator needs clarification before review can continue.",
   Approved: "Approved — the event can move into planning.",
   Planning: "Venues and equipment are being arranged.",
+  "Safety Review": "Waiting for the Safety Officer's check before confirmation.",
   Confirmed: "Confirmed — the event is set to go ahead.",
   Completed: "This event has finished and reached the final stage.",
   Cancelled: "This request has been cancelled.",

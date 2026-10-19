@@ -389,6 +389,39 @@ def test_admin_assigns_event_operations_manager_role(
     assert response.json()["role"] == "event_operations_manager"
 
 
+# AC1-H1 (happy): an admin can grant the SCRUM-60 Safety Officer role.
+def test_admin_assigns_safety_officer_role(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="admin-id",
+            email="admin@example.com",
+            app_metadata={"role": "admin"},
+        )
+    )
+    admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        SimpleNamespace(data=[{"role": "admin"}]),
+        SimpleNamespace(data=[{"role": "safety_officer"}]),
+    ]
+    admin.auth.admin.get_user_by_id.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="user-id",
+            email="safety@example.com",
+            app_metadata={"role": "safety_officer"},
+        )
+    )
+
+    response = client.patch(
+        "/auth/users/user-id/role",
+        headers={"Authorization": "Bearer admin-token"},
+        json={"role": "safety_officer"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["role"] == "safety_officer"
+
+
 @pytest.mark.parametrize(
     ("caller_role", "app_metadata"),
     [

@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import (
     AwareDatetime,
@@ -27,6 +28,7 @@ class EventRequestStatus(str, Enum):
     CHANGES_REQUESTED = "Changes Requested"
     APPROVED = "Approved"
     PLANNING = "Planning"
+    SAFETY_REVIEW = "Safety Review"
     CONFIRMED = "Confirmed"
     COMPLETED = "Completed"
     CANCELLED = "Cancelled"
@@ -242,6 +244,44 @@ class AttendeeEventResponse(BaseModel):
     description: str | None
     status: EventRequestStatus
     proposed_date_times: list[AwareDatetime]
+
+
+class SafetyTarget(BaseModel):
+    """An arrangement the Safety Officer says needs another look (SCRUM-60 AC4)."""
+
+    arrangement: Literal["venue_booking", "equipment_reservation"]
+    id: UUID
+
+
+class SafetyDecision(BaseModel):
+    """The Safety Officer's decision on an event in Safety Review (SCRUM-60).
+
+    Reject is parked until the customer defines it, so it is not accepted.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    decision: Literal["approved", "changes_requested"]
+    reason: str | None = Field(default=None, max_length=2_000)
+    targets: list[SafetyTarget] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def changes_need_a_reason(self) -> "SafetyDecision":
+        if self.decision == "changes_requested" and not self.reason:
+            raise ValueError("a reason is required when asking for changes")
+        if len({(t.arrangement, t.id) for t in self.targets}) != len(self.targets):
+            raise ValueError("each arrangement can be listed only once")
+        return self
+
+
+class SafetyReviewResponse(BaseModel):
+    id: str
+    event_request_id: str
+    decision: Literal["approved", "changes_requested"]
+    reason: str | None
+    targets: list[dict[str, Any]]
+    decided_by: str
+    decided_at: datetime
 
 
 class EventReviewDecisionResponse(BaseModel):

@@ -20,6 +20,7 @@ WHERE email_confirmed_at IS NULL
     'event_operations_manager@example.com',
     'event_coordinator1@example.com',
     'event_coordinator2@example.com',
+    'safety_officer@example.com',
     'technical_support@example.com',
     'venue_staff@example.com'
   );
@@ -37,6 +38,7 @@ FROM (VALUES
     ('event_operations_manager@example.com', 'event_operations_manager'),
     ('event_coordinator1@example.com',       'event_coordinator'),
     ('event_coordinator2@example.com',       'event_coordinator'),
+    ('safety_officer@example.com',           'safety_officer'),
     ('technical_support@example.com',        'technical_support'),
     ('venue_staff@example.com',              'venue_staff')
 ) AS r(email, role)
@@ -60,7 +62,7 @@ JOIN auth.users u ON u.email = m.email
 JOIN public.client_organisations o ON o.name = m.organisation
 ON CONFLICT (user_id) DO NOTHING;
 
--- 4. Check: expect 10 rows, each with confirmed = true. A missing row means
+-- 4. Check: expect 11 rows, each with confirmed = true. A missing row means
 --    that account has not been registered yet.
 SELECT u.email, s.role, u.email_confirmed_at IS NOT NULL AS confirmed
 FROM auth.users u
@@ -69,7 +71,8 @@ WHERE u.email IN (
     'admin@example.com', 'attendee@example.com', 'event_organiser@example.com',
     'event_organiser2@example.com', 'event_organiser3@example.com',
     'event_operations_manager@example.com', 'event_coordinator1@example.com',
-    'event_coordinator2@example.com', 'technical_support@example.com',
+    'event_coordinator2@example.com', 'safety_officer@example.com',
+    'technical_support@example.com',
     'venue_staff@example.com'
   )
 ORDER BY s.role, u.email;

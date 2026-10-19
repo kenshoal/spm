@@ -80,7 +80,9 @@ which Docker Compose sets. The default, `memory`, keeps both in process memory
 and is used by the unit tests and standalone development; that data is lost
 when the service stops. All routes verify the bearer token with `authService`;
 reads require `event_coordinator` or `venue_staff`, while create and update
-operations require `venue_staff`.
+operations require `venue_staff`. The `safety_officer` (SCRUM-60) may also read,
+role-wide: a venue, its blocks, and one event's bookings
+(`GET /booking-requests/event/{id}`).
 
 `GET /venues/locations` returns `[{"id", "name", "location"}]` for every venue,
 blocked venues included, and also admits `technical_support`. It exists so

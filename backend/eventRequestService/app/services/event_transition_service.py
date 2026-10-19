@@ -2,9 +2,11 @@ from app.models.event_request import (
     EventRequestResponse,
     EventRequestStatus,
     EventReviewDecision,
+    SafetyDecision,
 )
 from app.repositories.event_request_repository import EventRequestRpcError
 from app.services.event_request_service import (
+    EventRequestForbiddenError,
     EventRequestNotFoundError,
     EventRequestService,
 )
@@ -13,6 +15,7 @@ from app.services.notification_client import NotificationClient
 NOT_FOUND_ERRCODE = "P0002"
 NOT_ASSIGNED_ERRCODE = "P0003"
 NOT_ALLOWED_ERRCODE = "P0004"
+INVALID_PARAMETER_ERRCODE = "22023"
 
 
 class TransitionNotAllowedError(Exception):
@@ -38,6 +41,13 @@ class DecisionReasonRequiredError(Exception):
 
     def __init__(self, decision: EventRequestStatus) -> None:
         super().__init__(f"A reason is required when the decision is {decision.value}")
+
+
+class SafetyDecisionInvalidError(Exception):
+    """The database refused the decision's content (SQLSTATE 22023)."""
+
+    def __init__(self) -> None:
+        super().__init__("The safety decision is not valid")
 
 
 class EventTransitionService:
@@ -137,6 +147,42 @@ class EventTransitionService:
                 organiser_id=event_request.organiser_id,
                 reason=payload.reason,
             )
+        return event_request
+
+    def decide_safety(
+        self, event_request_id: str, officer_id: str, payload: SafetyDecision
+    ) -> EventRequestResponse:
+        """Record the Safety Officer's decision (SCRUM-60 AC3, AC4a, AC4b, AC6)."""
+        try:
+            event_request = self.event_request_service.decide_safety_review(
+                event_request_id, officer_id, payload
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == NOT_FOUND_ERRCODE:
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == NOT_ASSIGNED_ERRCODE:
+                raise EventRequestForbiddenError(event_request_id) from error
+            if error.errcode == NOT_ALLOWED_ERRCODE:
+                raise TransitionNotAllowedError(
+                    event_request_id,
+                    f"Event request {event_request_id} is not waiting for a safety check",
+                ) from error
+            if error.errcode == INVALID_PARAMETER_ERRCODE:
+                raise SafetyDecisionInvalidError() from error
+            raise
+
+        # After the decision is committed, as in SCRUM-17: a refused decision
+        # tells nobody anything. The organiser's "confirmed" notice is SCRUM-36.
+        if payload.decision == "changes_requested":
+            coordinator_id = self.event_request_service.latest_coordinator_id(
+                event_request_id
+            )
+            if coordinator_id is not None:
+                self.notification_client.notify_safety_changes_requested(
+                    event_request_id=event_request_id,
+                    coordinator_id=coordinator_id,
+                    reason=payload.reason,
+                )
         return event_request
 
     def _advance(

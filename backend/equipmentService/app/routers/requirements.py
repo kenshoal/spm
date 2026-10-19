@@ -19,6 +19,7 @@ from app.availability import norm
 from app.db import get_client
 from app.deps import (
     EVENT_COORDINATOR_ROLE,
+    SAFETY_OFFICER_ROLE,
     TECHNICAL_SUPPORT_ROLE,
     User,
     require_role,
@@ -187,16 +188,24 @@ def review_queue(
     return _list_rows(client, "status", status)
 
 
+# SCRUM-60 AC2: the Safety Officer reads one event's requirements for its
+# safety check, role-wide like Technical Support. Read-only.
+EventReaderDep = Annotated[
+    User,
+    Depends(require_role(EVENT_COORDINATOR_ROLE, TECHNICAL_SUPPORT_ROLE, SAFETY_OFFICER_ROLE)),
+]
+
+
 @router.get("/by-event/{event_request_id}", response_model=list[RequirementOut])
 def list_for_event(
     event_request_id: UUID,
-    user: ViewerDep,
+    user: EventReaderDep,
     client: ClientDep,
     events: EventDep,
     authorization: Annotated[str | None, Header()] = None,
 ) -> list[RequirementOut]:
     """One event's requirements; Coordinators must currently be assigned."""
-    if not _is_support(user):
+    if not _is_support(user) and SAFETY_OFFICER_ROLE not in user.roles:
         events.assert_assigned(str(event_request_id), _token(authorization), user.id)
     return _list_rows(client, "event_request_id", str(event_request_id))
 

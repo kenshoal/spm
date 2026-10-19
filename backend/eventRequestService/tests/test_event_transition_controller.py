@@ -226,6 +226,7 @@ def test_start_review_requires_event_coordinator_role(
 
 @pytest.mark.parametrize("from_status", sorted(CANCEL_SOURCE_STATUSES))
 # Purpose: The assigned Coordinator can cancel a request from any non-terminal status.
+# AC6-P1 (partition, SCRUM-60): includes Safety Review, which stays cancellable.
 def test_assigned_coordinator_can_cancel_from_every_non_terminal_status(
     from_status: str,
 ) -> None:

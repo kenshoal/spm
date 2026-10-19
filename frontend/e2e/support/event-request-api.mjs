@@ -19,7 +19,9 @@ const SESSIONS = {
   "coordinator-session": { id: "playwright-coordinator", role: "event_coordinator" },
   "other-coordinator-session": { id: "other-coordinator", role: "event_coordinator" },
   "ops-session": { id: "playwright-ops", role: "event_operations_manager" },
+  "safety-session": { id: "playwright-safety", role: "safety_officer" },
 };
+const safetyReviews = [];
 
 const CANCEL_SOURCES = new Set([
   "Submitted",
@@ -234,6 +236,39 @@ createServer(async (request, response) => {
     return;
   }
 
+  // SCRUM-60: mirrors eventRequestService's safety queue and decision. The real
+  // rules (role re-check, P0004/P0005, SCRUM-64 flags) are covered by its own
+  // tests and the database verification.
+  if (url.pathname === "/event-requests/safety-queue" && request.method === "GET") {
+    if (user.role !== "safety_officer") return send(response, 403, { detail: "Insufficient permissions" });
+    send(response, 200, [...records.values()].filter((r) => r.status === "Safety Review")
+      .sort((a, b) => a.updated_at.localeCompare(b.updated_at)));
+    return;
+  }
+  const safetyDecisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/safety-decision$/);
+  if (safetyDecisionMatch && request.method === "POST") {
+    if (user.role !== "safety_officer") return send(response, 403, { detail: "Insufficient permissions" });
+    const target = records.get(decodeURIComponent(safetyDecisionMatch[1]));
+    if (!target) return send(response, 404, { detail: "Event request not found" });
+    if (target.status !== "Safety Review") return send(response, 409, { detail: "Not waiting for a safety check" });
+    const body = await readJson(request);
+    const previous = target.status;
+    target.status = body.decision === "approved" ? "Confirmed" : "Planning";
+    target.updated_at = new Date().toISOString();
+    safetyReviews.unshift({
+      id: randomUUID(), event_request_id: target.id, decision: body.decision, reason: body.reason ?? null,
+      targets: body.targets ?? [], decided_by: user.id, decided_at: target.updated_at,
+    });
+    recordHistory(target, previous, user, `safety.${body.decision === "approved" ? "approval" : "changes_requested"}`);
+    send(response, 200, target);
+    return;
+  }
+  const safetyReviewsMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/safety-reviews$/);
+  if (safetyReviewsMatch && request.method === "GET") {
+    const eventId = decodeURIComponent(safetyReviewsMatch[1]);
+    send(response, 200, safetyReviews.filter((review) => review.event_request_id === eventId));
+    return;
+  }
   const historyMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/status-history$/);
   const coordinatorMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/coordinator$/);
   const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|resume-review|cancellation|completion)$/);
