@@ -146,3 +146,23 @@ def test_count_active_with_no_rows_is_zero() -> None:
     assert repository.count_active("e1") == 0
     assert repository.count_active_for_events([]) == {}
     assert calls == 1
+
+
+# AC5-N4 (negative): the duplicate check filters by event, attendee and
+# Registered status, and reads one row at most
+def test_has_active_queries_event_and_attendee() -> None:
+    seen: list[httpx.Request] = []
+    payloads: list[list[dict[str, str]]] = [[{"id": "r1"}], []]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=payloads.pop(0))
+
+    repository = make_repository(handler)
+
+    assert repository.has_active("e1", "a1") is True
+    assert repository.has_active("e1", "a1") is False
+    assert seen[0].url.params["event_request_id"] == "eq.e1"
+    assert seen[0].url.params["attendee_id"] == "eq.a1"
+    assert seen[0].url.params["status"] == "eq.Registered"
+    assert seen[0].url.params["limit"] == "1"

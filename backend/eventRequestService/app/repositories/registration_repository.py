@@ -42,6 +42,8 @@ class RegistrationRepository(Protocol):
 
     def count_active_for_events(self, event_ids: list[str]) -> dict[str, int]: ...
 
+    def has_active(self, event_id: str, attendee_id: str) -> bool: ...
+
     def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]: ...
 
     def register(
@@ -116,6 +118,19 @@ class SupabaseRegistrationRepository:
         for row in rows:
             counts[row["event_request_id"]] += 1
         return counts
+
+    def has_active(self, event_id: str, attendee_id: str) -> bool:
+        rows = self._get(
+            "/event_registrations",
+            {
+                "select": "id",
+                "status": "eq.Registered",
+                "event_request_id": f"eq.{event_id}",
+                "attendee_id": f"eq.{attendee_id}",
+                "limit": "1",
+            },
+        )
+        return bool(rows)
 
     def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]:
         return self._get(

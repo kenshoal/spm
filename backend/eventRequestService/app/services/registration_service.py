@@ -28,7 +28,9 @@ class RegistrationService:
     Reads and early refusals use the pure rules; the write goes through the
     `register_for_event` database function, which re-checks under a row lock,
     so its refusals (a race lost between check and write) are mapped to the same
-    errors the rules raise.
+    errors the rules raise. The early checks run in the function's order —
+    visible, window, already registered, capacity — so an attendee holding the
+    last place is told they are already registered, not that the event is full.
     """
 
     def __init__(self, repository: RegistrationRepository) -> None:
@@ -51,6 +53,10 @@ class RegistrationService:
         self, event_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]:
         event = self._visible_event(event_id)
+        if not is_window_open(event, now):
+            raise RegistrationNotOpenError
+        if self.repository.has_active(event_id, attendee_id):
+            raise AlreadyRegisteredError
         check_registration(event, now, self.repository.count_active(event_id))
         try:
             registration = self.repository.register(event_id, attendee_id, now)

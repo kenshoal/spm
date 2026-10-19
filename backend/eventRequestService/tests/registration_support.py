@@ -81,6 +81,14 @@ class FakeRegistrationRepository:
     def count_active_for_events(self, event_ids: list[str]) -> dict[str, int]:
         return {i: self.count_active(i) for i in event_ids}
 
+    def has_active(self, event_id: str, attendee_id: str) -> bool:
+        return any(
+            r["event_request_id"] == event_id
+            and r["attendee_id"] == attendee_id
+            and r["status"] == "Registered"
+            for r in self.registrations
+        )
+
     def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]:
         mine = [r for r in self.registrations if r["attendee_id"] == attendee_id]
         return [dict(r) for r in sorted(mine, key=lambda r: r["created_at"],
