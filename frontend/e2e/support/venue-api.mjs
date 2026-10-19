@@ -257,6 +257,34 @@ createServer(async (request, response) => {
     return send(response, 200, booking);
   }
 
+  // Mirrors venueService's SCRUM-31 GET /venues/{id}/calendar so the availability page can
+  // be driven in a browser. An active block wins over an approved booking, then a slot the
+  // venue does not operate, then a venue blocked in the catalogue; it returns states only.
+  const calendarPath = url.pathname.match(/^\/venues\/([^/]+)\/calendar$/);
+  if (calendarPath && request.method === "GET") {
+    if (!["event_coordinator", "venue_staff", "safety_officer"].includes(role)) return send(response, 403, { detail: "Insufficient permissions" });
+    const target = venues.get(decodeURIComponent(calendarPath[1]));
+    if (!target) return send(response, 404, { detail: "Venue not found" });
+    const month = url.searchParams.get("month") ?? "";
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return send(response, 422, { detail: "Invalid month" });
+    const [year, number] = month.split("-").map(Number);
+    const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
+    const covers = (item, date, slot) => item.start_date <= date && date <= item.end_date && item.slots.includes(slot);
+    const days = Array.from({ length: count }, (_, index) => {
+      const date = `${month}-${String(index + 1).padStart(2, "0")}`;
+      const slots = ["AM", "PM", "NIGHT"].map((slot) => {
+        let state = "open";
+        if ([...blocks.values()].some((b) => b.venue_id === target.id && b.status === "active" && covers(b, date, slot))) state = "blocked";
+        else if ([...bookings.values()].some((b) => b.venue_id === target.id && b.status === "approved" && covers(b, date, slot))) state = "booked";
+        else if (!target.operating_slots.includes(slot)) state = "not_offered";
+        else if (target.status !== "available") state = "unavailable";
+        return { slot, state };
+      });
+      return { date, slots };
+    });
+    return send(response, 200, { venue_id: target.id, month, days });
+  }
+
   const match = url.pathname.match(/^\/venues\/([^/]+)$/);
   const venue = match ? venues.get(decodeURIComponent(match[1])) : undefined;
   if (match && request.method === "GET") return venue ? send(response, 200, venue) : send(response, 404, { detail: "Venue not found" });
