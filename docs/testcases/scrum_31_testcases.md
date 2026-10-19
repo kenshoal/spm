@@ -111,7 +111,8 @@ Results from 19 October 2026 on Kennedy's machine against branch `feat/scrum-31-
 | AC3-H1, AC3-H2, AC3-X1 | Red then Green | As expected | Pass (local) | `test_blocked_wins_over_booked`, `test_cancelled_booking_frees_its_slots`, `test_calendar_agrees_with_venue_search` (4 venues, 10 dates, 3 slots each) |
 | AC4-P1 to AC4-P3 | Red then Green | As expected | Pass (local) | `tests/test_venue_calendar.py` |
 | AC2-X3 | Red then Green | Red: the store method did not exist. Green: as expected. A window-edge case was added after reviewing the plan | Pass (local, mocked Data API for Supabase) | `tests/test_booking_store_calendar.py`, `tests/test_supabase_booking_repository.py` |
-| AC1-U1 to AC1-U6, AC1-E1 | Planned | Not started | Not executed | Frontend page, scheduled next |
+| AC1-U1 to AC1-U6 | Red then Green | Red: the new modules did not exist (import error). Green: as expected | Pass (local) | `frontend/__tests__/venue-availability.test.tsx` (10 test cases): the table, month links across year ends, the venue picker, unknown venue, failed loads, the role gate and its refusal, and the search-result link |
+| AC1-E1, AC1-U5 (browser) | Written after the code (not Red first) | As expected, after fixing two faults in my own test (a "4 Mar" locator that also matched 14 and 24 Mar, then a word boundary that failed on the row's joined text) | Pass (local, Chrome, mock venue API) | `frontend/e2e/venue-availability.spec.ts`: from a search result a coordinator opens the calendar, sees Booked and Blocked in words, no block reason, and moves to the next month; an organiser is sent to `/unauthorised` |
 
 ## Latest verification
 
@@ -120,6 +121,19 @@ Results from 19 October 2026 on Kennedy's machine against branch `feat/scrum-31-
 | Lint | `ruff check .` | All checks passed |
 | New backend tests | `pytest tests/test_venue_calendar.py tests/test_booking_store_calendar.py -q` | 41 passed (plus 2 new Supabase-store tests in `tests/test_supabase_booking_repository.py`) |
 | Whole venueService suite | `pytest -q` (the CI command; also `python -m pytest`) | 496 passed, 10 skipped (the untracked live-database file) |
+
+**Frontend (19 October 2026, `frontend/`, Kennedy's machine).**
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Lint | `npm run lint` | Clean |
+| Type check | `npm run typecheck` | Clean |
+| Unit and component tests | `npm test` | 378 passed (35 files); 10 are new |
+| Browser tests, full suite | `npx playwright test` through a temporary config selecting the installed Google Chrome (`channel: "chrome"`), as for SCRUM-12 and SCRUM-61 | 43 passed, including the 2 new |
+
+Fault checks on the frontend: mislabelling blocked cells as Booked, a mock that ignores blocks, and letting organisers into the page each made a browser test fail.
+
+The browser tests run against the **mock** venue API in `e2e/support/venue-api.mjs`, extended with a copy of the calendar rules. They prove the screen and its wiring, not the real service. The page against the real services (Docker Compose and the shared development database) is **Not executed**.
 
 **Mutation check (manual, 19 October 2026).** Eleven one-line faults were injected one at a time and each made at least one test fail: booked winning over blocked, pending bookings counted as booked, the month's last date dropped, non-operating slots shown as open, a catalogue-blocked venue shown as open, lifted blocks counted, any signed-in user allowed, the window's start and end edges made exclusive, slots in the wrong order, and the Supabase query ignoring the status. Two attempts at the "any signed-in user" fault first broke an import and were discarded; the third, using the real dependency, was killed by the three role-refusal tests.
 
