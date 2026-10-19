@@ -121,8 +121,12 @@ def safety_queue(
     event_requests: Annotated[EventRequestService, Depends(get_event_request_service)],
 ) -> list[EventRequestResponse]:
     """SCRUM-60 AC2: events waiting for a safety check, longest-waiting first.
-    The status change bumps updated_at, so it stands for "entered Safety Review".
-    Venue and equipment details come from their own services."""
+    Venue and equipment details come from their own services.
+
+    ponytail: orders by updated_at, which the move into Safety Review bumps. An
+    edit while the event waits also bumps it and moves it down the queue. If that
+    matters, order by the latest "-> Safety Review" status-history row instead
+    (one more query per event)."""
     if SAFETY_OFFICER_ROLE not in caller.roles:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     waiting = event_requests.list_by_status(EventRequestStatus.SAFETY_REVIEW)

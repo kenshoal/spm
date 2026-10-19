@@ -269,6 +269,8 @@ class SafetyDecision(BaseModel):
     def changes_need_a_reason(self) -> "SafetyDecision":
         if self.decision == "changes_requested" and not self.reason:
             raise ValueError("a reason is required when asking for changes")
+        if len({(t.arrangement, t.id) for t in self.targets}) != len(self.targets):
+            raise ValueError("each arrangement can be listed only once")
         return self
 
 
