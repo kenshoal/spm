@@ -104,20 +104,32 @@ class SupabaseRegistrationRepository:
         return self.count_active_for_events([event_id]).get(event_id, 0)
 
     def count_active_for_events(self, event_ids: list[str]) -> dict[str, int]:
+        # One exact-count request per event: the Data API caps a page at 1,000
+        # rows, so counting fetched rows would undercount a large event.
         counts = {event_id: 0 for event_id in event_ids}
-        if not event_ids:
-            return counts
-        rows = self._get(
-            "/event_registrations",
-            {
-                "select": "event_request_id",
-                "status": "eq.Registered",
-                "event_request_id": f"in.({','.join(event_ids)})",
-            },
-        )
-        for row in rows:
-            counts[row["event_request_id"]] += 1
+        for event_id in event_ids:
+            counts[event_id] = self._count_active(event_id)
         return counts
+
+    def _count_active(self, event_id: str) -> int:
+        try:
+            response = self._client.head(
+                "/event_registrations",
+                params={
+                    "status": "eq.Registered",
+                    "event_request_id": f"eq.{event_id}",
+                },
+                headers={"Prefer": "count=exact"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the registration lookup"
+            ) from error
+        # Content-Range "*/42": PostgREST reports the matched total when
+        # count=exact is requested, with no row payload to page through.
+        total = response.headers.get("content-range", "").rpartition("/")[2]
+        return int(total) if total.isdigit() else 0
 
     def has_active(self, event_id: str, attendee_id: str) -> bool:
         rows = self._get(

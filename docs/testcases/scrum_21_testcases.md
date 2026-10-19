@@ -97,7 +97,7 @@ Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_regi
 | AC5-N4 | AC5 | A duplicate registration on a full event is refused as already registered, not as full (added 19 Oct: the duplicate check must run before the capacity check, matching `register_for_event`) | Negative | capacity 1, the attendee already holds the only place | POST registration again | — | 409 `already_registered` (not `event_full`) | Still one row | A + R |
 | AC1-X1 | AC1 | The event query selects no internal columns | Cross-cutting | Mocked Supabase | `get_event` | — | `select` equals the public-view columns | — | R |
 | AC5-H1 / AC5-H2 | AC5 | The RPC payload and the attendee list query are correct | Happy | Mocked Supabase | `register`; `list_for_attendee` | — | RPC body has event, attendee, `p_now`; list filtered by attendee, newest first | — | R |
-| AC4-B2 / AC4-B3 | AC4 | Only `Registered` rows are counted, per event; zero when none | Boundary | Mocked Supabase | `count_active_for_events` | — | `{e1: 2, e2: 1, e3: 0}`; empty id list makes no call | — | R |
+| AC4-B2 / AC4-B3 | AC4 | Only `Registered` rows are counted, per event, through an exact count query — never by counting fetched rows, which the Data API caps at 1,000 per page (added 19 Oct; updated 20 Oct) | Boundary | Mocked Supabase | `count_active_for_events` | — | `{e1: 2, e2: 1, e3: 0}` from `Content-Range` with `Prefer: count=exact`, one request per event; 1,001 counted with an empty page; zero when none; empty id list makes no call | — | R |
 
 ## Latest execution record
 
