@@ -102,7 +102,26 @@ Read-only: no table is written and no migration is needed. A slot's state is der
 
 ### Latest execution record
 
-Nothing has been run for this story yet.
+Results from 19 October 2026 on Kennedy's machine against branch `feat/scrum-31-venue-availability-view` (docs commit `8cd4a32` plus the uncommitted backend work), by Claude Code. Environment: Python 3.13, in-memory stores, authService overridden, no network. Real services were **not** involved.
+
+| ID | Automation status | Actual result | Execution status | Remarks and evidence |
+| --- | --- | --- | --- | --- |
+| AC1-H1, AC1-P1, AC1-P2, AC1-B1 to AC1-B3, AC1-N1 to AC1-N10, AC1-X1, AC1-X2 | Red then Green | Red: 404 on the missing route (and one body-shape assertion). Green: as expected | Pass (local) | `tests/test_venue_calendar.py` |
+| AC2-H1, AC2-B1, AC2-B2, AC2-H2, AC2-P1 to AC2-P5, AC2-X1, AC2-X2 | Red then Green | As expected. AC2-X2 passed vacuously before the route existed, so it was changed to assert a 200 first | Pass (local) | `tests/test_venue_calendar.py` |
+| AC3-H1, AC3-H2, AC3-X1 | Red then Green | As expected | Pass (local) | `test_blocked_wins_over_booked`, `test_cancelled_booking_frees_its_slots`, `test_calendar_agrees_with_venue_search` (4 venues, 10 dates, 3 slots each) |
+| AC4-P1 to AC4-P3 | Red then Green | As expected | Pass (local) | `tests/test_venue_calendar.py` |
+| AC2-X3 | Red then Green | Red: the store method did not exist. Green: as expected. A window-edge case was added after reviewing the plan | Pass (local, mocked Data API for Supabase) | `tests/test_booking_store_calendar.py`, `tests/test_supabase_booking_repository.py` |
+| AC1-U1 to AC1-U6, AC1-E1 | Planned | Not started | Not executed | Frontend page, scheduled next |
+
+## Latest verification
+
+| Check | Command (run from `backend/venueService`) | Result |
+| --- | --- | --- |
+| Lint | `ruff check .` | All checks passed |
+| New backend tests | `pytest tests/test_venue_calendar.py tests/test_booking_store_calendar.py -q` | 41 passed (plus 2 new Supabase-store tests in `tests/test_supabase_booking_repository.py`) |
+| Whole venueService suite | `pytest -q` (the CI command; also `python -m pytest`) | 496 passed, 10 skipped (the untracked live-database file) |
+
+**Mutation check (manual, 19 October 2026).** Eleven one-line faults were injected one at a time and each made at least one test fail: booked winning over blocked, pending bookings counted as booked, the month's last date dropped, non-operating slots shown as open, a catalogue-blocked venue shown as open, lifted blocks counted, any signed-in user allowed, the window's start and end edges made exclusive, slots in the wrong order, and the Supabase query ignoring the status. Two attempts at the "any signed-in user" fault first broke an import and were discarded; the third, using the real dependency, was killed by the three role-refusal tests.
 
 ## Disclosures
 
