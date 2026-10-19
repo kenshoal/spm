@@ -355,3 +355,20 @@ def test_repository_failure_is_a_bad_gateway() -> None:
 
     assert response.status_code == 502
     assert repo.registrations == []
+
+
+# AC5-N4 (negative): an attendee holding the last place is refused as already
+# registered, not as full — the duplicate check runs before the capacity check,
+# matching register_for_event's order
+def test_duplicate_registration_on_full_event_is_already_registered() -> None:
+    repo = FakeRegistrationRepository()
+    event_id = add_event(repo, registration_capacity=1)
+
+    with make_client(repo) as client:
+        first = client.post(register_path(event_id))
+        second = client.post(register_path(event_id))
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+    assert second.json()["code"] == "already_registered"
+    assert repo.count_active(event_id) == 1
