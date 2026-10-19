@@ -6,7 +6,7 @@ import { workspaceLinks } from "@/app/components/app-shell";
 
 const notifications = { href: "/notifications", label: "Notifications" };
 
-// Purpose: SCRUM-27 — each staff role sees the workspace it can use.
+// AC5-X9 (cross-cutting): SCRUM-64 adds the staff review workspace while preserving SCRUM-27 role-specific navigation.
 test("links each role to its own workspace", () => {
   expect(workspaceLinks(["event_operations_manager"])).toEqual([
     { href: "/operations/assignments", label: "Assignments" },
@@ -14,6 +14,7 @@ test("links each role to its own workspace", () => {
   ]);
   expect(workspaceLinks(["technical_support"])).toEqual([
     { href: "/equipment", label: "Equipment" },
+    { href: "/arrangement-reviews", label: "Arrangement reviews" },
     notifications,
   ]);
   expect(workspaceLinks(["venue_staff"])).toEqual([
@@ -21,6 +22,7 @@ test("links each role to its own workspace", () => {
     { href: "/booking-requests", label: "Booking requests" },
     { href: "/venue-blocks", label: "Venue blocks" },
     { href: "/venues/search", label: "Venue search" },
+    { href: "/arrangement-reviews", label: "Arrangement reviews" },
     notifications,
   ]);
   expect(workspaceLinks(["attendee"])).toEqual([]);
@@ -40,7 +42,7 @@ test("adds the notifications inbox after the workspaces", () => {
   ]);
 });
 
-// Purpose: SCRUM-27 — a multi-role user sees every workspace, each exactly once.
+// AC5-X9 (cross-cutting): the approved review workspace appears once alongside all SCRUM-27 multi-role workspaces.
 test("gives a multi-role user one link per workspace", () => {
   expect(workspaceLinks(["event_coordinator", "venue_staff"])).toEqual([
     { href: "/coordination/requests", label: "Coordination" },
@@ -48,6 +50,7 @@ test("gives a multi-role user one link per workspace", () => {
     { href: "/booking-requests", label: "Booking requests" },
     { href: "/venue-blocks", label: "Venue blocks" },
     { href: "/venues/search", label: "Venue search" },
+    { href: "/arrangement-reviews", label: "Arrangement reviews" },
     notifications,
   ]);
 });
