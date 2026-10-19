@@ -1,6 +1,6 @@
 # SCRUM-21 Implementation Plan: Register for a Confirmed Event
 
-Drafted 17 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status: draft. The AC review (§2) and decisions D1 to D9 (§3) need approval before test design is final or any production code is written** (AGENTS.md principle 2, `testing.md` §1).
+Drafted 17 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status: implemented on this branch on 18 October 2026** (commits `ca5fe6b` to `e24386c`, built as written below). **Updated 19 October 2026** after SCRUM-60 and SCRUM-64 merged into `dev`: `dev` is merged into the branch (`83db01f`), and §0 lists what is left before the PR, including two fixes from the plan review (U7, U8). **Completed 20 October 2026**: commits 10–15 are done (U3–U8; the AC5-N3 case was renumbered **AC5-N4** because the outage case already held that ID) and the pull request into `dev` is open (U9). D3, D5 and D8 (§3) still need Product Owner confirmation.
 
 **Goal:** An Attendee can see the public details of a Confirmed event, register during its registration window while places remain, and view their registration.
 
@@ -10,17 +10,50 @@ Drafted 17 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 
 ---
 
+## 0. Update 19 October: bring the branch up to date with `dev`
+
+SCRUM-60 (PR #62, merge `38ac2a5`) and SCRUM-64 (PR #63, merge `29e535b`) are on `dev`, so events can now reach `Confirmed` through the Safety Officer's approval (`decide_safety_review`, migration `0034`). **Nothing blocks the backend any more.** The branch was cut from `6b36647`. On 19 Oct it merged `dev` at `29e535b` (`83db01f`) and is now 0 commits behind.
+
+| # | Change | Why | Files | State |
+| --- | --- | --- | --- | --- |
+| U1 | Merge `dev` with the message `chore: merge dev into feat/scrum-21-register-for-event` | Git's default merge message fails CI (AGENTS.md) | — | **Done** (`83db01f`) |
+| U2 | Resolve two conflicts by **keeping both sides** | `dev` added `SafetyDecisionInvalidError`, the SCRUM-64 `arrangement_review_router` and `arrangement_review_relay`, and README rows at the same spots as this story's handlers and row | `backend/eventRequestService/app/main.py`, `database/README.md` | **Done.** The first attempt at `main.py` dropped pieces from both sides and would not import. It was rebuilt from `dev`'s version with only the SCRUM-21 parts added (the diff against `dev` adds lines only) |
+| U3 | Rename `0029_event_registrations.sql` → **`0048_event_registrations.sql`** | `0029_safety_review_status.sql` is on `dev`, along with `0030`–`0038` and `0040`–`0044`. `0039` and `0045`–`0047` are only on the SCRUM-58/60 branches (`dev`'s README already documents them), so `0048` is the next free number. Fetch again just before this commit | migration, `database/README.md`, `docs/testcases/scrum_21_testcases.md`, both verify scripts, this plan | **Done** (`312dd9b`; `dev` fetched first, still `29e535b`) |
+| U4 | Add `Safety Review` to `NON_CONFIRMED` (9 → 10 statuses) | `0029_safety_review_status.sql` added it between Planning and Confirmed. The rules already refuse it; the tests didn't cover it | `tests/registration_support.py`, `tests/test_registration_rules.py`, test-case doc rows AC1-P10 and AC2-P10 | **Done** (`eb35ebd`) |
+| U5 | Rebuild the disposable DB with `dev`'s migrations (`0001`–`0038`, `0040`–`0044`), then `0048`, and re-run `verify_event_registrations.sql` and `verify_event_registrations_race.sh` | The old evidence used `0026` + `0029` only. Confirm the CHECKs still hold with `Safety Review` in the status list. SCRUM-64's trigger `record_event_arrangement_reviews` fires only on updates to dates, attendance, venue or equipment needs, so the row lock in `register_for_event` (no update) does not fire it | evidence in the test-case doc | **Done** (20 Oct: throwaway docker `postgres:16`, one transaction per file because `0041`'s new enum value cannot share its adding transaction; verify, race and an extra `Safety Review` refusal check all passed) |
+| U6 | Re-run `pytest` and `ruff check .` in `backend/eventRequestService`, and record the new execution record | Earlier results are no longer current evidence (`testing.md` §8). The merged `main.py` has only been compiled so far | test-case doc | **Done** (20 Oct: 508 passed, 1 skipped; ruff clean; record added) |
+| U7 | **Fix: refuse a repeat registration as `already_registered`, even when the event is full** | `RegistrationService.register` runs `check_registration` (capacity) before the RPC, but the RPC checks duplicates *before* capacity. An attendee who holds the last place and registers again gets 409 `event_full`. AC5-N2 only covers a not-full event. Fix: check for an active registration before `check_registration`, so the API matches the DB function's order | `registration_service.py`, `registration_repository.py` (`has_active(event_id, attendee_id)`), `tests/registration_support.py`, `tests/test_registration_api.py`, test-case doc (new **AC5-N4** — the outage case already holds AC5-N3, `testing.md` §3) | **Done** (Red `b0d9d53`, Green `8f8d520`) |
+| U8 | **Fix: count active registrations with a count query, not by fetching rows** | `count_active_for_events` fetches every `Registered` row and counts in Python. The Supabase Data API returns at most 1,000 rows by default, so `places_remaining` is wrong past that. Use `Prefer: count=exact` with `HEAD` (or `limit=1`) and read `Content-Range`, once per event | `registration_repository.py`, `tests/test_registration_repository.py` | **Done** (`de651d0`; `HEAD` + `count=exact`, one request per event) |
+| U9 | Say in the PR description that D3, D5 and D8 are provisional, naming the tests that change if the PO decides otherwise (AC3-B2/B5, AC5-N2/N3, AC1-H2) | The §2 approval gate was not completed before building | PR description | At PR |
+
+**Commit sequence:**
+
+| # | Commit |
+| --- | --- |
+| 9 | `chore: merge dev into feat/scrum-21-register-for-event` (U1, U2). **Done: `83db01f`** |
+| 10 | `fix(database): renumber event registrations migration to 0048 (SCRUM-21)` (U3; same pattern as SCRUM-59's renumber to `0043`). **Done: `312dd9b`** |
+| 11 | `test(scrum-21): cover the Safety Review status in the non-Confirmed partitions` (U4). **Done: `eb35ebd`** |
+| 12 | `test(scrum-21): add Red test for a repeat registration on a full event` (U7; Red: expects `already_registered`, gets `event_full`). **Done: `b0d9d53`** |
+| 13 | `fix(event-request): check for an existing registration before capacity (SCRUM-21)` (U7). **Done: `8f8d520`** |
+| 14 | `fix(event-request): count active registrations with an exact count query (SCRUM-21)` (U8, with its repository test written first). **Done: `de651d0`** |
+| 15 | `docs(scrum-21): record post-merge local and disposable-database evidence` (U5, U6). **Done 20 Oct** |
+
+Then `git push`, since the branch is ahead of `origin/feat/scrum-21-register-for-event`, and open the PR into `dev` (U9). Applying `0048` to shared development is a separate step after review.
+
+---
+
 ## 1. Dependencies
 
-| Story | State (17 Oct) | Effect on SCRUM-21 |
+| Story | State (19 Oct) | Effect on SCRUM-21 |
 | --- | --- | --- |
-| SCRUM-58 Plan and Confirm (Tate) | In Progress. Approved → Planning merged (#59); AC2 and AC3 parked | Linked blocker. Does not set Confirmed |
-| SCRUM-60 Operational Safety Check (Jaren) | To Do | **The only story that sets `Confirmed`.** Not linked to SCRUM-21 in Jira; add "is blocked by" |
-| SCRUM-13 Reserve Equipment (Yang) | In review | SCRUM-60 depends on it |
+| SCRUM-58 Plan and Confirm (Tate) | In Progress. Approved → Planning merged (#59) and the Start Planning button (#61). Planning → Safety Review (`0039_send_for_safety_review.sql`) is still only on `feat/scrum-58-safety-review` | Linked blocker in Jira, but not needed by SCRUM-21's code. Without `0039` on `dev`, no real event can reach Confirmed, so the live run (§7) waits for it |
+| SCRUM-60 Operational Safety Check (Jaren) | **Merged into `dev` on 19 Oct (PR #62).** Jira still shows To Do | **The only story that sets `Confirmed`** (`decide_safety_review`, `0034`/`0044`). No longer a blocker. Not linked to SCRUM-21 in Jira |
+| SCRUM-64 Arrangement review (Jaren) | **Merged into `dev` on 19 Oct (PR #63)** | No effect on registration. Its trigger on `event_requests` ignores the registration columns (U5) |
+| SCRUM-13 Reserve Equipment (Yang) | Merged (#60) | SCRUM-60 depends on it |
 | SCRUM-22 Withdraw, SCRUM-24 Waiting list, SCRUM-38 Notify, SCRUM-41 Manual register, SCRUM-34 Registration info | To Do | Out of scope. They build on the table this story adds |
 | *(no story)* Coordinator sets the registration window and capacity | — | **Gap.** Q&A #30 says the coordinator sets the window, but no story does. See D2 |
 
-**Why this can start now:** `Confirmed` is already allowed in `event_requests.status` (migration `0011`). Unit and API tests seed Confirmed events through `FakeEventRequestRepository`, and the DB verification inserts a Confirmed fixture as `service_role`. Only the live end-to-end journey (§7, increment 2) waits for SCRUM-60.
+**Why this could start before SCRUM-60:** `Confirmed` was already allowed in `event_requests.status` (migration `0011`). Unit and API tests seed Confirmed events through `FakeEventRequestRepository`, and the DB verification inserts a Confirmed fixture as `service_role`. Since 19 Oct the status list also has `Safety Review` (`0029_safety_review_status.sql`), which this story must treat as not Confirmed (U4).
 
 ---
 
@@ -56,7 +89,7 @@ Drafted 17 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 
 ## 4. Design
 
-**Migration `0029_event_registrations.sql`** (dev ends at `0026` and SCRUM-13 claims `0027` and `0028`, so check the next free number before committing):
+**Migration `0048_event_registrations.sql`** (first built as `0029`; renumbered on 19 Oct because `0029` to `0047` are taken on `dev` or teammates' branches, see U3. Check again just before merging):
 
 - the three D2 columns on `event_requests`;
 - `event_registrations (id uuid pk, event_request_id uuid fk, attendee_id uuid fk auth.users, status text CHECK IN ('Registered') DEFAULT 'Registered', created_at timestamptz)`. SCRUM-22 widens the CHECK for `Withdrawn`;
@@ -78,8 +111,8 @@ Locking the event row makes concurrent last-place attempts queue up, which is wh
 | --- | --- |
 | `app/services/registration_rules.py` | **New.** Pure `check_registration(event, now, registered_count) -> None`, raising `EventNotVisibleError`, `RegistrationNotOpenError` or `EventFullError`. Also `places_remaining()` and `to_public_event()` (D4 whitelist) |
 | `app/models/registration.py` | **New.** `PublicEventResponse`, `RegistrationResponse` |
-| `app/repositories/registration_repository.py` | **New.** Protocol and Supabase implementation: `register` (RPC), `list_for_attendee`, `count_active`, `list_open_events` |
-| `app/services/registration_service.py` | **New.** Role check (attendee only), calls the rules for reads and the RPC for writes, maps RPC errors |
+| `app/repositories/registration_repository.py` | **New.** Protocol and Supabase implementation: `register` (RPC), `list_for_attendee`, `count_active` (an exact count query, U8), `has_active` (U7), `list_open_events` |
+| `app/services/registration_service.py` | **New.** Role check (attendee only), calls the rules for reads and the RPC for writes, maps RPC errors. Its early checks run in the RPC's order: visible, window, already registered, capacity (U7) |
 | `app/controllers/registration_controller.py` | **New.** Routes below |
 | `app/main.py` | Include the router; map new errors to 404/409 |
 | `app/clock.py` | **New.** `get_now()` (D9) |
@@ -104,10 +137,10 @@ The full table (pre-conditions, steps, data, forbidden side effects) is written 
 | AC1-H1 | Attendee views a Confirmed event | 200, D4 fields, correct `places_remaining` | A |
 | AC1-H2 | List shows only Confirmed events with an open window (D8) | Open event listed; closed, not-yet-open and Planning events absent | A |
 | AC1-X1 | No internal field leaks | Response keys equal the D4 whitelist exactly | U + A |
-| AC1-P1…P9 | Each non-Confirmed status (Draft, Submitted, Under Review, Changes Requested, Rejected, Approved, Planning, Completed, Cancelled) | 404 | A |
+| AC1-P1…P10 | Each non-Confirmed status (Draft, Submitted, Under Review, Changes Requested, Rejected, Approved, Planning, Safety Review, Completed, Cancelled) | 404 | A |
 | AC1-N1 | Unknown id | 404 | A |
 | AC2-H1 | Register for a Confirmed, open, not-full event | 201 (shared setup with AC5-H1) | A |
-| AC2-P1…P9 | Register for each of the 9 non-Confirmed statuses | 404, no registration row | U + A |
+| AC2-P1…P10 | Register for each of the 10 non-Confirmed statuses (P10 = Safety Review, added 19 Oct) | 404, no registration row | U + A |
 | AC2-X1 | Event cancelled between view and register | `P0002`, no row | D |
 | AC3-B1/B2/B3 | 1 s before / exactly at / 1 s after `opens_at` | refused / allowed / allowed | U |
 | AC3-B4/B5/B6 | 1 s before / exactly at / 1 s after `closes_at` | allowed / refused (D3) / refused | U |
@@ -122,11 +155,12 @@ The full table (pre-conditions, steps, data, forbidden side effects) is written 
 | AC5-H2 | Attendee lists own registrations | Only theirs, newest first | A |
 | AC5-N1 | Attendee B lists registrations | A's registration absent | A |
 | AC5-N2 | Duplicate registration (D5) | 409 `already_registered`, still one row | A + D |
+| AC5-N4 | Duplicate registration when the attendee holds the last place (added 19 Oct, U7; numbered N4 on 20 Oct because AC5-N3 was already taken) | 409 `already_registered`, not `event_full`; still one row | A + R |
 | AC5-X1 | Organiser, coordinator, operations manager try to register | 403, no row | A |
 | AC5-X2 | No session on each endpoint | 401 | A |
 | AC5-X3 | Browser roles | `anon` and `authenticated` cannot execute `register_for_event` or select `event_registrations` | D |
 
-Before treating a test as done, ask what plausible one-line bug should make it fail (e.g. `<=` vs `<` on capacity → AC4-B2; `>=` vs `>` on `closes_at` → AC3-B5).
+Before treating a test as done, ask what plausible one-line bug should make it fail (e.g. `<=` vs `<` on capacity → AC4-B2; `>=` vs `>` on `closes_at` → AC3-B5; the capacity check before the duplicate check → AC5-N3).
 
 ---
 
@@ -139,7 +173,7 @@ Before treating a test as done, ask what plausible one-line bug should make it f
 | 2 | `test(scrum-21): add Red unit tests for the registration rules` | `tests/test_registration_rules.py`, `app/services/registration_rules.py` (stubs raising `NotImplementedError`), `app/clock.py` | Unit tests Red |
 | 3 | `test(scrum-21): add Red API tests for attendee registration` | `tests/registration_support.py` (fake repository with Confirmed fixtures and an attendee auth stub), `tests/test_registration_api.py` | API tests Red (route 404) |
 | 4 | `test(scrum-21): add DB verification for register_for_event` | `database/verify_event_registrations.sql` | Red until the migration |
-| 5 | `feat(db): add event registrations and register_for_event (SCRUM-21)` | `0029_event_registrations.sql`, `database/README.md` | DB script Green (disposable local PostgreSQL first) |
+| 5 | `feat(db): add event registrations and register_for_event (SCRUM-21)` | `0029_event_registrations.sql` (renumbered to `0048` in commit 10), `database/README.md` | DB script Green (disposable local PostgreSQL first) |
 | 6 | `feat(event-request): registration rules (SCRUM-21)` | `registration_rules.py` | Unit tests Green |
 | 7 | `feat(event-request): attendee event view and registration endpoints (SCRUM-21)` | model, repository, service, controller, `main.py` | Whole service Green, `ruff check .` clean |
 | 8 | `docs(scrum-21): document endpoints and record Green evidence` | service README, test catalogue execution record | — |
@@ -150,21 +184,24 @@ Run `pytest -q` after commits 2 and 3 and put the Red counts in the commit body.
 
 ---
 
-## 7. Increment 2 (after SCRUM-60 merges)
+## 7. Increment 2 (frontend and live run)
+
+SCRUM-60 and SCRUM-64 are merged, so this no longer waits on them. A live run needs (a) SCRUM-58's Planning → Safety Review move (`0039`, still only on `feat/scrum-58-safety-review` as of 19 Oct) on `dev`, so a real event can reach Confirmed, and (b) a registration window and capacity on that event. No story sets those yet, so seed them with SQL until one exists.
+
 
 - Frontend attendee page (`frontend/app/events/…`): open-events list, event detail with Register button, "My registrations". Vitest component tests for the empty, full, closed and success states.
 - One Playwright journey: log in as `attendee@example.com` → open a Confirmed event → register → see it under My registrations → reload, and it persists.
-- Apply `0029` to shared dev; read-only checks of grants; one live API call.
+- Apply `0048` to shared dev; read-only checks of grants; one live API call.
 
 ---
 
 ## 8. Open questions (take to standup or the PO)
 
 1. D3 window boundaries, D5 duplicates, D8 list: need PO sign-off.
-2. Who owns the "set registration window and capacity" story (D2)? Until it exists, live testing needs SQL-seeded values.
+2. Who owns the "set registration window and capacity" story (D2)? Until it exists, live testing needs SQL-seeded values. **Still no Jira story as of 19 Oct; now the main gap for a live demo.**
 3. Should capacity be checked against the confirmed venue's `max_capacity` (Q&A #99)? Proposed: the setter story enforces it, not SCRUM-21.
 4. Discussion #127 (separate Open/Closed registration status) is unanswered. This plan derives "open" from the window, so no new status is needed.
-5. Add the SCRUM-60 → SCRUM-21 "blocks" link in Jira.
+5. ~~Add the SCRUM-60 → SCRUM-21 "blocks" link in Jira.~~ No longer needed: SCRUM-60 merged on 19 Oct. Jira still shows SCRUM-60 as To Do; ask Jaren to move it.
 
 ## 9. Done check
 
