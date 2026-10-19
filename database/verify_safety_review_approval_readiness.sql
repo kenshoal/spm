@@ -95,6 +95,28 @@ BEGIN
         RAISE EXCEPTION 'AC6-X11: expected Planning, got %', v_status;
     END IF;
 
+    -- AC6-X13 (review of PR #62): the same arrangement listed twice is refused
+    -- with 22023 before any write.
+    INSERT INTO public.event_requests (organiser_id, event_name, status)
+        VALUES (v_officer, 'VERIFY SCRUM60 duplicate', 'Safety Review') RETURNING id INTO v_event;
+    INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id,
+            start_date, end_date, slots, status, decided_by, decided_at)
+        VALUES (v_venue, v_officer, v_event, v_today + 12, v_today + 12,
+            ARRAY['AM']::public.booking_slot[], 'approved', v_officer, now())
+        RETURNING id INTO v_booking;
+    BEGIN
+        PERFORM public.decide_safety_review(v_event, v_officer, 'changes_requested', 'Recheck.',
+            jsonb_build_array(
+                jsonb_build_object('arrangement', 'venue_booking', 'id', v_booking),
+                jsonb_build_object('arrangement', 'venue_booking', 'id', upper(v_booking::text))));
+        RAISE EXCEPTION 'AC6-X13: duplicate targets accepted';
+    EXCEPTION WHEN SQLSTATE '22023' THEN NULL;
+    END;
+    SELECT count(*) INTO v_count FROM public.safety_reviews WHERE event_request_id = v_event;
+    IF v_count <> 0 OR EXISTS (SELECT 1 FROM public.arrangement_reviews WHERE event_request_id = v_event) THEN
+        RAISE EXCEPTION 'AC6-X13: duplicate targets wrote a review or flag';
+    END IF;
+
     -- AC6-X12: a ready event with nothing outstanding is approved.
     INSERT INTO public.event_requests (organiser_id, event_name, status)
         VALUES (v_officer, 'VERIFY SCRUM60 ready', 'Safety Review') RETURNING id INTO v_event;

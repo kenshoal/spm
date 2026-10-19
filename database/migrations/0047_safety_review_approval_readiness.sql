@@ -7,6 +7,7 @@
 -- is non-empty, readiness items first, as in SCRUM-58's handover. Asking for
 -- changes, the event FOR UPDATE lock, the 0044 NULL checks, 22023 for invalid
 -- targets and the all-or-nothing decision/status/flags/jobs are unchanged.
+-- Also refuses the same target listed twice (22023), from the PR #62 review.
 
 CREATE OR REPLACE FUNCTION public.decide_safety_review(
     p_event_request_id uuid,
@@ -56,6 +57,13 @@ BEGIN
        OR coalesce(char_length(p_reason), 0) > 2000
        OR p_targets IS NULL OR jsonb_typeof(p_targets) <> 'array' THEN
         RAISE EXCEPTION 'invalid safety decision' USING ERRCODE = '22023';
+    END IF;
+    -- The same arrangement twice is refused (review of PR #62); ids compare
+    -- case-insensitively, as uuids.
+    IF (SELECT count(*) FROM jsonb_array_elements(p_targets))
+       <> (SELECT count(DISTINCT (value->>'arrangement', lower(value->>'id')))
+           FROM jsonb_array_elements(p_targets)) THEN
+        RAISE EXCEPTION 'duplicate safety decision target' USING ERRCODE = '22023';
     END IF;
     FOR v_target IN SELECT value FROM jsonb_array_elements(p_targets) LOOP
         IF jsonb_typeof(v_target) <> 'object'
