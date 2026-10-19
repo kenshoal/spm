@@ -8,6 +8,7 @@ export const EVENT_REQUEST_STATUSES = [
   "Changes Requested",
   "Approved",
   "Planning",
+  "Safety Review",
   "Confirmed",
   "Completed",
   "Cancelled",
@@ -36,6 +37,7 @@ export const STATUS_GROUPS: Record<
     "Changes Requested",
     "Approved",
     "Planning",
+    "Safety Review",
     "Confirmed",
   ],
   completed: ["Completed"],
@@ -62,7 +64,11 @@ export function statusBadgeClass(status: EventRequestStatus): string {
   return "bg-[#fff3dc] text-[#80520d]";
 }
 
-export type CoordinatorTransition = "review" | "cancellation" | "completion";
+export type CoordinatorTransition =
+  | "review"
+  | "planning"
+  | "cancellation"
+  | "completion";
 
 // The actions a coordinator may take per status — mirrors the transition
 // windows the backend enforces, so the UI never offers an action that 409s.
@@ -72,6 +78,7 @@ export function coordinatorActions(
   if (isTerminalStatus(status)) return [];
   const actions: CoordinatorTransition[] = [];
   if (status === "Submitted") actions.push("review");
+  if (status === "Approved") actions.push("planning");
   if (status === "Confirmed") actions.push("completion");
   actions.push("cancellation");
   return actions;

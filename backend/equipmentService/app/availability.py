@@ -1,7 +1,8 @@
-"""Equipment availability calculation (SCRUM-10).
+"""Equipment availability calculation (SCRUM-10, SCRUM-13).
 
 Pure functions: no database or network access, so every date boundary is
-unit-tested in CI. See docs/testcases/scrum_10_testcases.md.
+unit-tested in CI. See docs/testcases/scrum_10_testcases.md and
+docs/testcases/scrum_13_testcases.md.
 """
 
 from collections.abc import Sequence
@@ -117,17 +118,61 @@ def check_availability(
         key = norm(item.type)
         available = 0
         for row in rows:
-            if row.operational_status != "AVAILABLE" or norm(row.type) != key:
+            if norm(row.type) != key:
                 continue
-            transfer = needs_transfer(row.home_location, event_venue, venues)
-            hold_start, hold_end = hold_window(
-                start_date, end_date, transfer, transfer_days
+            available += row_available(
+                row=row,
+                reservations=reservations,
+                start_date=start_date,
+                end_date=end_date,
+                event_venue=event_venue,
+                venues=venues,
+                transfer_days=transfer_days,
             )
-            peak = committed_peak(row.id, reservations, hold_start, hold_end)
-            available += max(0, row.total_owned_quantity - peak)
         result[item.type] = {
             "requested": item.quantity,
             "available": available,
             "shortfall": max(0, item.quantity - available),
         }
     return result
+
+
+def row_hold(
+    row: EquipmentRow,
+    start_date: date,
+    end_date: date,
+    event_venue: Venue,
+    venues: Sequence[Venue],
+    transfer_days: int = TRANSFER_DAYS,
+) -> tuple[date, date]:
+    """Inclusive hold window for one row: D-1, plus the transfer day if the
+    row is based in another building than the event venue (SCRUM-13 D5).
+    hold_start is the row's collection_date; hold_end is the event's end."""
+    transfer = needs_transfer(row.home_location, event_venue, venues)
+    return hold_window(start_date, end_date, transfer, transfer_days)
+
+
+def row_available(
+    *,
+    row: EquipmentRow,
+    reservations: Sequence[Reservation],
+    start_date: date,
+    end_date: date,
+    event_venue: Venue,
+    venues: Sequence[Venue],
+    transfer_days: int = TRANSFER_DAYS,
+) -> int:
+    """Units of one catalogue row free for its whole hold window (D4).
+
+    The one rule both the reserve path and check_availability count with,
+    so SCRUM-10 and SCRUM-13 cannot drift (AC5-X1): a non-AVAILABLE row
+    offers nothing, otherwise its total minus the units already committed
+    on the row's busiest day inside its own hold window.
+    """
+    if row.operational_status != "AVAILABLE":
+        return 0
+    hold_start, hold_end = row_hold(
+        row, start_date, end_date, event_venue, venues, transfer_days
+    )
+    peak = committed_peak(row.id, reservations, hold_start, hold_end)
+    return max(0, row.total_owned_quantity - peak)

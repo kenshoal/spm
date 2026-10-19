@@ -3,14 +3,14 @@ import { formatDateTime } from "@/lib/event-requests";
 import { describeNotification, type AppNotification } from "@/lib/notifications";
 import { MarkReadButton } from "./mark-read-button";
 
-export function NotificationList({ notifications }: { notifications: AppNotification[] }) {
+export function NotificationList({ notifications, roles = [] }: { notifications: AppNotification[]; roles?: readonly string[] }) {
   if (notifications.length === 0) {
     return <p className="rounded-2xl border border-dashed border-[#cbd7d1] bg-white px-6 py-10 text-center text-sm text-[#718078]">No notifications yet.</p>;
   }
   return (
     <div className="space-y-3">
       {notifications.map((notification) => {
-        const { message, href, detail } = describeNotification(notification);
+        const { message, href, detail } = describeNotification(notification, roles);
         const unread = notification.read_at === null;
         const headingId = `notification-${notification.id}`;
         return (

@@ -5,6 +5,9 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.controllers.arrangement_review_controller import (
+    router as arrangement_review_router,
+)
 from app.controllers.coordinator_assignment_controller import (
     router as coordinator_assignment_router,
 )
@@ -19,6 +22,10 @@ from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
 )
 from app.repositories.registration_repository import RegistrationRepository
+from app.services.arrangement_review_notification_relay import (
+    ArrangementReviewNotificationRelay,
+    build_arrangement_review_notification_relay,
+)
 from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentNotAllowedError,
     CoordinatorAssignmentNotFoundError,
@@ -37,6 +44,7 @@ from app.services.event_request_service import (
 from app.services.event_transition_service import (
     DecisionReasonRequiredError,
     EventTransitionService,
+    SafetyDecisionInvalidError,
     TransitionForbiddenError,
     TransitionNotAllowedError,
 )
@@ -56,20 +64,24 @@ def create_app(
     repository: EventRequestRepository | None = None,
     coordinator_repository: CoordinatorAssignmentRepository | None = None,
     outbox_relay: OutboxRelay | None = None,
+    arrangement_review_relay: ArrangementReviewNotificationRelay | None = None,
     registration_repository: RegistrationRepository | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-        relay_task = (
-            asyncio.create_task(outbox_relay.run_forever())
-            if outbox_relay is not None
-            else None
-        )
-        yield
-        if relay_task is not None:
-            relay_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await relay_task
+        relay_tasks = [
+            asyncio.create_task(relay.run_forever())
+            for relay in (outbox_relay, arrangement_review_relay)
+            if relay is not None
+        ]
+        try:
+            yield
+        finally:
+            for task in relay_tasks:
+                task.cancel()
+            for task in relay_tasks:
+                with suppress(asyncio.CancelledError):
+                    await task
 
     application = FastAPI(
         title="eventRequestService",
@@ -100,9 +112,12 @@ def create_app(
     # Before event_request_router: routes match in registration order, and its
     # /event-requests/{event_request_id} would otherwise swallow the literal
     # /event-requests/awaiting-assignment and reject it as a malformed UUID.
+    # The same holds for event_transition_router's /event-requests/safety-queue
+    # (SCRUM-60), so keep both routers above event_request_router.
     application.include_router(coordinator_assignment_router)
     application.include_router(event_transition_router)
     application.include_router(event_request_router)
+    application.include_router(arrangement_review_router)
     application.include_router(registration_router)
 
     @application.exception_handler(EventRequestNotFoundError)
@@ -213,6 +228,15 @@ def create_app(
             content={"detail": str(error)},
         )
 
+    @application.exception_handler(SafetyDecisionInvalidError)
+    async def safety_decision_invalid(
+        request: Request, error: SafetyDecisionInvalidError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(error)},
+        )
+
     @application.exception_handler(EventNotVisibleError)
     async def event_not_visible(
         request: Request, error: EventNotVisibleError
@@ -271,4 +295,7 @@ def create_app(
 
 # Only the served app relays the outbox; apps built in tests get no relay unless
 # they pass one, so a test run never delivers real events.
-app = create_app(outbox_relay=build_outbox_relay())
+app = create_app(
+    outbox_relay=build_outbox_relay(),
+    arrangement_review_relay=build_arrangement_review_notification_relay(),
+)

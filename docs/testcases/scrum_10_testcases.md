@@ -1,10 +1,12 @@
 # SCRUM-10 Test Cases: Check Equipment Availability
 
-Last reviewed: 5 October 2026
+Last reviewed: 15 October 2026
 
 Test catalogue for the equipment-availability story, designed **before implementation** (testing.md §2). Design decisions come from `SCRUM-10-summary.md` in the project folder. Companion catalogues: [scrum_16_testcases.md](scrum_16_testcases.md) (equipment status, whose `GET /status` endpoint this story changes) and [scrum_45_testcases.md](scrum_45_testcases.md).
 
 > **Status: approved for implementation.** The scenario-form ACs and team design proposals 1–7 were approved by Yang (story owner) on 5 October 2026. The AI-drafted cases still need a team-member review (testing.md §10); record the reviewer under "Review" before the story is marked Done.
+>
+> **15 October 2026:** the live path of `POST /equipment/availability-check` was broken from `6859656 fix(auth): restrict resource reads by role` (4 October 2026) until SCRUM-13's D11 fix: venueService `GET /venues` refuses `technical_support` with 403, which this endpoint reported as 502. The tests passed because the venueService stub ignored the caller's role. The endpoint now reads venueService `GET /venues/locations`, and SCRUM-13's `tests/test_venue_contract.py` (AC1-X7) checks it against the real venueService. See [scrum_13_testcases.md](scrum_13_testcases.md), "Disclosures".
 
 ## Story contract
 
@@ -57,7 +59,7 @@ Cases that depend on a proposal say so in the scenario, e.g. "(proposal 1)".
 
 All dates are October 2026: **Fri 9, Sat 10, Sun 11, Mon 12, Tue 13, Wed 14, Thu 15, Fri 16**. `norm(s) = " ".join(s.split()).casefold()`.
 
-**Venues (`VENUES`)**, returned by the mocked venueService `GET /venues`:
+**Venues (`VENUES`)**, returned by the mocked venueService `GET /venues/locations` (`GET /venues` until 15 October 2026):
 
 | id | name | location | status |
 | --- | --- | --- | --- |
@@ -97,7 +99,7 @@ Layers: **Unit** = `app/availability.py` called directly; **API** = FastAPI `Tes
 | ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | AC1-H1 | AC1, AC6 | Each requested type gets its own requested/available/shortfall | Happy | Rows `P10`, `S4`; no reservations | Call `check_availability` | Event Wed 14 → Wed 14 at `v-big`; items Projector 5, Speaker 2 | `Projector: {requested: 5, available: 10, shortfall: 0}`, `Speaker: {requested: 2, available: 4, shortfall: 0}`; no other keys | Input lists not mutated | Unit |
-| AC1-H2 | AC1 | The endpoint wires venueService, both queries and the calculation together | Happy | Fake returns rows `P10`, `S4` and no reservations; venueService stub returns `VENUES` | Send `REQ` with items Projector 5, Speaker 2 | As left | `200`; body as AC1-H1; venueService `GET /venues` called once with the caller's `Authorization` header; equipment query filtered on `operational_status = AVAILABLE` | No insert, update or RPC call | API |
+| AC1-H2 | AC1 | The endpoint wires venueService, both queries and the calculation together | Happy | Fake returns rows `P10`, `S4` and no reservations; venueService stub returns `VENUES` | Send `REQ` with items Projector 5, Speaker 2 | As left | `200`; body as AC1-H1; venueService `GET /venues/locations` called once with the caller's `Authorization` header; equipment query filtered on `operational_status = AVAILABLE` | No insert, update or RPC call | API |
 | AC1-P1 | AC1 | A type split across several rows is summed | Partition | Projector rows of 6 (Store Room B) and 4 (Store Room C); no reservations | Call `check_availability` | Event Wed 14; Projector 5 | `available: 10` | — | Unit |
 | AC1-P2 | AC1 | Requested type matches the catalogue ignoring case and spaces (proposal 7) | Partition | Row `P10` (type "Projector") | Call `check_availability` | Item type `"  projector "`, quantity 5 | Key `"  projector "` (as requested) with `available: 10` | — | Unit |
 | AC1-P3 | AC1 | Catalogue rows whose types differ only in case and spaces count together (proposal 7) | Partition | Rows "Projector" ×6 and "projector " ×4 | Call `check_availability` | Item "Projector" 5 | `available: 10` | — | Unit |

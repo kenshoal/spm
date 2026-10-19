@@ -12,6 +12,7 @@ const SESSIONS = {
   "ops-session": "event_operations_manager",
   "venue-session": "venue_staff",
   "tech-session": "technical_support",
+  "safety-session": "safety_officer",
 };
 
 function send(response, status, body) {
@@ -25,8 +26,14 @@ async function readJson(request) {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
 }
 
+// SCRUM-59: like venueService, setup and turnaround are 0-1020 minutes in 15-minute steps.
+function invalidPrep(value) {
+  return value !== undefined && !(Number.isInteger(value) && value >= 0 && value <= 1020 && value % 15 === 0);
+}
+
 function invalid(body) {
-  return !body.name || !body.location || !Number.isInteger(body.max_capacity) || body.max_capacity <= 0;
+  return !body.name || !body.location || !Number.isInteger(body.max_capacity) || body.max_capacity <= 0
+    || invalidPrep(body.setup_minutes) || invalidPrep(body.turnaround_minutes);
 }
 
 // Dates are inclusive YYYY-MM-DD strings; a shared slot on a shared date overlaps.
@@ -45,6 +52,7 @@ function makeVenue(body) {
   const now = new Date().toISOString();
   return {
     facilities: [], accessibility_features: [], supported_layouts: [], operating_slots: ["AM", "PM", "NIGHT"],
+    setup_minutes: 0, turnaround_minutes: 0,
     ...body, id: body.id ?? randomUUID(), status: body.status ?? "available", created_at: now, updated_at: now,
   };
 }
@@ -133,7 +141,10 @@ createServer(async (request, response) => {
   // venueService's own tests and database verification.
   const blockPath = url.pathname.match(/^\/venues\/([^/]+)\/blocks$/);
   if (blockPath) {
-    if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
+    // SCRUM-60: the Safety Officer reads blocks as restrictions; only Venue Staff write.
+    if (role !== "venue_staff" && !(role === "safety_officer" && request.method === "GET")) {
+      return send(response, 403, { detail: "Insufficient permissions" });
+    }
     const venueId = decodeURIComponent(blockPath[1]);
     if (!venues.has(venueId)) return send(response, 404, { detail: "Venue not found" });
     if (request.method === "GET") return send(response, 200, [...blocks.values()].filter((b) => b.venue_id === venueId));
@@ -175,6 +186,25 @@ createServer(async (request, response) => {
     if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
     const wanted = url.searchParams.get("status") ?? "pending";
     return send(response, 200, [...bookings.values()].filter((b) => b.status === wanted).sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  }
+
+  // Mirrors venueService's SCRUM-61 reads and cancel so the coordinator's event page
+  // can be driven in a browser. The mock does not check the event's assignment; the
+  // real service does (venueService's own tests and the real-stack check cover that).
+  const eventBookings = url.pathname.match(/^\/booking-requests\/event\/([^/]+)$/);
+  if (eventBookings && request.method === "GET") {
+    if (!["venue_staff", "event_coordinator", "safety_officer"].includes(role)) return send(response, 403, { detail: "Insufficient permissions" });
+    const eventId = decodeURIComponent(eventBookings[1]);
+    return send(response, 200, [...bookings.values()].filter((b) => b.event_request_id === eventId).sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  }
+  const cancelPath = url.pathname.match(/^\/booking-requests\/([^/]+)\/cancel$/);
+  if (cancelPath && request.method === "POST") {
+    if (role !== "event_coordinator") return send(response, 403, { detail: "Insufficient permissions" });
+    const booking = bookings.get(decodeURIComponent(cancelPath[1]));
+    if (!booking) return send(response, 404, { detail: "Booking request not found" });
+    if (!["pending", "approved"].includes(booking.status)) return send(response, 409, { detail: "Booking request cannot be cancelled" });
+    Object.assign(booking, { status: "cancelled", cancelled_by: "playwright-coordinator", cancelled_at: new Date().toISOString() });
+    return send(response, 200, booking);
   }
 
   const decisionPath = url.pathname.match(/^\/booking-requests\/([^/]+)\/decision$/);
@@ -233,7 +263,9 @@ createServer(async (request, response) => {
   if (match && request.method === "PATCH") {
     if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
     if (!venue) return send(response, 404, { detail: "Venue not found" });
-    const updated = { ...venue, ...(await readJson(request)), updated_at: new Date().toISOString() };
+    const changes = await readJson(request);
+    if (invalidPrep(changes.setup_minutes) || invalidPrep(changes.turnaround_minutes)) return send(response, 422, { detail: "Invalid venue" });
+    const updated = { ...venue, ...changes, updated_at: new Date().toISOString() };
     venues.set(venue.id, updated);
     return send(response, 200, updated);
   }

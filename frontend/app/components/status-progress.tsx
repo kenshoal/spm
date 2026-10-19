@@ -6,6 +6,7 @@ const MILESTONES = [
   "Under Review",
   "Approved",
   "Planning",
+  "Safety Review",
   "Confirmed",
   "Completed",
 ] as const;
@@ -20,6 +21,7 @@ const STATUS_DESCRIPTIONS: Record<EventRequestStatus, string> = {
   "Changes Requested": "The coordinator needs clarification before review can continue.",
   Approved: "Approved — the event can move into planning.",
   Planning: "Venues and equipment are being arranged.",
+  "Safety Review": "Waiting for the Safety Officer's check before confirmation.",
   Confirmed: "Confirmed — the event is set to go ahead.",
   Completed: "This event has finished and reached the final stage.",
   Cancelled: "This request has been cancelled.",
@@ -55,7 +57,7 @@ export function StatusProgress({
       ? coordinatorAssigned === true
         ? "A coordinator has been assigned and can begin review."
         : coordinatorAssigned === false
-          ? "Waiting for an Event Operations Manager to assign a coordinator."
+          ? "Waiting for an Event Coordinator Lead to assign a coordinator."
           : STATUS_DESCRIPTIONS.Submitted
       : STATUS_DESCRIPTIONS[status];
 

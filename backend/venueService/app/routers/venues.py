@@ -26,12 +26,19 @@ from app.booking_notifications import (
     get_booking_notifier,
 )
 from app.booking_repository import BookingRequestStore, get_booking_repository
-from app.dependencies import Principal, require_venue_staff, require_venue_viewer
+from app.dependencies import (
+    Principal,
+    require_block_reader,
+    require_venue_location_reader,
+    require_venue_staff,
+    require_venue_viewer,
+)
 from app.models import (
     RoomLayout,
     Slot,
     Venue,
     VenueCreate,
+    VenueLocation,
     VenueStatus,
     VenueUpdate,
 )
@@ -45,6 +52,7 @@ router = APIRouter(prefix="/venues", tags=["venues"])
 RepoDep = Annotated[VenueStore, Depends(get_repository)]
 VenueStaffDep = Annotated[Principal, Depends(require_venue_staff)]
 VenueViewerDep = Annotated[Principal, Depends(require_venue_viewer)]
+VenueLocationReaderDep = Annotated[Principal, Depends(require_venue_location_reader)]
 BlockRepoDep = Annotated[BlockStore, Depends(get_block_repository)]
 BookingRepoDep = Annotated[BookingRequestStore, Depends(get_booking_repository)]
 
@@ -52,13 +60,14 @@ BookingRepoDep = Annotated[BookingRequestStore, Depends(get_booking_repository)]
 @router.get("/{venue_id}/blocks", response_model=list[VenueBlock])
 def list_venue_blocks(
     venue_id: str,
-    principal: VenueStaffDep,
+    principal: Annotated[Principal, Depends(require_block_reader)],
     repo: RepoDep,
     blocks: BlockRepoDep,
 ) -> list[VenueBlock]:
     """List all recorded blocks for a venue, including lifted blocks.
 
-    Venue Staff only: reasons are internal planning information.
+    Venue Staff and the Safety Officer only: reasons are internal planning
+    information (SCRUM-60 AC2).
     """
     del principal
     if repo.get(venue_id) is None:
@@ -126,6 +135,20 @@ def create_venue(
 def list_venues(principal: VenueViewerDep, repo: RepoDep) -> list[Venue]:
     del principal
     return repo.list()
+
+
+# Declared before GET /{venue_id}: FastAPI matches routes in declaration order,
+# so declaring it later would treat "locations" as a venue id.
+@router.get("/locations", response_model=list[VenueLocation])
+def list_venue_locations(
+    principal: VenueLocationReaderDep, repo: RepoDep
+) -> list[VenueLocation]:
+    """Every venue's id, name and building, blocked venues included: a blocked
+    room still locates the equipment stored in it (SCRUM-13 D11)."""
+    del principal
+    return [
+        VenueLocation(id=v.id, name=v.name, location=v.location) for v in repo.list()
+    ]
 
 
 @router.get("/search", response_model=list[Venue])

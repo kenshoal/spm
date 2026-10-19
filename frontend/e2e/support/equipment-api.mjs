@@ -7,7 +7,11 @@ let nextHistoryId = 1;
 const SESSIONS = {
   "test-session": { id: "playwright-user", role: "event_organiser" },
   "tech-session": { id: "playwright-tech", role: "technical_support" },
+  "safety-session": { id: "playwright-safety", role: "safety_officer" },
 };
+// SCRUM-33/13 reads by event, seeded by the SCRUM-60 journey.
+const requirements = [];
+const reservations = [];
 
 function send(response, status, body) {
   response.writeHead(status, { "Content-Type": "application/json" });
@@ -23,10 +27,26 @@ async function readJson(request) {
 createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if (request.method === "GET" && url.pathname === "/health") return send(response, 200, { status: "ok" });
+  if (request.method === "POST" && url.pathname === "/__seed_requirement") {
+    const row = { id: randomUUID(), technical_requirements: null, status: "arranged", ...(await readJson(request)) };
+    requirements.push(row);
+    return send(response, 201, row);
+  }
+  if (request.method === "POST" && url.pathname === "/__seed_reservation") {
+    const row = { id: randomUUID(), ...(await readJson(request)) };
+    reservations.push(row);
+    return send(response, 201, row);
+  }
   const user = SESSIONS[(request.headers.authorization ?? "").replace(/^Bearer /, "")];
   if (!user) return send(response, 401, { detail: "Authentication required" });
   const staffOnly = () => user.role !== "technical_support" && (send(response, 403, { detail: "Insufficient permissions" }), true);
 
+  const byEvent = url.pathname.match(/^\/equipment-(requirements|reservations)\/by-event\/([^/]+)$/);
+  if (byEvent && request.method === "GET") {
+    if (!["technical_support", "safety_officer"].includes(user.role)) return send(response, 403, { detail: "Insufficient permissions" });
+    const rows = byEvent[1] === "requirements" ? requirements : reservations;
+    return send(response, 200, rows.filter((row) => row.event_request_id === decodeURIComponent(byEvent[2])));
+  }
   if (url.pathname === "/equipment" && request.method === "GET") {
     const status = url.searchParams.get("operational_status");
     return send(response, 200, [...items.values()].filter((item) => !status || item.operational_status === status));

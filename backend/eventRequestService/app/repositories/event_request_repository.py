@@ -6,6 +6,18 @@ from app.config import Settings
 
 
 class EventRequestRepository(Protocol):
+    def list_arrangement_reviews(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]: ...
+
+    def list_arrangement_reviews_for_arrangement(
+        self, arrangement: str
+    ) -> list[dict[str, Any]]: ...
+
+    def clear_arrangement_review(
+        self, review_id: str, actor_id: str, allowed_arrangements: list[str]
+    ) -> dict[str, Any]: ...
+
     def list_status_history(self, event_request_id: str) -> list[dict[str, Any]]: ...
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]: ...
@@ -66,6 +78,15 @@ class EventRequestRepository(Protocol):
     ) -> dict[str, Any]: ...
 
     def list_change_requests(self, event_request_id: str) -> list[dict[str, Any]]: ...
+
+    def decide_safety_review(
+        self, event_request_id: str, officer_id: str, decision: str,
+        reason: str | None, targets: list[dict[str, Any]]
+    ) -> dict[str, Any]: ...
+
+    def list_safety_reviews(self, event_request_id: str) -> list[dict[str, Any]]: ...
+
+    def latest_coordinator_id(self, event_request_id: str) -> str | None: ...
 
     def decide_change_request(
         self, event_request_id: str, change_request_id: str,
@@ -143,6 +164,46 @@ class SupabaseEventRequestRepository:
             headers={"Prefer": "return=representation"},
         )
         return rows[0]
+
+    def list_arrangement_reviews(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]:
+        """Use the shared outstanding predicate without changing HTTP visibility."""
+        return self._request_table(
+            "POST",
+            "/rpc/get_outstanding_arrangement_reviews",
+            json={"p_event_request_id": event_request_id},
+        )
+
+    def list_arrangement_reviews_for_arrangement(
+        self, arrangement: str
+    ) -> list[dict[str, Any]]:
+        """Return raw domain-scoped evidence; outstanding/order belong to service."""
+        return self._request_table(
+            "GET", "/arrangement_reviews",
+            params={"arrangement": f"eq.{arrangement}", "select": "*"},
+        )
+
+    def clear_arrangement_review(
+        self, review_id: str, actor_id: str, allowed_arrangements: list[str]
+    ) -> dict[str, Any]:
+        """Only the exact-ID server RPC may write review audit fields."""
+        try:
+            response = self._client.post(
+                "/rpc/clear_arrangement_review",
+                json={
+                    "p_review_id": review_id,
+                    "p_actor_id": actor_id,
+                    "p_allowed_arrangements": allowed_arrangements,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError("Arrangement reviews unavailable") from error
+        return response.json()
 
     def list_status_history(self, event_request_id: str) -> list[dict[str, Any]]:
         """The controller checks SCRUM-39 visibility before this server-only read."""
@@ -368,6 +429,49 @@ class SupabaseEventRequestRepository:
                 "p_reason": reason,
             },
         )
+
+    def decide_safety_review(
+        self,
+        event_request_id: str,
+        officer_id: str,
+        decision: str,
+        reason: str | None,
+        targets: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "decide_safety_review",
+            {
+                "p_event_request_id": event_request_id,
+                "p_officer_id": officer_id,
+                "p_decision": decision,
+                "p_reason": reason,
+                "p_targets": targets,
+            },
+        )
+
+    def list_safety_reviews(self, event_request_id: str) -> list[dict[str, Any]]:
+        return self._request_table(
+            "GET",
+            "/safety_reviews",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "decided_at.desc,id.desc",
+                "select": "*",
+            },
+        )
+
+    def latest_coordinator_id(self, event_request_id: str) -> str | None:
+        rows = self._request_table(
+            "GET",
+            "/event_coordinator_assignments",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "id.desc",
+                "limit": "1",
+                "select": "coordinator_id",
+            },
+        )
+        return rows[0]["coordinator_id"] if rows else None
 
     def _call_rpc(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:

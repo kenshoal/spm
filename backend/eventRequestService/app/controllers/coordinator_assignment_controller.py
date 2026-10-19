@@ -59,7 +59,7 @@ def get_operations_manager_id(
     if "event_operations_manager" not in caller.roles:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Only an Event Operations Manager can assign a Coordinator",
+            "Only an Event Coordinator Lead can assign a Coordinator",
         )
     return caller.id
 

@@ -20,7 +20,8 @@ The story title says "Confirm", but no Jira AC confirms an event. That gap is pa
 ## Scope
 
 - **Included (this increment):** AC1 and AC4 for the Approved → Planning move only. Endpoint `POST /event-requests/{id}/planning`.
-- **Excluded:** AC2, AC3 (parked above); Safety Officer check and confirmation (SCRUM-60); registration for confirmed events (SCRUM-21); notifications about the move (SCRUM-57); frontend control (later increment of this story).
+- **Included (second increment, 15 Oct 2026):** the coordinator's "Start planning" control on the coordination request page, for the same AC1 and AC4 behaviour (frontend only; no backend change). Offered on Approved events only; one click, no confirmation dialog, like "Start review".
+- **Excluded:** AC2, AC3 (parked above); Safety Officer check and confirmation (SCRUM-60); registration for confirmed events (SCRUM-21); notifications about the move (SCRUM-57).
 
 ## Actors and permissions
 
@@ -57,6 +58,13 @@ Only the coordinator on the **latest** assignment row (ordered by `id`) may star
 | AC4-N5, N6 | AC4 | Organiser and operations manager roles are refused even if their ID matches the assignment | Negative | Auth stubbed to the given role | POST `/planning` | `event_organiser`; `event_operations_manager` | 403 | Status unchanged | API |
 | AC4-N7 | AC4 | A refused database call writes no history and changes nothing | Negative | As AC1-X1 | Call the function as a different coordinator | — | `P0003`; status `Approved` | No new history row | DB |
 | AC4-N8 | AC4 | Browser roles cannot call the function directly | Negative | As AC1-X1 | `has_function_privilege` for `anon`, `authenticated` | — | false for both | — | DB |
+| AC1-P9 | AC1 | The control appears for Approved events and no other status | Partition | — | Ask `coordinatorActions` for every status | All ten statuses | `planning` offered only for Approved, and listed before `cancellation` | — | UI (unit) |
+| AC1-H2 | AC1 | The coordinator starts planning with one click, no dialog | Happy | `TransitionButton` rendered with kind `planning` | Click "Start planning" | request id `request-6` | No `alertdialog`; `startEventPlanning` called once with the request id | — | UI (component) |
+| AC1-H3 | AC1 | The server action posts the session to the planning endpoint and refreshes the pages showing status | Happy | `fetch` stubbed to 200; id contains `/` | Call `startEventPlanning("request/5")` | — | POST `…/request%2F5/planning` with `Authorization: Bearer valid-token`; returns `{}`; revalidates the queue, detail and organiser pages | — | Action |
+| AC1-N2 | AC1 | A request that is no longer Approved reports the stale status | Negative | `fetch` stubbed to 409 | Call `startEventPlanning` | — | "This request's status has already changed…" message | No page revalidated | Action |
+| AC1-N3 | AC1 | An unreachable API gives a retry message and does not throw | Negative | `fetch` rejects | Call `startEventPlanning` | — | "That could not be done. Please try again." | No page revalidated | Action |
+| AC4-N9 | AC4 | A coordinator who is not the assigned one gets the assignment message | Negative | `fetch` stubbed to 403 | Call `startEventPlanning` | — | "Only the coordinator currently assigned to this request can do that." | No page revalidated | Action |
+| AC4-N10 | AC4 | An expired session sends the coordinator to sign in | Negative | `fetch` stubbed to 401 | Call `startEventPlanning` | — | `redirect("/auth")` | No page revalidated | Action |
 
 ## Latest execution record
 
@@ -67,6 +75,7 @@ Only the coordinator on the **latest** assignment row (ordered by `id`) may star
 | AC1-N1 | Green | 404 with the service's "was not found" message | Pass | as above | Claude for Tate, 13 Oct 2026 | Red was FastAPI's route-level `Not Found`; the body assertion separates the two |
 | AC4-N1…N6 | Green | 403 (N1–N3, N5, N6) and 401 (N4); status stays Approved | Pass | as above | Claude for Tate, 13 Oct 2026 | as above; N5/N6 stub the auth service over `httpx.get` |
 | AC1-X1, AC4-N7, AC4-N8 | Green | Planning set; one history row `Approved → Planning`, actor `scrum58-coordinator`, `event_coordinator`, `coordinator.planning`; refused call left event and history unchanged; anon/authenticated cannot execute, service_role can | Pass | as above, **disposable local PostgreSQL 16** built by `database/tests/bootstrap_event_status_history.py` + `0026` | Claude for Tate, 13 Oct 2026 | `psql -f database/verify_event_request_planning.sql` printed `ALL EVENT PLANNING VERIFICATIONS PASSED` and left 0 fixture rows. Red before `0026`: `transition not allowed from status Approved`. Not run on shared Supabase (0026 not applied there) |
+| AC1-P9, AC1-H2, AC1-H3, AC1-N2, AC1-N3, AC4-N9, AC4-N10 | Green | Seven tests pass; control offered only on Approved; action posts to `/planning` and maps 403/409/401/network as specified | Pass | branch `feat/scrum-58-start-planning-button` on `bf4aed5`, **local**, Vitest 5.0.0 + jsdom, Node 24.20.0, `fetch` stubbed (no real API) | Claude for Tate, 15 Oct 2026 | `frontend/__tests__/coordination.test.tsx`, `frontend/__tests__/coordination-actions.test.ts`. Red first: 8 failed (`startEventPlanning is not a function`; `planning` not offered). Not run against a real API or in a browser |
 
 **Local evidence, 13 October 2026** (red runs seen first for every case):
 
@@ -76,4 +85,11 @@ Only the coordinator on the **latest** assignment row (ordered by `id`) may star
 
 **Shared development, 13 October 2026:** before applying, the live `advance_event_request_by_coordinator` matched `0025` (no newer change to overwrite). `0026` applied via MCP as `20261013134214 event_request_planning`. Read-only checks afterwards: definition contains the Approved → Planning move and the `planning` source; `anon` and `authenticated` cannot execute; `service_role` can; not `SECURITY DEFINER`. The rolled-back verification script was **not** run on shared (the MCP SQL tool is used read-only), so AC1-X1/AC4-N7 are proven locally only.
 
-**Not yet done:** a live API call against shared; frontend control; PR CI; human review of these test cases (`testing.md` §10).
+**Frontend increment, local, 15 October 2026** (Node 24.20.0, run in `spm/frontend`):
+
+- Baseline before changes: `npm test` 31 files, 307 passed.
+- Red: `npx vitest run __tests__/coordination.test.tsx __tests__/coordination-actions.test.ts` 8 failed for the intended reason.
+- Green: same command, 2 files, 30 passed. Whole suite `npm test`: 31 files, 314 passed, 0 failed, 0 skipped. `npm run lint` clean, `npm run typecheck` clean, `npm run build` succeeded.
+- Mocks prove the control and the action's request and error mapping, not the real API contract. A real check (button against the running API) is still outstanding.
+
+**Not yet done:** a live API call against shared; a browser run of the new control (no Playwright journey added); PR CI for the frontend increment; human review of these test cases (`testing.md` §10).

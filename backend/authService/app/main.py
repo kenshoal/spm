@@ -55,6 +55,7 @@ Role = Literal[
     "event_coordinator",
     "event_operations_manager",
     "event_organiser",
+    "safety_officer",
     "technical_support",
     "venue_staff",
 ]

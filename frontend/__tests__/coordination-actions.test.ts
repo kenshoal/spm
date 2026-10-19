@@ -23,6 +23,7 @@ import {
   decideEventRequest,
   decideEventChangeRequest,
   resumeEventRequestReview,
+  startEventPlanning,
   startEventRequestReview,
 } from "@/app/coordination/actions";
 
@@ -257,5 +258,70 @@ test("explains when change decisions are unavailable", async () => {
   const state = await decideEventChangeRequest("request-1", "change-1", "Approved", {}, new FormData());
 
   expect(state.message).toBe("Approval and rejection are unavailable until arrangement review is supported.");
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});
+
+// AC1-H3 (happy): starting planning posts the coordinator's session to the planning endpoint and refreshes the pages that show the status
+test("starts planning through the event request API", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const state = await startEventPlanning("request/5", {}, new FormData());
+
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(fetchMock.mock.calls[0][0]).toBe(
+    "http://127.0.0.1:8003/event-requests/request%2F5/planning",
+  );
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({
+    method: "POST",
+    headers: { Authorization: "Bearer valid-token" },
+  });
+  expect(state).toEqual({});
+  expect(navigation.revalidatePath).toHaveBeenCalledWith("/coordination/requests");
+  expect(navigation.revalidatePath).toHaveBeenCalledWith("/coordination/requests/request/5");
+  expect(navigation.revalidatePath).toHaveBeenCalledWith("/event-requests");
+});
+
+// AC4-N9 (negative): a coordinator who is not the assigned one gets the assignment message and no page is refreshed
+test("explains that only the assigned coordinator can start planning", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+  const state = await startEventPlanning("request-5", {}, new FormData());
+
+  expect(state).toEqual({
+    message: "Only the coordinator currently assigned to this request can do that.",
+  });
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});
+
+// AC1-N2 (negative): a request that is no longer Approved reports the stale status and no page is refreshed
+test("reports when the request is no longer approved", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 409 }));
+
+  const state = await startEventPlanning("request-5", {}, new FormData());
+
+  expect(state).toEqual({
+    message: "This request's status has already changed. Refresh the page to see where it stands.",
+  });
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});
+
+// AC4-N10 (negative): an expired session sends the coordinator to sign in again
+test("redirects to sign in when the session has expired", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401 }));
+
+  await startEventPlanning("request-5", {}, new FormData());
+
+  expect(navigation.redirect).toHaveBeenCalledWith("/auth");
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});
+
+// AC1-N3 (negative): an unreachable API gives a retry message, not a thrown error
+test("shows a retry message when the API is unreachable", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+  const state = await startEventPlanning("request-5", {}, new FormData());
+
+  expect(state).toEqual({ message: "That could not be done. Please try again." });
   expect(navigation.revalidatePath).not.toHaveBeenCalled();
 });

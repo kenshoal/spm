@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     supabase_secret_key: SecretStr
     auth_service_url: AnyHttpUrl = "http://127.0.0.1:8001"
     # notificationService's POST /notifications/events. Unset means nothing is
-    # sent and the outbox relay does not run, so submission events stay queued.
+    # sent and neither outbox relay runs; submission/review work stays queued.
     notification_service_url: AnyHttpUrl | None = None
 
     model_config = SettingsConfigDict(

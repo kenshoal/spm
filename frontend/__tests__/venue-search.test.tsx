@@ -53,7 +53,8 @@ test("drops a date that is not a real calendar date", () => {
 const venue: Venue = {
   id: "v1", name: "Riverside Hall", location: "East Wing", max_capacity: 120,
   facilities: ["Projector"], accessibility_features: ["Ramp access"], supported_layouts: ["theatre"],
-  operating_slots: ["AM", "PM"], status: "available", created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
+  operating_slots: ["AM", "PM"], setup_minutes: 30, turnaround_minutes: 45,
+  status: "available", created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
 };
 
 // Purpose: SCRUM-9 AC2 — each result shows the attributes a coordinator shortlists by.
@@ -73,4 +74,22 @@ test("explains when no venue matches", () => {
   render(<VenueResults venues={[]} />);
 
   expect(screen.getByText("No venue matches every filter. Try removing one.")).toBeDefined();
+});
+
+// AC2-H2 (happy): SCRUM-59 coordinators see each result's setup and turnaround time
+test("shows setup and turnaround time for each result", () => {
+  render(<VenueResults venues={[venue]} />);
+
+  const attributes = screen.getByRole("article", { name: "Riverside Hall" }).querySelector("dl") as HTMLElement;
+  expect(within(attributes).getByText("Setup").nextElementSibling?.textContent).toBe("30 min");
+  expect(within(attributes).getByText("Turnaround").nextElementSibling?.textContent).toBe("45 min");
+});
+
+// AC4-H2 (happy): SCRUM-59 a time that was never set reads "None"
+test("shows None when a venue has no setup or turnaround time", () => {
+  render(<VenueResults venues={[{ ...venue, setup_minutes: 0, turnaround_minutes: 0 }]} />);
+
+  const attributes = screen.getByRole("article", { name: "Riverside Hall" }).querySelector("dl") as HTMLElement;
+  expect(within(attributes).getByText("Setup").nextElementSibling?.textContent).toBe("None");
+  expect(within(attributes).getByText("Turnaround").nextElementSibling?.textContent).toBe("None");
 });
