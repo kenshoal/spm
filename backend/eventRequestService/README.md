@@ -227,20 +227,22 @@ this snapshot is not a lease against arbitrary privileged SQL mutations. See the
 database contract for error, caller and concurrency-verification requirements.
 
 For native cross-branch verification, the database README provides an offline
-37-file combined fixture pinned at `4a5bc9349ecb91d260454b6a9db77beea15e5793`.
+37-file combined fixture pinned at `e7888dcfdb19777722583b471b1d31e49da3f9c4`.
 It loads local 0026 Planning support and exact external 0034, 0039 and 0044–0047
 from that one reviewed archive. All scopes require the complete stack: current
 0046 depends on 0039 and 0047 depends on 0046. Scope selects only the local runner's
 `decision`, `handover` or `all` checks. The published caller records the saved
 decision and targeted reviews atomically, while approval and handover consume
 normal readiness plus outstanding reviews. Caller cross-event target errors are
-`22023`; the private helper retains its own `P0002` contract. These external
+`22023`; current 0047 also refuses duplicate target pairs before writes, as
+covered by upstream AC6-X13. The private helper retains its own `P0002` missing-
+target and pair-deduplication contracts. These external
 functions are not copied into this feature's migrations or enabled by adding a
 new API route here. Current 0046 removes the older local venue SELECT workaround.
 The four upstream workflow SQL checks and the local integration runner have
 separate commands and evidence; native role checks do not prove JWT/HTTP/browser
-access, shared deployment or PR CI. Historical 0044-only evidence stays labelled
-historical in the database README and integration handoff. The independent
+access, shared deployment or PR CI. Earlier 4a5bc93 and 0044-only evidence stays labelled historical in the database
+README and integration handoff; it is not a current e7888dc verification claim. The independent
 30-file SCRUM-64 fixture is unchanged. No runtime code or shared database is
 changed by this documentation update.
 

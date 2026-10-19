@@ -229,7 +229,7 @@ Neither fixture is a full safety-workflow deployment. Historical execution recor
 
 Jaren's published `decide_safety_review(event UUID, officer UUID, decision text,
 reason text, targets jsonb)` at PR62 commit
-`4a5bc9349ecb91d260454b6a9db77beea15e5793` owns the saved `safety_reviews`
+`e7888dcfdb19777722583b471b1d31e49da3f9c4` owns the saved `safety_reviews`
 decision and lifecycle mutation through external 0034 and its 0044/0045/0047
 replacements. Targets are objects with `arrangement` (`venue_booking` or
 `equipment_reservation`) and `id` (the booking/reservation UUID). The published
@@ -289,11 +289,14 @@ decision foreign key or separate replay ledger here: a caller passing additional
 targets on a repeated UUID is not detected by the per-target conflict key.
 
 **Published integration boundary:** the optional pinned fixture below uses PR62
-commit `4a5bc9349ecb91d260454b6a9db77beea15e5793`, containing the decision
+commit `e7888dcfdb19777722583b471b1d31e49da3f9c4`, containing the decision
 foundation, NULL validation and 0045–0047 connections. Its saved changes-requested
 decision calls this private writer with the actual saved UUID in the same
 transaction; invalid or cross-event targets are mapped to caller error `22023`.
-The helper's own private missing-target contract remains `P0002`. Approval and
+The helper's own private missing-target contract remains `P0002`. The published
+0047 caller refuses duplicate domain/UUID target pairs with `22023` before writes
+(UUID text case does not distinguish targets); the private helper still deduplicates
+its trusted input. These are separate caller/helper contracts. Approval and
 handover both check normal readiness followed by outstanding review evidence,
 including retained flags on cancelled bookings. Those caller/lifecycle/gate
 functions remain external story ownership and are not copied into this checkout.
@@ -619,7 +622,7 @@ same complete schema: 0046 depends on 0039 and 0047 depends on 0046. Selecting
 Set `SCRUM64_TEST_DSN` to an owned disposable loopback database named
 `scrum48_*`. Set `SCRUM64_EXTERNAL_SQL_DIR` to the **database directory of an
 extracted, reviewed offline source archive** at commit
-`4a5bc9349ecb91d260454b6a9db77beea15e5793`: it must contain `migrations/`
+`e7888dcfdb19777722583b471b1d31e49da3f9c4`: it must contain `migrations/`
 and the four verifier files. This is one published combined source snapshot,
 including Tate's handover/readiness work; it is not an implicit branch merge.
 Keep its commit, source paths and SHA256 values in the archive manifest. Do not
@@ -636,11 +639,11 @@ All entries in this table are from that same pinned commit:
 | `migrations/0044_safety_review_null_inputs.sql` | `aa2cb9b05e978358b4b634a715ca95fd27284dcf9f7c821132af3993c6301792` |
 | `migrations/0045_safety_review_arrangement_reviews.sql` | `333774e7c9e7fe5831bdf44d308230d15b39e1ff80b2bff4ba4cf536df7b3ff4` |
 | `migrations/0046_shared_event_readiness.sql` | `a6c0f19a3900ae4576a9d6edb5fa11cc3c437f5de086b1e628dd9492e3dc2a3c` |
-| `migrations/0047_safety_review_approval_readiness.sql` | `c0ab8732be85a2c8226e7ae5ab2156f89efb1430e4c479d319773c2817435993` |
+| `migrations/0047_safety_review_approval_readiness.sql` | `647d8e67e13b7307144438473bc298167f49c67b40c0d8c20b82dde435ff0507` |
 | `verify_safety_review_decisions.sql` | `401938449777cc45827062cf14f08434cbd0eddd82c80b40caee814b3d6f1070` |
 | `verify_safety_review_arrangement_reviews.sql` | `8c7602f5366229bbc0ae38c02a5f818cc32484a4c82d58ace1bbea8e91e5000c` |
 | `verify_shared_event_readiness.sql` | `55803187c95990062be3bda03bb45aaa665d05c61bd0293908984bcf85f6059d` |
-| `verify_safety_review_approval_readiness.sql` | `6f7912f04bc1656b2573a29dada5eb34479d3cf399ce75e1ffbe71a81748abb0` |
+| `verify_safety_review_approval_readiness.sql` | `44455ab8f6848f6abbc9c3877225568614a446c3c1a0234a7cff8eb00a63aadc` |
 
 0034 requires the event schema, `staff_roles`, exact 0029 safety status/role
 foundation and 0025 actor/history support. The guarded SCRUM-48 bootstrap supplies
@@ -670,11 +673,11 @@ expected = {
     "migrations/0044_safety_review_null_inputs.sql": "aa2cb9b05e978358b4b634a715ca95fd27284dcf9f7c821132af3993c6301792",
     "migrations/0045_safety_review_arrangement_reviews.sql": "333774e7c9e7fe5831bdf44d308230d15b39e1ff80b2bff4ba4cf536df7b3ff4",
     "migrations/0046_shared_event_readiness.sql": "a6c0f19a3900ae4576a9d6edb5fa11cc3c437f5de086b1e628dd9492e3dc2a3c",
-    "migrations/0047_safety_review_approval_readiness.sql": "c0ab8732be85a2c8226e7ae5ab2156f89efb1430e4c479d319773c2817435993",
+    "migrations/0047_safety_review_approval_readiness.sql": "647d8e67e13b7307144438473bc298167f49c67b40c0d8c20b82dde435ff0507",
     "verify_safety_review_decisions.sql": "401938449777cc45827062cf14f08434cbd0eddd82c80b40caee814b3d6f1070",
     "verify_safety_review_arrangement_reviews.sql": "8c7602f5366229bbc0ae38c02a5f818cc32484a4c82d58ace1bbea8e91e5000c",
     "verify_shared_event_readiness.sql": "55803187c95990062be3bda03bb45aaa665d05c61bd0293908984bcf85f6059d",
-    "verify_safety_review_approval_readiness.sql": "6f7912f04bc1656b2573a29dada5eb34479d3cf399ce75e1ffbe71a81748abb0",
+    "verify_safety_review_approval_readiness.sql": "44455ab8f6848f6abbc9c3877225568614a446c3c1a0234a7cff8eb00a63aadc",
 }
 for name, digest in expected.items():
     if hashlib.sha256((archive / name).read_bytes()).hexdigest() != digest:
@@ -746,7 +749,9 @@ bootstrap and direct commands.
 
 After all 37 files, optionally run all four exact upstream workflow checks. The
 current decision verifier uses a real target and a ready approval fixture, so it
-is compatible with 0045/0047. Every script rolls its fixtures back:
+is compatible with 0045/0047. The latest approval verifier also includes AC6-X13
+for duplicate-target `22023` refusal before writes. Every script rolls its fixtures
+back:
 
 ```sh
 for verification in \
@@ -786,6 +791,15 @@ snapshot is not a claim that the workflow is deployed to shared Supabase.
 
 #### Earlier source/evidence pins (historical only)
 
+The preceding full-stack source pin was
+`4a5bc9349ecb91d260454b6a9db77beea15e5793`, with 0047 SHA256
+`c0ab8732be85a2c8226e7ae5ab2156f89efb1430e4c479d319773c2817435993`
+and approval verifier SHA256
+`6f7912f04bc1656b2573a29dada5eb34479d3cf399ce75e1ffbe71a81748abb0`.
+Its recorded results remain tied to that source; they are not current evidence
+for e7888dc's duplicate-target change. Current execution status belongs in the
+integration handoff, separately from these reproducible source inputs.
+
 Earlier PR62 commit `289a814917dc8a9e4f874b43595285cf7dc68ef9` used the same
 0034 digest `4099f1f7a0c60df682d076c0080e7911da05008495313126de0c9e3f79e817aa`
 and verifier `9627a4da26058dd4fe3f8bfbd18abcf8763b4124f2157185176bbc786179c916`.
@@ -797,7 +811,7 @@ connections. Tate's earlier 0039 was pinned at
 The original frozen runner was
 `78ad48f8926f703fd86724d3086f9837f0ab43e6ab92e8c8f96210744f33a76e`.
 Those missing-connection failures and initial venue 42501 remain historical
-results; they are not current failures at 4a5bc93. The separately live-verified
+results; they do not describe the current published connections. The separately live-verified
 local venue ACL snippet had SHA256
 `4eafc51e7a40f66bdf96b2e637c68e621bd09f3fd02cf896c1952d39c1146724`.
 It was a local platform-precondition workaround, never a repository migration,

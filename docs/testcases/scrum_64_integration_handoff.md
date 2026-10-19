@@ -1,6 +1,6 @@
 # SCRUM-64 combined safety integration handoff — updated 19 October 2026
 
-**The bounded native integration checks now pass on the published 0047 snapshot.** On 19 October 2026, root ran the approved caller-contract correction against exact snapshot `4a5bc9349ecb91d260454b6a9db77beea15e5793`: seven methods/nine transaction executions passed, zero failures,0.837s. The former sole mismatch was the public caller's 22023 versus the old test's private-helper P0002 expectation. Only that caught SQLSTATE and explanatory error text changed; the full no-write snapshot assertion and all other tests remain identical. This is expectation reconciliation, not a production TDD fix. The dated 79-case baseline stays 77 Green/two Planned; no new cases are added. Actual API/JWT identity, real authenticated browser and whole-story Done remain unproven. The 18 October failures below are historical observations of their exact earlier pins, superseded for this bounded native layer by the latest record.
+**The bounded native integration checks pass on the latest pinned source.** On 19 October 2026, root reran unchanged runner 6861 against isolated published snapshot `e7888dcfdb19777722583b471b1d31e49da3f9c4`: seven methods/nine transaction executions passed, zero failures,0.835s. Four published workflow SQL verifiers also passed with ROLLBACK. A separate temporary Jaren AC6-X13 compatibility supplement proves exact and mixed-case duplicate UUID refusals with 22023, exact duplicate message and full protected-state equality. This adds no repository case or production TDD claim. The dated 79-case baseline stays 77 Green/two Planned; actual API/JWT, real authenticated browser and whole-story Done remain unproven. Earlier 4a5bc934 and 18 October results remain historical evidence, not current source pins.
 
 Vera owns this test design, opt-in runner and catalogue. Devon owns SCRUM-64 production changes. Root owns isolated database preparation, execution records and external workflow/PR actions. No production function is replaced by a test implementation, no external story is implemented here and no shared database is changed.
 
@@ -125,11 +125,11 @@ Decision independence is an actual runtime proof, not only a command label: `dec
 On the new combined 33 schema, all ten unchanged native review SQL scripts passed with ROLLBACK (`review-regression-after44.log`) and the three-method native lock harness passed in 4.489s (`concurrency-after44.log`). Both child-domain subcases report no caller child wait and the expected writer event wait. These are non-additive regression checks, not new integration Green records. Root also reset the decision database and reproduced Devon's exact scope-aware README recipe using an archive containing only the three Jaren inputs, with no Tate 0039 file: 32-file setup and updated verifier passed (`readme-decision-only-reproduction.log`), then the same scoped decision assertions again gave 6 methods/7 transactions, 2 passing/5 failing in 0.665s (`decision-from-readme.log`). This is additional setup reproduction, not new cases. No SCRUM-64 runtime fix was justified by the observed failures. The published NULL fix is locally reproduced; the required caller/gate connections remain **Not done**, real API/JWT checks remain unverified and the unpublished shared ordinary-readiness capability remains Blocked.
 
 
-## Latest 19 October 2026 — approved public-caller contract reconciliation
+## Earlier 19 October 2026 — public-caller contract reconciliation on 4a5bc934
 
 The requester explicitly approved changing the public-caller cross-event expectation to 22023. The private helper's absent/cross-eventP0002 contract remains unchanged. The source used for this execution is published snapshot `4a5bc9349ecb91d260454b6a9db77beea15e5793`, retained at `/tmp/scrum64-approval47-verification-20261019/snapshot`. Its0047 migration SHA256 is `c0ab8732be85a2c8226e7ae5ab2156f89efb1430e4c479d319773c2817435993`. This snapshot is an isolated verification input, not a claim it was merged into the SCRUM-64 checkout.
 
-Before changing the test, root reconstructed the native setup and reproduced the frozen 5de75 runner: seven methods/nine transactions, eight passing executions and one contract mismatch,0.822s (`before-full.log`). The actual public caller refused the cross-event target with22023 and message `safety decision target is not part of this event`; the old test expected P0002, so its later snapshot equality was not reached. This was not an accepted foreign target or a demonstrated production regression.
+Before changing the test, root reconstructed the native setup and reproduced the frozen 5de75 runner: seven methods/nine transactions, eight passing executions and one contract mismatch,0.822s (`before-full.log`). The actual public caller refused the cross-event target with 22023 and message `safety decision target is not part of this event`; the old test expected P0002, so its later snapshot equality was not reached. This was not an accepted foreign target or a demonstrated production regression.
 
 Vera archived the original 5de75 runner at `/tmp/scrum64-caller-contract-20261019/runner-before-5de75.py`, then changed exactly two literals inside `test_cross_event_target_rolls_back_actual_caller`: its caught SQLSTATE and expected-code explanation, P0002→22023. Its AC7-N3 purpose comment, valid-first/foreign-second fixture, full protected-state equality and every other function are unchanged. AST comparison and literal diff establish this scope. Private-helper tests were not edited. The Green-executed runner `database/tests/test_safety_arrangement_integration.py` SHA256 was `add2030f8805e2444e3cc1d6749b5d89222c924e8c497a12d054b92de203d3b3`; original 5de75/78ad archives preserve the earlier evidence. No new test or production change was made.
 
@@ -157,6 +157,140 @@ python3 /Users/tionghengrui/Documents/SCH/Y2S2/SPM/Project/spm/database/tests/te
 **Publication preparation — 19 October 2026:** the user authorised publishing the Green opt-in runner. Its header now describes the portable external-stack prerequisite instead of a local/uncommitted restriction. Publication source SHA256 is `6861e420fec648561ea7bfb6d0dd46539cb22740c828bdf298c442b8ff124a23`. The Python AST excluding the module docstring is identical to the nine-pass add2030 source; all seven labelled test bodies and every assertion are unchanged. No test was added and no execution count changed. This is documentation-only preparation, not a new native rerun or a claim of passing against the base feature checkout alone. The opt-in runner requires the reviewed external safety/readiness stack through 0047; current nine-pass evidence remains the exact 4a5bc934 snapshot above. Root owns publication, CI and live verification; their outcomes must be recorded separately.
 
 The six draft integration IDs remain this separate layer, not extra baseline 79 cases. This native result supersedes earlier missing-connection/blocked-helper observations only for the exact published snapshot and checks executed. The earlier results remain dated source evidence. Root owns setup/execution, cleanup and the separate execution-handoff record; Vera owns this test correction/evidence review. No shared database, production function, merge, commit or push was changed by this test task.
+
+
+## Latest 19 October 2026 — e7888dc refresh and duplicate no-write supplement
+
+The user authorised refreshing the published Jaren source and verifying duplicate refusal without changing SCRUM-64 production or the committed runner. The exact snapshot is `e7888dcfdb19777722583b471b1d31e49da3f9c4`, retained at `/tmp/scrum64-e7888dc-verification-20261019/snapshot`. Its relevant SHA256 fingerprints are:
+
+| Source | SHA256 |
+| --- | --- |
+| `database/migrations/0047_safety_review_approval_readiness.sql` | `647d8e67e13b7307144438473bc298167f49c67b40c0d8c20b82dde435ff0507` |
+| `database/verify_safety_review_approval_readiness.sql` | `44455ab8f6848f6abbc9c3877225568614a446c3c1a0234a7cff8eb00a63aadc` |
+| `database/verify_safety_review_decisions.sql` | `401938449777cc45827062cf14f08434cbd0eddd82c80b40caee814b3d6f1070` |
+| `database/verify_safety_review_arrangement_reviews.sql` | `8c7602f5366229bbc0ae38c02a5f818cc32484a4c82d58ace1bbea8e91e5000c` |
+| `database/verify_shared_event_readiness.sql` | `55803187c95990062be3bda03bb45aaa665d05c61bd0293908984bcf85f6059d` |
+
+Root executed against owned PostgreSQL16. Vera independently read the raw logs in `/tmp/scrum64-e7888dc-verification-20261019/`:
+
+| Check | Observed result | Evidence |
+| --- | --- | --- |
+| Four exact workflow SQL verifiers above | All pass with ROLLBACK. | `verify_safety_review_{decisions,arrangement_reviews,approval_readiness}.log`, `verify_shared_event_readiness.log` |
+| Unchanged committed runner 6861 | Seven methods/nine transaction executions, nine pass/zero fail,0.835s. | `combined-integration.log` |
+| Existing SCRUM-64 review SQL checks | Ten scripts pass with ROLLBACK. | `review-regression.log` |
+| Existing review lock harness | Three methods pass,4.487s. | `review-locks.log` |
+| Published handover race harness | Five methods pass,10.267s. | `handover-races.log` |
+| Jaren AC6-X13 compatibility supplement | Two diagnostic executions pass: exact duplicate and mixed-case UUID identity, exact 22023/message and full protected-state equality. | `duplicate-no-write.log` |
+
+The upstream AC6-X13 already checks duplicate 22023 and zero saved decisions/flags. Its randomly generated UUID is not a guaranteed alphabetic case-folding fixture, and it does not explicitly compare status/history/jobs/resources. The temporary supplement therefore imports the frozen committed runner 6861, uses its actual linked fixtures, native service-role call and complete `integration_state()` snapshot, and substitutes only the in-process booking fixture UUID `64abcdef-0123-4abc-8def-0123456789ab`. The first transaction repeats that literal exactly; the second uses its uppercase representation. Both require SQLSTATE 22023 and exact message `duplicate safety decision target`, then compare the entire protected-state snapshot. This distinguishes duplicate detection from an unrelated 22023, accepted duplicate or partial-write fault. No test-side production function or copied business rule is supplied.
+
+The diagnostic was frozen before execution: temporary `/tmp/scrum64-e7888dc-verification-20261019/vera/verify_duplicate_target_no_write.py`, SHA256 `3c854c46b64611081765c746d2cbfa501a86ec3c393e1283c191a8bcc6a55269`. It passed Python compilation and focused Ruff. The committed runner remains byte-identical SHA256 `6861e420fec648561ea7bfb6d0dd46539cb22740c828bdf298c442b8ff124a23`; no new repository testcase, matrix ID or baseline count was added. These are two non-additive compatibility executions under Jaren's existing AC6-X13, not extra SCRUM-64 cases, a newly authored production fix or a retroactive Red.
+
+Root executed this exact temporary command (the portable equivalent follows):
+
+```sh
+python3 /tmp/scrum64-e7888dc-verification-20261019/vera/verify_duplicate_target_no_write.py \
+  --runner /Users/tionghengrui/Documents/SCH/Y2S2/SPM/Project/spm/database/tests/test_safety_arrangement_integration.py \
+  --dsn postgresql://postgres@127.0.0.1/scrum48_64_e7888dc \
+  --psql /tmp/scrum64-e7888dc-verification-20261019/bin/psql --disposable
+```
+
+For reproduction, prepare the reviewed external stack through 0047 using the current README recipe, then save the exact temporary source below outside the repository. Run it with the real committed runner path, an owned loopback `scrum48_*` DSN and the matching psql command. This source is recorded here because its executed `/tmp` path is an ephemeral diagnostic artifact, not a repository test file:
+
+```sh
+python3 /tmp/verify_duplicate_target_no_write.py \
+  --runner "$SCRUM64_REPO/database/tests/test_safety_arrangement_integration.py" \
+  --dsn "$SCRUM64_TEST_DSN" --psql "$SCRUM64_PSQL" --disposable
+```
+
+<details>
+<summary>Exact frozen temporary AC6-X13 supplement source</summary>
+
+```python
+"""Temporary Jaren AC6-X13 compatibility supplement; no production substitute.
+
+Reuse the committed opt-in runner's real linked fixtures and full protected-state
+snapshot. Both independent transactions roll back. This adds no repository case.
+"""
+
+import argparse
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+from urllib.parse import urlparse
+
+EXPECTED_RUNNER_SHA = "6861e420fec648561ea7bfb6d0dd46539cb22740c828bdf298c442b8ff124a23"
+LETTER_BOOKING = "64abcdef-0123-4abc-8def-0123456789ab"
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--runner", type=Path, required=True)
+    parser.add_argument("--dsn", required=True)
+    parser.add_argument("--psql", default="psql")
+    parser.add_argument("--disposable", action="store_true")
+    args = parser.parse_args()
+    parsed = urlparse(args.dsn)
+    if (
+        not args.disposable
+        or parsed.scheme not in ("postgres", "postgresql")
+        or parsed.hostname not in ("127.0.0.1", "localhost", "::1")
+        or not parsed.path.removeprefix("/").startswith("scrum48_")
+    ):
+        parser.error("Only an explicitly disposable loopback scrum48_* database is allowed")
+    if hashlib.sha256(args.runner.read_bytes()).hexdigest() != EXPECTED_RUNNER_SHA:
+        parser.error("Committed fixture/snapshot source does not match frozen runner6861")
+    spec = importlib.util.spec_from_file_location("scrum64_frozen_native", args.runner)
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    runner.DSN, runner.PSQL = args.dsn, args.psql
+    # Only this process's test fixture identity changes; no repository source changes.
+    runner.BOOKING = LETTER_BOOKING
+    probe = runner.CombinedSafetyIntegration("test_cross_event_target_rolls_back_actual_caller")
+    assert LETTER_BOOKING != LETTER_BOOKING.upper()
+    for case, second_id in (
+        ("exact-duplicate", LETTER_BOOKING),
+        ("mixed-case-same-UUID", LETTER_BOOKING.upper()),
+    ):
+        targets = json.dumps([
+            {"arrangement": "venue_booking", "id": LETTER_BOOKING},
+            {"arrangement": "venue_booking", "id": second_id},
+        ])
+        # Jaren AC6-X13 (negative): duplicate UUID identity must refuse before any protected state change.
+        probe.native(f"""DO $case$
+        DECLARE before_state jsonb:=pg_temp.integration_state(); actual_message text;
+        BEGIN
+          ASSERT EXISTS(SELECT 1 FROM public.venue_booking_requests
+            WHERE id='{LETTER_BOOKING}' AND event_request_id='{runner.E1}'),
+            'AC6-X13 supplement: linked alphabetic UUID fixture missing';
+          ASSERT '{LETTER_BOOKING}'::uuid='{second_id}'::uuid,
+            'AC6-X13 supplement: input does not represent the same UUID';
+          BEGIN
+            SET LOCAL ROLE service_role;
+            PERFORM {runner.decide(targets=targets)};
+            RESET ROLE;
+            RAISE EXCEPTION 'AC6-X13 supplement: duplicate target accepted' USING ERRCODE='P9906';
+          EXCEPTION WHEN SQLSTATE '22023' THEN
+            GET STACKED DIAGNOSTICS actual_message=MESSAGE_TEXT;
+            ASSERT actual_message='duplicate safety decision target',
+              'AC6-X13 supplement: unrelated22023 caught: ' || actual_message;
+          END;
+          ASSERT pg_temp.integration_state()=before_state,
+            'AC6-X13 supplement: refusal changed protected decision/event/history/flags/jobs/resources';
+          RAISE NOTICE 'INTEGRATION ASSERTIONS PASSED AC6-X13 supplement {case}';
+        END $case$;""")
+        print(f"PASS Jaren AC6-X13 supplement {case}:22023/exact message/full snapshot unchanged; ROLLBACK")
+    print("PASS:2 compatibility executions; no new repository case or realJWT claim")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+</details>
+
+All test transactions roll back; the first reserved-event cleanup check reports zero retained case events (`first-fixture-cleanup.log`). Root also reproduced the updated37-file README setup from a second empty owned database, then reran all four workflow SQL verifiers and the nine integration transactions successfully (`readme-setup.log`, `readme-upstream-workflow.log`, `readme-combined-integration.log`; runner0.826s). An initial transient local PostgreSQL TCP-readiness failure was retained as startup evidence, not product Red; the same setup passed after TCP readiness. This is separate reproducibility evidence, not new cases. Root owns final cleanup, PR/CI and live evidence. The four workflow verifiers, nine runner transactions, other regression methods and two supplementary executions are different non-additive units. The 79-case baseline and two real-Auth Planned items remain unchanged. No real JWT, shared deployment or full lifecycle-concurrency guarantee follows from these native passes.
 
 ## Historical 18 October owner actions — superseded by latest native result
 
