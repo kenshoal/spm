@@ -1,5 +1,30 @@
 # SCRUM-64 execution handoff — 19 October 2026
 
+## PR62/dev merge conflict resolution — 19 October 2026
+
+PR62 merged into dev at `38ac2a5`, after the previous feature publication5dac61a. Root fetched current dev, confirmed the feature checkout was clean and merged without committing so conflicts could be reviewed. Tested merge commit: `eaff7f2ad6e048227c59f04f98a08972cce328dd` (`chore: merge dev into feat/scrum-64-arrangement-review`). This is a dev-to-feature integration, not a merge of PR63 into dev.
+
+Four conflicts were resolved as a semantic union: Devon owned `database/README.md` and `frontend/app/components/app-shell.tsx`; Vera owned `frontend/__tests__/event-request-status.test.tsx` and `frontend/e2e/support/event-request-api.mjs`. Database documentation retains both migration histories and byte-identical independent30/full37 setup commands. Navigation retains staff review links, Safety checks and Notifications. Status-test assertions from both branches are preserved; the duplicate purpose labels are combined. The fixture preserves venue/technical sessions and arrangement-review routes while adding the safety session/storage/routes. No future Tate handover or Jaren0045/0047 runtime code was copied to resolve a conflict.
+
+| Merged check | Command and environment | Current observed result |
+| --- | --- | --- |
+| Event-request backend | `SCRUM64_NOTIFICATION_RUNTIME=/tmp/scrum64-notification-runtime/bin/python .venv/bin/python -m pytest -q -p no:cacheprovider`, from eventRequestService |421 passed,4.19s, no skips; two existing dependency warnings. |
+| Auth backend | `.venv/bin/python -m pytest -q -p no:cacheprovider`, from authService |46 passed,0.13s; one existing dependency warning. |
+| Equipment backend | `.venv/bin/python -m pytest -q -p no:cacheprovider`, from equipmentService |333 passed,1.57s. |
+| Venue backend | `../eventRequestService/.venv/bin/python -m pytest -q -p no:cacheprovider`, from venueService |453 passed,1.56s; two existing dependency warnings. |
+| Backend lint | Existing service Ruff runtimes, `ruff check --no-cache .` in all four affected services | Passed. |
+| Frontend unit | `npm test -- --run` |382 passed across38 files,6.65s. These totals include upstream stories, not SCRUM-64-only cases. |
+| Frontend quality | `npm run lint`; `npm run typecheck` | Passed. |
+| Production build/browser | `npx playwright test --reporter=list` (config builds with webpack first) |43 passed in17.7s, including Safety Officer and arrangement-review workflows. Simulated Auth/APIs, not shared end-to-end. |
+| Preserved combined recipe | Exact three e788-pinned README blocks, owned PostgreSQL16 `scrum48_64_dev_merge` | Fresh37 setup PASS; four workflow SQL scripts PASS/ROLLBACK; seven-method/nine-execution runner PASS in0.824s. External0045–0047 remain explicitly loaded test inputs. |
+| Merge integrity | Four resolver fingerprints, semantic test/fixture AST audit; `git diff --cached --check origin/dev` and scoped conflict-file check | Passed; no remaining unmerged entries/markers. |
+
+The full merge-index whitespace check against the feature's old parent reported three inherited trailing blank lines in upstream safety tests/repository tests/story60 docs. They were not introduced by the resolution. Checks against actual targetdev and all four resolved files pass; unrelated upstream files were not reformatted to manufacture a clean old-parent diff.
+
+Merged dev now supplies the Safety Officer foundation/queue/UI,0034 and0044; later0045/0046/0047 consuming runtime remains in its owning follow-up branches. In particular the current base API does not yet handle the laterP0005 approval contract; that handler is already owned by Jaren's0045 branch and must travel with the later rollout, not be copied into this conflict resolution. No live deployment or new authenticated workflow proof is claimed.
+
+Logs: `/tmp/scrum64-merge-{event,auth,venue,equipment}-tests.log`, `/tmp/scrum64-merge-frontend-{tests,lint,types}.log`, `/tmp/scrum64-merge-e2e.log` and `/tmp/scrum64-dev-merge-resolution-20261019/{readme-setup,upstream-workflow,combined-integration}.log`. The owned native fixture database was checked and removed. No shared Supabase or Jira was changed. Human review/rollout gates remain separate. Exact pushed-head PR63 CI is checked and linked in the PR description after publication; older conflict/CI observations below remain historical.
+
 ## Refreshed duplicate-target dependency verification — 19 October 2026
 
 The user authorised rerunning the latest Jaren dependency and updating setup pins, evidence and PR63. Current external pin: `e7888dcfdb19777722583b471b1d31e49da3f9c4` on `feat/scrum-60-approval-readiness`. Root archived exact source and verified that0047 now rejects repeated `(arrangement,id)` pairs with caller22023 before writes, comparing UUID text case-insensitively. The earlier4a5 evidence below remains historical and reproducible; it does not establish this new duplicate behaviour. SCRUM-64 runtime and committed runner6861 are unchanged.
