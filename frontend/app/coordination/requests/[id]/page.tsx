@@ -14,6 +14,8 @@ import { RequestDetails } from "../../../components/request-details";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { SafetyReviewsPanel } from "../../../components/safety-reviews-panel";
 import { listSafetyReviews } from "@/lib/safety";
+import { formatBookingDates, listEventBookings } from "@/lib/event-bookings";
+import { listVenues } from "@/lib/venues";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
 import { ChangeRequestPanel } from "./change-request-panel";
@@ -47,7 +49,7 @@ async function CoordinatorRequestView({ id }: { id: string }) {
   }
 
   const request = result.request;
-  const [decisionResult, changeResult, safetyResult] = await Promise.all([
+  const [decisionResult, changeResult, safetyResult, bookingLabels] = await Promise.all([
     listReviewDecisions(id)
       .then((decisions) => ({ decisions, failed: false as const }))
       .catch(() => ({ decisions: [], failed: true as const })),
@@ -57,6 +59,19 @@ async function CoordinatorRequestView({ id }: { id: string }) {
     listSafetyReviews(id)
       .then((reviews) => ({ reviews, failed: false as const }))
       .catch(() => ({ reviews: [], failed: true as const })),
+    // Names for the bookings a Safety Officer asked to recheck; the panel falls
+    // back to "A venue booking" if they cannot be loaded.
+    Promise.all([listEventBookings(id), listVenues()])
+      .then(([bookings, venues]) => {
+        const names = new Map(venues.map((venue) => [venue.id, venue.name]));
+        return Object.fromEntries(
+          bookings.map((booking) => [
+            booking.id,
+            `${names.get(booking.venue_id) ?? "Venue"}, ${formatBookingDates(booking.start_date, booking.end_date)}`,
+          ]),
+        );
+      })
+      .catch(() => ({}) as Record<string, string>),
   ]);
   const decisions = decisionResult.decisions;
   const latestClarification = decisions.find(
@@ -84,7 +99,7 @@ async function CoordinatorRequestView({ id }: { id: string }) {
         <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">The safety check is temporarily unavailable.</div>
       ) : request.status === "Safety Review" || safetyResult.reviews.length > 0 ? (
         <div className="mt-5">
-          <SafetyReviewsPanel reviews={safetyResult.reviews} />
+          <SafetyReviewsPanel reviews={safetyResult.reviews} labels={bookingLabels} />
         </div>
       ) : null}
       <Suspense fallback={<VenueBookingsLoading />}>

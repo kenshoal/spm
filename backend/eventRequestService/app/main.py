@@ -84,6 +84,8 @@ def create_app(
     # Before event_request_router: routes match in registration order, and its
     # /event-requests/{event_request_id} would otherwise swallow the literal
     # /event-requests/awaiting-assignment and reject it as a malformed UUID.
+    # The same holds for event_transition_router's /event-requests/safety-queue
+    # (SCRUM-60), so keep both routers above event_request_router.
     application.include_router(coordinator_assignment_router)
     application.include_router(event_transition_router)
     application.include_router(event_request_router)

@@ -349,3 +349,18 @@ def test_only_safety_officers_see_the_queue(caller: str) -> None:
 
     assert response.status_code == 403
 
+
+# AC4a-N6 (negative, review of PR #62): the same arrangement ticked twice is
+# refused rather than saved twice.
+def test_duplicate_targets_are_refused() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+
+    response = decide(
+        client,
+        event_request_id,
+        {"decision": "changes_requested", "reason": REASON, "targets": [TARGETS[0], TARGETS[0]]},
+    )
+
+    assert response.status_code == 422
+    assert_unchanged(events, event_request_id)
+
