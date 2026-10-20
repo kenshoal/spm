@@ -97,3 +97,11 @@ No new persistence in this increment.
 - Playwright, full suite: 43 passed. Its webServer runs `next build`, so the build passes too; the APIs are the e2e mock services, not the real stack.
 
 **Not yet done:** PR CI for increment 2; a check against the real stack (real auth service, Supabase and notificationService) of the grouped page and of the old coordinator's inbox; human review of these test cases (`testing.md` §10). Increment 1's real-stack check of the renamed labels is also still outstanding.
+
+## Human review of the test design (`testing.md` §10)
+
+**Reviewed by Tate Lim (story owner), 20 October 2026: accepted as written.** The test cases were drafted by Claude; Tate reviewed the contract, the expected results and the "Not yet done" list against the agreed requirements.
+
+Points raised in the review and left open:
+- AC4-N3 is proven at the notification client only (it swallows connection errors, 500s and a missing URL). No test drives a full reassignment with the notice failing; the expected result's "reassignment response unchanged" rests on the client never raising.
+- AC5-N1…N6 cover six coordinator actions. "Send for safety review" (SCRUM-58, `POST /event-requests/{id}/safety-review`) should be added once SCRUM-58's branch is merged.
