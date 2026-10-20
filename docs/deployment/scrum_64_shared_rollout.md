@@ -286,3 +286,31 @@ SQL/service-role checks do not prove JWT authentication or HTTP worker delivery.
 The earlier disposable fault/concurrency evidence remains separate and
 attributable to its own environment. Preserve all source SQL and the unrelated
 SCRUM-35 working changes.
+
+## Publication check against current dev — 20 October 2026
+
+The isolated evidence branch integrated `origin/dev` at `498543b` without
+conflicts. No production source or previously applied migration was changed.
+The full eventRequestService suite passed **555 tests, 0 failed/skipped**, with
+two existing dependency deprecations (4.77s), using the installed event-service
+Python and `SCRUM64_NOTIFICATION_RUNTIME=/tmp/scrum64-notification-runtime/bin/python`:
+`python -m pytest -q -p no:cacheprovider` from that service. The first restricted
+attempt had 554 passes and a local socket-permission fixture error; rerunning
+with loopback permission passed without modifying the tests or product.
+
+The four focused frontend arrangement-review test files recorded in the story
+matrix passed **14 tests** (996ms). The first restricted attempt could not write
+the reused dependency cache; the permitted rerun passed unchanged. These are
+local tests, with the doubles and loopback-notification limitations already
+recorded above, not authenticated shared-app evidence.
+
+After the separately owned 0039/0046 and 0050 rollouts, both unchanged approved
+shared-safe scripts passed again through Supabase MCP: the privilege/RLS check
+and the mechanism smoke with explicit ROLLBACK. This demonstrates continued
+mechanism compatibility with those deployed prerequisites; it does not prove
+0047 is deployed or the real user/inbox journey.
+
+SCRUM-64's live Jira status was already Done before this publication step. This
+record does not alter its ACs or status and does not conceal the outstanding
+normal-user and committed-delivery evidence. The publication PR requires human
+review and its own CI. No SCRUM-35 working changes are part of this branch.
