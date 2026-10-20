@@ -1,3 +1,6 @@
+import json
+from typing import Any
+
 from app.models.event_request import (
     EventRequestResponse,
     EventRequestStatus,
@@ -16,6 +19,7 @@ NOT_FOUND_ERRCODE = "P0002"
 NOT_ASSIGNED_ERRCODE = "P0003"
 NOT_ALLOWED_ERRCODE = "P0004"
 INVALID_PARAMETER_ERRCODE = "22023"
+NOT_READY_ERRCODE = "P0005"
 
 
 class TransitionNotAllowedError(Exception):
@@ -48,6 +52,20 @@ class SafetyDecisionInvalidError(Exception):
 
     def __init__(self) -> None:
         super().__init__("The safety decision is not valid")
+
+
+class SafetyApprovalBlockedError(Exception):
+    """SCRUM-60 AC6: approval waits until every arrangement review is cleared.
+    outstanding is the database function's list, each item given a message,
+    in the same shape as SCRUM-58's not-ready response."""
+
+    def __init__(self, event_request_id: str, outstanding: list[dict[str, Any]]) -> None:
+        super().__init__(f"Event request {event_request_id} cannot be approved yet")
+        self.event_request_id = event_request_id
+        self.outstanding = [
+            {**item, "message": f"Still marked for review: {item.get('reason', '')}"}
+            for item in outstanding
+        ]
 
 
 class EventTransitionService:
@@ -169,6 +187,10 @@ class EventTransitionService:
                 ) from error
             if error.errcode == INVALID_PARAMETER_ERRCODE:
                 raise SafetyDecisionInvalidError() from error
+            if error.errcode == NOT_READY_ERRCODE:
+                raise SafetyApprovalBlockedError(
+                    event_request_id, json.loads(error.details or "[]")
+                ) from error
             raise
 
         # After the decision is committed, as in SCRUM-17: a refused decision
