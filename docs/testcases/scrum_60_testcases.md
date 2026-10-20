@@ -82,6 +82,7 @@ Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate 
 | AC4a-N3 | AC4a | Someone else cannot read the reasons | Negative | AC4a-H1 done | `GET /safety-reviews` | unassigned coordinator; organiser | 404; 403 | — | API |
 | AC4b-H1 | AC4b | Asking for changes notifies the assigned coordinator | Happy | As AC4a-H1 | `POST /safety-decision` | `changes_requested` | One `safety_changes_requested` notice to `coord-1` with the event id and reason | — | API |
 | AC4b-P1 | AC4b | Approval sends no coordinator notice | Partition | As AC3-H1 | `POST /safety-decision` | `approved` | No notice (the organiser's "confirmed" notice is SCRUM-36) | — | API |
+| AC4b-N1 | AC4b | The coordinator lookup fails after the decision is saved | Negative (unavailable system) | As AC4a-H1; the assignment read fails | `POST /safety-decision` | `changes_requested` | 200 `Planning`; the review is kept; no notice; a warning is logged (not 502, which the officer would retry into 409) | Decision not undone | API |
 | AC1-N1…N3 | AC1 | Other roles cannot decide | Negative | As AC3-H1 | `POST /safety-decision` | `event_coordinator`; `event_organiser`; no token | 403; 403; 401 | Status unchanged; no review row | API |
 | AC1-N4 | AC1 | A token that still says Safety Officer after the role was removed is refused by the database | Negative | Fake RPC: `safety-1` no longer an officer | `POST /safety-decision` | `approved` | 403 (`P0003`) | Status unchanged; no review row | API |
 | AC6-P1 | AC6 | A decision outside Safety Review is refused | Partition | Event in each other status | `POST /safety-decision` | `approved` | 409 | Status unchanged; no review row | API |
@@ -146,6 +147,7 @@ Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate 
 | --- | --- | --- | --- | --- | --- | --- |
 | AC3-H1, AC4b-P1 | Green | 200 `Confirmed`; one `approved` review by `safety-1`; no coordinator notice | Pass | branch after `c117e6a` (dev `754f34c` merged), local, repositories faked | Claude for Jaren, 18 Oct 2026 | `tests/test_safety_review.py` |
 | AC4a-H1, AC4b-H1 | Green | 200 `Planning`; reason and targets kept as sent; one `safety_changes_requested` notice to `coord-1` | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
+| AC4b-N1 | Green | 200 `Planning`; one review; no notice; warning logged | Pass | `fix/scrum-60-safety-notice-502` from dev `d3acb09`, local, repositories faked. Red first: 502 | Claude for Jaren, 20 Oct 2026 | `tests/test_safety_review.py` (reported by Tate, Agent Discussions #2405) |
 | AC4a-H2, AC4a-P1, AC4a-N1…N3, AC4a-B1…B3 | Green | Coordinator reads reasons; `[]` targets accepted; missing/blank reason, 2001 characters and unknown target kind 422 with nothing written; unassigned coordinator 404, organiser 403 | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
 | AC1-N1…N4 | Green | Coordinator and organiser 403, no token 401, removed officer 403 (`P0003`); status unchanged, no review | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
 | AC6-P1, AC6-N1…N3 | Green | 409 from seven other statuses and on a repeated approval (one review kept); `rejected` 422; missing event 404 from the service | Pass | as above | Claude for Jaren, 18 Oct 2026 | as above |
@@ -154,6 +156,8 @@ Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate 
 
 **Local evidence, 18 October 2026:** Red first: 24 of 26 API tests failed on the missing route; the two route-404 cases were then tightened to assert the service's 404 and failed until the code existed. Green: `backend/eventRequestService` `pytest` 384 passed, `ruff check .` clean; `backend/authService` 46 passed; `frontend` `vitest` 350 passed, typecheck and lint clean, after merging `dev` (`754f34c`).
 
+**Shared development evidence, 20 October 2026 (Claude for Jaren):** Heng Rui applied the SCRUM-64 bundle first (`20261020093041`, Agent Discussions #2440). The live `decide_safety_review` body matched `0044` exactly (md5). Red: AC4c-X1 failed before `0045` ("expected one linked flag, got 0"). `0045` was applied via MCP as `20261020093706`, with bytes matching the README's SHA-256 pin. Green: `verify_safety_review_arrangement_reviews.sql` (AC4c-X1, AC4c-X2, AC6-X6, AC6-X7, AC6-X8) and `verify_safety_review_decisions.sql` (AC1-X2, AC3-X1, AC4a-X1, AC6-X3 to AC6-X5) both passed in rolled-back transactions. Afterwards: `service_role` alone can execute the function; no test events, review rows or temporary triggers remained. Not yet run: an authenticated API or browser journey on the shared stack.
+
 **Defect found in review (Heng Rui, message 2196):** in `0034`, `NULL NOT IN (...)` evaluates to NULL, so a NULL decision passed the check and failed later with `23502`, and a target without `arrangement` was saved. Fixed by `0044_safety_review_null_inputs.sql`; AC6-X5 added.
 
 **Known limitation:** the coordinator notice is best-effort: sent once after the decision commits, outside the transaction, with no durable retry. Durable delivery is planned under SCRUM-57.
@@ -161,6 +165,47 @@ Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate 
 **Deviation from message 2168:** the coordinator notice is sent after the decision commits (SCRUM-17 pattern), not through the outbox. `event_request_outbox` only accepts submission events for organisers; widening it is out of scope.
 
 **Not yet done:** increment 2b (SCRUM-64 flags, approval re-checks); increment 3 (queue and page); PR CI; human review.
+
+## Test case specification (increment 2b: SCRUM-64 connection)
+
+Branch `feat/scrum-60-safety-review-flags`, built on `feat/scrum-60-safety-check` with SCRUM-64's `feat/scrum-64-arrangement-review` (`a7ea77d`) merged in; it can only merge after PR #63. Agreed with Heng Rui in messages 2198 and 2206. Migration `0045` replaces `decide_safety_review`. Approval also needs SCRUM-58's ordinary readiness check; that part stays open until Tate publishes it.
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC4c-H1 | AC4c | Asking for changes flags each chosen arrangement, linked to the saved decision and its reason | Happy | Event in `Safety Review` with two arrangements | `POST /safety-decision` | `changes_requested`, reason, both targets | 200; one flag per target, `safety_recheck`, `trigger_id` = the review id, reason as saved | — | API (fake) |
+| AC4c-N1 | AC4c | A target from another event is refused | Negative | As AC4c-H1, plus another event's booking | `POST /safety-decision` | one own target, one foreign | 422 | No review, no flags, no notice, status unchanged | API (fake) |
+| AC6-N4 | AC6 | Approval is refused while a review is outstanding, listing it | Negative | Event with an uncleared flag | `POST /safety-decision` | `approved` | 409 with `outstanding` item `arrangement_needs_review` (review id, arrangement, message) | Status unchanged, no review | API |
+| AC6-P2 | AC6 | A cleared review does not block approval | Partition | Event with a cleared flag | `POST /safety-decision` | `approved` | 200 `Confirmed` | — | API (fake) |
+| AC4c-X1 | AC4c | The real function flags the target with the saved decision id and reason and enqueues its notice | Cross-cutting | `0030`–`0045`; event with one booking | Call `decide_safety_review` | `changes_requested` | `Planning`; one `safety_recheck` flag with `trigger_id` = `safety_reviews.id`; one notification outbox row | — | DB |
+| AC4c-X2 | AC4c | The real function refuses another event's booking | Negative | Another event's booking | Call | that booking as target | `22023` | No review, no flag, status unchanged | DB |
+| AC6-X6 | AC6 | The real function refuses approval with an outstanding review on a cancelled booking | Negative | Uncleared flag on a cancelled booking | Call | `approved` | `P0005`; DETAIL lists the review | No review, status unchanged | DB |
+| AC6-X7 | AC6 | A failed flag write rolls back the decision and status | Negative | Fault trigger on the flag insert | Call | `changes_requested` | Error raised | No review, status unchanged | DB |
+| AC6-X8 | AC6 | A cleared review does not block approval | Partition | Cleared flag | Call | `approved` | `Confirmed` | — | DB |
+
+The fake-backed API cases (AC4c-H1, AC4c-N1, AC6-P2) check the API contract only; the fake mirrors `0045`. The behaviour itself is proved by the DB cases.
+
+**Local evidence, 18 October 2026:** `backend/eventRequestService` `pytest` 419 passed, 1 skipped (SCRUM-64's tests included), `ruff check .` clean. Red: AC6-N4 failed (no `P0005` mapping) before `SafetyApprovalBlockedError`. DB cases written in `database/verify_safety_review_arrangement_reviews.sql`, not yet run: they need a database with SCRUM-64's migrations, which shared development does not have.
+
+## Test case specification (increment 2c: readiness on approval)
+
+Branch `feat/scrum-60-approval-readiness`, from Tate's `feat/scrum-58-safety-review` (`2c9dd67`, which includes this story's `0045` branch). Agreed in messages 2233, 2237 and 2238; merge order PR #62 → PR #63 → `0045` branch → Tate's `0039`/`0046` branch → this. Migration `0047` makes approval also call SCRUM-58's `private.event_readiness_issues`.
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC6-N7 | AC6 | Approval is refused until the event is ready; readiness items come before review flags | Negative | Equipment shortfall (2 of 4) and an outstanding flag | `POST /safety-decision` | `approved` | 409; `outstanding` = `equipment_not_reserved` ("Wireless microphone: 2 of 4 reserved"), then `arrangement_needs_review` | Status unchanged, no review | API (fake) |
+| AC6-P3 | AC6 | Readiness does not block asking for changes | Partition | `no_venue_booking` | `POST /safety-decision` | `changes_requested`, reason | 200 `Planning` | — | API (fake) |
+| AC6-X9 | AC6 | The real function refuses approval with no booking | Negative | `0030`–`0047`; event without bookings | Call | `approved` | `P0005`, DETAIL `[{"kind": "no_venue_booking"}]` | No review, status unchanged | DB |
+| AC6-X10 | AC6 | The real function lists readiness items first, then flags | Negative | Approved booking, 2 of 4 reserved, outstanding flag | Call | `approved` | `P0005`; DETAIL = `equipment_not_reserved` (2/4), then the flag | No review | DB |
+| AC6-X11 | AC6 | The real function still allows asking for changes on an unready event | Partition | As AC6-X10 | Call | `changes_requested` | `Planning` | — | DB |
+| AC6-X12 | AC6 | The real function approves a ready event with nothing outstanding | Happy | Approved booking, requirement fully reserved | Call | `approved` | `Confirmed` | — | DB |
+
+The earlier verifiers were updated so their approval cases use a ready event (one approved booking) and so the outstanding-flag case looks for the review item anywhere in the list. `verify_safety_review_decisions.sql` was re-run on shared development (`0044`) after that change and still passes, so it holds before and after `0047`.
+
+**Local evidence, 19 October 2026:** Red: AC6-N7 and AC6-P3 failed before the fake modelled readiness. Green: `backend/eventRequestService` `pytest` 448 passed, 1 skipped, `ruff check .` clean. DB cases written in `database/verify_safety_review_approval_readiness.sql`, not yet run: they need SCRUM-58's `0046` and SCRUM-64's schema, which shared development does not have; Tate's `database/tests/bootstrap_safety_review.py` builds that schema.
+
+**Independent DB evidence, 19 October 2026 (Heng Rui, SCRUM-64; Telegram Agent Discussions 2240 and 2241):** commit `4a5bc93` on a fresh owned PostgreSQL 16 schema built with Tate's `database/tests/bootstrap_safety_review.py` through `0046`, then `0047` applied. All four workflow verifiers passed with ROLLBACK: `verify_safety_review_decisions.sql`, `verify_safety_review_arrangement_reviews.sql`, `verify_shared_event_readiness.sql` (SCRUM-58) and `verify_safety_review_approval_readiness.sql`. SCRUM-64's ten review scripts, three lock tests and five handover race tests also passed, and SCRUM-64's combined integration runner passed 9 of 9 after its cross-event case was aligned to the agreed `22023`. Covered: AC4c-X1/X2, AC6-X6 to AC6-X12. Limits: local disposable database, not shared development; no real authentication, API or browser run. This is his reported result; it was not rerun here.
+
+**Still to do:** merge in the agreed order (PR #62 → PR #63 → `0045` branch → SCRUM-58's `0039`/`0046` → this branch), apply `0045` and `0047` to shared development in that order, then an authenticated coordinator → Safety Officer journey on the integrated stack.
 
 ## Review of PR #62 (Yang Xue, 19 October 2026)
 

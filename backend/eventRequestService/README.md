@@ -72,6 +72,26 @@ event-request field, changes the status to `Submitted`, and makes the request
 read-only. Requirements that do not apply must still contain explicit text such
 as `None`.
 
+## Attendee registration (SCRUM-21)
+
+Attendee-only endpoints (any other role gets 403, no session 401). They read the
+registration window and capacity on `event_requests`; the screen that sets those
+is a separate story, so until it exists they are set in SQL.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/attendee/events` | Confirmed events whose registration window is open now, public fields only |
+| `GET` | `/attendee/events/{id}` | One Confirmed event with `places_remaining`; anything else is 404 `event_not_found` |
+| `POST` | `/attendee/events/{id}/registrations` | Register (201). 409 `registration_not_open`, `event_full` or `already_registered`; 404 `event_not_found` |
+| `GET` | `/attendee/registrations` | The caller's own registrations, newest first, each with the public event |
+
+Open means `registration_opens_at <= now < registration_closes_at`; an unset
+window or capacity is not open. Public fields are `id, event_name, purpose,
+description, proposed_date_times, registration_opens_at, registration_closes_at,
+registration_capacity, places_remaining`. The write runs `register_for_event`
+(migration `0029`), which locks the event row, so two attendees racing for the
+last place cannot both succeed. Refusals carry a `code` beside `detail`.
+
 ## Status transitions
 
 The database migration `0011_event_request_review_status.sql` permits the full
@@ -194,11 +214,19 @@ The coordinator adapter posts only `p_event_request_id` to the server-only
 `get_outstanding_arrangement_reviews` RPC. The SQL/STABLE/INVOKER helper returns
 full outstanding evidence in descending timestamp/UUID order and can be called
 within a server consumer's own transaction, without taking event/resource row
-locks or deciding readiness. Staff domain queues keep their existing table read.
-HTTP results remain subject to the deployment's PostgREST row cap (Supabase
-default: 1,000); paging and 1,000-plus completeness are not verified here. Direct
-SQL has no helper LIMIT. See `database/README.md` for setup and the separate
-rolled-back SQL checks.
+locks or deciding readiness. Coordinator RPC reads and staff table reads share
+a descending timestamp/UUID keyset pager. The coordinator POST body remains only
+`p_event_request_id`; page ordering and cursor filters are PostgREST query
+parameters on its table-valued result. Staff requests retain the authorised domain
+and outstanding-row filters on every page. Direct SQL has no helper LIMIT.
+
+A response shorter than the requested 1,000 rows may be a lower server cap, so
+only an empty page ends either HTTP read. Clearing previously read rows cannot
+shift an offset and hide unread work; failure on any page returns the safe 502
+rather than partial evidence. Pages are separate reads, not one database snapshot:
+rows cleared after an earlier page can remain in that response and newly raised
+rows above its cursor appear on the next refresh. See `database/README.md` for
+setup and the separate rolled-back SQL checks.
 
 Migration 0031 records actual significant event updates atomically with reviews
 for current/future approved venue bookings and equipment reservations. Dates and
@@ -300,10 +328,18 @@ across the remote HTTP request.
 The relay rotates batches of at most 50 by never/least-recently attempted work,
 then source time/ID. Directory lookup failure retains its attempt stamp and logs
 an unresolved lookup; individual recipient/job failures do not stop later work.
-It runs every 10 seconds when Supabase and `NOTIFICATION_SERVICE_URL` are
-configured. The app lifespan starts it and waits for its bounded in-flight work
-before closing the client on shutdown. With the URL unset, both notification
+It waits 10 seconds after each pass when Supabase and
+`NOTIFICATION_SERVICE_URL` are configured. The app lifespan starts it and waits
+for its bounded in-flight work before closing the client on shutdown. With the URL unset, both notification
 relays remain off and queued work is retained.
+
+Pending review jobs have no maximum-attempt count, expiry or automatic drop.
+Missing current recipients and delivery outages retain the job for later recovery;
+accepted recipient progress and stable delivery identities remain available for
+retry deduplication. The 50-job batch limits each sweep, and the 10-second pause
+separates passes; neither limits lifetime attempts or the total queue. Recovery
+latency depends on backlog, new work and dependency availability; no fixed delivery
+deadline is promised.
 
 To run delivery locally, start notificationService on port 8005 using its README,
 set the event service's **server-only**

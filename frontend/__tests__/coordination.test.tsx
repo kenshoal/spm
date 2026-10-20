@@ -16,6 +16,7 @@ afterEach(cleanup);
 vi.mock("@/app/coordination/actions", () => ({
   startEventRequestReview: vi.fn().mockResolvedValue({}),
   startEventPlanning: vi.fn().mockResolvedValue({}),
+  sendForSafetyReview: vi.fn().mockResolvedValue({}),
   cancelEventRequest: vi.fn().mockResolvedValue({}),
   completeEventRequest: vi.fn().mockResolvedValue({}),
   resumeEventRequestReview: vi.fn().mockResolvedValue({}),
@@ -27,6 +28,7 @@ import {
   completeEventRequest,
   decideEventRequest,
   resumeEventRequestReview,
+  sendForSafetyReview,
   startEventPlanning,
   startEventRequestReview,
 } from "@/app/coordination/actions";
@@ -58,7 +60,7 @@ test("offers only the actions each status allows", () => {
   expect(coordinatorActions("Under Review")).toEqual(["cancellation"]);
   expect(coordinatorActions("Changes Requested")).toEqual(["cancellation"]);
   expect(coordinatorActions("Approved")).toEqual(["planning", "cancellation"]);
-  expect(coordinatorActions("Planning")).toEqual(["cancellation"]);
+  expect(coordinatorActions("Planning")).toEqual(["safety-review", "cancellation"]);
   expect(coordinatorActions("Safety Review")).toEqual(["cancellation"]);
   expect(coordinatorActions("Confirmed")).toEqual(["completion", "cancellation"]);
   expect(coordinatorActions("Completed")).toEqual([]);
@@ -188,4 +190,43 @@ test("starts planning immediately without a confirmation dialog", async () => {
   await waitFor(() =>
     expect(startEventPlanning).toHaveBeenCalledWith("request-6", {}, expect.anything()),
   );
+});
+
+// AC2-P13 (partition): sending for safety review is offered for Planning events and for no other status
+test("offers send for safety review only on planning events", () => {
+  for (const status of EVENT_REQUEST_STATUSES) {
+    expect(coordinatorActions(status).includes("safety-review")).toBe(status === "Planning");
+  }
+  expect(coordinatorActions("Planning")[0]).toBe("safety-review");
+});
+
+// AC2-H3 (happy): the coordinator sends a planning event for its safety check with one click and no dialog
+test("sends for safety review immediately without a confirmation dialog", async () => {
+  render(<TransitionButton eventRequestId="request-7" kind="safety-review" />);
+
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Send for safety review" }));
+
+  await waitFor(() =>
+    expect(sendForSafetyReview).toHaveBeenCalledWith("request-7", {}, expect.anything()),
+  );
+});
+
+// AC3-N11 (negative): when the event is not ready, the coordinator sees every outstanding item as a list
+test("lists what is still outstanding when the event is not ready", async () => {
+  vi.mocked(sendForSafetyReview).mockResolvedValueOnce({
+    message: "This event isn't ready for safety review yet.",
+    outstanding: ["The booking for Hall F is still waiting for a decision", "Microphone: 2 of 3 reserved"],
+  });
+  render(<TransitionButton eventRequestId="request-8" kind="safety-review" />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Send for safety review" }));
+
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("This event isn't ready for safety review yet.");
+  const items = within(alert).getAllByRole("listitem").map((item) => item.textContent);
+  expect(items).toEqual([
+    "The booking for Hall F is still waiting for a decision",
+    "Microphone: 2 of 3 reserved",
+  ]);
 });

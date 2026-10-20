@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -29,10 +30,18 @@ class FakeEventRequestRepository:
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
         self.coordinator_assignment_rows: list[dict[str, Any]] = []
+        # What send_event_request_for_safety_review would find outstanding per
+        # event; the readiness rules themselves are proven in the database.
+        self.safety_review_outstanding: dict[str, list[dict[str, Any]]] = {}
         self.review_decision_rows: list[dict[str, Any]] = []
         self.change_request_rows: list[dict[str, Any]] = []
         self.safety_officer_ids: set[str] = set()
         self.safety_review_rows: list[dict[str, Any]] = []
+        # SCRUM-64 stand-ins: arrangements as (event, kind, id), and review flags.
+        self.arrangements: set[tuple[str, str, str]] = set()
+        self.arrangement_review_rows: list[dict[str, Any]] = []
+        # SCRUM-58 stand-in: event_readiness_issues per event ([] when ready).
+        self.readiness_issues: dict[str, list[dict[str, Any]]] = {}
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()
@@ -177,6 +186,36 @@ class FakeEventRequestRepository:
         row["updated_at"] = datetime.now(UTC).isoformat()
         return dict(row)
 
+    def send_for_safety_review(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]:
+        """Mirrors send_event_request_for_safety_review: not found, assignment,
+        Planning, then readiness, all before any write."""
+        row = self.rows.get(event_request_id)
+        if row is None:
+            raise EventRequestRpcError("not found", errcode="P0002")
+
+        assignments = [
+            assignment
+            for assignment in self.coordinator_assignment_rows
+            if assignment["event_request_id"] == event_request_id
+        ]
+        latest = max(assignments, key=lambda assignment: assignment["id"], default=None)
+        if latest is None or latest["coordinator_id"] != coordinator_id:
+            raise EventRequestRpcError("not assigned", errcode="P0003")
+        if row["status"] != "Planning":
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+
+        outstanding = self.safety_review_outstanding.get(event_request_id, [])
+        if outstanding:
+            raise EventRequestRpcError(
+                "not ready", errcode="P0005", details=json.dumps(outstanding)
+            )
+
+        row["status"] = "Safety Review"
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
     def decide_by_coordinator(
         self,
         event_request_id: str,
@@ -249,9 +288,46 @@ class FakeEventRequestRepository:
             decision == "changes_requested" and not (reason or "").strip()
         ):
             raise EventRequestRpcError("invalid decision", errcode="22023")
+        # 0045: a target outside this event is invalid input, not a missing event.
+        if any(
+            (event_request_id, target["arrangement"], target["id"]) not in self.arrangements
+            for target in targets
+        ):
+            raise EventRequestRpcError("target not in event", errcode="22023")
+        # 0047: approval waits for ordinary readiness, then for every review flag.
+        outstanding = list(self.readiness_issues.get(event_request_id, [])) + [
+            {
+                "kind": "arrangement_needs_review",
+                "review_id": review["id"],
+                "arrangement": review["arrangement"],
+                "arrangement_id": review["arrangement_id"],
+                "reason": review["reason"],
+            }
+            for review in self.arrangement_review_rows
+            if review["event_request_id"] == event_request_id
+            and review["cleared_at"] is None
+        ]
+        if decision == "approved" and outstanding:
+            raise EventRequestRpcError(
+                "not ready", errcode="P0005", details=json.dumps(outstanding)
+            )
+        review_id = str(uuid4())
+        for target in targets:
+            self.arrangement_review_rows.append(
+                {
+                    "id": str(uuid4()),
+                    "event_request_id": event_request_id,
+                    "arrangement": target["arrangement"],
+                    "arrangement_id": target["id"],
+                    "trigger_type": "safety_recheck",
+                    "trigger_id": review_id,
+                    "reason": reason,
+                    "cleared_at": None,
+                }
+            )
         self.safety_review_rows.append(
             {
-                "id": str(uuid4()),
+                "id": review_id,
                 "event_request_id": event_request_id,
                 "decision": decision,
                 "reason": reason,

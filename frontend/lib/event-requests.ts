@@ -67,6 +67,7 @@ export function statusBadgeClass(status: EventRequestStatus): string {
 export type CoordinatorTransition =
   | "review"
   | "planning"
+  | "safety-review"
   | "cancellation"
   | "completion";
 
@@ -79,6 +80,7 @@ export function coordinatorActions(
   const actions: CoordinatorTransition[] = [];
   if (status === "Submitted") actions.push("review");
   if (status === "Approved") actions.push("planning");
+  if (status === "Planning") actions.push("safety-review");
   if (status === "Confirmed") actions.push("completion");
   actions.push("cancellation");
   return actions;

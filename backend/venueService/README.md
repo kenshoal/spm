@@ -71,6 +71,7 @@ SCRUM-20. Schema: `database/migrations/0043_venue_setup_turnaround.sql`.
 | Create a venue block | `POST /venues/{venue_id}/blocks` |
 | List a venue's blocks | `GET /venues/{venue_id}/blocks` |
 | Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}`, `GET /booking-requests/event/{event_request_id}`, `POST /booking-requests/{id}/cancel` |
+| View venue availability | `GET /venues/{id}/calendar?month=YYYY-MM` |
 | Decide a booking request | `POST /booking-requests/{id}/decision`, `GET /booking-requests/{id}/refusals` |
 
 Venues are stored in the Supabase `public.venues` table
@@ -209,8 +210,13 @@ booking, so no event-status lookup is needed.
 Booking requests (SCRUM-32) are stored in `public.venue_booking_requests`
 (`database/migrations/0018_venue_booking_requests.sql`) under the same
 `VENUE_STORAGE_BACKEND` switch. An Event Coordinator submits a request for a
-venue, an inclusive date range and one or more slots, for an event they are
-currently assigned to. venueService confirms that with eventRequestService
+venue, an inclusive date range, and a `start_minute` and `end_minute` that apply
+on each date (SCRUM-65, migration `0050`). The times are minutes after midnight
+in Singapore time, in 15-minute steps from 420 (07:00) to 1440 (24:00), with the
+end after the start; otherwise 422 with `off_step`, `outside_operating_window` or
+`end_not_after_start`. The old `slots` field is refused. Responses still include
+`slots` (the slots the time touches) until Sprint 4. The request is for an event
+the Coordinator is currently assigned to. venueService confirms that with eventRequestService
 (`EVENT_REQUEST_API_URL`, default `http://127.0.0.1:8003`) using the caller's own
 token, and copies the event's name, expected attendance and venue-requirements
 text into the request. Submitting creates a `pending` request and reserves
@@ -231,6 +237,16 @@ event's current Coordinator may, the event's other requests are untouched, and
 cancelling an approved request frees its slots at once. Rejected and cancelled
 requests cannot be cancelled again (409). "Changing" a booking is cancelling it
 and requesting again. The `cancelled` status needs migrations 0041 and 0042.
+
+`GET /venues/{id}/calendar?month=YYYY-MM` (SCRUM-31) returns one month of slot
+states for a venue: for each date, AM, PM and NIGHT are `open`, `booked`
+(an approved booking request), `blocked` (an active block), `unavailable` (the
+venue is blocked in the catalogue) or `not_offered` (a slot the venue does not
+operate). An active block wins over a booking, so the calendar agrees with the
+Venue Staff calendar and with venue search. Event Coordinators, Venue Staff and
+Safety Officers may read it; other roles get 403. It is read-only and never
+returns block reasons, event names or ids. Tentative holds are not shown until
+SCRUM-18 exists.
 
 ## Run locally
 
