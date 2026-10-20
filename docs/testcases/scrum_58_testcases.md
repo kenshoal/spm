@@ -1,6 +1,8 @@
 # SCRUM-58 — Plan and Confirm an Event
 
-Source: [Jira SCRUM-58](https://is212g9t4.atlassian.net/browse/SCRUM-58), read 13 October 2026. Branch: `feat/scrum-58-plan-and-confirm`, base `11dae05`.
+Source: [Jira SCRUM-58](https://is212g9t4.atlassian.net/browse/SCRUM-58), read 13 October 2026. Branches: `feat/scrum-58-plan-and-confirm` (AC1, AC4; base `11dae05`), `feat/scrum-58-start-planning-button` (Start planning control) and `feat/scrum-58-safety-review` (AC2, AC3).
+
+This document grew one section per increment. The table below is the current contract; the increment sections further down hold the detail and evidence for each part.
 
 ## Approved contract
 
@@ -11,17 +13,18 @@ The story owner (Tate) reviewed the four Jira ACs and approved the scope below o
 | Jira AC | Outcome | Approved wording |
 | --- | --- | --- |
 | The coordinator can move an approved event into planning. | **Keep, clarified** | **AC1:** Given an Approved event assigned to me, when I start planning, then its status becomes Planning and the status history records me (role `event_coordinator`, source `coordinator.planning`) as the actor. |
-| Once all of the event's venue bookings are approved and its equipment is reserved, the coordinator can send it for the safety check. | **Parked** | **AC2:** not built yet. No status for "waiting for safety check" exists, and who moves the event to Confirmed is undecided. Asked Jaren (SCRUM-60) on 13 Oct. Also open: does an event with no venue bookings pass? |
-| If anything is still waiting, missing or marked for review, the system says what and doesn't send it. | **Parked** | **AC3:** not built yet. Needs the "marked for review" flag from SCRUM-64 (Heng Rui) and equipment reservation from SCRUM-13 (Yang Xue). |
+| Once all of the event's venue bookings are approved and its equipment is reserved, the coordinator can send it for the safety check. | **Clarified 16 Oct** (parked 13–16 Oct) | **AC2:** Planning → Safety Review when there is at least one approved venue booking, none pending (rejected and cancelled ignored) and every equipment requirement's reservations add up to its quantity. See "Increment: send for safety review" and "Increment: shared readiness". |
+| If anything is still waiting, missing or marked for review, the system says what and doesn't send it. | **Split 16 Oct** (parked 13–16 Oct) | **AC3a** (16 Oct): otherwise refused with every outstanding booking/equipment item listed. **AC3b** (19 Oct): every outstanding SCRUM-64 review also blocks, listed after them. See the two increments below. |
 | Only the event's own coordinator can do this. Anyone else is stopped, and nothing changes. | **Keep, clarified** | **AC4:** Given an event assigned to coordinator A, when anyone else tries to start planning (another or a reassigned-away coordinator, an organiser, an operations manager, or a caller with no session), then they are refused (403, or 401 without a session) and the status and history do not change. |
 
-The story title says "Confirm", but no Jira AC confirms an event. That gap is part of the AC2 question to SCRUM-60.
+The story title says "Confirm", but no Jira AC confirms an event. Settled 16 Oct: only the Safety Officer confirms (SCRUM-60); this story ends at Safety Review.
 
 ## Scope
 
 - **Included (this increment):** AC1 and AC4 for the Approved → Planning move only. Endpoint `POST /event-requests/{id}/planning`.
 - **Included (second increment, 15 Oct 2026):** the coordinator's "Start planning" control on the coordination request page, for the same AC1 and AC4 behaviour (frontend only; no backend change). Offered on Approved events only; one click, no confirmation dialog, like "Start review".
-- **Excluded:** AC2, AC3 (parked above); Safety Officer check and confirmation (SCRUM-60); registration for confirmed events (SCRUM-21); notifications about the move (SCRUM-57).
+- **Included (later increments, 16–19 Oct 2026):** AC2, AC3a, AC3b, the shared readiness function and the "Send for safety review" control; see the increment sections below.
+- **Excluded:** Safety Officer check and confirmation (SCRUM-60); registration for confirmed events (SCRUM-21); notifications about the move (SCRUM-57).
 
 ## Actors and permissions
 
@@ -39,8 +42,8 @@ Only the coordinator on the **latest** assignment row (ordered by `id`) may star
 
 ## Assumptions and open questions
 
-1. AC2 target status and confirmer — asked Jaren, 13 Oct.
-2. Shape of the "marked for review" flag — asked Heng Rui, 13 Oct.
+1. ~~AC2 target status and confirmer~~ — Safety Review; only the Safety Officer confirms (Jaren, 16 Oct).
+2. ~~Shape of the "marked for review" flag~~ — SCRUM-64's `arrangement_reviews` and `get_outstanding_arrangement_reviews` (Heng Rui, 17 Oct).
 3. Planning may still be cancelled by the coordinator (already allowed since migration `0012`); unchanged here.
 
 ## Test case specification
@@ -255,3 +258,11 @@ The assigned coordinator's request page offers **Send for safety review** on Pla
 
 - Whole frontend: `npm test` 38 files, 385 passed, 0 failed; `npm run lint` clean; `npm run typecheck` clean; `npm run build` succeeded.
 - Mocks prove the control and the action's request and error mapping, not the real API. **Not yet done:** a browser run against the running API (no Playwright journey added), PR CI, human review of these test cases.
+
+## Human review of the test design (`testing.md` §10)
+
+**Reviewed by Tate Lim (story owner), 20 October 2026: accepted as written.** The test cases were drafted by Claude; Tate reviewed the contract, the expected results and the "Not yet done" lists against the agreed requirements.
+
+Points raised in the review and left open:
+- Two readiness rules are the story owner's decisions (16 Oct), not yet confirmed by the PO: rejected bookings are ignored, and "reserved" means reservations add up to the requirement's quantity rather than Technical Support's `arranged` status. Jira's wording is "all of the event's venue bookings are approved".
+- No browser (Playwright) journey covers "Start planning" or "Send for safety review"; the controls are proven with mocked APIs only.
