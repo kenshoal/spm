@@ -7,6 +7,7 @@ the Supabase store.
 
 from __future__ import annotations
 
+from datetime import date
 from functools import lru_cache
 from typing import Protocol
 
@@ -33,6 +34,9 @@ class BookingRequestStore(Protocol):
     def list_for_requester(self, user_id: str) -> list[BookingRequest]: ...
     def list_for_event(self, event_request_id: str) -> list[BookingRequest]: ...
     def cancel(self, booking_id: str, cancelled_by: str) -> BookingRequest: ...
+    def list_approved_for_venue(
+        self, venue_id: str, start_date: date, end_date: date
+    ) -> list[BookingRequest]: ...
 
 
 class BookingRequestRepository:
@@ -90,6 +94,21 @@ class BookingRequestRepository:
             booking.cancelled_by = cancelled_by
             booking.cancelled_at = _now()
             return booking.model_copy()
+
+    def list_approved_for_venue(
+        self, venue_id: str, start_date: date, end_date: date
+    ) -> list[BookingRequest]:
+        """Approved bookings of one venue that touch ``start_date``..``end_date``."""
+
+        matching = [
+            item
+            for item in self._items
+            if item.venue_id == venue_id
+            and item.status is BookingRequestStatus.APPROVED
+            and item.start_date <= end_date
+            and item.end_date >= start_date
+        ]
+        return sorted(matching, key=lambda item: item.created_at)
 
     def clear(self) -> None:
         self._items.clear()

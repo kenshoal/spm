@@ -7,6 +7,7 @@ from app.routers import (
     booking_decisions,
     booking_requests,
     suitability,
+    venue_calendar,
     venues,
 )
 from app.supabase_block_repository import StorageError
@@ -34,6 +35,7 @@ app.include_router(block_checks.router)
 app.include_router(booking_requests.router)
 app.include_router(booking_decisions.router)
 app.include_router(suitability.router)
+app.include_router(venue_calendar.router)
 
 
 @app.exception_handler(SupabaseRepositoryError)
