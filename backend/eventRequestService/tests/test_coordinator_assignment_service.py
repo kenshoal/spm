@@ -113,3 +113,92 @@ def test_current_assignments_skip_the_assignment_lookup_when_nothing_in_flight()
     )
 
     assert service.list_current_assignments() == []
+
+
+class RecordingNotificationClient:
+    """Records every notice by type, so a test can assert who was told what."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, dict[str, Any]]] = []
+
+    def notify_coordinator_assigned(self, **kwargs: Any) -> None:
+        self.sent.append(("coordinator_assigned", kwargs))
+
+    def notify_coordinator_unassigned(self, **kwargs: Any) -> None:
+        self.sent.append(("coordinator_unassigned", kwargs))
+
+
+def make_reassignable() -> tuple[CoordinatorAssignmentService, RecordingNotificationClient, str]:
+    event_requests = FakeEventRequestRepository()
+    event_request_id = submit_event_request(event_requests)
+    notifications = RecordingNotificationClient()
+    service = CoordinatorAssignmentService(
+        FakeCoordinatorAssignmentRepository(),
+        EventRequestService(event_requests),
+        notifications,
+    )
+    return service, notifications, event_request_id
+
+
+def assign(service: CoordinatorAssignmentService, event_request_id: str, coordinator_id: str) -> None:
+    service.assign(
+        event_request_id, CoordinatorAssignRequest(coordinator_id=coordinator_id), "ops-1"
+    )
+
+
+def unassigned_notices(notifications: RecordingNotificationClient) -> list[dict[str, Any]]:
+    return [kwargs for kind, kwargs in notifications.sent if kind == "coordinator_unassigned"]
+
+
+# AC4-H1 (happy): reassigning tells the old coordinator, and the new one is still told as before
+def test_reassignment_tells_the_old_and_the_new_coordinator() -> None:
+    service, notifications, event_request_id = make_reassignable()
+    assign(service, event_request_id, "coord-1")
+    notifications.sent.clear()
+
+    assign(service, event_request_id, "coord-2")
+
+    assert notifications.sent == [
+        (
+            "coordinator_assigned",
+            {"event_request_id": event_request_id, "coordinator_id": "coord-2", "assigned_by": "ops-1"},
+        ),
+        (
+            "coordinator_unassigned",
+            {"event_request_id": event_request_id, "coordinator_id": "coord-1", "assigned_by": "ops-1"},
+        ),
+    ]
+
+
+# AC4-N1 (negative): a first assignment has nobody to tell about losing the event
+def test_first_assignment_sends_no_unassigned_notice() -> None:
+    service, notifications, event_request_id = make_reassignable()
+
+    assign(service, event_request_id, "coord-1")
+
+    assert unassigned_notices(notifications) == []
+    assert [kind for kind, _ in notifications.sent] == ["coordinator_assigned"]
+
+
+# AC4-N2 (negative): reassigning to the same coordinator does not tell them they lost the event
+def test_reassigning_to_the_same_coordinator_sends_no_unassigned_notice() -> None:
+    service, notifications, event_request_id = make_reassignable()
+    assign(service, event_request_id, "coord-1")
+
+    assign(service, event_request_id, "coord-1")
+
+    assert unassigned_notices(notifications) == []
+
+
+# AC4-B1 (boundary): with a longer history, only the immediately previous coordinator is told
+def test_only_the_immediately_previous_coordinator_is_told() -> None:
+    service, notifications, event_request_id = make_reassignable()
+    assign(service, event_request_id, "coord-1")
+    assign(service, event_request_id, "coord-2")
+    notifications.sent.clear()
+
+    assign(service, event_request_id, "coord-3")
+
+    assert unassigned_notices(notifications) == [
+        {"event_request_id": event_request_id, "coordinator_id": "coord-2", "assigned_by": "ops-1"}
+    ]

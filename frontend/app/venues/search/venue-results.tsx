@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { SuitabilityFormValues } from "@/lib/venue-suitability";
 import { layoutLabel, prepTimeLabel, type Venue } from "@/lib/venues";
 import { SuitabilityCheck } from "./suitability-check";
@@ -27,6 +28,7 @@ export function VenueResults({ venues, requirements = NO_REQUIREMENTS }: { venue
               <dt className="text-[#718078]">Setup</dt><dd className="text-[#273832]">{prepTimeLabel(venue.setup_minutes)}</dd>
               <dt className="text-[#718078]">Turnaround</dt><dd className="text-[#273832]">{prepTimeLabel(venue.turnaround_minutes)}</dd>
             </dl>
+            <Link href={`/venues/availability?venue=${encodeURIComponent(venue.id)}`} className="mt-3 inline-flex min-h-9 items-center text-sm font-semibold text-[#0f6b5b] hover:underline">View availability</Link>
             <SuitabilityCheck venueId={venue.id} defaults={requirements} />
           </article>
         ))}
