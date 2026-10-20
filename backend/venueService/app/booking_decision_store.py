@@ -105,6 +105,8 @@ class MemoryBookingDecisionStore:
                     start_date=booking.start_date,
                     end_date=booking.end_date,
                     slots=booking.slots,
+                    start_minute=booking.start_minute,
+                    end_minute=booking.end_minute,
                 ),
                 decision=details,
                 venue=venue,
@@ -116,6 +118,8 @@ class MemoryBookingDecisionStore:
                         start_date=other.start_date,
                         end_date=other.end_date,
                         slots=other.slots,
+                        start_minute=other.start_minute,
+                        end_minute=other.end_minute,
                     )
                     for other in approved
                     if other.id != booking.id
