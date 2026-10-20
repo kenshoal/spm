@@ -1,4 +1,4 @@
--- Run after 0050_venue_booking_times.sql (SCRUM-65 slice 1). Every change is
+-- Run after 0050_venue_booking_times.sql and 0051_venue_block_times.sql (SCRUM-65). Every change is
 -- rolled back. Uses no DELETE or UPDATE. Borrows the oldest auth user, which
 -- venue_blocks.created_by needs.
 --   psql -X -v ON_ERROR_STOP=1 -f database/verify_venue_booking_times.sql
@@ -136,7 +136,7 @@ BEGIN
     END IF;
 
     -- AC2-X1: a PM block refuses 11:00-13:00 by its touched slots, not 08:00-10:00.
-    PERFORM public.create_venue_block(v_venue, v_day + 20, v_day + 20, '{PM}',
+    PERFORM public.create_venue_block(v_venue, v_day + 20, v_day + 20, 720, 1080,
         'maintenance', NULL, v_user);
     INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id,
             start_date, end_date, start_minute, end_minute)

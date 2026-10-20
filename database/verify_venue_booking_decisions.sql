@@ -1,5 +1,6 @@
 -- Run after 0016_venues.sql, 0018_venue_booking_requests.sql,
--- 0023_venue_blocks.sql and 0024_venue_booking_decisions.sql.
+-- 0023_venue_blocks.sql and 0024_venue_booking_decisions.sql, and since SCRUM-65
+-- after 0050 and 0051 (blocks take times; operating slots no longer refuse).
 -- Case IDs match docs/testcases/scrum_15_testcases.md (DB-1, DB-2).
 -- Every mutation is rolled back, so this leaves no venue, block, request or
 -- refusal data behind. Before 0024 is applied it stops at the first call to
@@ -155,7 +156,7 @@ BEGIN
 
     -- DB-2 / AC5-H1: a block created under the venue lock refuses approval and is recorded.
     SELECT id INTO block FROM public.create_venue_block(
-        venue, '2030-04-02', '2030-04-02', '{AM}', 'maintenance', '  Repairs  ', staff
+        venue, '2030-04-02', '2030-04-02', 420, 720, 'maintenance', '  Repairs  ', staff
     );
     IF (SELECT reason_detail FROM public.venue_blocks WHERE id = block) <> 'Repairs' THEN
         RAISE EXCEPTION 'DB-2: block detail not trimmed';
@@ -170,8 +171,8 @@ BEGIN
     PERFORM pg_temp.expect_failure(
         'DB-2',
         format(
-            'SELECT public.create_venue_block(%L, %L, %L, %L, %L, NULL, %L)',
-            gen_random_uuid(), '2030-04-02', '2030-04-02', '{AM}', 'maintenance', staff
+            'SELECT public.create_venue_block(%L, %L, %L, 420, 720, %L, NULL, %L)',
+            gen_random_uuid(), '2030-04-02', '2030-04-02', 'maintenance', staff
         ),
         'P0002'
     );
@@ -187,7 +188,8 @@ BEGIN
         pg_temp.new_venue(venue_status => 'blocked'), '2030-05-01', '2030-05-01', '{NIGHT}'
     );
     result := pg_temp.decide(request, 'approved');
-    IF result -> 'refusal_codes' <> '["venue_unavailable", "outside_operating_slots"]'::jsonb THEN
+    -- SCRUM-65 (0051): the operating-slot refusal is retired.
+    IF result -> 'refusal_codes' <> '["venue_unavailable"]'::jsonb THEN
         RAISE EXCEPTION 'AC5-P1/P2: wrong refusal codes: %', result;
     END IF;
 
@@ -198,7 +200,7 @@ BEGIN
            'authenticated', 'public.decide_venue_booking_request(uuid, text, uuid, text, text)', 'EXECUTE')
        OR has_function_privilege(
            'anon',
-           'public.create_venue_block(uuid, date, date, public.booking_slot[], public.block_reason, text, uuid)',
+           'public.create_venue_block(uuid, date, date, integer, integer, public.block_reason, text, uuid)',
            'EXECUTE')
        OR has_table_privilege('anon', 'public.venue_booking_refusals', 'SELECT')
        OR has_table_privilege('authenticated', 'public.venue_booking_refusals', 'SELECT') THEN
