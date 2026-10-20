@@ -22,6 +22,11 @@ def test_real_domain_queue_and_clear_transport_contract(operation):
     seeded, assignments = action_fixture()
     original = deepcopy(seeded.arrangement_review_rows[4])
     cleared = {**original, "cleared_at": CLEARED_TIME, "cleared_by": VENUE_STAFF}
+    # Prepared first page already satisfies the server-side domain/outstanding/order contract.
+    queue_page = [
+        deepcopy(next(row for row in seeded.arrangement_review_rows if row["id"].endswith(f"{number:012d}")))
+        for number in (1, 9, 3)
+    ]
     calls = []
     conflict = False
 
@@ -31,18 +36,22 @@ def test_real_domain_queue_and_clear_transport_contract(operation):
         if operation == "queue":
             assert request.method == "GET"
             assert request.url.path == "/rest/v1/arrangement_reviews"
-            assert dict(request.url.params) == {
+            expected_query = {
                 "arrangement": "eq.venue_booking",
+                "cleared_at": "is.null",
+                "order": "raised_at.desc,id.desc",
+                "limit": "1000",
                 "select": "*",
             }
-            return httpx.Response(
-                200,
-                json=[
-                    row
-                    for row in seeded.arrangement_review_rows
-                    if row["arrangement"] == "venue_booking"
-                ],
-            )
+            if len(calls) == 2:
+                last = queue_page[-1]
+                expected_query["or"] = (
+                    f"(raised_at.lt.{last['raised_at']},"
+                    f"and(raised_at.eq.{last['raised_at']},id.lt.{last['id']}))"
+                )
+            assert dict(request.url.params) == expected_query
+            assert len(calls) <= 2, "An empty continuation page must terminate the read"
+            return httpx.Response(200, json=queue_page if len(calls) == 1 else [])
         assert request.method == "POST"
         assert request.url.path == "/rest/v1/rpc/clear_arrangement_review"
         assert dict(request.url.params) == {}
@@ -74,7 +83,7 @@ def test_real_domain_queue_and_clear_transport_contract(operation):
             assert [row["id"] for row in response.json()] == [
                 f"00000000-0000-4000-8000-{number:012d}" for number in (1, 9, 3)
             ]
-            assert len(calls) == 1
+            assert len(calls) == 2
         else:
             response = client.post(f"/arrangement-reviews/{original['id']}/clear")
             assert response.status_code == 200
