@@ -94,6 +94,17 @@ def start_planning(
 
 
 @router.post(
+    "/{event_request_id}/safety-review", response_model=EventRequestResponse
+)
+def send_for_safety_review(
+    event_request_id: UUID,
+    caller_id: CallerDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    return service.send_for_safety_review(str(event_request_id), caller_id)
+
+
+@router.post(
     "/{event_request_id}/cancellation", response_model=EventRequestResponse
 )
 def cancel_event(
