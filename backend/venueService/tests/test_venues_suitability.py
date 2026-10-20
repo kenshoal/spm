@@ -103,8 +103,7 @@ def test_unknown_layout_value_is_rejected() -> None:
     assert client.get(f"/venues/{venue['id']}").json() == before
 
 
-# AC3-N3 (negative): an off-step time (times replace slots, SCRUM-65) is rejected
-# and the venue is unchanged
+# AC3-N3 (negative): an off-step time (times replace slots, SCRUM-65) is rejected and the venue is unchanged
 def test_unknown_slot_value_is_rejected() -> None:
     venue = _make_venue()
     before = client.get(f"/venues/{venue['id']}").json()

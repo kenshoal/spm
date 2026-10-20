@@ -127,8 +127,7 @@ def test_block_slots_field_is_refused() -> None:
     assert response.status_code == 422
 
 
-# AC3-B1 (boundary): approval is refused by a block it overlaps by one step,
-# and allowed right up to the block's start
+# AC3-B1 (boundary): approval is refused by one step of overlap with a block, allowed right up to its start
 @pytest.mark.parametrize(
     ("start", "end", "refused"),
     [("11:00", "12:45", True), ("11:00", "12:30", False), ("14:00", "15:00", False)],
@@ -159,8 +158,7 @@ def test_blocked_time_is_not_offered_in_search() -> None:
     assert venue in search(date=DAY, start_minute=hm("14:00"), end_minute=hm("16:00"))
 
 
-# AC3-X1 (cross-cutting): a new block alerts only bookings it overlaps in time,
-# and the notice carries both time ranges
+# AC3-X1 (cross-cutting): a new block alerts only bookings it overlaps in time, with both time ranges
 def test_block_notice_uses_times() -> None:
     venue = make_venue()
     hit = seed_booking(venue, "13:00", "15:00", approved=True)

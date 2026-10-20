@@ -33,7 +33,9 @@ test("new venue form offers every attribute and no status", () => {
     expect(screen.getByLabelText(label)).toBeDefined();
   }
   expect(screen.getByRole("checkbox", { name: "Theatre" })).toBeDefined();
-  expect(screen.getByRole("checkbox", { name: "NIGHT" })).toBeDefined();
+  // SCRUM-65: operating slots are retired; every venue runs 07:00-24:00.
+  expect(screen.queryByRole("checkbox", { name: "NIGHT" })).toBeNull();
+  expect(screen.getByText("Every venue is bookable from 07:00 to 24:00 in 15-minute steps.")).toBeDefined();
   expect(screen.queryByLabelText("Availability")).toBeNull();
   expect(screen.getByRole("button", { name: "Add venue" })).toBeDefined();
 });
@@ -70,7 +72,6 @@ test("an invalid capacity echoed after a failed edit submission overrides the st
       facilities: venue.facilities.join(", "),
       accessibility_features: venue.accessibility_features.join(", "),
       supported_layouts: venue.supported_layouts,
-      operating_slots: venue.operating_slots,
       setup_minutes: String(venue.setup_minutes),
       turnaround_minutes: String(venue.turnaround_minutes),
       status: venue.status,

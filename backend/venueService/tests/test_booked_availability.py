@@ -77,8 +77,7 @@ def test_other_slots_dates_and_venues_stay_offered():
     assert other in search(date="2026-10-20", **slot_times(["AM"]))
 
 
-# AC3-B1 (boundary): a date-only search needs some of 07:00-24:00 free of blocks and
-# bookings (SCRUM-65: the fixed window replaces the venue's operating slots)
+# AC3-B1 (boundary): a date-only search needs some of 07:00-24:00 free of blocks and bookings (SCRUM-65)
 def test_date_only_search_counts_blocks_and_bookings_together():
     venue = make_venue(slots=("AM", "PM"))
     book(venue, "2026-10-20", "2026-10-20", ["AM"])

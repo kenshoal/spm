@@ -2,9 +2,8 @@ import {
   MAX_PREP_MINUTES,
   PREP_MINUTES_STEP,
   ROOM_LAYOUTS,
-  SLOTS,
+  timeRangeFrom,
   type RoomLayout,
-  type Slot,
   type VenueStatus,
 } from "./venue-options";
 
@@ -15,7 +14,6 @@ export interface VenuePayload {
   facilities: string[];
   accessibility_features: string[];
   supported_layouts: RoomLayout[];
-  operating_slots: Slot[];
   setup_minutes: number | null;
   turnaround_minutes: number | null;
   status?: VenueStatus;
@@ -32,7 +30,6 @@ export interface VenueFormValues {
   facilities: string;
   accessibility_features: string;
   supported_layouts: string[];
-  operating_slots: string[];
   setup_minutes: string;
   turnaround_minutes: string;
   status?: string;
@@ -94,7 +91,6 @@ export function readVenueFormValues(formData: FormData): VenueFormValues {
     facilities: text(formData, "facilities"),
     accessibility_features: text(formData, "accessibility_features"),
     supported_layouts: formData.getAll("supported_layouts").map(String),
-    operating_slots: formData.getAll("operating_slots").map(String),
     setup_minutes: text(formData, "setup_minutes"),
     turnaround_minutes: text(formData, "turnaround_minutes"),
   };
@@ -115,7 +111,6 @@ export function parseVenueForm(
     facilities: splitList(text(formData, "facilities")),
     accessibility_features: splitList(text(formData, "accessibility_features")),
     supported_layouts: pick(formData, "supported_layouts", ROOM_LAYOUTS),
-    operating_slots: pick(formData, "operating_slots", SLOTS),
     setup_minutes: prepMinutes(text(formData, "setup_minutes")),
     turnaround_minutes: prepMinutes(text(formData, "turnaround_minutes")),
   };
@@ -127,7 +122,6 @@ export function parseVenueForm(
   if (!payload.name) errors.name = "Enter the venue name.";
   if (!payload.location) errors.location = "Enter the venue location.";
   if (capacity === null || capacity <= 0) errors.max_capacity = "Enter a whole number greater than zero.";
-  if (payload.operating_slots.length === 0) errors.operating_slots = "Choose at least one operating slot.";
   const prepError = `Enter minutes in steps of ${PREP_MINUTES_STEP}, from 0 to ${MAX_PREP_MINUTES}.`;
   if (payload.setup_minutes === null) errors.setup_minutes = prepError;
   if (payload.turnaround_minutes === null) errors.turnaround_minutes = prepError;
@@ -138,7 +132,8 @@ export interface VenueSearchInput {
   required_capacity?: string;
   location?: string;
   date?: string;
-  slot?: string;
+  start_time?: string;
+  end_time?: string;
   layout?: string;
   facility?: string;
   accessibility?: string;
@@ -154,7 +149,7 @@ function isRealCalendarDate(value: string): boolean {
 }
 
 // Builds the query string for GET /venues/search from raw form text. Unknown
-// slot/layout values are dropped (rather than 422ing the backend); an
+// layout values are dropped (rather than 422ing the backend); an
 // invalid capacity is reported instead of sent; an empty result (nothing
 // filled in, or an error) yields a null query so the page knows not to search.
 export function buildVenueSearch(input: VenueSearchInput): { query: string | null; errors: Record<string, string> } {
@@ -169,8 +164,18 @@ export function buildVenueSearch(input: VenueSearchInput): { query: string | nul
   if (location) params.set("location", location);
   const date = (input.date ?? "").trim();
   if (isRealCalendarDate(date)) params.set("date", date);
-  const slot = input.slot ?? "";
-  if ((SLOTS as readonly string[]).includes(slot)) params.set("slot", slot);
+  // SCRUM-65: an optional time range, which needs a date.
+  const startTime = (input.start_time ?? "").trim();
+  const endTime = (input.end_time ?? "").trim();
+  if (startTime || endTime) {
+    const times = timeRangeFrom(startTime, endTime);
+    if (Object.keys(times.errors).length) Object.assign(errors, times.errors);
+    else if (!params.has("date")) errors.date = "Choose a date to search by time.";
+    else {
+      params.set("start_minute", String(times.start_minute));
+      params.set("end_minute", String(times.end_minute));
+    }
+  }
   const layout = input.layout ?? "";
   if ((ROOM_LAYOUTS as readonly string[]).includes(layout)) params.set("layout", layout);
   for (const item of splitList(input.facility ?? "")) params.append("facility", item);

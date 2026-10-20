@@ -112,8 +112,7 @@ def test_lifted_block_does_not_restrict_search():
     assert search(date="2026-09-21") == {venue_id}
 
 
-# AC2-P4 (partition): a search without a date makes no dated availability claim
-# (times need a date since SCRUM-65)
+# AC2-P4 (partition): a search without a date makes no dated availability claim (times need a date, SCRUM-65)
 def test_search_without_date_does_not_apply_dated_blocks():
     venue_id = make_venue()
     make_block(venue_id, slots=["AM", "PM", "NIGHT"])

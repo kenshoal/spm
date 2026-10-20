@@ -59,8 +59,7 @@ def test_layout_filter_matches_supported_layout() -> None:
     assert [v["name"] for v in response.json()] == ["Theatre-ready"]
 
 
-# SCRUM-65 AC4-P2 (partition): per-venue operating slots no longer filter search;
-# every venue operates 07:00-24:00 (Product Owner, 20 October 2026)
+# SCRUM-65 AC4-P2 (partition): per-venue operating slots no longer filter search; every venue runs 07:00-24:00
 def test_slot_filter_matches_operating_slots() -> None:
     _make_venue(name="Evenings", operating_slots=["NIGHT"])
     _make_venue(name="Mornings", operating_slots=["AM"])

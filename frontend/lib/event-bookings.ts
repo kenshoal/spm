@@ -11,6 +11,9 @@ export interface EventBooking {
   venue_id: string;
   start_date: string;
   end_date: string;
+  // SCRUM-65: the booked time on each date.
+  start_minute: number;
+  end_minute: number;
   slots: Slot[];
   status: EventBookingStatus;
   created_at: string;

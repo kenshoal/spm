@@ -32,7 +32,7 @@ function form(fields: {
   return data;
 }
 
-const validFields = { name: "Hall A", location: "Building 1", max_capacity: "50", operating_slots: ["AM"] };
+const validFields = { name: "Hall A", location: "Building 1", max_capacity: "50" };
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -58,7 +58,6 @@ test("creates a venue and redirects to the venue list", async () => {
       facilities: [],
       accessibility_features: [],
       supported_layouts: [],
-      operating_slots: ["AM"],
       setup_minutes: 0,
       turnaround_minutes: 0,
     }),
@@ -83,7 +82,6 @@ test("an invalid form never calls fetch and echoes the raw values", async () => 
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
-    operating_slots: [],
 
     setup_minutes: "",
 
@@ -106,7 +104,6 @@ test("a 403 explains that only Venue Staff can change the catalogue", async () =
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
-    operating_slots: ["AM"],
 
     setup_minutes: "",
 
@@ -138,7 +135,6 @@ test("a backend 422 is worded without referring to highlighted fields", async ()
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
-    operating_slots: ["AM"],
 
     setup_minutes: "",
 
@@ -170,7 +166,6 @@ test("returns a retryable error when the venue service cannot be reached", async
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
-    operating_slots: ["AM"],
 
     setup_minutes: "",
 

@@ -115,10 +115,8 @@ def test_unsupported_layout_is_flagged(layout: RoomLayout) -> None:
     assert _attributes(result) == ["layout"]
 
 
-# AC3-P6, AC3-P7, AC3-P8 (partition): each old slot's time is inside the fixed
-# 07:00-24:00 window every venue operates, so none is flagged (SCRUM-65 AC7;
-# the per-venue operating slots are retired, and a time outside the window is
-# refused with 422 instead)
+# SCRUM-65: per-venue operating slots are retired; a time outside 07:00-24:00 is refused with 422.
+# AC3-P6, AC3-P7, AC3-P8 (partition): each old slot's time is inside the fixed window, so none is flagged
 @pytest.mark.parametrize(
     "slot",
     list(Slot),
@@ -187,8 +185,7 @@ def test_no_optional_requirements_compares_attendance_only() -> None:
     assert result.mismatches == []
 
 
-# AC3-X1 (cross-cutting): every unmet attribute is reported together, each once
-# (operating slots retired by SCRUM-65)
+# AC3-X1 (cross-cutting): every unmet attribute is reported together, each once (no operating slot since SCRUM-65)
 def test_all_unmet_attributes_are_reported_once() -> None:
     result = check_suitability(
         _venue(

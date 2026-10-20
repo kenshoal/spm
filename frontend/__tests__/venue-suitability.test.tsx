@@ -73,7 +73,9 @@ test("sends the filled-in requirements to the suitability endpoint", async () =>
   await checkVenueSuitability("v1", {}, form({
     expected_attendance: " 100 ",
     required_layout: "theatre",
-    required_slot: "PM",
+    // SCRUM-65: a time range replaces the slot.
+    start_time: "12:00",
+    end_time: "18:00",
     required_facilities: "Projector, Stage",
     required_accessibility: "Ramp access",
   }));
@@ -85,7 +87,8 @@ test("sends the filled-in requirements to the suitability endpoint", async () =>
   expect(JSON.parse(init.body)).toEqual({
     expected_attendance: 100,
     required_layout: "theatre",
-    required_slot: "PM",
+    required_start_minute: 720,
+    required_end_minute: 1080,
     required_facilities: ["Projector", "Stage"],
     required_accessibility: ["Ramp access"],
   });
@@ -104,9 +107,19 @@ test("omits requirements that were left blank", async () => {
 test("drops a layout and a slot outside the enums", async () => {
   const fetchMock = respond(200, { venue_id: "v1", suitable: true, mismatches: [] });
 
-  await checkVenueSuitability("v1", {}, form({ expected_attendance: "10", required_layout: "ballroom", required_slot: "MIDNIGHT" }));
+  await checkVenueSuitability("v1", {}, form({ expected_attendance: "10", required_layout: "ballroom" }));
 
   expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ expected_attendance: 10 });
+});
+
+// SCRUM-65 AC4-N2 (negative): an invalid time range is reported and never sent
+test("refuses an invalid time range without calling the service", async () => {
+  const fetchMock = respond(200, notSuitable);
+
+  const state = await checkVenueSuitability("v1", {}, form({ expected_attendance: "10", start_time: "13:00", end_time: "12:00" }));
+
+  expect(state.errors).toEqual({ end_time: "The end must be after the start." });
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 // AC4-H4 (happy): the action returns the service's verdict unchanged.
@@ -197,14 +210,15 @@ test("pre-fills each result's check form from the search filters", () => {
   render(
     <VenueResults
       venues={[venue]}
-      requirements={{ expected_attendance: "80", required_layout: "theatre", required_slot: "PM", required_facilities: "Projector", required_accessibility: "" }}
+      requirements={{ expected_attendance: "80", required_layout: "theatre", start_time: "12:00", end_time: "18:00", required_facilities: "Projector", required_accessibility: "" }}
     />,
   );
 
   const card = screen.getByRole("article", { name: "Riverside Hall" });
   expect((within(card).getByLabelText("Expected attendance") as HTMLInputElement).value).toBe("80");
   expect((within(card).getByLabelText("Required layout") as HTMLSelectElement).value).toBe("theatre");
-  expect((within(card).getByLabelText("Required slot") as HTMLSelectElement).value).toBe("PM");
+  expect((within(card).getByLabelText("Start time") as HTMLSelectElement).value).toBe("12:00");
+  expect((within(card).getByLabelText("End time") as HTMLSelectElement).value).toBe("18:00");
   expect((within(card).getByLabelText("Required facilities") as HTMLInputElement).value).toBe("Projector");
   expect(within(card).getByRole("button", { name: "Check this venue" })).toBeDefined();
 });

@@ -21,7 +21,7 @@ test("coordinator opens a venue's availability from search and sees booked and b
   expect(booking.ok()).toBeTruthy();
   const block = await request.post(`${VENUE_API}/venues/${venue.id}/blocks`, {
     headers: { Authorization: "Bearer venue-session" },
-    data: { start_date: "2030-03-06", end_date: "2030-03-06", slots: ["NIGHT"], reason_category: "maintenance", reason_detail: "Private roof repair" },
+    data: { start_date: "2030-03-06", end_date: "2030-03-06", start_minute: 1080, end_minute: 1440, reason_category: "maintenance", reason_detail: "Private roof repair" },
   });
   expect(block.status()).toBe(201);
 
