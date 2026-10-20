@@ -215,3 +215,101 @@ def test_unassigned_notice_is_a_no_op_without_a_url(monkeypatch: pytest.MonkeyPa
     NotificationClient(None).notify_coordinator_unassigned(
         event_request_id="req-1", coordinator_id="coord-1", assigned_by="ops-1"
     )
+
+
+# AC5-H1 (happy): the technical-support assignment notice names the event and
+# the requirement, and carries the assignment id so notificationService can
+# dedupe retries
+def test_technical_support_assignment_posts_expected_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_post(url: str, **kwargs: object) -> httpx.Response:
+        captured["url"] = url
+        captured["json"] = kwargs.get("json")
+        return httpx.Response(202, json={"ok": True}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    NotificationClient("https://notifications.example.com/events").notify_technical_support_assigned(
+        event_request_id="req-1",
+        event_name="Tech Summit 2030",
+        requirement_id="req-av-1",
+        skill_tag="audio_visual",
+        staff_id="tss-av",
+        assigned_by="coord-1",
+        assignment_id="assign-1",
+    )
+
+    assert captured["url"] == "https://notifications.example.com/events"
+    assert captured["json"] == {
+        "event_type": "technical_support_assigned",
+        "recipient_id": "tss-av",
+        "event_id": "assign-1",
+        "payload": {
+            "event_request_id": "req-1",
+            "event_name": "Tech Summit 2030",
+            "requirement_id": "req-av-1",
+            "skill_tag": "audio_visual",
+            "assigned_by": "coord-1",
+        },
+    }
+
+
+# AC5-N2 (negative): a failed notice is logged naming the staff member and the
+# event, never raised — the assignment it reports on must stand
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        httpx.ConnectError("connection refused"),
+        httpx.Response(500, json={"error": "boom"}, request=httpx.Request("POST", "https://n.example/e")),
+    ],
+    ids=["AC5-N2-connect", "AC5-N2-500"],
+)
+def test_technical_support_notice_failure_is_swallowed_and_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, outcome: object
+) -> None:
+    def fake_post(*args: object, **kwargs: object) -> httpx.Response:
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome  # type: ignore[return-value]
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    with caplog.at_level("WARNING"):
+        NotificationClient("https://n.example/e").notify_technical_support_assigned(
+            event_request_id="req-1",
+            event_name="Tech Summit 2030",
+            requirement_id="req-av-1",
+            skill_tag="audio_visual",
+            staff_id="tss-av",
+            assigned_by="coord-1",
+            assignment_id="assign-1",
+        )
+
+    warnings = [record for record in caplog.records if record.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "tss-av" in warnings[0].getMessage()
+    assert "req-1" in warnings[0].getMessage()
+
+
+# AC5-X1a (cross-cutting): with no notification service configured nothing is
+# sent and nothing fails
+def test_technical_support_notice_is_a_no_op_without_a_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("must not post without a configured URL")
+
+    monkeypatch.setattr(httpx, "post", fail_if_called)
+
+    NotificationClient(None).notify_technical_support_assigned(
+        event_request_id="req-1",
+        event_name="Tech Summit 2030",
+        requirement_id="req-av-1",
+        skill_tag="audio_visual",
+        staff_id="tss-av",
+        assigned_by="coord-1",
+        assignment_id="assign-1",
+    )
