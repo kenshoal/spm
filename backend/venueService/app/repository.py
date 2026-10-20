@@ -10,6 +10,7 @@ mechanism. ``VENUE_STORAGE_BACKEND`` selects the implementation:
 
 from __future__ import annotations
 
+from datetime import timedelta
 from functools import lru_cache
 from typing import Protocol
 
@@ -46,7 +47,9 @@ class VenueRepository:
         if venue is None:
             return None
         patch = data.model_dump(exclude_unset=True)
-        updated = venue.model_copy(update={**patch, "updated_at": _now()})
+        # Strictly after the previous value: Windows clock ticks can repeat _now().
+        updated_at = max(_now(), venue.updated_at + timedelta(microseconds=1))
+        updated = venue.model_copy(update={**patch, "updated_at": updated_at})
         self._venues[venue.id] = updated
         return updated
 
