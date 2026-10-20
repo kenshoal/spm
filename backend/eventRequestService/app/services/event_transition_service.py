@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any
 
 from app.models.event_request import (
@@ -7,7 +8,10 @@ from app.models.event_request import (
     EventReviewDecision,
     SafetyDecision,
 )
-from app.repositories.event_request_repository import EventRequestRpcError
+from app.repositories.event_request_repository import (
+    EventRequestRpcError,
+    SupabaseRepositoryError,
+)
 from app.services.event_request_service import (
     EventRequestForbiddenError,
     EventRequestNotFoundError,
@@ -21,6 +25,8 @@ NOT_ALLOWED_ERRCODE = "P0004"
 INVALID_PARAMETER_ERRCODE = "22023"
 NOT_READY_ERRCODE = "P0005"
 
+
+logger = logging.getLogger(__name__)
 
 class TransitionNotAllowedError(Exception):
     """The request wasn't in a status the requested transition applies to —
@@ -196,9 +202,21 @@ class EventTransitionService:
         # After the decision is committed, as in SCRUM-17: a refused decision
         # tells nobody anything. The organiser's "confirmed" notice is SCRUM-36.
         if payload.decision == "changes_requested":
-            coordinator_id = self.event_request_service.latest_coordinator_id(
-                event_request_id
-            )
+            # The decision is saved: a failed lookup must not turn it into a 502,
+            # which the officer would retry into a 409. The reason stays readable
+            # on the request.
+            try:
+                coordinator_id = self.event_request_service.latest_coordinator_id(
+                    event_request_id
+                )
+            except SupabaseRepositoryError:
+                logger.warning(
+                    "Could not find the coordinator to notify of the safety changes "
+                    "requested on event request %s",
+                    event_request_id,
+                    exc_info=True,
+                )
+                coordinator_id = None
             if coordinator_id is not None:
                 self.notification_client.notify_safety_changes_requested(
                     event_request_id=event_request_id,
