@@ -26,7 +26,7 @@ The acceptance criteria (as reworded on 18 October 2026 for the 15-minute bookin
 - **Dependencies:** SCRUM-65 (bookings as times) for every AC in use; SCRUM-64 (merged 19 October 2026) for AC6 flags; SCRUM-35 for AC4 wiring.
 - **Actors and access:** unchanged from SCRUM-15 and SCRUM-59. Venue Staff decide booking requests and change venue times; Event Coordinators submit requests and receive notices.
 - **Rules:**
-  - A booking is one date with a start and an end time (SCRUM-65 AC1), in Singapore local time.
+  - A booking follows SCRUM-65's model (0050, live on shared 20 October 2026): an inclusive date range with one start and end minute applied on each date, in Singapore local time (07:00 = 420, 24:00 = 1440). Two bookings clash only if their date ranges share a day and their padded times overlap.
   - Times fall on 15-minute steps from 07:00 to 24:00, and the end is after the start.
   - Setup and turnaround are the venue's (SCRUM-59), so both bookings at a venue use the same values.
   - Ranges are half-open: a range ending at 12:00 and one starting at 12:00 do not overlap.
@@ -36,7 +36,7 @@ The acceptance criteria (as reworded on 18 October 2026 for the 15-minute bookin
   - Setup and turnaround padding must stay inside 07:00–24:00. This is a team decision, not confirmed with the customer, and can be relaxed if the customer rules otherwise.
   - AC6 flags both bookings of each newly conflicting pair, because either Event Coordinator may need to move, plus any booking whose new padding falls outside the window (Q&A #120: identify for review and notify, do not cancel).
   - AC6 does not flag bookings that have already ended (date before today), the same rule SCRUM-23 uses for block alerts. Only approved bookings that have not ended are considered.
-- **Open question:** how SCRUM-65 converts multi-day and multi-slot bookings is not yet decided. The rules here work per date.
+- **Settled by SCRUM-65 (PO, 20 October 2026):** bookings keep their date range, and one fixed 07:00–24:00 window applies to every venue.
 
 ## Acceptance criteria
 
@@ -51,7 +51,7 @@ The acceptance criteria (as reworded on 18 October 2026 for the 15-minute bookin
 
 ### Sprint 3: conflict rules (unit)
 
-Times below are on one date at one venue unless stated. "30 / 45" means setup 30 minutes, turnaround 45 minutes.
+Times below are on 20 October 2026 at one venue unless stated; date ranges are inclusive. "30 / 45" means setup 30 minutes, turnaround 45 minutes.
 
 | ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -69,6 +69,9 @@ Times below are on one date at one venue unless stated. "30 / 45" means setup 30
 | AC1-H3 | AC1 | Every clashing booking is reported, in start order | Happy | Venue 0 / 0; approved A 09:00–10:00, B 11:00–12:00, C 14:00–15:00 | Check request | 09:30–11:30 | Conflicts A, B (not C) | — | Unit |
 | AC1-P1 | AC1 | Only approved bookings count | Partition | Venue 0 / 0; one pending, one rejected, one cancelled request at 10:00–12:00 | Check request | 10:00–12:00 | No conflicts | — | Unit |
 | AC1-P2 | AC1 | Other venues and other dates never conflict | Partition | Approved 10:00–12:00 at another venue; approved 10:00–12:00 at this venue on the next day | Check request | 10:00–12:00 | No conflicts | — | Unit |
+| AC1-P3 | AC1 | Multi-day bookings clash when their date ranges share a day | Partition | Approved A 19–20 Oct 10:00–12:00 | Check request | 20–22 Oct 11:00–13:00 | Conflict with A | — | Unit |
+| AC1-P4 | AC1 | The same times on date ranges that share no day never clash | Partition | Approved A 19–20 Oct 10:00–12:00 | Check request | 21–22 Oct 10:00–12:00 | No conflicts | — | Unit |
+| AC1-B2 | AC1 | Date ranges are inclusive at both ends | Boundary | Approved A 20–21 Oct 10:00–12:00 | Check requests | 21 Oct; 22 Oct (both 10:00–12:00) | Conflict with A; no conflict | — | Unit |
 | AC1-B1 | AC1 | Touching bookings do not overlap; one step of overlap does | Boundary | Venue 0 / 0; approved A 10:00–12:00 | Check requests | 12:00–13:00; 11:45–13:00 | No conflict; conflict with A | — | Unit |
 | AC5-B1 | AC5 | A gap equal to turnaround plus setup is allowed; one step less is not | Boundary | Venue 30 / 45; approved A 10:00–12:00 | Check requests | 13:15–14:00 (gap 75); 13:00–14:00 (gap 60) | No conflict; conflict with A | — | Unit |
 | AC5-B2 | AC5 | The same boundary applies before an existing booking | Boundary | Venue 30 / 45; approved A 14:00–15:00 | Check requests | 11:00–12:45 (gap 75); 11:00–13:00 (gap 60) | No conflict; conflict with A | — | Unit |
@@ -82,37 +85,38 @@ Times below are on one date at one venue unless stated. "30 / 45" means setup 30
 | AC6-P3 | AC6 | Only newly conflicting bookings are affected | Partition | Venue 0 / 30; approved A 10:00–12:00, B 12:15–13:00 (already conflicting), C 13:30–14:00 | Change to 0 / 45 | — | B and C affected (B now clashes with C); A–B already conflicted and is not counted again | — | Unit |
 | AC6-B1 | AC6 | A booking pushed outside the window by new padding is affected | Boundary | Venue 0 / 0; approved A 07:00–08:00 | Change to 30 / 0 | — | A affected | — | Unit |
 | AC6-P4 | AC6 | Only approved bookings are considered | Partition | Venue 0 / 0; pending request 10:00–12:00 and approved A 12:15–13:00 | Change to 0 / 45 | — | Nothing affected | — | Unit |
-| AC6-B2 | AC6 | Bookings that have already ended are not flagged; today's still are | Boundary | Today is 20 Oct; venue 0 / 0; approved A 10:00–12:00 and B 12:30–14:00 on 19 Oct; approved C 10:00–12:00 and D 12:30–14:00 on 20 Oct | Change to 0 / 45 | — | C and D affected; A and B not | — | Unit |
+| AC6-B2 | AC6 | Bookings that ended before today are not flagged; one ending today still is | Boundary | Today is 20 Oct; venue 0 / 0; approved A 10:00–12:00 and B 12:30–14:00 on 19 Oct; approved C 19–20 Oct 10:00–12:00 and D 12:30–14:00 on 20 Oct | Change to 0 / 45 | — | C and D affected; A and B not | — | Unit |
+| AC6-P5 | AC6 | A newly conflicting pair must share a day | Partition | Venue 0 / 0; approved A 10:00–12:00 on 20 Oct and B 12:30–14:00 on 21 Oct | Change to 0 / 45 | — | Nothing affected | — | Unit |
 
 ### Sprint 4: applying the rules (planned, after SCRUM-65)
 
 Designed in detail when SCRUM-65's time model is merged. Planned coverage:
 
 - **AC1, AC3, AC5 (API + DB):** approval refuses a padded overlap with `booking_conflict` and the conflicting IDs, records the refusal and leaves the request pending; two concurrent approvals of overlapping requests cannot both succeed; submission refuses a conflicting request.
-- **AC2, AC3 (API):** availability and dated search treat padded times as taken.
 - **AC4 (API):** SCRUM-35's change flow refuses a conflicting reschedule through the check.
 - **AC6 (API + DB):** the timing update, change record, flags and notification jobs are atomic; an unchanged save writes nothing; a retry creates no duplicate flags or notices; the Event Coordinator and Venue Staff both receive `arrangement_needs_review`; bookings, approvals, event statuses and existing review records are unchanged; non-Venue-Staff callers get 403.
 - **E2E:** a refused approval explains the clash, including setup and turnaround; flagged bookings appear for review.
 
 ## Latest execution record
 
-Build: Sprint 3 increment (conflict rules) as an uncommitted working tree on `feat/scrum-20-venue-booking-conflicts` at `29e535b` (20 October). Executed with Claude Code, pending human review. Code: `backend/venueService/app/time_conflicts.py`; tests: `backend/venueService/tests/test_time_conflicts.py`.
+Build: Sprint 3 increment (conflict rules) at `b824b72` (20 October), updated to SCRUM-65's date-range model (0050) as an uncommitted working tree on `feat/scrum-20-venue-booking-conflicts` at `180901f` after merging dev (21 October). Executed with Claude Code, pending human review. Code: `backend/venueService/app/time_conflicts.py`; tests: `backend/venueService/tests/test_time_conflicts.py`.
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | AC2-H1, AC2-B1, AC2-B2, AC2-N1 | Green | 10:00–12:00, 07:00–08:00, 23:45–24:00 and 10:00–10:15 valid; 06:45 and 24:15 refused `outside_operating_window`; equal or reversed times refused `end_not_after_start`; 10:10 and 11:05 refused `off_step` | Pass | 29e535b + working tree, local | Claude Code, 20 Oct 2026 | `check_booking_time` |
 | AC3-H1, AC3-P1, AC3-B1, AC3-B2, AC3-H2 | Green | 10:00–12:00 with 30 / 45 occupies 09:30–12:45; 0 / 0 leaves it unchanged; 07:30 start with 30 setup valid, 07:15 refused `setup_outside_window`; 23:15 end with 45 turnaround valid, 23:30 refused `turnaround_outside_window`; 12:15 request conflicts with 10:00–12:00 only when padded | Pass | same | same | `padded_range`, `check_booking_time`, `find_conflicts` |
 | AC1-H1, AC1-H2, AC1-H3, AC1-P1, AC1-P2, AC1-B1 | Green | Overlap reported; free time clear; several conflicts returned in start order; pending, rejected and cancelled ignored; other venues and dates ignored; touching at 12:00 clear, 11:45 conflicts | Pass | same | same | `find_conflicts` |
+| AC1-P3, AC1-P4, AC1-B2 | Green | 19–20 Oct clashes with 20–22 Oct; 19–20 Oct and 21–22 Oct at the same times do not; a 20–21 Oct booking clashes on 21 Oct, not 22 Oct | Pass | 180901f + working tree, local | Claude Code, 21 Oct 2026 | Red first (`TimedBooking` had no `start_date`) |
 | AC5-B1, AC5-B2, AC5-P1 | Green | With 30 / 45, a 75-minute gap is allowed and 60 conflicts, after and before an existing booking; turnaround-only and setup-only boundaries hold | Pass | same | same | `find_conflicts` |
 | AC4-H1, AC4-P1, AC4-H2 | Green | A moved booking conflicts with another booking, never with itself, and a free time is clear | Pass | same | same | `find_conflicts(..., exclude_id=...)` |
-| AC6-H1, AC6-P1, AC6-P2, AC6-P3, AC6-P4, AC6-B1, AC6-B2 | Green | Raising turnaround returns both bookings of the new pair; unchanged and lowered times return nothing; an already-conflicting pair is not counted again; pending ignored; a 07:00 booking pushed outside the window by 30 setup is returned; yesterday's bookings ignored, today's returned | Pass | same | same | `affected_by_timing_change` |
+| AC6-H1, AC6-P1, AC6-P2, AC6-P3, AC6-P4, AC6-B1, AC6-B2, AC6-P5 | Green | Raising turnaround returns both bookings of the new pair; unchanged and lowered times return nothing; an already-conflicting pair is not counted again; pending ignored; a 07:00 booking pushed outside the window by 30 setup is returned; bookings that ended yesterday ignored, one ending today (including a 19–20 Oct booking) returned; a pair on different days is not a conflict | Pass | 180901f + working tree, local | Claude Code, 21 Oct 2026 | `affected_by_timing_change` |
 
 ### Local validation evidence
 
 | Check | Command and environment | Result | Remarks |
 | --- | --- | --- | --- |
-| Story tests | `pytest tests/test_time_conflicts.py` in `python:3.12-slim` | 37 passed (30 tests, 28 case IDs) | Red first: collection failed because `app.time_conflicts` did not exist. The Red was at module level, not per case |
-| Backend regression | `pytest` (whole venueService suite) in `python:3.12-slim` | 490 passed | No existing code changed |
+| Story tests | `pytest tests/test_time_conflicts.py` in `python:3.12-slim` | 41 passed (34 tests, 32 case IDs) | First version: Red at module level (`app.time_conflicts` did not exist). Date-range update: 27 cases Red (`TypeError: unexpected keyword argument 'start_date'`), then Green |
+| Backend regression | `pytest` (whole venueService suite) in `python:3.12-slim`, after merging dev (incl. SCRUM-65 slice 1) | 564 passed (560 before this change) | No existing code changed. `app.booking_models` and `app.time_conflicts` import together, so booking_models can import `check_booking_time` without a cycle |
 | Lint | `ruff check .` | All checks passed | — |
 
 Not yet run: database, API, frontend and pull-request CI (Sprint 4, after SCRUM-65).
