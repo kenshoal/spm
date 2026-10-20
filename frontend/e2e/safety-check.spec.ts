@@ -49,7 +49,7 @@ test("the Safety Officer asks for changes and the coordinator sees why", async (
   await page.context().addCookies(sessionCookie("venue-session"));
   const blocked = await page.request.post(`${VENUE_API}/venues/${venue.id}/blocks`, {
     headers: { Authorization: "Bearer venue-session" },
-    data: { start_date: "2026-12-20", end_date: "2026-12-20", slots: ["AM"], reason_category: "safety", reason_detail: "Fire door repair" },
+    data: { start_date: "2026-12-20", end_date: "2026-12-20", start_minute: 420, end_minute: 720, reason_category: "safety", reason_detail: "Fire door repair" },
   });
   expect(blocked.ok()).toBeTruthy();
 

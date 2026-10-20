@@ -6,15 +6,15 @@ function form(fields: {
   venue_id?: string;
   start_date?: string;
   end_date?: string;
-  slots?: string[];
+  start_time?: string;
+  end_time?: string;
   reason_category?: string;
   reason_detail?: string;
 }): FormData {
   const data = new FormData();
-  for (const key of ["venue_id", "start_date", "end_date", "reason_category", "reason_detail"] as const) {
+  for (const key of ["venue_id", "start_date", "end_date", "start_time", "end_time", "reason_category", "reason_detail"] as const) {
     if (fields[key] !== undefined) data.set(key, fields[key]);
   }
-  for (const slot of fields.slots ?? []) data.append("slots", slot);
   return data;
 }
 
@@ -22,7 +22,9 @@ const valid = {
   venue_id: "v1",
   start_date: "2026-10-20",
   end_date: "2026-10-21",
-  slots: ["AM", "PM"],
+  // SCRUM-65: times replace the AM and PM slots.
+  start_time: "07:00",
+  end_time: "18:00",
   reason_category: "maintenance",
   reason_detail: " Air-con repairs ",
 };
@@ -34,7 +36,8 @@ test("parses a complete block into the API payload", () => {
     payload: {
       start_date: "2026-10-20",
       end_date: "2026-10-21",
-      slots: ["AM", "PM"],
+      start_minute: 420,
+      end_minute: 1080,
       reason_category: "maintenance",
       reason_detail: "Air-con repairs",
     },
@@ -55,13 +58,14 @@ test.each([
   expect(payload.reason_category).toBe(reason);
 });
 
-// AC1-P5 (partition): one slot and all slots are accepted in canonical order, unknown values dropped
+// AC1-P5 (partition): a short time and the whole day are accepted as minutes (SCRUM-65)
 test("accepts a single slot and all slots in canonical order", () => {
-  expect(parseBlockForm(form({ ...valid, slots: ["PM"] })).payload.slots).toEqual(["PM"]);
+  const short = parseBlockForm(form({ ...valid, start_time: "12:00", end_time: "12:15" }));
+  expect([short.payload.start_minute, short.payload.end_minute]).toEqual([720, 735]);
 
-  const all = parseBlockForm(form({ ...valid, slots: ["NIGHT", "AM", "MIDNIGHT", "PM", "AM"] }));
+  const all = parseBlockForm(form({ ...valid, start_time: "07:00", end_time: "24:00" }));
   expect(all.errors).toEqual({});
-  expect(all.payload.slots).toEqual(["AM", "PM", "NIGHT"]);
+  expect([all.payload.start_minute, all.payload.end_minute]).toEqual([420, 1440]);
 });
 
 // AC1-B1 (boundary): a one-day block (end date equals start date) is accepted
@@ -95,10 +99,14 @@ test("omits blank detail from the payload", () => {
   expect(payload).not.toHaveProperty("reason_detail");
 });
 
-// AC1-N1 (negative): a block without any slot is refused
+// AC1-N1 (negative): a block without times, or with the end not after the start, is refused (SCRUM-65)
 test("refuses a block with no slot", () => {
-  expect(parseBlockForm(form({ ...valid, slots: [] })).errors).toEqual({
-    slots: "Choose at least one slot.",
+  expect(parseBlockForm(form({ ...valid, start_time: "", end_time: "" })).errors).toEqual({
+    start_time: "Choose a start time.",
+    end_time: "Choose an end time.",
+  });
+  expect(parseBlockForm(form({ ...valid, start_time: "18:00", end_time: "07:00" })).errors).toEqual({
+    end_time: "The end must be after the start.",
   });
 });
 
@@ -126,11 +134,12 @@ test("refuses a block with no venue", () => {
 
 // AC1-N1 (negative): raw values are echoed exactly as typed so a failed submission keeps the input
 test("reads the raw form values for echoing back", () => {
-  expect(readBlockFormValues(form({ ...valid, slots: ["PM", "MIDNIGHT"] }))).toEqual({
+  expect(readBlockFormValues(form({ ...valid, start_time: "12:00", end_time: "11:00" }))).toEqual({
     venue_id: "v1",
     start_date: "2026-10-20",
     end_date: "2026-10-21",
-    slots: ["PM", "MIDNIGHT"],
+    start_time: "12:00",
+    end_time: "11:00",
     reason_category: "maintenance",
     reason_detail: " Air-con repairs ",
   });

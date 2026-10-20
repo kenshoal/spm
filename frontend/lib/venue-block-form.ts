@@ -1,10 +1,11 @@
 import { BLOCK_REASONS, REASON_DETAIL_MAX, type BlockReason } from "./venue-block-options";
-import { SLOTS, type Slot } from "./venue-options";
+import { readTimeRange } from "./venue-options";
 
 export interface BlockPayload {
   start_date: string;
   end_date: string;
-  slots: Slot[];
+  start_minute: number;
+  end_minute: number;
   reason_category: BlockReason;
   reason_detail?: string;
 }
@@ -15,7 +16,8 @@ export interface BlockFormValues {
   venue_id: string;
   start_date: string;
   end_date: string;
-  slots: string[];
+  start_time: string;
+  end_time: string;
   reason_category: string;
   reason_detail: string;
 }
@@ -37,7 +39,8 @@ export function readBlockFormValues(formData: FormData): BlockFormValues {
     venue_id: raw(formData, "venue_id"),
     start_date: raw(formData, "start_date"),
     end_date: raw(formData, "end_date"),
-    slots: formData.getAll("slots").map(String),
+    start_time: raw(formData, "start_time"),
+    end_time: raw(formData, "end_time"),
     reason_category: raw(formData, "reason_category"),
     reason_detail: raw(formData, "reason_detail"),
   };
@@ -51,9 +54,7 @@ export function parseBlockForm(formData: FormData): {
   const venueId = raw(formData, "venue_id").trim();
   const startDate = raw(formData, "start_date").trim();
   const endDate = raw(formData, "end_date").trim();
-  const chosen = new Set(formData.getAll("slots").map(String));
-  // Canonical AM, PM, NIGHT order; unknown values are dropped.
-  const slots = SLOTS.filter((slot) => chosen.has(slot));
+  const times = readTimeRange(formData);
   const reason = raw(formData, "reason_category").trim();
   const detail = raw(formData, "reason_detail").trim();
 
@@ -64,7 +65,7 @@ export function parseBlockForm(formData: FormData): {
   else if (isRealDate(startDate) && endDate < startDate) {
     errors.end_date = "The end date must be on or after the start date.";
   }
-  if (slots.length === 0) errors.slots = "Choose at least one slot.";
+  Object.assign(errors, times.errors);
   const isReason = (BLOCK_REASONS as readonly string[]).includes(reason);
   if (!isReason) errors.reason_category = "Choose a reason.";
   if (detail.length > REASON_DETAIL_MAX) {
@@ -74,7 +75,8 @@ export function parseBlockForm(formData: FormData): {
   const payload: BlockPayload = {
     start_date: startDate,
     end_date: endDate,
-    slots,
+    start_minute: times.start_minute,
+    end_minute: times.end_minute,
     reason_category: reason as BlockReason,
   };
   if (detail) payload.reason_detail = detail;

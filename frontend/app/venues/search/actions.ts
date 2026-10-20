@@ -15,7 +15,7 @@ export interface SuitabilityState {
   values?: SuitabilityFormValues;
 }
 
-const FIELDS = ["expected_attendance", "required_layout", "required_slot", "required_facilities", "required_accessibility"] as const;
+const FIELDS = ["expected_attendance", "required_layout", "start_time", "end_time", "required_facilities", "required_accessibility"] as const;
 
 function readValues(formData: FormData): SuitabilityFormValues {
   return Object.fromEntries(FIELDS.map((field) => [field, String(formData.get(field) ?? "")])) as unknown as SuitabilityFormValues;

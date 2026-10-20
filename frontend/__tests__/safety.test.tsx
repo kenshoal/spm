@@ -27,6 +27,8 @@ function block(overrides: Partial<VenueBlock>): VenueBlock {
     venue_id: "venue-1",
     start_date: "2026-11-20",
     end_date: "2026-11-20",
+    start_minute: 420,
+    end_minute: 720,
     slots: ["AM"],
     reason_category: "safety",
     reason_detail: "Fire door repair",
@@ -90,14 +92,14 @@ test.each([
   expect(parseSafetyDecisionForm(form(fields)).errors).toEqual(errors);
 });
 
-// AC2-X1 (cross-cutting): only active blocks that overlap the booking's dates and
-// slots are shown as restrictions.
+// AC2-X1 (cross-cutting): only active blocks that overlap the booking's dates and times (SCRUM-65) are restrictions
 test("shows only active blocks overlapping the booking", () => {
-  const booking = { start_date: "2026-11-20", end_date: "2026-11-21", slots: ["AM" as const] };
+  const booking = { start_date: "2026-11-20", end_date: "2026-11-21", start_minute: 600, end_minute: 840 };
   const overlapping = block({ id: "overlap" });
   const lifted = block({ id: "lifted", status: "lifted" });
   const otherDay = block({ id: "other-day", start_date: "2026-11-25", end_date: "2026-11-25" });
-  const otherSlot = block({ id: "other-slot", slots: ["PM"] });
+  // Starts exactly when the booking ends, so the half-open ranges do not overlap.
+  const otherSlot = block({ id: "other-slot", start_minute: 840, end_minute: 1080 });
 
   expect(overlappingBlocks([overlapping, lifted, otherDay, otherSlot], booking).map((b) => b.id)).toEqual(["overlap"]);
 });

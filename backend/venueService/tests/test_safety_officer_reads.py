@@ -12,6 +12,7 @@ from booking_support import (
     seed_booking,
 )
 from fastapi.testclient import TestClient
+from time_support import slot_times
 
 from app.main import app
 
@@ -26,7 +27,7 @@ def block_for(venue_id: str) -> dict:
         json={
             "start_date": "2026-11-20",
             "end_date": "2026-11-20",
-            "slots": ["AM"],
+            **slot_times(["AM"]),
             "reason_category": "safety",
         },
     )
@@ -81,6 +82,6 @@ def test_safety_officer_cannot_change_venues_or_blocks() -> None:
     assert client.patch(f"/venues/{venue.id}", json={"max_capacity": 1}).status_code == 403
     assert client.post(
         f"/venues/{venue.id}/blocks",
-        json={"start_date": "2026-11-20", "end_date": "2026-11-20", "slots": ["AM"],
+        json={"start_date": "2026-11-20", "end_date": "2026-11-20", **slot_times(["AM"]),
               "reason_category": "safety"},
     ).status_code == 403

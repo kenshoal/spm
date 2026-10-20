@@ -16,7 +16,6 @@ const valid = {
   facilities: "Projector, WiFi",
   accessibility_features: "Ramp access",
   supported_layouts: ["theatre", "classroom"],
-  operating_slots: ["AM", "PM"],
 };
 
 // Purpose: Review focus 5 — comma lists are trimmed, blank-free and de-duplicated.
@@ -37,7 +36,6 @@ test("parses a complete venue", () => {
     facilities: ["Projector", "WiFi"],
     accessibility_features: ["Ramp access"],
     supported_layouts: ["theatre", "classroom"],
-    operating_slots: ["AM", "PM"],
     setup_minutes: 0,
     turnaround_minutes: 0,
   });
@@ -50,18 +48,19 @@ test.each(["abc", "0", "-3", "12.5", ""])("rejects capacity %j", (capacity) => {
   expect(errors.max_capacity).toBe("Enter a whole number greater than zero.");
 });
 
-// Purpose: A venue needs a name, a location and at least one bookable slot.
+// Purpose: A venue needs a name and a location (operating slots retired by SCRUM-65:
+// every venue runs 07:00-24:00).
 test("reports missing required fields", () => {
   const { errors } = parseVenueForm(venueForm({ max_capacity: "10" }), { includeStatus: false });
 
-  expect(errors).toMatchObject({
+  expect(errors).toEqual({
     name: "Enter the venue name.",
     location: "Enter the venue location.",
-    operating_slots: "Choose at least one operating slot.",
   });
 });
 
-// Purpose: Values outside the backend enums are dropped rather than sent.
+// Purpose: Values outside the backend enums are dropped rather than sent; operating
+// slots are no longer sent at all (SCRUM-65).
 test("ignores unknown layouts, slots and statuses", () => {
   const { payload } = parseVenueForm(
     venueForm({ ...valid, supported_layouts: ["theatre", "ballroom"], operating_slots: ["AM", "MIDNIGHT"], status: "gone" }),
@@ -69,7 +68,7 @@ test("ignores unknown layouts, slots and statuses", () => {
   );
 
   expect(payload.supported_layouts).toEqual(["theatre"]);
-  expect(payload.operating_slots).toEqual(["AM"]);
+  expect("operating_slots" in payload).toBe(false);
   expect(payload.status).toBe("available");
 });
 
@@ -87,7 +86,6 @@ test("readVenueFormValues keeps an invalid capacity and the raw comma text untou
   expect(values.max_capacity).toBe("abc");
   expect(values.facilities).toBe("Projector, WiFi");
   expect(values.supported_layouts).toEqual(["theatre", "classroom"]);
-  expect(values.operating_slots).toEqual(["AM", "PM"]);
 });
 
 // Purpose: The create form never submits a status field, so nothing should echo one.

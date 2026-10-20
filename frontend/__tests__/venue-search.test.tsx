@@ -13,7 +13,9 @@ test("builds a query from every filter", () => {
     required_capacity: "80",
     location: " East ",
     date: "2026-11-14",
-    slot: "PM",
+    // SCRUM-65: a time range replaces the slot.
+    start_time: "12:00",
+    end_time: "18:00",
     layout: "theatre",
     facility: "Projector, WiFi",
     accessibility: "Ramp access",
@@ -22,7 +24,7 @@ test("builds a query from every filter", () => {
   expect(errors).toEqual({});
   expect(new URLSearchParams(query!).getAll("facility")).toEqual(["Projector", "WiFi"]);
   expect(Object.fromEntries(new URLSearchParams(query!))).toMatchObject({
-    required_capacity: "80", location: "East", date: "2026-11-14", slot: "PM", layout: "theatre", accessibility: "Ramp access",
+    required_capacity: "80", location: "East", date: "2026-11-14", start_minute: "720", end_minute: "1080", layout: "theatre", accessibility: "Ramp access",
   });
 });
 
@@ -41,7 +43,17 @@ test.each(["0", "abc", "2.5", "-1"])("rejects capacity %j", (value) => {
 
 // Purpose: Values outside the backend enums are dropped instead of causing a 422.
 test("drops unknown slot and layout values", () => {
-  expect(buildVenueSearch({ slot: "MIDNIGHT", layout: "ballroom", location: "East" }).query).toBe("location=East");
+  expect(buildVenueSearch({ layout: "ballroom", location: "East" }).query).toBe("location=East");
+});
+
+// SCRUM-65 AC4-N3 (negative): an invalid time range, or times without a date, are reported, not sent
+test.each([
+  [{ date: "2026-11-14", start_time: "12:10", end_time: "13:00" }, { start_time: "Times must be on a 15-minute step." }],
+  [{ date: "2026-11-14", start_time: "13:00", end_time: "12:00" }, { end_time: "The end must be after the start." }],
+  [{ date: "2026-11-14", start_time: "12:00" }, { end_time: "Choose an end time." }],
+  [{ start_time: "12:00", end_time: "13:00" }, { date: "Choose a date to search by time." }],
+])("refuses search times %j", (input, errors) => {
+  expect(buildVenueSearch(input)).toEqual({ query: null, errors });
 });
 
 // Purpose: A date that matches YYYY-MM-DD but isn't a real calendar date
@@ -63,7 +75,7 @@ test("shows key attributes for each result", () => {
 
   // Scoped to the attribute list: the card's check form also offers "Theatre" as an option.
   const attributes = screen.getByRole("article", { name: "Riverside Hall" }).querySelector("dl") as HTMLElement;
-  for (const text of ["East Wing", "120", "Theatre", "Projector", "Ramp access", "AM, PM"]) {
+  for (const text of ["East Wing", "120", "Theatre", "Projector", "Ramp access"]) {
     expect(within(attributes).getByText(new RegExp(text))).toBeDefined();
   }
   expect(screen.getByText("1 venue matches every filter.")).toBeDefined();

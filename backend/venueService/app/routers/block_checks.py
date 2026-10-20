@@ -23,9 +23,10 @@ def availability(
     blocks: BlockRepoDep,
     bookings: Annotated[BookingRequestStore, Depends(get_booking_repository)],
 ) -> AvailabilityResult:
-    """Check venue status/operating slots/blocks; does not reserve or lock a venue.
+    """Check venue status, blocks and approved bookings by date and time; does
+    not reserve or lock a venue.
 
-    Venue Staff and Event Coordinators only. The result carries dates, slots and
+    Venue Staff and Event Coordinators only. The result carries dates, times and
     reason codes, never the blocks' free-text reasons.
     """
     venue = repo.get(venue_id)

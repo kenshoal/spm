@@ -17,7 +17,9 @@ def payload(**overrides: object) -> dict:
     data = {
         "start_date": "2026-09-20",
         "end_date": "2026-09-21",
-        "slots": ["PM", "AM"],
+        # 07:00-18:00, the old AM and PM slots (SCRUM-65).
+        "start_minute": 420,
+        "end_minute": 1080,
         "reason_category": "maintenance",
         "reason_detail": " Air-conditioning repairs ",
     }
@@ -55,6 +57,7 @@ def test_create_block_stores_normalized_record_and_server_metadata(venue_id):
     assert body["status"] == "active"
     assert body["start_date"] == "2026-09-20"
     assert body["end_date"] == "2026-09-21"
+    assert (body["start_minute"], body["end_minute"]) == (420, 1080)
     assert body["slots"] == ["AM", "PM"]
     assert body["reason_category"] == "maintenance"
     assert body["reason_detail"] == "Air-conditioning repairs"
@@ -91,10 +94,11 @@ def test_missing_venue_does_not_store_block():
     [
         {"end_date": "2026-09-19"},
         {"start_date": "not-a-date"},
-        {"slots": []},
-        {"slots": ["AM", "AM"]},
-        {"slots": [None]},
-        {"slots": ["AFTERNOON"]},
+        # Times replace slots (SCRUM-65); the slots field itself is refused.
+        {"start_minute": 430},
+        {"end_minute": 420},
+        {"start_minute": None},
+        {"slots": ["AM"]},
         {"reason_category": "unknown"},
         {"reason_detail": "x" * 1001},
         {"created_by": "spoofed-staff"},
@@ -113,7 +117,7 @@ def test_invalid_request_does_not_store_block(venue_id, changes):
 
 # AC1-P8 (partition): repeated blocks get distinct ids and detail is optional
 def test_multiple_blocks_have_distinct_ids_and_optional_detail(venue_id):
-    data = payload(slots=["NIGHT"])
+    data = payload(start_minute=1080, end_minute=1440)
     del data["reason_detail"]
     responses = [
         client.post(f"/venues/{venue_id}/blocks", json=data) for _ in range(2)
@@ -160,7 +164,8 @@ def test_availability_check_is_limited_to_internal_planners(venue_id, role, expe
 
     response = client.post(
         f"/venues/{venue_id}/availability",
-        json={"start_date": "2026-09-20", "end_date": "2026-09-20", "slots": ["AM"]},
+        json={"start_date": "2026-09-20", "end_date": "2026-09-20", "start_minute": 420,
+              "end_minute": 720},
     )
 
     assert response.status_code == expected

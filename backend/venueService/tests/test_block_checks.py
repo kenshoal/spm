@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from time_support import slot_times
 
 from app.block_models import BlockStatus
 from app.block_repository import block_repository
@@ -17,13 +18,14 @@ def venue():
     return result.json()["id"]
 
 
-def make_block(venue, **overrides):
+def make_block(venue, slots=("AM",), **overrides):
+    # SCRUM-65: slot names map to their times (AM 07:00-12:00, PM 12:00-18:00).
     response = client.post(
         f"/venues/{venue}/blocks",
         json={
             "start_date": "2026-10-01",
             "end_date": "2026-10-03",
-            "slots": ["AM"],
+            **slot_times(slots),
             "reason_category": "maintenance",
         }
         | overrides,
@@ -32,13 +34,13 @@ def make_block(venue, **overrides):
     return response.json()["id"]
 
 
-def check(venue, **overrides):
+def check(venue, slots=("AM",), **overrides):
     return client.post(
         f"/venues/{venue}/availability",
         json={
             "start_date": "2026-10-01",
             "end_date": "2026-10-03",
-            "slots": ["AM"],
+            **slot_times(slots),
         }
         | overrides,
     )
@@ -56,13 +58,14 @@ def test_availability_flow_reports_conflicts_without_writes(venue):
         "venue_id": venue,
         "available": False,
         "reasons": ["active_block"],
-        "unsupported_slots": [],
         "conflicts": [
             {
                 "block_id": block,
                 "start_date": "2026-10-01",
                 "end_date": "2026-10-02",
-                "slots": ["AM"],
+                # The shared part in time: 07:00-12:00 (SCRUM-65).
+                "start_minute": 420,
+                "end_minute": 720,
             }
         ],
         "booking_conflicts": [],
@@ -89,26 +92,26 @@ def test_availability_inclusive_boundaries(venue, day, available):
     assert check(venue, start_date=day, end_date=day).json()["available"] is available
 
 
-# AC2-P9 (partition): a blocked venue or a non-operating slot is reported unavailable
+# AC2-P9 (partition): a blocked venue is reported unavailable; old operating slots no longer count (SCRUM-65)
 def test_availability_whole_venue_status_and_operating_slots(venue):
     client.patch(
         f"/venues/{venue}", json={"status": "blocked", "operating_slots": ["PM"]}
     )
     response = check(venue).json()
     assert response["available"] is False
-    assert response["reasons"] == ["venue_unavailable", "outside_operating_slots"]
-    assert response["unsupported_slots"] == ["AM"]
+    assert response["reasons"] == ["venue_unavailable"]
 
 
 # AC2-N3 (negative): an invalid availability request returns 422
 @pytest.mark.parametrize(
     "changes",
     [
-        {"slots": []},
-        {"slots": ["AM", "AM"]},
-        {"slots": [None]},
+        # Times replace slots (SCRUM-65).
+        {"start_minute": 425},
+        {"start_minute": 720, "end_minute": 720},
+        {"start_minute": None},
         {"end_date": "2026-09-30"},
-        {"slots": ["invalid"]},
+        {"start_minute": "nine"},
         {"created_by": "spoofed"},
     ],
     ids=["AC2-N3a", "AC2-N3b", "AC2-N3c", "AC2-N3d", "AC2-N3e", "AC2-N3f"],

@@ -11,7 +11,25 @@ from app.availability_models import (
 from app.block_models import BlockStatus, VenueBlock
 from app.booking_models import BookingRequest, BookingRequestStatus
 from app.models import Venue, VenueStatus
-from app.slots import overlaps
+from app.slots import times_overlap
+
+
+def _overlaps(requested: Period, item: VenueBlock | BookingRequest) -> bool:
+    return times_overlap(
+        requested.start_date, requested.end_date,
+        requested.start_minute, requested.end_minute,
+        item.start_date, item.end_date, item.start_minute, item.end_minute,
+    )
+
+
+def _shared(requested: Period, item: VenueBlock | BookingRequest) -> dict:
+    """The dates and times both periods cover."""
+    return {
+        "start_date": max(requested.start_date, item.start_date),
+        "end_date": min(requested.end_date, item.end_date),
+        "start_minute": max(requested.start_minute, item.start_minute),
+        "end_minute": min(requested.end_minute, item.end_minute),
+    }
 
 
 def check_availability(
@@ -20,55 +38,29 @@ def check_availability(
     blocks: Iterable[VenueBlock],
     bookings: Iterable[BookingRequest] = (),
 ) -> AvailabilityResult:
-    """Check status, operating slots, active blocks and approved bookings.
+    """Check venue status, active blocks and approved bookings by time.
 
     Only approved requests are bookings (0018); pending and rejected ones
-    reserve nothing. Callers that check bookings themselves pass none.
+    reserve nothing. Callers that check bookings themselves pass none. Every
+    venue operates 07:00-24:00 (SCRUM-65), which Period already enforces.
     """
     conflicts = [
-        BlockConflict(
-            block_id=block.id,
-            start_date=max(requested.start_date, block.start_date),
-            end_date=min(requested.end_date, block.end_date),
-            slots=[s for s in requested.slots if s in block.slots],
-        )
+        BlockConflict(block_id=block.id, **_shared(requested, block))
         for block in blocks
         if block.venue_id == venue.id
         and block.status == BlockStatus.ACTIVE
-        and overlaps(
-            requested.start_date,
-            requested.end_date,
-            requested.slots,
-            block.start_date,
-            block.end_date,
-            block.slots,
-        )
+        and _overlaps(requested, block)
     ]
     booking_conflicts = [
-        BookingOverlap(
-            booking_id=booking.id,
-            start_date=max(requested.start_date, booking.start_date),
-            end_date=min(requested.end_date, booking.end_date),
-            slots=[s for s in requested.slots if s in booking.slots],
-        )
+        BookingOverlap(booking_id=booking.id, **_shared(requested, booking))
         for booking in bookings
         if booking.venue_id == venue.id
         and booking.status is BookingRequestStatus.APPROVED
-        and overlaps(
-            requested.start_date,
-            requested.end_date,
-            requested.slots,
-            booking.start_date,
-            booking.end_date,
-            booking.slots,
-        )
+        and _overlaps(requested, booking)
     ]
-    unsupported = [s for s in requested.slots if s not in venue.operating_slots]
     reasons = []
     if venue.status != VenueStatus.AVAILABLE:
         reasons.append("venue_unavailable")
-    if unsupported:
-        reasons.append("outside_operating_slots")
     if conflicts:
         reasons.append("active_block")
     if booking_conflicts:
@@ -77,7 +69,6 @@ def check_availability(
         venue_id=venue.id,
         available=not reasons,
         reasons=reasons,
-        unsupported_slots=unsupported,
         conflicts=conflicts,
         booking_conflicts=booking_conflicts,
     )
