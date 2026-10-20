@@ -25,6 +25,7 @@ DECLARE
     v_req uuid;
     v_req_probe uuid;
     v_req_other uuid;
+    v_req_other_av uuid;
     v_row public.technical_support_requirements%ROWTYPE;
     v_assignment public.technical_support_assignments%ROWTYPE;
     v_count int;
@@ -190,6 +191,15 @@ BEGIN
         RAISE EXCEPTION 'AC2-H1: assignment stored wrong: %', v_assignment;
     END IF;
 
+    -- AC3-H1: the candidate list shows exactly the suitable staff, ascending,
+    -- with the person already on the requirement marked.
+    SELECT string_agg(staff_id || ':' || already_assigned::text, ', ' ORDER BY staff_id)
+        INTO v_text
+    FROM public.list_technical_support_candidates(v_req);
+    IF v_text <> v_tss_av || ':true, ' || v_tss_av2 || ':false' THEN
+        RAISE EXCEPTION 'AC3-H1: candidates are %', v_text;
+    END IF;
+
     -- AC2-H2: several staff can be assigned to one requirement.
     PERFORM public.assign_technical_support_staff(v_event, v_req, v_tss_av2, v_coord);
     SELECT count(*) INTO v_count
@@ -256,15 +266,6 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0005' THEN NULL;
     END;
 
-    -- AC3-H1: the candidate list shows exactly the suitable staff, ascending,
-    -- with the person already on the requirement marked.
-    SELECT string_agg(staff_id || ':' || already_assigned::text, ', ' ORDER BY staff_id)
-        INTO v_text
-    FROM public.list_technical_support_candidates(v_req);
-    IF v_text <> v_tss_av || ':true, ' || v_tss_av2 || ':false' THEN
-        RAISE EXCEPTION 'AC3-H1: candidates are %', v_text;
-    END IF;
-
     -- AC3-X1: no availability or double-booking check. The second event takes a
     -- requirement and the same staff member as the first event's keynote.
     SELECT * INTO v_row
@@ -315,7 +316,10 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0003' THEN NULL;
     END;
     -- ...and the new coordinator can assign: the check reads the same state.
-    PERFORM public.assign_technical_support_staff(v_other, v_req_other, v_tss_av2, v_coord2);
+    SELECT id INTO v_req_other_av
+    FROM public.record_technical_support_requirement(
+             v_other, v_coord2, 'New coordinator records after handover', 'audio_visual');
+    PERFORM public.assign_technical_support_staff(v_other, v_req_other_av, v_tss_av2, v_coord2);
 
     -- AC3-P5: suitability is rechecked at write time — a staff member whose
     -- technical_support role is removed after tagging is refused.
@@ -330,7 +334,9 @@ BEGIN
     VALUES (v_tss_av2::uuid, 'technical_support');
 
     -- AC3-X4: the candidate list and the assign function never disagree, per
-    -- user, with each probe's write rolled back to its savepoint.
+    -- user. Probes run on a fresh requirement; a success stays (the whole
+    -- transaction is rolled back at the end) but cannot affect a later user,
+    -- because suitability ignores assignments.
     SELECT id INTO v_req_probe
     FROM public.record_technical_support_requirement(
              v_event, v_coord, 'probe requirement', 'audio_visual');
@@ -343,7 +349,6 @@ BEGIN
             SELECT 1 FROM public.list_technical_support_candidates(v_req_probe)
             WHERE staff_id = r.staff_id
         ) INTO v_listed;
-        EXECUTE 'SAVEPOINT probe';
         BEGIN
             PERFORM public.assign_technical_support_staff(
                 v_event, v_req_probe, r.staff_id, v_coord);
@@ -351,7 +356,6 @@ BEGIN
         EXCEPTION WHEN OTHERS THEN
             v_succeeded := FALSE;
         END;
-        EXECUTE 'ROLLBACK TO SAVEPOINT probe';
         IF v_listed <> v_succeeded THEN
             RAISE EXCEPTION 'AC3-X4: list says %, write says % for %',
                 v_listed, v_succeeded, r.staff_id;
@@ -359,8 +363,9 @@ BEGIN
     END LOOP;
     SELECT count(*) INTO v_count
     FROM public.technical_support_assignments WHERE requirement_id = v_req_probe;
-    IF v_count <> 0 THEN
-        RAISE EXCEPTION 'AC3-X4: savepoint probes left % rows', v_count;
+    IF v_count <> 2 THEN
+        RAISE EXCEPTION 'AC3-X4: expected the 2 suitable staff stored, found %',
+            v_count;
     END IF;
 
     -- AC5-X1b: notification retries dedupe on (recipient_id, event_id) — one

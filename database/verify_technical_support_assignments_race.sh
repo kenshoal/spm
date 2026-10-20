@@ -37,14 +37,17 @@ COMMIT;
 SQL
 
 cleanup() {
+    # The organiser user stays: event_requests.organiser_id cascades into the
+    # immutable status history, so deleting it would fail. Left behind: one
+    # Cancelled event, its organiser account and its baseline history.
     "${PSQL[@]}" <<SQL >/dev/null || true
 BEGIN;
 DELETE FROM public.technical_support_assignments WHERE event_request_id = '$EVENT';
 DELETE FROM public.technical_support_requirements WHERE event_request_id = '$EVENT';
 DELETE FROM public.event_coordinator_assignments WHERE event_request_id = '$EVENT';
 UPDATE public.event_requests SET status = 'Cancelled' WHERE id = '$EVENT';
-DELETE FROM public.staff_roles WHERE user_id IN (('$COORD')::uuid, ('$TSS')::uuid, ('$ORG')::uuid);
-DELETE FROM auth.users WHERE id IN (('$COORD')::uuid, ('$TSS')::uuid, ('$ORG')::uuid);
+DELETE FROM public.staff_roles WHERE user_id IN (('$COORD')::uuid, ('$TSS')::uuid);
+DELETE FROM auth.users WHERE id IN (('$COORD')::uuid, ('$TSS')::uuid);
 COMMIT;
 SQL
 }
@@ -54,7 +57,7 @@ OUT1=$(mktemp)
 OUT2=$(mktemp)
 
 # Session 1 wins the event row lock and holds it across its insert.
-"${PSQL[@]}" <<SQL >"$OUT1" &
+"${PSQL[@]}" <<SQL >"$OUT1" 2>&1 &
 BEGIN;
 SELECT * FROM public.assign_technical_support_staff('$EVENT', '$REQ', '$TSS', '$COORD');
 SELECT pg_sleep(3);
@@ -65,7 +68,7 @@ sleep 1
 
 # Session 2 queues behind the lock, then loses to the unique constraint.
 set +e
-"${PSQL[@]}" <<SQL >"$OUT2"
+"${PSQL[@]}" <<SQL >"$OUT2" 2>&1
 SELECT * FROM public.assign_technical_support_staff('$EVENT', '$REQ', '$TSS', '$COORD');
 SQL
 STATUS2=$?
