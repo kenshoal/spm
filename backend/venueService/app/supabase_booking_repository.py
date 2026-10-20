@@ -165,7 +165,6 @@ class SupabaseBookingRepository:
                 "start_date": f"lte.{end_date.isoformat()}",
                 "end_date": f"gte.{start_date.isoformat()}",
                 "select": "*",
-                "order": "created_at.asc,id.asc",
             },
         )
         return [BookingRequest.model_validate(row) for row in rows]

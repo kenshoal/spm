@@ -1,6 +1,7 @@
 import { unstable_rethrow } from "next/navigation";
 import { requireAnyRole } from "@/lib/auth";
 import { buildVenueSearch, type VenueSearchInput } from "@/lib/venue-form";
+import { monthOfDate } from "@/lib/venue-calendar";
 import { layoutLabel, ROOM_LAYOUTS, searchVenues, SLOTS } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../../components/app-shell";
 import { VenueResults } from "./venue-results";
@@ -67,6 +68,7 @@ export default async function VenueSearchPage({ searchParams }: { searchParams: 
       ) : (
         <VenueResults
           venues={outcome.venues}
+          month={monthOfDate(input.date ?? "")}
           requirements={{
             expected_attendance: input.required_capacity ?? "",
             required_layout: input.layout ?? "",

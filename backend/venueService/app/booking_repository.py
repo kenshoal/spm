@@ -108,7 +108,7 @@ class BookingRequestRepository:
             and item.start_date <= end_date
             and item.end_date >= start_date
         ]
-        return sorted(matching, key=lambda item: item.created_at)
+        return matching
 
     def clear(self) -> None:
         self._items.clear()

@@ -1,8 +1,8 @@
 import { unstable_rethrow } from "next/navigation";
 import type { ReactNode } from "react";
 import { requireAnyRole } from "@/lib/auth";
-import { currentMonth, parseMonth } from "@/lib/block-calendar";
-import { getVenueCalendar } from "@/lib/venue-calendar";
+import { currentMonth } from "@/lib/block-calendar";
+import { getVenueCalendar, parseCalendarMonth } from "@/lib/venue-calendar";
 import { listVenues, type Venue } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../../components/app-shell";
 import { AvailabilityCalendarTable } from "./availability-calendar";
@@ -45,7 +45,7 @@ async function AvailabilityContent({ params }: { params: Record<string, string |
     return <p className="rounded-2xl border border-dashed border-[#cbd7d1] bg-white px-6 py-14 text-center text-sm text-[#718078]">No venues in the catalogue yet.</p>;
   }
 
-  const month = parseMonth(first(params.month), currentMonth());
+  const month = parseCalendarMonth(first(params.month), currentMonth());
   const selectedId = first(params.venue) || venues.value[0].id;
   const picker = <VenuePicker venues={venues.value} selected={selectedId} month={month} />;
   const venue = venues.value.find((candidate) => candidate.id === selectedId);

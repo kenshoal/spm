@@ -123,11 +123,11 @@ def test_month_lengths(month: str, count: int, last: str) -> None:
     assert days[-1]["date"] == last
 
 
-# AC1-N1 to AC1-N6 (negative): a month that is not YYYY-MM is refused
+# AC1-N1 to AC1-N6, AC1-N11 (negative): a month that is not a real YYYY-MM is refused (including year 0000)
 @pytest.mark.parametrize(
     "month",
-    ["2026-13", "2026-00", "2026-1", "26-10", "abc", None],
-    ids=["AC1-N1", "AC1-N2", "AC1-N3", "AC1-N4", "AC1-N5", "AC1-N6"],
+    ["2026-13", "2026-00", "2026-1", "26-10", "abc", None, "0000-01"],
+    ids=["AC1-N1", "AC1-N2", "AC1-N3", "AC1-N4", "AC1-N5", "AC1-N6", "AC1-N11"],
 )
 def test_invalid_month_is_refused(month: str | None) -> None:
     venue = make_venue()
@@ -136,6 +136,17 @@ def test_invalid_month_is_refused(month: str | None) -> None:
     response = client.get(f"/venues/{venue.id}/calendar", params=params)
 
     assert response.status_code == 422
+
+
+# AC1-B4, AC1-B5 (boundary): the first and last month the calendar can show both work
+@pytest.mark.parametrize("month", ["0001-01", "9999-12"], ids=["AC1-B4", "AC1-B5"])
+def test_first_and_last_representable_months(month: str) -> None:
+    venue = make_venue()
+
+    response = calendar(venue.id, month)
+
+    assert response.status_code == 200
+    assert len(response.json()["days"]) == 31
 
 
 # AC1-N7 (negative): an unknown venue returns 404
