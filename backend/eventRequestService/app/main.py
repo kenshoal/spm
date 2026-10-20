@@ -22,6 +22,7 @@ from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
 )
 from app.repositories.registration_repository import RegistrationRepository
+from app.repositories.technical_support_repository import TechnicalSupportRepository
 from app.services.arrangement_review_notification_relay import (
     ArrangementReviewNotificationRelay,
     build_arrangement_review_notification_relay,
@@ -50,6 +51,7 @@ from app.services.event_transition_service import (
     TransitionForbiddenError,
     TransitionNotAllowedError,
 )
+from app.services.notification_client import NotificationClient
 from app.services.outbox_relay import OutboxRelay, build_outbox_relay
 from app.services.registration_rules import (
     EventFullError,
@@ -68,6 +70,8 @@ def create_app(
     outbox_relay: OutboxRelay | None = None,
     arrangement_review_relay: ArrangementReviewNotificationRelay | None = None,
     registration_repository: RegistrationRepository | None = None,
+    technical_support_repository: TechnicalSupportRepository | None = None,
+    technical_support_notification_client: NotificationClient | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -110,6 +114,12 @@ def create_app(
         EventTransitionService(event_request_service)
         if event_request_service is not None
         else None
+    )
+    # SCRUM-19 seam: the technical support routes and service arrive with the
+    # implementation commit; tests already inject the fakes through here.
+    application.state.technical_support_repository = technical_support_repository
+    application.state.technical_support_notification_client = (
+        technical_support_notification_client
     )
     # Before event_request_router: routes match in registration order, and its
     # /event-requests/{event_request_id} would otherwise swallow the literal
