@@ -8,6 +8,7 @@ with the server-side secret key, implementing the interface of the in-memory
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import httpx
@@ -148,3 +149,23 @@ class SupabaseBookingRepository:
         if not isinstance(body, dict):
             raise SupabaseRepositoryError("Venue store returned an unexpected response")
         return BookingRequest.model_validate(body)
+
+    def list_approved_for_venue(
+        self, venue_id: str, start_date: date, end_date: date
+    ) -> list[BookingRequest]:
+        """Approved bookings of one venue that touch ``start_date``..``end_date``."""
+
+        if not _is_uuid(venue_id):
+            return []
+        rows = self._request(
+            "GET",
+            params={
+                "venue_id": f"eq.{venue_id}",
+                "status": "eq.approved",
+                "start_date": f"lte.{end_date.isoformat()}",
+                "end_date": f"gte.{start_date.isoformat()}",
+                "select": "*",
+                "order": "created_at.asc,id.asc",
+            },
+        )
+        return [BookingRequest.model_validate(row) for row in rows]

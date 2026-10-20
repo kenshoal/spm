@@ -152,3 +152,66 @@ def test_submission_unconfigured_reports_not_delivered(
     )
 
     assert delivered is False
+
+
+# AC4-H2 (happy): the old coordinator's notice is posted in the agreed shape, addressed to them
+def test_posts_coordinator_unassigned_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_post(url: str, **kwargs: object) -> httpx.Response:
+        captured["url"] = url
+        captured["json"] = kwargs.get("json")
+        return httpx.Response(202, json={"ok": True}, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    NotificationClient("https://notifications.example.com/events").notify_coordinator_unassigned(
+        event_request_id="req-1", coordinator_id="coord-1", assigned_by="ops-1"
+    )
+
+    assert captured["url"] == "https://notifications.example.com/events"
+    assert captured["json"] == {
+        "event_type": "coordinator_unassigned",
+        "recipient_id": "coord-1",
+        "payload": {
+            "event_request_id": "req-1",
+            "coordinator_id": "coord-1",
+            "assigned_by": "ops-1",
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        httpx.ConnectError("connection refused"),
+        httpx.Response(500, json={"error": "boom"}, request=httpx.Request("POST", "https://n.example/e")),
+    ],
+    ids=["AC4-N3-connect", "AC4-N3-500"],
+)
+# AC4-N3 (negative): a failed unassigned notice is logged, never raised, so the reassignment stands
+def test_unassigned_notice_failure_is_swallowed(
+    monkeypatch: pytest.MonkeyPatch, failure: object
+) -> None:
+    def fake_post(*args: object, **kwargs: object) -> httpx.Response:
+        if isinstance(failure, Exception):
+            raise failure
+        return failure  # type: ignore[return-value]
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    NotificationClient("https://n.example/e").notify_coordinator_unassigned(
+        event_request_id="req-1", coordinator_id="coord-1", assigned_by="ops-1"
+    )
+
+
+# AC4-N3 (negative): with no notification service configured, nothing is sent and nothing fails
+def test_unassigned_notice_is_a_no_op_without_a_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("must not post without a configured URL")
+
+    monkeypatch.setattr(httpx, "post", fail_if_called)
+
+    NotificationClient(None).notify_coordinator_unassigned(
+        event_request_id="req-1", coordinator_id="coord-1", assigned_by="ops-1"
+    )

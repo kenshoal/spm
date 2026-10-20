@@ -6,7 +6,7 @@ vi.mock("@/app/operations/actions", () => ({ assignCoordinator: vi.fn().mockReso
 import { AssignCoordinatorForm } from "@/app/operations/assignments/assign-coordinator-form";
 import { AssignedList, AwaitingList } from "@/app/operations/assignments/assignment-lists";
 import type { EventRequest } from "@/lib/event-requests";
-import { coordinatorLabel, type CoordinatorOption } from "@/lib/operations";
+import { coordinatorLabel, groupByCoordinator, type CoordinatorOption, type CurrentAssignment } from "@/lib/operations";
 
 afterEach(cleanup);
 
@@ -126,4 +126,88 @@ test("omits the hidden current-coordinator field for a fresh assignment", () => 
 test("labels an unknown coordinator by id", () => {
   expect(coordinatorLabel("coord-9", coordinators)).toBe("coord-9");
   expect(coordinatorLabel("coord-2", coordinators)).toBe("blair@example.com");
+});
+
+function makeAssignment(
+  requestId: string,
+  name: string,
+  coordinatorId: string,
+  createdAt = "2026-09-13T03:00:00Z",
+): CurrentAssignment {
+  return {
+    event_request: { ...makeRequest(requestId, name), status: "Planning", created_at: createdAt },
+    assignment: { id: Number(requestId.replace(/\D/g, "")) || 1, event_request_id: requestId, coordinator_id: coordinatorId, assigned_by: "ops-1", assigned_at: "2026-09-20T02:00:00Z" },
+  };
+}
+
+// AC3-H1 (happy): SCRUM-62 AC3 — the Lead sees each coordinator's active events under that coordinator, with a count
+test("groups assigned events under their coordinator with a count", () => {
+  render(
+    <AssignedList
+      assignments={[
+        makeAssignment("r1", "Gala Dinner", "coord-1"),
+        makeAssignment("r2", "Tech Summit", "coord-2"),
+        makeAssignment("r3", "Book Fair", "coord-1"),
+      ]}
+      coordinators={coordinators}
+    />,
+  );
+
+  const alex = screen.getByRole("region", { name: "alex@example.com (2)" });
+  expect(within(alex).getAllByRole("article").map((card) => card.getAttribute("aria-labelledby"))).toEqual([
+    "request-r1",
+    "request-r3",
+  ]);
+  const blair = screen.getByRole("region", { name: "blair@example.com (1)" });
+  expect(within(blair).getByRole("article", { name: "Tech Summit" })).toBeDefined();
+  expect(within(blair).queryByRole("article", { name: "Gala Dinner" })).toBeNull();
+});
+
+// AC3-P1 (partition): SCRUM-62 AC3 — a coordinator with no active events still appears, so the Lead can see who is free
+test("shows coordinators with no active events", () => {
+  render(
+    <AssignedList
+      assignments={[makeAssignment("r1", "Gala Dinner", "coord-1")]}
+      coordinators={[...coordinators, { id: "coord-3", email: "casey@example.com" }]}
+    />,
+  );
+
+  const casey = screen.getByRole("region", { name: "casey@example.com (0)" });
+  expect(within(casey).getByText("No active events")).toBeDefined();
+  expect(within(casey).queryAllByRole("article")).toHaveLength(0);
+  expect(screen.getByRole("region", { name: "blair@example.com (0)" })).toBeDefined();
+});
+
+// AC3-X2 (cross-cutting): SCRUM-62 AC3 — each grouped event keeps its reassign control, which never offers its own coordinator
+test("keeps a reassign control on every grouped event", () => {
+  render(<AssignedList assignments={[makeAssignment("r1", "Gala Dinner", "coord-1")]} coordinators={coordinators} />);
+
+  const card = within(screen.getByRole("region", { name: "alex@example.com (1)" })).getByRole("article", { name: "Gala Dinner" });
+  expect(within(card).getByRole("button", { name: "Reassign" })).toBeDefined();
+  const options = within(within(card).getByRole("combobox", { name: "Coordinator" })).getAllByRole("option");
+  expect(options.map((option) => option.textContent)).toEqual(["Choose a coordinator", "blair@example.com"]);
+});
+
+// AC3-P2 (partition): SCRUM-62 AC3 — an event whose coordinator is missing from the directory is grouped under the id, not dropped
+test("keeps events whose coordinator is not in the directory", () => {
+  const groups = groupByCoordinator([makeAssignment("r1", "Gala Dinner", "coord-z")], []);
+
+  expect(groups.map((group) => [group.coordinatorId, group.label, group.assignments.map((a) => a.event_request.id)])).toEqual([
+    ["coord-z", "coord-z", ["r1"]],
+  ]);
+});
+
+// AC3-X1 (cross-cutting): SCRUM-62 AC3 — groups are sorted by name and events oldest first, whatever order they arrive in
+test("orders groups by name and events oldest first", () => {
+  const groups = groupByCoordinator(
+    [
+      makeAssignment("r2", "Second", "coord-1", "2026-09-14T03:00:00Z"),
+      makeAssignment("r9", "Blair's", "coord-2"),
+      makeAssignment("r1", "First", "coord-1", "2026-09-12T03:00:00Z"),
+    ],
+    [coordinators[1], coordinators[0]],
+  );
+
+  expect(groups.map((group) => group.label)).toEqual(["alex@example.com", "blair@example.com"]);
+  expect(groups[0].assignments.map((a) => a.event_request.id)).toEqual(["r1", "r2"]);
 });

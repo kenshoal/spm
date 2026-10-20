@@ -18,15 +18,19 @@ const labelClass = "block text-sm font-semibold text-[#34463f]";
 export function SafetyDecisionForm({
   eventRequestId,
   arrangements,
+  approveBlockedReason,
 }: {
   eventRequestId: string;
   arrangements: ArrangementOption[];
+  // Set when part of the check could not be loaded: approving blind is refused.
+  approveBlockedReason?: string;
 }) {
   const [state, formAction, isPending] = useActionState(decideSafety.bind(null, eventRequestId), initialState);
   const errors = state.errors ?? {};
   return (
     <form action={formAction} noValidate className="mt-5 space-y-4 border-t border-[#eef2f0] pt-4">
-      <button type="submit" name="decision" value="approved" disabled={isPending} className="min-h-11 rounded-xl bg-[#0f6b5b] px-5 text-sm font-bold text-white hover:bg-[#0b5b4d] disabled:opacity-60">
+      {approveBlockedReason ? <p role="alert" className="rounded-xl bg-[#fff4f3] px-4 py-3 text-sm font-semibold text-[#8e3d35]">{approveBlockedReason}</p> : null}
+      <button type="submit" name="decision" value="approved" disabled={isPending || Boolean(approveBlockedReason)} className="min-h-11 rounded-xl bg-[#0f6b5b] px-5 text-sm font-bold text-white hover:bg-[#0b5b4d] disabled:opacity-60">
         Approve
       </button>
       <label className={labelClass}>What needs to change
@@ -49,6 +53,7 @@ export function SafetyDecisionForm({
       <button type="submit" name="decision" value="changes_requested" disabled={isPending} className="min-h-11 rounded-xl border border-[#80520d] px-5 text-sm font-bold text-[#80520d] hover:bg-[#fff8ec] disabled:opacity-60">
         Ask for changes
       </button>
+      {errors.decision ? <p className="text-sm text-[#a23939]">{errors.decision}</p> : null}
       {state.message ? <p role="alert" className="rounded-xl bg-[#fff4f3] px-4 py-3 text-sm text-[#8e3d35]">{state.message}</p> : null}
     </form>
   );

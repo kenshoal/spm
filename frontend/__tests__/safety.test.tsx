@@ -39,9 +39,20 @@ function block(overrides: Partial<VenueBlock>): VenueBlock {
 
 // AC3-H2 (happy, SCRUM-60 increment 3): approving sends only the decision.
 test("an approval sends only the decision", () => {
-  expect(parseSafetyDecisionForm(form([["decision", "approved"], ["reason", "typed"], ["target", `venue_booking:${BOOKING}`]]))).toEqual({
+  expect(parseSafetyDecisionForm(form([["decision", "approved"], ["reason", "  "]]))).toEqual({
     payload: { decision: "approved", targets: [] },
     errors: {},
+  });
+});
+
+// AC3-N2 (negative, review of PR #62): Approve never silently drops a typed
+// reason or ticked arrangements.
+test.each([
+  ["a reason", [["decision", "approved"], ["reason", "Exit routes missing"]]],
+  ["a ticked arrangement", [["decision", "approved"], ["target", `venue_booking:${BOOKING}`]]],
+] as [string, [string, string][]][])("refuses to approve with %s filled in", (_label, fields) => {
+  expect(parseSafetyDecisionForm(form(fields)).errors).toEqual({
+    decision: "You typed a reason or ticked arrangements. Clear them to approve, or choose Ask for changes.",
   });
 });
 
@@ -116,6 +127,50 @@ test("offers each arrangement as a target and both decisions", () => {
   expect(screen.getByRole("button", { name: "Approve" })).toBeDefined();
   expect(screen.getByRole("button", { name: "Ask for changes" })).toBeDefined();
   expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
+});
+
+// AC2-N4 (negative, review of PR #62): when venue details or restrictions could
+// not be loaded, the card says so and Approve is disabled, never "all clear".
+test("blocks approval when venue details could not be loaded", () => {
+  render(
+    <SafetyDecisionForm
+      eventRequestId="event-1"
+      arrangements={[]}
+      approveBlockedReason="Venue details or restrictions couldn't be loaded. Don't approve until this is fixed."
+    />,
+  );
+
+  expect(screen.getByRole("alert").textContent).toContain("couldn't be loaded");
+  expect((screen.getByRole("button", { name: "Approve" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Ask for changes" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+// AC4a-H6 (happy, review of PR #62): the coordinator sees which arrangements the
+// Safety Officer asked to recheck.
+test("lists the arrangements the Safety Officer flagged", () => {
+  render(
+    <SafetyReviewsPanel
+      reviews={[
+        {
+          id: "review-2",
+          event_request_id: "event-1",
+          decision: "changes_requested",
+          reason: "Recheck the hall.",
+          targets: [
+            { arrangement: "venue_booking", id: BOOKING },
+            { arrangement: "equipment_reservation", id: RESERVATION },
+          ],
+          decided_by: "officer-1",
+          decided_at: "2026-10-18T09:00:00Z",
+        },
+      ]}
+      labels={{ [BOOKING]: "Hall B, 20 Nov 2026" }}
+    />,
+  );
+
+  expect(screen.getByText("To recheck:")).toBeDefined();
+  expect(screen.getByText("Hall B, 20 Nov 2026")).toBeDefined();
+  expect(screen.getByText("An equipment reservation")).toBeDefined();
 });
 
 // AC4a-H4 (happy): the coordinator reads the Safety Officer's reason on the event page.
