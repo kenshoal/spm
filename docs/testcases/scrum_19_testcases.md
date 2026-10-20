@@ -202,13 +202,18 @@ Layers: U = unit (`backend/eventRequestService/tests/test_technical_support_rule
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC1-*, AC2-*, AC3-*, AC4-*, AC5-* (U) | Planned | — | Not executed | — | — | `tests/test_technical_support_rules.py` (commit 2 Red, commit 7 Green) |
-| AC1-*, AC2-*, AC3-*, AC4-*, AC5-* (A) | Planned | — | Not executed | — | — | `tests/test_technical_support_api.py` (commit 3 Red: route 404) |
-| AC2-N7, AC4-B1 (R) | Planned | — | Not executed | — | — | `tests/test_technical_support_repository.py` (commit 4) |
-| AC5-H1, AC5-N2, AC5-X1a (N) | Planned | — | Not executed | — | — | `tests/test_notification_client.py` (commit 4) |
-| AC1-H1/B4/B5/X2, AC2-H1/H2/P10/N1/N3/N5/N6/X4, AC3-H1/P2–P5/N1/X1/X4, AC5-X1b (D) | Planned | — | Not executed | — | — | `database/verify_technical_support_assignments.sql` on disposable PostgreSQL 16 (commit 5 Red until `0051`) |
-| AC2-X5 (D race) | Planned | — | Not executed | — | — | `database/verify_technical_support_assignments_race.sh` |
+| AC1-*, AC2-*, AC3-*, AC4-*, AC5-* (U) | Green | 31 passed | Pass | `216df55` Red (18 failed / 13 passed, all failures `NotImplementedError`); `ba46c50` Green | Claude, local, 20 Oct 2026 | `pytest tests/test_technical_support_rules.py`; rules implemented in `ba46c50` |
+| AC1-*, AC2-*, AC3-*, AC4-*, AC5-* (A) | Green | 87 passed | Pass | `b821d54` Red (76 failed / 11 passed; all failures plain route 404, the 11 pass vacuously on 4xx-only or bare-404 assertions); `4d1488a` Green | Claude, local, 20 Oct 2026 | `pytest tests/test_technical_support_api.py`; repository faked with the database functions' check order (`technical_support_fakes.py`) |
+| AC2-N7, AC4-B1 (R) | Green | 15 passed | Pass | `e5c3b85` Red (NotImplementedError); `4d1488a` Green | Claude, local, 20 Oct 2026 | `pytest tests/test_technical_support_repository.py`; httpx MockTransport against the Supabase shapes |
+| AC5-H1, AC5-N2, AC5-X1a (N) | Green | 16 passed (11 pre-existing + 5 new) | Pass | `e5c3b85` Red (`AttributeError: notify_technical_support_assigned`); `4d1488a` Green | Claude, local, 20 Oct 2026 | `pytest tests/test_notification_client.py`; `httpx.post` monkeypatched |
+| Whole service | Green | 691 passed, 1 skipped | Pass | `4d1488a` | Claude, local, 20 Oct 2026 | `ruff check .` clean; `pytest -q` (554 baseline + 137 new); dependencies mocked, no live Supabase |
+| AC1-H1/B4/B5/X2, AC2-H1/H2/P10/N1/N3/N5/N6/X4, AC3-H1/P2–P5/N1/X1/X4, AC5-X1b (D) | Green | ALL SCRUM-19 TECHNICAL SUPPORT VERIFICATIONS PASSED (rolled back) | Pass | `fe579dd` Red (`relation "public.technical_support_requirements" does not exist`); `75bcf34` Green | Claude, disposable docker `postgres:16` cluster `scrum19-verify-pg`, 20 Oct 2026 | Cluster built by `python3 -I database/tests/bootstrap_safety_review.py --disposable --dsn postgresql://postgres@127.0.0.1:5432/scrum48_scrum19 --psql <docker wrapper> --through 0051_technical_support_assignments.sql`; verifier run via `psql -X -v ON_ERROR_STOP=1`. Two mid-run failures were verifier fixture bugs (a stale `already_assigned` expectation, an unsuitable staff choice), not migration defects; corrected in `75bcf34` |
+| AC2-X5 (D race) | Green | RACE VERIFICATION PASSED: one row; the loser hit the unique constraint | Pass | `75bcf34` | Claude, same disposable cluster, 20 Oct 2026 | `verify_technical_support_assignments_race.sh` run inside the container; leaves one Cancelled event and its organiser behind (status history immutable) |
 | AC1-X3, AC2-X6, AC3-P6, AC4-X1 (F) | Planned | — | Not executed | — | — | increment 2 |
-| AC5-H3 (E) | Planned | — | Not executed | — | — | increment 2; needs `0051` on the target database |
+| AC5-H3 (E) | Planned | — | Not executed | — | — | increment 2; needs `0051` + `seed_technical_support_skills.sql` on the target database and a running stack |
 
-Still open: AC review and D2/D3/D7 sign-off; teammate review of these AI-drafted cases (`testing.md` §10).
+Scope note (plan §1): increment 1 delivered commits `8aa0a73`…`4d1488a` on
+`feat/scrum-19-assign-technical-support`; shared-dev application of `0051` and
+the seed, live grant checks, one live API run and PR CI remain (increment 2).
+Still open: PO confirmation of D2/D3/D7 at standup; teammate review of these
+AI-drafted cases (`testing.md` §10).
