@@ -52,6 +52,10 @@ class EventRequestRepository(Protocol):
         self, event_request_id: str, coordinator_id: str, to_status: str
     ) -> dict[str, Any]: ...
 
+    def send_for_safety_review(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]: ...
+
     def decide_by_coordinator(
         self,
         event_request_id: str,
@@ -366,6 +370,27 @@ class SupabaseEventRequestRepository:
                     "p_event_request_id": event_request_id,
                     "p_coordinator_id": coordinator_id,
                     "p_to_status": to_status,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
+
+    def send_for_safety_review(
+        self, event_request_id: str, coordinator_id: str
+    ) -> dict[str, Any]:
+        try:
+            response = self._client.post(
+                "/rpc/send_event_request_for_safety_review",
+                json={
+                    "p_event_request_id": event_request_id,
+                    "p_coordinator_id": coordinator_id,
                 },
                 headers={"Accept": "application/vnd.pgrst.object+json"},
             )

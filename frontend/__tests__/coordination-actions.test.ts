@@ -23,6 +23,7 @@ import {
   decideEventRequest,
   decideEventChangeRequest,
   resumeEventRequestReview,
+  sendForSafetyReview,
   startEventPlanning,
   startEventRequestReview,
 } from "@/app/coordination/actions";
@@ -323,5 +324,78 @@ test("shows a retry message when the API is unreachable", async () => {
   const state = await startEventPlanning("request-5", {}, new FormData());
 
   expect(state).toEqual({ message: "That could not be done. Please try again." });
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});
+
+// AC2-H4 (happy): sending for safety review posts the coordinator's session to its endpoint and refreshes the pages that show the status
+test("sends for safety review through the event request API", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const state = await sendForSafetyReview("request/9", {}, new FormData());
+
+  expect(fetchMock.mock.calls[0][0]).toBe(
+    "http://127.0.0.1:8003/event-requests/request%2F9/safety-review",
+  );
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({
+    method: "POST",
+    headers: { Authorization: "Bearer valid-token" },
+  });
+  expect(state).toEqual({});
+  expect(navigation.revalidatePath).toHaveBeenCalledWith("/coordination/requests");
+  expect(navigation.revalidatePath).toHaveBeenCalledWith("/coordination/requests/request/9");
+  expect(navigation.revalidatePath).toHaveBeenCalledWith("/event-requests");
+});
+
+// AC3-N12 (negative): a not-ready refusal returns each outstanding item's message and refreshes nothing
+test("returns the outstanding items when the event is not ready", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({
+        detail: "Event request request-9 is not ready for safety review",
+        outstanding: [
+          { kind: "no_venue_booking", message: "No venue is booked for this event" },
+          { kind: "arrangement_needs_review", reason: "Exit moved", message: "Still marked for review: Exit moved" },
+        ],
+      }),
+    }),
+  );
+
+  const state = await sendForSafetyReview("request-9", {}, new FormData());
+
+  expect(state).toEqual({
+    message: "This event isn't ready for safety review yet.",
+    outstanding: ["No venue is booked for this event", "Still marked for review: Exit moved"],
+  });
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});
+
+// AC2-N4 (negative): a 409 without an outstanding list means the status already moved on
+test("reports when the event is no longer in planning", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: false, status: 409, json: async () => ({ detail: "Cannot send" }) }),
+  );
+
+  const state = await sendForSafetyReview("request-9", {}, new FormData());
+
+  expect(state).toEqual({
+    message: "This request's status has already changed. Refresh the page to see where it stands.",
+  });
+  expect(navigation.revalidatePath).not.toHaveBeenCalled();
+});
+
+// AC4-N20 (negative): a coordinator who is not the assigned one gets the assignment message
+test("explains that only the assigned coordinator can send for safety review", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+
+  const state = await sendForSafetyReview("request-9", {}, new FormData());
+
+  expect(state).toEqual({
+    message: "Only the coordinator currently assigned to this request can do that.",
+  });
   expect(navigation.revalidatePath).not.toHaveBeenCalled();
 });

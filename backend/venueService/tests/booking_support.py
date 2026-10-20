@@ -112,7 +112,9 @@ def submit_body(venue_id: str, /, **overrides: Any) -> dict[str, Any]:
         "event_request_id": EVENT,
         "start_date": "2030-01-10",
         "end_date": "2030-01-10",
-        "slots": ["AM"],
+        # 07:00-12:00, the old AM slot (SCRUM-65).
+        "start_minute": 420,
+        "end_minute": 720,
     }
     body.update(overrides)
     return {key: value for key, value in body.items() if value is not OMIT}

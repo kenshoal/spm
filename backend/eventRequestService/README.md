@@ -72,6 +72,26 @@ event-request field, changes the status to `Submitted`, and makes the request
 read-only. Requirements that do not apply must still contain explicit text such
 as `None`.
 
+## Attendee registration (SCRUM-21)
+
+Attendee-only endpoints (any other role gets 403, no session 401). They read the
+registration window and capacity on `event_requests`; the screen that sets those
+is a separate story, so until it exists they are set in SQL.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/attendee/events` | Confirmed events whose registration window is open now, public fields only |
+| `GET` | `/attendee/events/{id}` | One Confirmed event with `places_remaining`; anything else is 404 `event_not_found` |
+| `POST` | `/attendee/events/{id}/registrations` | Register (201). 409 `registration_not_open`, `event_full` or `already_registered`; 404 `event_not_found` |
+| `GET` | `/attendee/registrations` | The caller's own registrations, newest first, each with the public event |
+
+Open means `registration_opens_at <= now < registration_closes_at`; an unset
+window or capacity is not open. Public fields are `id, event_name, purpose,
+description, proposed_date_times, registration_opens_at, registration_closes_at,
+registration_capacity, places_remaining`. The write runs `register_for_event`
+(migration `0029`), which locks the event row, so two attendees racing for the
+last place cannot both succeed. Refusals carry a `code` beside `detail`.
+
 ## Status transitions
 
 The database migration `0011_event_request_review_status.sql` permits the full

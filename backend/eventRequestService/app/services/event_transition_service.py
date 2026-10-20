@@ -46,6 +46,40 @@ class TransitionForbiddenError(Exception):
         self.event_request_id = event_request_id
 
 
+def _outstanding_message(item: dict[str, Any]) -> str:
+    """One wording for every P0005 item, so the coordinator reads the same text
+    whether the handover (SCRUM-58) or the approval (SCRUM-60) refused."""
+    kind = item.get("kind")
+    if kind == "no_venue_booking":
+        return "No venue is booked for this event"
+    if kind == "venue_booking_pending":
+        return (
+            f"The booking for {item.get('venue_name')} is still waiting for a decision"
+        )
+    if kind == "equipment_not_reserved":
+        return (
+            f"{item.get('equipment_type')}: "
+            f"{item.get('reserved')} of {item.get('required')} reserved"
+        )
+    if kind == "arrangement_needs_review":
+        return f"Still marked for review: {item.get('reason', '')}"
+    return "Something is still outstanding"
+
+
+class SafetyReviewNotReadyError(Exception):
+    """SCRUM-58 AC3a: the event still has outstanding bookings or equipment.
+    outstanding is the database function's list, each item given a message."""
+
+    def __init__(self, event_request_id: str, outstanding: list[dict[str, Any]]) -> None:
+        super().__init__(
+            f"Event request {event_request_id} is not ready for safety review"
+        )
+        self.event_request_id = event_request_id
+        self.outstanding = [
+            {**item, "message": _outstanding_message(item)} for item in outstanding
+        ]
+
+
 class DecisionReasonRequiredError(Exception):
     """A returned or rejected request must explain what the organiser needs to know."""
 
@@ -69,8 +103,7 @@ class SafetyApprovalBlockedError(Exception):
         super().__init__(f"Event request {event_request_id} cannot be approved yet")
         self.event_request_id = event_request_id
         self.outstanding = [
-            {**item, "message": f"Still marked for review: {item.get('reason', '')}"}
-            for item in outstanding
+            {**item, "message": _outstanding_message(item)} for item in outstanding
         ]
 
 
@@ -78,9 +111,10 @@ class EventTransitionService:
     """Own coordinator transitions and SCRUM-17 review decisions.
 
     Every operation uses a database function that locks the request and
-    re-checks the latest assignment before writing. Approved -> Planning is
-    SCRUM-58; the safety check, confirmation and post-submission change
-    requests remain in their owning stories.
+    re-checks the latest assignment before writing. Approved -> Planning and
+    Planning -> Safety Review are SCRUM-58; the Safety Officer's decision
+    (SCRUM-60) and post-submission change requests remain in their owning
+    stories.
     """
 
     def __init__(
@@ -123,6 +157,30 @@ class EventTransitionService:
         return self._advance(
             event_request_id, caller_id, EventRequestStatus.PLANNING
         )
+
+    def send_for_safety_review(
+        self, event_request_id: str, caller_id: str
+    ) -> EventRequestResponse:
+        try:
+            return self.event_request_service.send_for_safety_review(
+                event_request_id, caller_id
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == NOT_FOUND_ERRCODE:
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == NOT_ASSIGNED_ERRCODE:
+                raise TransitionForbiddenError(event_request_id) from error
+            if error.errcode == NOT_ALLOWED_ERRCODE:
+                raise TransitionNotAllowedError(
+                    event_request_id,
+                    f"Cannot send event request {event_request_id} for safety "
+                    "review from its current status",
+                ) from error
+            if error.errcode == NOT_READY_ERRCODE:
+                raise SafetyReviewNotReadyError(
+                    event_request_id, json.loads(error.details or "[]")
+                ) from error
+            raise
 
     def cancel(self, event_request_id: str, caller_id: str) -> EventRequestResponse:
         return self._advance(
