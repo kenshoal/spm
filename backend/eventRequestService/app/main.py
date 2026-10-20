@@ -44,6 +44,7 @@ from app.services.event_transition_service import (
     EventTransitionService,
     SafetyApprovalBlockedError,
     SafetyDecisionInvalidError,
+    SafetyReviewNotReadyError,
     TransitionForbiddenError,
     TransitionNotAllowedError,
 )
@@ -191,6 +192,15 @@ def create_app(
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": str(error)},
+        )
+
+    @application.exception_handler(SafetyReviewNotReadyError)
+    async def safety_review_not_ready(
+        request: Request, error: SafetyReviewNotReadyError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": str(error), "outstanding": error.outstanding},
         )
 
     @application.exception_handler(TransitionForbiddenError)
