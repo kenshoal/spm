@@ -62,3 +62,36 @@ def conflicts(
         for offset in range((end - start).days + 1)
         for slot in ordered
     ]
+
+
+# SCRUM-65: slot time ranges in minutes after midnight (Product Owner, 20 October
+# 2026). They leave no gaps, so consecutive slots join into one exact range.
+SLOT_RANGES = {Slot.AM: (420, 720), Slot.PM: (720, 1080), Slot.NIGHT: (1080, 1440)}
+
+
+def slots_to_range(slots: Collection[Slot | str]) -> tuple[int, int]:
+    """The one time range covered by consecutive slots (the booking conversion)."""
+    chosen = [slot for slot in SLOT_RANGES if slot in {Slot(s) for s in slots}]
+    if not chosen:
+        raise ValueError("At least one slot is needed")
+    start, end = SLOT_RANGES[chosen[0]][0], SLOT_RANGES[chosen[-1]][1]
+    if sum(b - a for a, b in (SLOT_RANGES[s] for s in chosen)) != end - start:
+        raise ValueError("Slots must be consecutive to become one time range")
+    return start, end
+
+
+def touched_slots(start_minute: int, end_minute: int) -> list[Slot]:
+    """Slots that a half-open time range overlaps, for slot-based readers."""
+    return [
+        slot
+        for slot, (slot_start, slot_end) in SLOT_RANGES.items()
+        if start_minute < slot_end and slot_start < end_minute
+    ]
+
+
+def times_overlap(
+    a_start: date, a_end: date, a_from: int, a_to: int,
+    b_start: date, b_end: date, b_from: int, b_to: int,
+) -> bool:
+    """Whether two date ranges share a day and their daily time ranges overlap."""
+    return a_start <= b_end and b_start <= a_end and a_from < b_to and b_from < a_to

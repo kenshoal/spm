@@ -14,10 +14,24 @@ from app.availability_models import AvailabilityResult, Period
 from app.block_checks import check_availability
 from app.block_models import VenueBlock
 from app.models import Venue
-from app.slots import overlaps
+from app.slots import slots_to_range, times_overlap
 
 
-class BookingDecisionSubject(Period):
+class _TimedPeriod(Period):
+    """A period with its daily time range (SCRUM-65). Without times, the
+    consecutive slots give the range, as the 0050 conversion does."""
+
+    start_minute: int | None = None
+    end_minute: int | None = None
+
+    @model_validator(mode="after")
+    def _default_times(self) -> "_TimedPeriod":
+        if self.start_minute is None or self.end_minute is None:
+            self.start_minute, self.end_minute = slots_to_range(self.slots)
+        return self
+
+
+class BookingDecisionSubject(_TimedPeriod):
     """Minimal current booking projection; map storage statuses in the adapter."""
 
     venue_id: str = Field(min_length=1)
@@ -25,7 +39,7 @@ class BookingDecisionSubject(Period):
     current_status: str = Field(min_length=1)
 
 
-class ConfirmedVenueBooking(Period):
+class ConfirmedVenueBooking(_TimedPeriod):
     """An actual confirmed reservation, irrespective of the parent event status.
 
     The adapter must omit cancelled/unconfirmed reservations. Proposed event
@@ -133,13 +147,15 @@ def assess_booking_decision(
                 other.booking_id
                 for other in confirmed_bookings
                 if other.venue_id == booking.venue_id
-                and overlaps(
+                and times_overlap(
                     booking.start_date,
                     booking.end_date,
-                    booking.slots,
+                    booking.start_minute,
+                    booking.end_minute,
                     other.start_date,
                     other.end_date,
-                    other.slots,
+                    other.start_minute,
+                    other.end_minute,
                 )
             }
         )

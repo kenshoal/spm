@@ -210,8 +210,13 @@ booking, so no event-status lookup is needed.
 Booking requests (SCRUM-32) are stored in `public.venue_booking_requests`
 (`database/migrations/0018_venue_booking_requests.sql`) under the same
 `VENUE_STORAGE_BACKEND` switch. An Event Coordinator submits a request for a
-venue, an inclusive date range and one or more slots, for an event they are
-currently assigned to. venueService confirms that with eventRequestService
+venue, an inclusive date range, and a `start_minute` and `end_minute` that apply
+on each date (SCRUM-65, migration `0050`). The times are minutes after midnight
+in Singapore time, in 15-minute steps from 420 (07:00) to 1440 (24:00), with the
+end after the start; otherwise 422 with `off_step`, `outside_operating_window` or
+`end_not_after_start`. The old `slots` field is refused. Responses still include
+`slots` (the slots the time touches) until Sprint 4. The request is for an event
+the Coordinator is currently assigned to. venueService confirms that with eventRequestService
 (`EVENT_REQUEST_API_URL`, default `http://127.0.0.1:8003`) using the caller's own
 token, and copies the event's name, expected attendance and venue-requirements
 text into the request. Submitting creates a `pending` request and reserves
