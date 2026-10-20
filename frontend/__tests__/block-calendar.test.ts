@@ -154,7 +154,7 @@ test("shows a catalogue-blocked venue as unavailable on every date", () => {
 test("keeps an available venue's free slots open", () => {
   const calendar = buildBlockCalendar({ ...venue, status: "available" }, [], "2026-10");
 
-  expect(day(calendar, "2026-10-01")).toEqual({ date: "2026-10-01", unavailable: false, entries: [] });
+  expect(day(calendar, "2026-10-01")).toEqual({ date: "2026-10-01", unavailable: false, entries: [], free: true });
 });
 
 // AC4-P4 (partition): another venue's block never marks this venue's calendar
@@ -200,4 +200,18 @@ test("finds the bookings a block overlaps in time", () => {
   ], "2026-10-01");
 
   expect(affected.map((b) => b.id)).toEqual(["hit"]);
+});
+
+// AC4-B2 (boundary): a day is free only while some time in 07:00-24:00 is neither blocked nor booked
+test.each([
+  ["a full-day block", [[420, 1440]], false],
+  ["blocks that meet end to end", [[420, 720], [720, 1440]], false],
+  ["15 minutes free at the end", [[420, 1425]], true],
+  ["15 minutes free at the start", [[435, 1440]], true],
+  ["a 15-minute gap between blocks", [[420, 720], [735, 1440]], true],
+  ["no blocks", [], true],
+])("marks %s as free: %j -> %s", (_label, ranges, free) => {
+  const blocks = (ranges as number[][]).map(([start_minute, end_minute], i) =>
+    block({ id: `b${i}`, start_date: "2026-10-20", end_date: "2026-10-20", start_minute, end_minute }));
+  expect(day(buildBlockCalendar(venue, blocks, "2026-10"), "2026-10-20").free).toBe(free);
 });

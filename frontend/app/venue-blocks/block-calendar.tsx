@@ -24,7 +24,11 @@ function Times({ day }: { day: CalendarDay }) {
           </li>
         ))}
       </ul>
-      <span className="mt-1 block text-xs text-[#145c40]">Other times available</span>
+      {day.free ? (
+        <span className="mt-1 block text-xs text-[#145c40]">Other times available</span>
+      ) : (
+        <span className="mt-1 block text-xs font-semibold text-[#8c3a2b]">No free time</span>
+      )}
     </td>
   );
 }
