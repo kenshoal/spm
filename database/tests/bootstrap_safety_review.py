@@ -48,6 +48,9 @@ MIGRATIONS = (
     "0044_safety_review_null_inputs.sql",
     "0045_safety_review_arrangement_reviews.sql",
     "0046_shared_event_readiness.sql",
+    "0048_event_registrations.sql",
+    "0050_venue_booking_times.sql",
+    "0051_technical_support_assignments.sql",
 )
 
 
