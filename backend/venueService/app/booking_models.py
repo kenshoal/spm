@@ -1,8 +1,11 @@
 """Models for venue booking requests (SCRUM-32).
 
-A request is an Event Coordinator's ask for a venue, a date range and slots.
-Submitting creates a pending request and reserves nothing. Table:
-``database/migrations/0018_venue_booking_requests.sql``.
+A request is an Event Coordinator's ask for a venue, a date range and a start
+and end time that apply on each date (SCRUM-65). Times are minutes after
+midnight in 15-minute steps within 07:00-24:00 (420-1440). Submitting creates a
+pending request and reserves nothing. Tables:
+``database/migrations/0018_venue_booking_requests.sql`` and
+``0050_venue_booking_times.sql``.
 """
 
 from __future__ import annotations
@@ -11,9 +14,20 @@ from datetime import date, datetime
 from enum import Enum
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+from pydantic_core import PydanticCustomError
 
 from app.models import Slot, _now
+from app.slots import slots_to_range, touched_slots
+
+OPEN_MINUTE, CLOSE_MINUTE, STEP_MINUTES = 420, 1440, 15
 
 
 class BookingRequestStatus(str, Enum):
@@ -32,7 +46,8 @@ class BookingRequestCreate(BaseModel):
     event_request_id: UUID
     start_date: date
     end_date: date
-    slots: list[Slot] = Field(min_length=1)
+    start_minute: int
+    end_minute: int
 
     @field_validator("end_date")
     @classmethod
@@ -42,12 +57,22 @@ class BookingRequestCreate(BaseModel):
             raise ValueError("end_date must not be before start_date")
         return value
 
-    @field_validator("slots")
-    @classmethod
-    def _no_duplicate_slots(cls, value: list[Slot]) -> list[Slot]:
-        if len(set(value)) != len(value):
-            raise ValueError("slots must not contain duplicates")
-        return value
+    @model_validator(mode="after")
+    def _valid_times(self) -> BookingRequestCreate:
+        # The codes match SCRUM-20's check_booking_time; the database checks
+        # the same rules (0050).
+        start, end = self.start_minute, self.end_minute
+        if start % STEP_MINUTES or end % STEP_MINUTES:
+            raise PydanticCustomError("off_step", "Times must be on a 15-minute step.")
+        if start < OPEN_MINUTE or end > CLOSE_MINUTE:
+            raise PydanticCustomError(
+                "outside_operating_window", "Bookings must fall between 07:00 and 24:00."
+            )
+        if end <= start:
+            raise PydanticCustomError(
+                "end_not_after_start", "The end must be after the start."
+            )
+        return self
 
 
 class BookingRequest(BaseModel):
@@ -62,7 +87,11 @@ class BookingRequest(BaseModel):
     requirements_note: str | None = None
     start_date: date
     end_date: date
-    slots: list[Slot]
+    start_minute: int | None = None
+    end_minute: int | None = None
+    # Until Sprint 4 the slots a booking's time touches, for slot-based readers.
+    # Given alone (stored rows before 0050), they convert to the time range.
+    slots: list[Slot] = Field(default_factory=list)
     status: BookingRequestStatus = BookingRequestStatus.PENDING
     decision_reason: str | None = None
     suggested_alternative: str | None = None
@@ -71,3 +100,10 @@ class BookingRequest(BaseModel):
     cancelled_by: str | None = None
     cancelled_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)
+
+    @model_validator(mode="after")
+    def _times_and_slots(self) -> BookingRequest:
+        if self.start_minute is None or self.end_minute is None:
+            self.start_minute, self.end_minute = slots_to_range(self.slots)
+        self.slots = touched_slots(self.start_minute, self.end_minute)
+        return self
