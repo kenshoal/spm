@@ -59,13 +59,18 @@ def test_layout_filter_matches_supported_layout() -> None:
     assert [v["name"] for v in response.json()] == ["Theatre-ready"]
 
 
+# SCRUM-65 AC4-P2 (partition): per-venue operating slots no longer filter search;
+# every venue operates 07:00-24:00 (Product Owner, 20 October 2026)
 def test_slot_filter_matches_operating_slots() -> None:
     _make_venue(name="Evenings", operating_slots=["NIGHT"])
     _make_venue(name="Mornings", operating_slots=["AM"])
 
-    response = client.get("/venues/search", params={"slot": "NIGHT"})
+    response = client.get(
+        "/venues/search",
+        params={"date": "2030-01-10", "start_minute": 1080, "end_minute": 1200},
+    )
 
-    assert [v["name"] for v in response.json()] == ["Evenings"]
+    assert sorted(v["name"] for v in response.json()) == ["Evenings", "Mornings"]
 
 
 def test_facility_filter_requires_all_requested_facilities() -> None:
@@ -124,7 +129,10 @@ def test_all_filters_apply_together() -> None:
             "required_capacity": 200,
             "facility": "projector",
             "layout": "theatre",
-            "slot": "PM",
+            # A PM time since SCRUM-65; all three venues are free then.
+            "date": "2030-01-10",
+            "start_minute": 720,
+            "end_minute": 1080,
         },
     )
 

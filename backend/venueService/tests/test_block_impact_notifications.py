@@ -14,6 +14,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from time_support import slot_times
 
 from app.block_repository import block_repository
 from app.booking_models import BookingRequest, BookingRequestStatus
@@ -68,7 +69,8 @@ def book(venue_id: str, start: str, end: str, slots: list[str], status: str = "a
 
 
 def block(venue_id: str, start: str, end: str, slots: list[str], **extra):
-    body = {"start_date": start, "end_date": end, "slots": slots, "reason_category": "maintenance"} | extra
+    # SCRUM-65: blocks take the times the slot names map to.
+    body = {"start_date": start, "end_date": end, **slot_times(slots), "reason_category": "maintenance"} | extra
     return client.post(f"/venues/{venue_id}/blocks", json=body)
 
 
@@ -100,6 +102,11 @@ def test_block_over_a_booking_notifies_its_coordinator(notifier):
         "booking_start_date": "2026-11-20",
         "booking_end_date": "2026-11-21",
         "booking_slots": ["AM", "PM"],
+        # SCRUM-65: both time ranges are sent too.
+        "block_start_minute": 420,
+        "block_end_minute": 720,
+        "booking_start_minute": 420,
+        "booking_end_minute": 1080,
     }
 
 
@@ -169,7 +176,7 @@ def test_refused_block_sends_nothing(notifier):
     assert block(venue, "2026-11-20", "2026-11-19", ["AM"]).status_code == 422
     assert client.post(
         "/venues/missing/blocks",
-        json={"start_date": "2026-11-20", "end_date": "2026-11-20", "slots": ["AM"], "reason_category": "safety"},
+        json={"start_date": "2026-11-20", "end_date": "2026-11-20", **slot_times(["AM"]), "reason_category": "safety"},
     ).status_code == 404
 
     assert notifier.sent == []

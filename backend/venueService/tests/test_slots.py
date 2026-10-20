@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from app.block_models import VenueBlockCreate
+from app.block_models import VenueBlock
 from app.models import Slot
 from app.slots import conflicts, overlaps
 
@@ -82,10 +82,14 @@ def test_reversed_ranges_are_rejected(function, first_invalid: bool) -> None:
 
 # AC2-H2 (happy): a block identifies exactly the dates and slots it shares with a booking
 def test_new_block_identifies_affected_slots_of_existing_booking() -> None:
-    block = VenueBlockCreate(
+    # A stored PM block (12:00-18:00 since SCRUM-65) still exposes its slots.
+    block = VenueBlock(
+        venue_id="venue-1",
+        created_by="staff-1",
         start_date="2026-09-20",
         end_date="2026-09-22",
-        slots=["PM"],
+        start_minute=720,
+        end_minute=1080,
         reason_category="maintenance",
     )
     # A reserved AM+PM period already exists. No event service is needed to

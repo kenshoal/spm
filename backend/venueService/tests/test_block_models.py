@@ -5,34 +5,36 @@ import pytest
 from pydantic import ValidationError
 
 from app.block_models import BlockReason, BlockStatus, VenueBlock, VenueBlockCreate
-from app.models import Slot
 
 
 def payload(**changes: object) -> dict:
     return {
         "start_date": "2026-09-20",
         "end_date": "2026-09-22",
-        "slots": ["PM"],
+        # 12:00-18:00, the old PM slot (SCRUM-65).
+        "start_minute": 720,
+        "end_minute": 1080,
         "reason_category": "maintenance",
         **changes,
     }
 
 
-# AC1-H3 (happy): a valid block request parses its dates and slots
+# AC1-H3 (happy): a valid block request parses its dates and times (slots until SCRUM-65)
 def test_partial_block_parses_dates_and_reuses_slot_enum() -> None:
     block = VenueBlockCreate(**payload())
     assert block.start_date == date(2026, 9, 20)
     assert block.end_date == date(2026, 9, 22)
-    assert block.slots == [Slot.PM]
+    assert (block.start_minute, block.end_minute) == (720, 1080)
     assert block.reason_category is BlockReason.MAINTENANCE
     assert block.reason_detail is None
 
 
-# AC1-B4 (boundary): a same-day full-day block keeps AM, PM, NIGHT order
+# AC1-B4 (boundary): a same-day full-day block (07:00-24:00) still lists AM, PM, NIGHT in order
 def test_same_day_full_day_block_uses_chronological_slot_order() -> None:
-    block = VenueBlockCreate(
-        **payload(end_date="2026-09-20", slots=["NIGHT", "AM", "PM"])
+    request = VenueBlockCreate(
+        **payload(end_date="2026-09-20", start_minute=420, end_minute=1440)
     )
+    block = VenueBlock(**request.model_dump(), venue_id="venue-1", created_by="staff-1")
     assert block.start_date == block.end_date
     assert block.model_dump(mode="json")["slots"] == ["AM", "PM", "NIGHT"]
 
@@ -43,15 +45,16 @@ def test_all_story_reasons_are_accepted(reason: BlockReason) -> None:
     assert VenueBlockCreate(**payload(reason_category=reason)).reason_category is reason
 
 
-# AC1-N10 (negative): invalid dates and slots are rejected before storage
+# AC1-N10 (negative): invalid dates and times are rejected before storage
 @pytest.mark.parametrize(
     "changes, field",
     [
         ({"end_date": "2026-09-19"}, None),
         ({"start_date": "2026-02-30"}, "start_date"),
-        ({"slots": []}, "slots"),
-        ({"slots": ["MORNING"]}, "slots"),
-        ({"slots": ["AM", "AM"]}, "slots"),
+        # Times replace slots (SCRUM-65): off step, outside 07:00-24:00, not after start.
+        ({"start_minute": 730}, None),
+        ({"start_minute": 405}, None),
+        ({"end_minute": 720}, None),
         ({"reason_category": ""}, "reason_category"),
         ({"reason_category": "other"}, "reason_category"),
         ({"reason_detail": "x" * 1001}, "reason_detail"),

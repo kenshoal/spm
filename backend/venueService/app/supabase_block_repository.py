@@ -130,7 +130,8 @@ class SupabaseBlockRepository:
                 "A real creator UUID is required for database storage", 503
             )
         values = data.model_dump(mode="json")
-        # create_venue_block (0024) locks the venue row like booking approval.
+        # create_venue_block (0024, times since 0051) locks the venue row like
+        # booking approval.
         rows = self.api.request(
             "POST",
             "rpc/create_venue_block",
@@ -138,7 +139,8 @@ class SupabaseBlockRepository:
                 "p_venue_id": venue_id,
                 "p_start_date": values["start_date"],
                 "p_end_date": values["end_date"],
-                "p_slots": values["slots"],
+                "p_start_minute": values["start_minute"],
+                "p_end_minute": values["end_minute"],
                 "p_reason_category": values["reason_category"],
                 "p_reason_detail": values["reason_detail"],
                 "p_created_by": created_by,
