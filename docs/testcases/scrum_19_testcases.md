@@ -1,0 +1,214 @@
+# SCRUM-19 — Assign Technical Support Staff to an Event
+
+Source: [Jira SCRUM-19](https://is212g9t4.atlassian.net/browse/SCRUM-19) and `docs/superpowers/plans/2026-10-19-scrum-19-assign-technical-support.md`. Branch: `feat/scrum-19-assign-technical-support`, based on `origin/dev` `a14ed6d` (merged 20 Oct 2026).
+
+> **Status: Approved 20 October 2026.** Yang Xue (story owner) approved the §2 AC wording — including the AC1 narrow-in from E4-2 — and decisions D1–D12 as proposed, and scoped the story to increment 1 (database + backend). D2/D3/D7 remain flagged for PO confirmation at standup (see open questions). The rewording is recorded here, not written back to Jira. Migration numbering follows dev as it now stands: `0051`, not the `0030` the plan drafted when dev ended at `0026`.
+
+## Approved contract
+
+As an Event Coordinator, I want to assign suitable Technical Support Staff to an event that needs on-site support, so that the event's technical needs are covered on the day.
+
+| Jira AC | Outcome | Approved wording |
+| --- | --- | --- |
+| *(precondition of Jira AC1)* | **Narrow-in from E4-2 (Team Design Proposal)** | **AC1:** Given an Approved, Planning or Confirmed event, when its assigned Coordinator records a technical-support requirement with a description and one skill tag, then the requirement is stored against the event. Any other caller or event status is refused and nothing is stored. |
+| For an event that indicated a technical-support requirement, the Coordinator can assign Technical Support Staff. | **Clarify** | **AC2:** Given an Approved, Planning or Confirmed event with a recorded requirement, when its assigned Coordinator assigns a suitable staff member to that requirement, then one assignment is stored. An unknown requirement, a requirement on another event, a disallowed status, a repeat assignment of the same person, or a caller who is not the assigned Coordinator is refused and nothing is stored. |
+| "Suitable" … holds the technical-support role/skill tag recorded against the requirement; no availability or double-booking check. | **Keep, clarified** | **AC3:** Given a requirement with skill tag *T*, a person is suitable only if they hold the `technical_support` role **and** tag *T*. The candidate list shows exactly those people; assigning anyone else is refused as not suitable. Being assigned to another event at the same time does not make someone unsuitable. |
+| Given a support requirement, when staff are assigned, then the event shows the assigned staff. | **Keep, clarified** | **AC4:** Given an event with requirements, when its assigned Coordinator or any Technical Support Staff member views the event's technical support, then each requirement is listed with its assigned staff (who, assigned by, when) in a stable order, and a requirement with nobody assigned shows an empty list. |
+| Assigned staff are notified. | **Clarify** | **AC5:** Given a successful assignment, then the newly assigned staff member, and only they, receives one in-app notification naming the event and requirement. A refused assignment notifies nobody, and a notification failure never undoes the assignment. |
+
+Cross-cutting: no session → 401; role outside the allowed set → 403; an `event_coordinator` who is not the event's latest coordinator → 404; coordinator and status are rechecked inside the locked DB function; `anon` and `authenticated` cannot execute the new functions or read the new tables.
+
+## Decisions
+
+| # | Decision |
+| --- | --- |
+| D1 | Built in eventRequestService. |
+| D2 | `technical_support_requirements (id, event_request_id, description 1–2000 not blank, skill_tag, recorded_by, recorded_at)`. E4-2's when-needed, TSS acknowledgement, clarification thread, notify-on-requirement, edit/delete and reschedule flagging are excluded. **Needs PO confirmation.** |
+| D3 | Skill tags: `audio_visual`, `lighting`, `it_network`, `livestream`. Staff tags in `technical_support_skills (user_id, skill_tag)`, seeded by SQL. **Needs PO confirmation.** |
+| D4 | Suitable ⇔ `technical_support` role **and** the requirement's tag; one helper `private.is_suitable_technical_support` used by the candidate list and the assign function. No availability check. |
+| D5 | Only the latest-assigned coordinator records and assigns. Unrelated coordinator → 404; other roles → 403. |
+| D6 | Allowed statuses: `Approved`, `Planning`, `Confirmed`; others → 409 `support_not_allowed`. |
+| D7 | One row per (requirement, staff); a repeat → 409 `already_assigned`. Several staff per requirement allowed. **Needs PO confirmation.** |
+| D8 | No unassign in this slice. |
+| D9 | Notification `technical_support_assigned` to the staff member after commit; `event_id` = assignment id; payload `{event_request_id, event_name, requirement_id, skill_tag, assigned_by}`; failure logged, never raised. |
+| D10 | View: latest coordinator or any `technical_support`. Organiser, venue staff, ops manager, attendee → 403. |
+| D11 | Candidates: coordinator only; suitable staff ids ascending with `already_assigned`. |
+| D12 | New refusals return `{"detail": {"code", "message"}}`. |
+
+## Scope
+
+- **Included:** AC1 to AC5. Endpoints `POST /event-requests/{id}/technical-support/requirements`, `GET /event-requests/{id}/technical-support`, `GET /event-requests/{id}/technical-support/requirements/{rid}/candidates`, `POST /event-requests/{id}/technical-support/requirements/{rid}/assignments`. Coordinator-page panel (increment 2).
+- **Excluded:** the rest of E4-2 (no Jira story yet), maintaining staff skill tags in the UI (new story), staff availability and double-booking (Jira AC2, customer clarification #6), unassigning or replacing staff, flagging support assignments on a reschedule (SCRUM-64), a TSS-facing "my assignments" page, notifying on a new requirement.
+
+## Actors and permissions
+
+| Actor | Record requirement | View technical support | List candidates | Assign |
+| --- | --- | --- | --- | --- |
+| Latest-assigned `event_coordinator` | ✔ | ✔ | ✔ | ✔ |
+| Other `event_coordinator` | 404 | 404 | 404 | 404 |
+| `technical_support` | 403 | ✔ (any event) | 403 | 403 |
+| `event_organiser` (even the owner), `venue_staff`, `event_operations_manager`, `attendee` | 403 | 403 | 403 | 403 |
+| No session | 401 | 401 | 401 | 401 |
+
+## Allowed state
+
+Requirements may be recorded and staff assigned only while the event's status is `Approved`, `Planning` or `Confirmed`. No status change is made by this story.
+
+## Persistence and atomicity
+
+`record_technical_support_requirement` and `assign_technical_support_staff` (migration `0051_technical_support_assignments.sql`) lock the `event_requests` row `FOR UPDATE` (the lock shared with coordinator assignment and status transitions), then check, in order: event exists (`P0002`), caller is the latest coordinator (`P0003`), status allowed (`P0004`), requirement exists on this event (`P0002`), staff suitable (`P0005`), then insert (duplicate → `23505`). A refusal writes nothing. The notification is sent by the service only after the RPC returns.
+
+## Assumptions and open questions
+
+1. Approve AC1 narrow-in vs a separate E4-2 story (plan §9.1).
+2. D3 tag vocabulary and long-term owner of staff tags.
+3. D7 repeat → 409.
+4. D10 Organiser visibility (proposed: no).
+5. Re-estimate 2 → 3 points.
+6. Shared dev has one TSS account; live partition checks need `technical_support2@example.com` (role `technical_support`, tag `lighting`) created through authService.
+
+## Fixtures
+
+Unit/API fixtures (in `tests/technical_support_fakes.py`):
+
+| Name | Value | Roles | Skill tags |
+| --- | --- | --- | --- |
+| `COORD` | `coord-1` | `event_coordinator`, latest on `EVENT` and `OTHER_EVENT` | — |
+| `OTHER_COORD` | `coord-2` | `event_coordinator`, on no event | — |
+| `TSS_AV` | `tss-av` | `technical_support` | `audio_visual`, `it_network` |
+| `TSS_AV2` | `tss-av2` | `technical_support` | `audio_visual` |
+| `TSS_LIGHT` | `tss-light` | `technical_support` | `lighting` |
+| `TSS_NONE` | `tss-none` | `technical_support` | — |
+| `VENUE_AV` | `venue-av` | `venue_staff` | `audio_visual` |
+| `ORGANISER` | `org-1` | `event_organiser`, owns `EVENT` | — |
+| `OPS` | `ops-1` | `event_operations_manager` | — |
+| `ATTENDEE` | `att-1` | `attendee` | — |
+| `EVENT` | `11111111-1111-4111-8111-111111111111` | Planning, "Tech Summit 2030", 2030-03-10T09:00+08:00 | — |
+| `OTHER_EVENT` | `22222222-2222-4222-8222-222222222222` | Planning, same date and time | — |
+| `REQ_AV` | `aaaa0000-0000-4000-8000-000000000001` | on `EVENT`, `audio_visual`, "Two wireless mics and a mixing-desk operator for the keynote" | — |
+| `REQ_IT` | `aaaa0000-0000-4000-8000-000000000002` | on `EVENT`, `it_network`, "Venue Wi-Fi for 300 delegates" | — |
+| `REQ_OTHER` | `aaaa0000-0000-4000-8000-000000000003` | on `OTHER_EVENT`, `audio_visual` | — |
+
+Live accounts (password `12345678`, `database/seed_test_accounts.sql` + `database/seed_technical_support_skills.sql`): `event_coordinator1@example.com`, `event_coordinator2@example.com`, `technical_support@example.com` (`audio_visual`, `it_network`), `technical_support2@example.com` (`lighting`, to be created), `venue_staff@example.com` (`audio_visual`, no TSS role), `event_organiser@example.com`, `event_operations_manager@example.com`, `attendee@example.com`.
+
+Endpoint shorthand: **REQ-POST** = `POST /event-requests/{EVENT}/technical-support/requirements`; **TS-GET** = `GET /event-requests/{EVENT}/technical-support`; **CAND-GET** = `GET /event-requests/{EVENT}/technical-support/requirements/{rid}/candidates`; **ASSIGN-POST** = `POST /event-requests/{EVENT}/technical-support/requirements/{rid}/assignments`.
+
+## Test case specification
+
+Layers: U = unit (`backend/eventRequestService/tests/test_technical_support_rules.py`), A = API (`tests/test_technical_support_api.py`), R = repository (`tests/test_technical_support_repository.py`), N = notification client (`tests/test_notification_client.py`), D = DB (`database/verify_technical_support_assignments.sql`, `database/verify_technical_support_assignments_race.sh`), F = frontend (`frontend/__tests__/technical-support-panel.test.tsx`, `frontend/__tests__/technical-support-actions.test.ts`), E = Playwright (`frontend/e2e/assign-technical-support.spec.ts`). Unless stated, the caller is `COORD`, the event is `EVENT` in Planning and the requirement is `REQ_AV`.
+
+### AC1 — Record a technical-support requirement
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC1-H1 | AC1 | The assigned coordinator records a requirement on a Planning event | Happy | `EVENT` Planning, latest coordinator `COORD`, no requirements | 1. REQ-POST as `COORD`. 2. TS-GET as `COORD` | `{"description": "Two wireless mics and a mixing-desk operator for the keynote", "skill_tag": "audio_visual"}` | 1. 201; body has `id` (uuid), `event_request_id` = `EVENT`, the description, `skill_tag` `audio_visual`, `recorded_by` `coord-1`, `recorded_at`. 2. One requirement with `assigned_staff: []`. DB: one row with the same values | Event status and `updated_at` unchanged; no notification sent | A + D |
+| AC1-P1…P3 | AC1 | Each allowed status accepts a requirement | Partition | `EVENT` in the given status, `COORD` latest | `ensure_support_allowed(status)`; REQ-POST | `Approved` (P1), `Planning` (P2), `Confirmed` (P3) | No error; 201 | Status unchanged | U + A |
+| AC1-P4…P10 | AC1 | Each other status refuses a requirement | Partition | `EVENT` in the given status, `COORD` latest | `ensure_support_allowed(status)`; REQ-POST | `Draft` (P4), `Submitted` (P5), `Under Review` (P6), `Changes Requested` (P7), `Rejected` (P8), `Completed` (P9), `Cancelled` (P10) | `SupportNotAllowedError`; 409, `detail.code` `support_not_allowed` | No requirement row; status unchanged | U + A |
+| AC1-P11…P14 | AC1 | Each skill tag in the vocabulary is accepted | Partition | as AC1-H1 | Validate `RequirementCreate`; REQ-POST | `audio_visual` (P11), `lighting` (P12), `it_network` (P13), `livestream` (P14) | Valid; 201 with that tag | — | U + A |
+| AC1-N1 | AC1 | An unknown skill tag is rejected | Negative | as AC1-H1 | REQ-POST | `skill_tag: "plumbing"` | 422 | No row | A |
+| AC1-N2 | AC1 | Tags are case-sensitive | Negative | — | Validate `RequirementCreate` | `skill_tag: "Audio_Visual"` | `ValidationError` | — | U |
+| AC1-N3 | AC1 | Missing skill tag or missing description is rejected | Negative | as AC1-H1 | REQ-POST twice | `{"description": "Mics"}`; `{"skill_tag": "lighting"}` | 422 each | No row | A |
+| AC1-N4 | AC1 | A coordinator who is not on the event cannot record | Negative | `EVENT` latest coordinator `COORD` | REQ-POST as `OTHER_COORD` | valid body | 404, `detail.code` `event_request_not_found` | No row | A |
+| AC1-N5 | AC1 | Unknown event | Negative | Empty repository | REQ-POST to `/event-requests/99999999-9999-4999-8999-999999999999/…` as `COORD` | valid body | 404 | No row | A |
+| AC1-N6 | AC1 | The client cannot choose `recorded_by` | Negative | as AC1-H1 | REQ-POST | valid body + `"recorded_by": "coord-2"` | 422 (`extra="forbid"`) | No row | A |
+| AC1-B1 | AC1 | Empty description | Boundary | — | Validate; REQ-POST | `""` | `ValidationError`; 422 | No row | U + A |
+| AC1-B2 | AC1 | Whitespace-only description | Boundary | — | Validate; REQ-POST | `"   \n\t"` | `ValidationError`; 422 | No row | U + A |
+| AC1-B3 | AC1 | Shortest valid description | Boundary | — | Validate | `"A"` | Valid; stored as `"A"` | — | U |
+| AC1-B4 | AC1 | Description at the limit | Boundary | as AC1-H1 | Validate; REQ-POST; DB insert | `"x" * 2000` | Valid; 201; DB accepts | — | U + A + D |
+| AC1-B5 | AC1 | Description one over the limit | Boundary | as AC1-H1 | Validate; REQ-POST; direct DB insert as `service_role` | `"x" * 2001` | `ValidationError`; 422; DB raises `23514` (check violation) | No row | U + A + D |
+| AC1-X1 | AC1 | No other role can record, including the owning organiser and TSS | Cross-cutting | as AC1-H1 | REQ-POST as each role | `ORGANISER`, `TSS_AV`, `VENUE_AV`, `OPS`, `ATTENDEE` | 403 each | No row | A |
+| AC1-X2 | AC1 | Reassignment between page load and submit is caught at write time | Cross-cutting | `EVENT` assigned to `COORD`; then a new assignment row to `OTHER_COORD` | Call `record_technical_support_requirement(EVENT, 'coord-1', …)`; then REQ-POST as `COORD` with the fake reassigned | — | `P0003`; 404 | No row | D + A |
+| AC1-X3 | AC1 | The form blocks a blank or over-long description and offers exactly the four tags | Cross-cutting | Panel rendered for a Planning event | Type nothing / 2001 chars; open the tag select | — | Submit disabled with message "Describe the support needed" / counter shows 2001/2000 in error style; select lists Audio-visual, Lighting, IT and network, Livestream | No server action call | F |
+
+### AC2 — Assign staff to a requirement
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC2-H1 | AC2 | The assigned coordinator assigns a suitable staff member | Happy | `REQ_AV` on `EVENT`, no assignments | ASSIGN-POST (`rid` = `REQ_AV`) as `COORD` | `{"staff_id": "tss-av"}` | 201; body `id`, `requirement_id` `REQ_AV`, `event_request_id` `EVENT`, `staff_id` `tss-av`, `assigned_by` `coord-1`, `assigned_at`. DB: one row with those values | Requirement and event unchanged | A + D |
+| AC2-H2 | AC2 | Several staff can be assigned to one requirement | Happy | AC2-H1 done | ASSIGN-POST as `COORD` | `{"staff_id": "tss-av2"}` | 201; two rows for `REQ_AV` | `tss-av` row unchanged | A + D |
+| AC2-P1…P3 | AC2 | Each allowed status accepts an assignment | Partition | `EVENT` in the given status with `REQ_AV` | ASSIGN-POST `tss-av` | `Approved`, `Planning`, `Confirmed` | 201 | — | U + A |
+| AC2-P4…P10 | AC2 | Each other status refuses an assignment | Partition | `REQ_AV` recorded while Planning, then event status set to the given value (fake / SQL) | ASSIGN-POST `tss-av` | `Draft`, `Submitted`, `Under Review`, `Changes Requested`, `Rejected`, `Completed`, `Cancelled` | 409 `support_not_allowed` | No assignment row; no notification | U + A (D: `Cancelled` only) |
+| AC2-N1 | AC2 | A requirement that belongs to another event is refused | Negative | `REQ_OTHER` on `OTHER_EVENT`; `COORD` on both | ASSIGN-POST to `EVENT` with `rid` = `REQ_OTHER`; call the DB function the same way | `tss-av` | 404 `requirement_not_found`; `P0002` | No row on either event; no notification | A + D |
+| AC2-N2 | AC2 | Unknown requirement id | Negative | `EVENT` with no requirements | ASSIGN-POST `rid` = `aaaa0000-0000-4000-8000-0000000000ff` | `tss-av` | 404 `requirement_not_found` | No row | A |
+| AC2-N3 | AC2 | Assigning the same person twice is refused (D7) | Negative | AC2-H1 done | ASSIGN-POST again; direct second insert in DB | `tss-av` | 409 `already_assigned`; DB `23505` | Still one row; exactly one notification in total | A + D |
+| AC2-N4 | AC2 | A coordinator who is not on the event cannot assign | Negative | `EVENT` latest `COORD` | ASSIGN-POST as `OTHER_COORD` | `tss-av` | 404 `event_request_not_found` | No row; no notification | A |
+| AC2-N5 | AC2 | Reassignment between page load and assign is caught at write time | Negative | `EVENT` reassigned from `COORD` to `OTHER_COORD` after `COORD` loaded the page | DB: `assign_technical_support_staff(EVENT, REQ_AV, 'tss-av', 'coord-1')`; API: fake reassigned, ASSIGN-POST as `COORD` | — | `P0003`; 404 | No row; no notification | D + A |
+| AC2-N6 | AC2 | Event cancelled between page load and assign | Negative | `EVENT` Planning with `REQ_AV`; then cancelled via `advance_event_request_by_coordinator(..., 'Cancelled')` | Call `assign_technical_support_staff` | `tss-av` | `P0004` | No row | D |
+| AC2-N7 | AC2 | Supabase unavailable | Negative | Fake repository raises `SupabaseRepositoryError` on `assign`; mocked 503 and `httpx.ConnectError` at R | ASSIGN-POST; `repository.assign(...)` | `tss-av` | 502; `SupabaseRepositoryError` (not `TechnicalSupportRpcError`) | No row; **no notification** | A + R |
+| AC2-B1 | AC2 | Blank staff id | Boundary | as AC2-H1 | ASSIGN-POST | `"staff_id": ""` | 422 | No row | A |
+| AC2-B2 | AC2 | Staff id at the 64-char limit is accepted for checking | Boundary | as AC2-H1 | ASSIGN-POST | `"s" * 64` (unknown user) | 409 `staff_not_suitable` (passes validation, fails suitability) | No row | A |
+| AC2-B3 | AC2 | Staff id over the limit | Boundary | as AC2-H1 | ASSIGN-POST | `"s" * 65` | 422 | No row | A |
+| AC2-X1 | AC2 | No other role can assign, including TSS assigning themselves | Cross-cutting | as AC2-H1 | ASSIGN-POST as each role | `ORGANISER`, `TSS_AV` (body `tss-av`), `VENUE_AV`, `OPS`, `ATTENDEE` | 403 each | No row; no notification | A |
+| AC2-X2 | AC2 | No session on every endpoint | Cross-cutting | Real auth dependency (no override) | Call REQ-POST, TS-GET, CAND-GET, ASSIGN-POST with no `Authorization` header | — | 401 each | No row | A |
+| AC2-X3 | AC2 | The client cannot choose `assigned_by` | Cross-cutting | as AC2-H1 | ASSIGN-POST | `{"staff_id": "tss-av", "assigned_by": "coord-2"}` | 422 | No row | A |
+| AC2-X4 | AC2 | Browser roles cannot reach the new functions or tables | Cross-cutting | Local cluster with `0051` | `has_function_privilege` for the three public functions and the private helper; `has_table_privilege` SELECT/INSERT on the three tables | `anon`, `authenticated`, `service_role` | false for `anon`/`authenticated`; `service_role` can execute and select/insert | — | D |
+| AC2-X5 | AC2 | Two sessions assign the same person concurrently | Cross-cutting | `REQ_AV` committed, no assignments; two `psql` sessions | Both call `assign_technical_support_staff(EVENT, REQ_AV, 'tss-av', 'coord-1')` at the same time | — | Exactly one row; the other session gets `23505` | Never two rows | D (race script) |
+| AC2-X6 | AC2 | Refusals are shown as readable messages in the panel | Cross-cutting | Server action mocked to return each 409 code | Click Assign | `support_not_allowed`, `staff_not_suitable`, `already_assigned` | "Technical support can only be arranged for approved, planning or confirmed events" / "This person doesn't hold the required skill" / "Already assigned to this requirement" | Assigned list not changed | F |
+
+### AC3 — Suitability
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC3-H1 | AC3 | The candidate list shows exactly the suitable staff | Happy | All fixture users exist; `REQ_AV`; `tss-av` already assigned | CAND-GET (`rid` = `REQ_AV`) as `COORD` | — | 200; `[{"staff_id": "tss-av", "already_assigned": true}, {"staff_id": "tss-av2", "already_assigned": false}]` (ascending id). Absent: `tss-light`, `tss-none`, `venue-av`, `coord-1` | No write | A + D |
+| AC3-P1 | AC3 | Role and matching tag → suitable | Partition | — | `is_suitable({"technical_support"}, {"audio_visual"}, "audio_visual")` | — | `True` | — | U |
+| AC3-P2 | AC3 | Role but a different tag → not suitable | Partition | `TSS_LIGHT` | `is_suitable(...)`; ASSIGN-POST; DB function | `tss-light` on `REQ_AV` | `False`; 409 `staff_not_suitable`; `P0005` | No row; no notification | U + A + D |
+| AC3-P3 | AC3 | Role but no tags → not suitable | Partition | `TSS_NONE` | `is_suitable({"technical_support"}, set(), "audio_visual")`; DB helper | `tss-none` | `False`; helper false | — | U + D |
+| AC3-P4 | AC3 | Tag but no `technical_support` role → not suitable | Partition | `VENUE_AV` | `is_suitable({"venue_staff"}, {"audio_visual"}, "audio_visual")`; ASSIGN-POST; DB function | `venue-av` | `False`; 409 `staff_not_suitable`; `P0005` | No row | U + A + D |
+| AC3-P5 | AC3 | Role removed after tagging → not suitable at write time | Partition | `tss-av2` tagged; then its `staff_roles` row deleted (in the transaction) | Call `assign_technical_support_staff` | `tss-av2` | `P0005` | No row | D |
+| AC3-P6 | AC3 | No one holds the tag → empty list, shown as an empty state | Partition | Requirement on `EVENT` with `livestream`; no one holds it | CAND-GET; render panel with `[]` | — | 200 `[]`; panel shows "No suitable Technical Support Staff hold the Livestream skill" and no Assign button | — | A + F |
+| AC3-N1 | AC3 | Unknown user id is "not suitable", not "not found" | Negative | — | ASSIGN-POST; DB function | `staff_id: "ghost-user"` | 409 `staff_not_suitable`; `P0005` (does not reveal whether the account exists) | No row | A + D |
+| AC3-X1 | AC3 | No availability or double-booking check | Cross-cutting | `tss-av` assigned to `REQ_OTHER` on `OTHER_EVENT` at the same date and time | CAND-GET for `REQ_AV`; ASSIGN-POST `tss-av` to `REQ_AV` | — | `tss-av` is listed; 201 | — | A + D |
+| AC3-X2 | AC3 | A multi-tag staff member is suitable for each of their tags, and only those | Cross-cutting | `TSS_AV` (`audio_visual`, `it_network`) | `is_suitable` for each of the four tags | — | `True` for `audio_visual`, `it_network`; `False` for `lighting`, `livestream` | — | U |
+| AC3-X3 | AC3 | Candidate list access | Cross-cutting | as AC3-H1 | CAND-GET as `OTHER_COORD`; as `TSS_AV`, `ORGANISER`, `OPS` | — | 404; 403 each | — | A |
+| AC3-X4 | AC3 | The candidate list and the assign function never disagree | Cross-cutting | All fixture users in `auth.users`, `staff_roles`, `technical_support_skills` | For each user: is the user in `list_technical_support_candidates(REQ_AV)`? Does `assign_technical_support_staff` succeed (in a savepoint)? | `tss-av`, `tss-av2`, `tss-light`, `tss-none`, `venue-av`, `coord-1` | Listed ⇔ assign succeeds, for every user | Savepoints rolled back | D |
+
+### AC4 — The event shows its assigned staff
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC4-H1 | AC4 | The coordinator sees who is assigned | Happy | `REQ_AV` with `tss-av` assigned by `coord-1` | TS-GET as `COORD` | — | 200; `[{"id": REQ_AV, "description", "skill_tag": "audio_visual", "recorded_by", "recorded_at", "assigned_staff": [{"staff_id": "tss-av", "assigned_by": "coord-1", "assigned_at"}]}]` | No write | A |
+| AC4-H2 | AC4 | Any Technical Support Staff member sees the same view | Happy | as AC4-H1 | TS-GET as `TSS_LIGHT` (not assigned to anything) | — | 200; same body as AC4-H1 | — | A |
+| AC4-P1 | AC4 | A requirement with nobody assigned shows an empty list | Partition | `REQ_IT` recorded, no assignments | TS-GET as `COORD` | — | `REQ_IT` present with `assigned_staff: []` | — | A |
+| AC4-P2 | AC4 | Staff are listed under the right requirement only | Partition | `tss-av` and `tss-av2` on `REQ_AV`; only `tss-av` on `REQ_IT` | `group_by_requirement(...)`; TS-GET | — | `REQ_AV` → [`tss-av`, `tss-av2`]; `REQ_IT` → [`tss-av`] only (`tss-av2` not under `REQ_IT`) | — | U + A |
+| AC4-P3 | AC4 | An event with no requirements | Partition | `EVENT` with none | TS-GET as `COORD` | — | 200 `[]` | — | A |
+| AC4-B1 | AC4 | Stable order when timestamps tie | Boundary | Two requirements with identical `recorded_at`; two assignments with identical `assigned_at` | `group_by_requirement(...)`; repository list query | ids `…01` < `…02`; staff ids `tss-av` < `tss-av2` | Requirements by (`recorded_at`, `id`); staff by (`assigned_at`, `id`); repository orders by `recorded_at.asc,id.asc` and `assigned_at.asc,id.asc` | — | U + R |
+| AC4-N1 | AC4 | View access is refused correctly | Negative | as AC4-H1 | TS-GET as `OTHER_COORD`; as `ORGANISER`, `VENUE_AV`, `OPS`, `ATTENDEE`; for an unknown event as `COORD` | — | 404; 403 each; 404 | — | A |
+| AC4-X1 | AC4 | The view leaks nothing beyond the agreed fields, and the coordinator page shows emails | Cross-cutting | as AC4-H1; staff list from `/auth/users?role=technical_support` mocked | TS-GET keys; render panel | `tss-av` → `technical_support@example.com` | Keys exactly as AC4-H1 (no `organiser_id`, event fields or notes); panel shows "technical_support@example.com", falls back to the id when the email is unknown | — | A + F |
+
+### AC5 — Assigned staff are notified
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC5-H1 | AC5 | A successful assignment sends one notification to the staff member | Happy | `RecordingNotificationClient`; `respx`/`httpx` mock at N | ASSIGN-POST `tss-av`; call `notify_technical_support_assigned(...)` directly | — | Exactly one call / one POST to the configured URL with `{"event_type": "technical_support_assigned", "recipient_id": "tss-av", "event_id": <assignment id>, "payload": {"event_request_id": EVENT, "event_name": "Tech Summit 2030", "requirement_id": REQ_AV, "skill_tag": "audio_visual", "assigned_by": "coord-1"}}` | Not sent to `coord-1`, the organiser or other TSS | A + N |
+| AC5-H2 | AC5 | Only the newly assigned person is notified | Happy | `tss-av` already assigned and notified | ASSIGN-POST `tss-av2` | — | One new call, recipient `tss-av2` | No second notification to `tss-av` | A |
+| AC5-H3 | AC5 | The staff member sees the notification in their inbox | Happy | Local stack (or shared dev) with `0051`; seeded Planning event assigned to `event_coordinator1@example.com` with an AV requirement | 1. Log in as `event_coordinator1@example.com` / `12345678`. 2. Open the event under Coordination. 3. Choose `technical_support@example.com`, click Assign. 4. Log out; log in as `technical_support@example.com`. 5. Open Notifications. 6. Reload | — | Step 3: listed under the requirement. Step 5: a notification naming "Tech Summit…" and the requirement. Step 6: both still shown | — | E |
+| AC5-N1 | AC5 | A refused assignment notifies nobody | Negative | Each refusal set up as in its own case | ASSIGN-POST for each refusal | 409 `support_not_allowed`, `staff_not_suitable`, `already_assigned`; 404 (unrelated coordinator, wrong requirement); 403 (`OPS`); 502 | Zero notification calls in every case | — | A (parametrised, ids per refusal) |
+| AC5-N2 | AC5 | A notification failure never undoes the assignment | Negative | notificationService returns 500; then raises `httpx.ConnectError` | ASSIGN-POST `tss-av`; call the client directly | — | 201 and the row is kept; client returns `None` and logs one `WARNING` naming the staff id and event | No exception escapes; no rollback | A + N |
+| AC5-X1 | AC5 | Notifications are idempotent and skipped when not configured | Cross-cutting | (a) URL unset; (b) the same assignment notified twice against the real `notifications` table | (a) call the client; (b) insert twice with the same `(recipient_id, event_id)` | — | (a) no HTTP call; (b) one notification row (existing `notifications_recipient_event_key`) | — | N + D |
+
+**ID count:** AC1 29, AC2 28, AC3 12, AC4 8, AC5 6 = **83 IDs** (ranges counted individually; 58 rows).
+
+## Coverage check
+
+| AC | Happy | Partition | Boundary | Negative | Cross-cutting |
+| --- | --- | --- | --- | --- | --- |
+| AC1 | H1 | P1–P14 (status ×10, tag ×4) | B1–B5 (description 0 / blank / 1 / 2000 / 2001) | N1–N6 | X1 roles, X2 reassignment race, X3 UI |
+| AC2 | H1, H2 | P1–P10 (status ×10) | B1–B3 (staff id 0 / 64 / 65) | N1–N7 | X1 roles, X2 401, X3 forged actor, X4 grants, X5 race, X6 UI |
+| AC3 | H1 | P1–P6 (role × tag) | — (no numeric boundary; empty list is P6) | N1 | X1 no availability, X2 multi-tag, X3 access, X4 list = write |
+| AC4 | H1, H2 | P1–P3 | B1 ordering tie | N1 | X1 field whitelist + UI |
+| AC5 | H1, H2, H3 (E2E) | — | — | N1, N2 | X1 idempotency / unset URL |
+
+## Latest execution record
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC1-*, AC2-*, AC3-*, AC4-*, AC5-* (U) | Planned | — | Not executed | — | — | `tests/test_technical_support_rules.py` (commit 2 Red, commit 7 Green) |
+| AC1-*, AC2-*, AC3-*, AC4-*, AC5-* (A) | Planned | — | Not executed | — | — | `tests/test_technical_support_api.py` (commit 3 Red: route 404) |
+| AC2-N7, AC4-B1 (R) | Planned | — | Not executed | — | — | `tests/test_technical_support_repository.py` (commit 4) |
+| AC5-H1, AC5-N2, AC5-X1a (N) | Planned | — | Not executed | — | — | `tests/test_notification_client.py` (commit 4) |
+| AC1-H1/B4/B5/X2, AC2-H1/H2/P10/N1/N3/N5/N6/X4, AC3-H1/P2–P5/N1/X1/X4, AC5-X1b (D) | Planned | — | Not executed | — | — | `database/verify_technical_support_assignments.sql` on disposable PostgreSQL 16 (commit 5 Red until `0051`) |
+| AC2-X5 (D race) | Planned | — | Not executed | — | — | `database/verify_technical_support_assignments_race.sh` |
+| AC1-X3, AC2-X6, AC3-P6, AC4-X1 (F) | Planned | — | Not executed | — | — | increment 2 |
+| AC5-H3 (E) | Planned | — | Not executed | — | — | increment 2; needs `0051` on the target database |
+
+Still open: AC review and D2/D3/D7 sign-off; teammate review of these AI-drafted cases (`testing.md` §10).
