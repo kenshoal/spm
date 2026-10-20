@@ -118,6 +118,8 @@ Slice 1, branch `feat/scrum-65-time-model`, 20 October 2026. Windows 11, Python 
 | Cross-service | Unit | `pytest` in `backend/equipmentService` | 333 passed | No change needed |
 | AC1-X1, AC1-P1, AC2-H1, AC2-B1, AC2-P1, AC2-P2, AC2-X1, AC5-H1, AC5-N1 | Shared development DB, rolled back | `0050` + `verify_venue_booking_times.sql` in one transaction ending in `ROLLBACK`, via Supabase MCP | Passed; afterwards no time columns, no new functions and no test venue on shared | First run stopped at AC2-X1 because `venue_blocks.created_by` needs a real auth user (fixture fault, fixed). The verifier was written after the migration, so it has no separate Red run. `0050` is **not applied** to shared |
 
+**Shared rollout, 20 October 2026 (Claude for Jaren):** after PR #73 merged (`a14ed6d`), `0050` was applied to shared development as `20261020113931`. Pre-check: the live `decide_venue_booking_request` matched `0024` (md5); 5 bookings, none non-consecutive. Post-check: the 5 bookings hold 07:00-12:00 (AM) or 12:00-18:00 (PM) with unchanged slots; the function bodies match the merged file; `verify_venue_booking_times.sql` (AC1-X1, AC1-P1, AC2-H1, AC2-B1, AC2-P1, AC2-P2, AC2-X1, AC5-H1, AC5-N1) passed, rolled back; `service_role`-only execute; no test rows left. No separate Red run on shared: before `0050` the verifier cannot run, because the time columns do not exist.
+
 Not run: the frontend (unchanged in slice 1) and a browser journey.
 
 Known flake, not from this story: `test_venue_setup_turnaround.py::test_update_changes_both_times_only` (SCRUM-59) sometimes fails on Windows because two `updated_at` values share a microsecond. It fails the same way on unchanged `dev`.
