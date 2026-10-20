@@ -274,6 +274,7 @@ After PR #76 merged (`dev` at `2de4a3b`; the migration and verifier files identi
 
 - **How a pass is known:** the MCP tool does not return `RAISE NOTICE` output, so the printed pass line was not seen. A pass is the absence of an error: `plpgsql.check_asserts` is `on` on shared, and a negative control (`ASSERT false` in a rolled-back block) came back as `ERROR: P0004`, so a failing check would have surfaced.
 - **Nothing left behind:** afterwards 0 events named `VERIFY SCRUM-58…`, 0 test venues, 0 assignments for `scrum58-coordinator`/`other-coordinator`, and still 0 events in Safety Review.
+- **Re-run after SCRUM-65's `0050`** (applied to shared as `20261020113931`, five minutes after `0046`, adding `start_minute`/`end_minute` to venue bookings): both verifiers run again on shared, rolled back, no error. The first had its comments removed and one added check that its slot-only fixture bookings received `0050`'s 07:00–12:00 range, proving the run saw the new schema; the second ran unchanged. Afterwards 0 fixture rows; the 5 real bookings untouched.
 - **Not yet done:** a live call through the running API and the button in a browser with a real sign-in; confirming PR #76's CI result (not checked from here).
 
 ## Human review of the test design (`testing.md` §10)
