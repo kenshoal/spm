@@ -55,8 +55,8 @@ export function AvailabilityCalendarTable({ calendar, venueId, venueName }: { ca
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-[#1b2b25]">{label}</h2>
         <div className="flex gap-4 text-sm font-semibold">
-          <Link href={href(previous)} className="text-[#0f6b5b] hover:underline">Previous month</Link>
-          <Link href={href(next)} className="text-[#0f6b5b] hover:underline">Next month</Link>
+          {previous ? <Link href={href(previous)} className="text-[#0f6b5b] hover:underline">Previous month</Link> : null}
+          {next ? <Link href={href(next)} className="text-[#0f6b5b] hover:underline">Next month</Link> : null}
         </div>
       </div>
       <div className="overflow-x-auto">

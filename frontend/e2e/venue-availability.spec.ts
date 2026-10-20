@@ -26,11 +26,11 @@ test("coordinator opens a venue's availability from search and sees booked and b
   expect(block.status()).toBe(201);
 
   await page.context().addCookies(sessionCookie("coordinator-session"));
-  await page.goto(`/venues/search?location=${encodeURIComponent(wing)}`);
+  // The link keeps the month of the searched date, so it opens on March 2030.
+  await page.goto(`/venues/search?location=${encodeURIComponent(wing)}&date=2030-03-04`);
   await page.getByRole("article", { name }).getByRole("link", { name: /View availability/ }).click();
-  await expect(page).toHaveURL(new RegExp(`/venues/availability\\?venue=${venue.id}`));
+  await expect(page).toHaveURL(new RegExp(`/venues/availability\\?venue=${venue.id}&month=2030-03`));
 
-  await page.goto(`/venues/availability?venue=${venue.id}&month=2030-03`);
   const table = page.getByRole("table", { name: `${name} availability, March 2030` });
   await expect(table.getByRole("row")).toHaveCount(32);
   const fourth = table.getByRole("row").filter({ hasText: /\b4 Mar/ });

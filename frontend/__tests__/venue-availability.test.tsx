@@ -18,11 +18,12 @@ vi.mock("@/lib/venues", async (importOriginal) => ({
 }));
 vi.mock("@/app/auth/actions", () => ({ logout: vi.fn() }));
 
+import { currentMonth } from "@/lib/block-calendar";
 import { AvailabilityCalendarTable } from "@/app/venues/availability/availability-calendar";
 import VenueAvailabilityPage from "@/app/venues/availability/page";
 import { VenueResults } from "@/app/venues/search/venue-results";
 import { buildBlockCalendar } from "@/lib/block-calendar";
-import type { VenueCalendar } from "@/lib/venue-calendar";
+import { monthOfDate, type VenueCalendar } from "@/lib/venue-calendar";
 import type { Venue } from "@/lib/venues";
 
 afterEach(cleanup);
@@ -217,4 +218,44 @@ test("each search result links to that venue's availability", () => {
 
   const card = screen.getByRole("article", { name: "Riverside Hall" });
   expect(within(card).getByRole("link", { name: /View availability/ }).getAttribute("href")).toBe("/venues/availability?venue=v1");
+});
+
+
+// AC1-U2 (boundary): at the calendar's ends there is no link that would leave it
+test("has no Previous link at 0001-01 and no Next link at 9999-12", () => {
+  const { unmount } = render(<AvailabilityCalendarTable calendar={calendar("0001-01", 1)} venueId="v1" venueName="Hall" />);
+  expect(screen.queryByRole("link", { name: "Previous month" })).toBeNull();
+  expect(screen.getByRole("link", { name: "Next month" }).getAttribute("href")).toBe("/venues/availability?venue=v1&month=0001-02");
+  unmount();
+
+  render(<AvailabilityCalendarTable calendar={calendar("9999-12", 1)} venueId="v1" venueName="Hall" />);
+  expect(screen.queryByRole("link", { name: "Next month" })).toBeNull();
+  expect(screen.getByRole("link", { name: "Previous month" }).getAttribute("href")).toBe("/venues/availability?venue=v1&month=9999-11");
+});
+
+// AC1-U7 (negative): a month the API would refuse falls back to this month, not "Venue not found"
+test.each(["0000-01", "2026-13", "abc"])("falls back to the current month for %j", async (month) => {
+  await openPage({ venue: "v1", month });
+
+  expect(data.getVenueCalendar).toHaveBeenCalledWith("v1", currentMonth());
+  expect(screen.queryByText("Venue not found")).toBeNull();
+});
+
+// AC1-U8 (happy): the search-result link carries the month that was searched
+test("the search-result link keeps the searched month", () => {
+  render(<VenueResults venues={[hall]} month="2026-11" />);
+
+  const card = screen.getByRole("article", { name: "Riverside Hall" });
+  expect(within(card).getByRole("link", { name: /View availability/ }).getAttribute("href")).toBe("/venues/availability?venue=v1&month=2026-11");
+});
+
+// AC1-U8 (partition): only a real searched date gives a month
+test.each([
+  ["2026-11-14", "2026-11"],
+  ["", null],
+  ["abc", null],
+  ["2026-13-01", null],
+  ["0000-05-01", null],
+])("takes the month of the searched date %j", (value, expected) => {
+  expect(monthOfDate(value)).toBe(expected);
 });
