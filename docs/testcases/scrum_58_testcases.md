@@ -259,6 +259,23 @@ The assigned coordinator's request page offers **Send for safety review** on Pla
 - Whole frontend: `npm test` 38 files, 385 passed, 0 failed; `npm run lint` clean; `npm run typecheck` clean; `npm run build` succeeded.
 - Mocks prove the control and the action's request and error mapping, not the real API. **Not yet done:** a browser run against the running API (no Playwright journey added), PR CI, human review of these test cases.
 
+## Shared development rollout — 20 October 2026
+
+After PR #76 merged (`dev` at `2de4a3b`; the migration and verifier files identical to the tested branch).
+
+**Before applying (read-only):** neither `send_event_request_for_safety_review` nor `private.event_readiness_issues` existed; `get_outstanding_arrangement_reviews` (SCRUM-64) and `decide_safety_review` (SCRUM-60) did; the status check allows `Safety Review`; the latest migration was `20261020093706 safety_review_arrangement_reviews` (`0045`). No event was in Planning or Safety Review, so no live data could be affected.
+
+**Applied via MCP, in order:** `0039` as `20261020113354 send_for_safety_review`, then `0046` as `20261020113427 shared_event_readiness`. Afterwards: the handover calls `event_readiness_issues`; both functions have `search_path=""`; the handover is not `SECURITY DEFINER`, the shared function is (and is `STABLE`); `service_role` can execute both, `anon` and `authenticated` cannot.
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC2-H1 … AC4-N11 (14 DB cases) | Green | As expected | Pass | `dev` `2de4a3b`, **shared development Supabase** | Claude for Tate, 20 Oct 2026 | `verify_safety_review_readiness.sql` run unchanged through the MCP SQL tool, inside its own transaction ending in `ROLLBACK`; returned no error |
+| AC3-P1 … AC4-X1 (9 DB cases) | Green | As expected | Pass | as above | Claude for Tate, 20 Oct 2026 | `verify_shared_event_readiness.sql` run the same way, including the `SET LOCAL ROLE service_role` case; returned no error. This closes the earlier gap that `service_role`'s grants on shared were unproven |
+
+- **How a pass is known:** the MCP tool does not return `RAISE NOTICE` output, so the printed pass line was not seen. A pass is the absence of an error: `plpgsql.check_asserts` is `on` on shared, and a negative control (`ASSERT false` in a rolled-back block) came back as `ERROR: P0004`, so a failing check would have surfaced.
+- **Nothing left behind:** afterwards 0 events named `VERIFY SCRUM-58…`, 0 test venues, 0 assignments for `scrum58-coordinator`/`other-coordinator`, and still 0 events in Safety Review.
+- **Not yet done:** a live call through the running API and the button in a browser with a real sign-in; confirming PR #76's CI result (not checked from here).
+
 ## Human review of the test design (`testing.md` §10)
 
 **Reviewed by Tate Lim (story owner), 20 October 2026: accepted as written.** The test cases were drafted by Claude; Tate reviewed the contract, the expected results and the "Not yet done" lists against the agreed requirements.
