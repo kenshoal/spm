@@ -1,7 +1,8 @@
 """SCRUM-20: venue booking conflict rules on 15-minute time ranges.
 
-Case IDs match docs/testcases/scrum_20_testcases.md. These are the pure rules;
-applying them to stored bookings waits for SCRUM-65.
+Case IDs match docs/testcases/scrum_20_testcases.md. These are the pure rules on
+SCRUM-65's booking model (0050): an inclusive date range with one start and end
+minute on each date. Applying them inside the database is a later increment.
 """
 
 from __future__ import annotations
@@ -47,17 +48,32 @@ def booking(
     start: str,
     end: str,
     *,
-    on_date: date = DAY,
+    dates: tuple[date, date] = (DAY, DAY),
     venue_id: str = VENUE,
     status: BookingRequestStatus = BookingRequestStatus.APPROVED,
 ) -> TimedBooking:
-    return TimedBooking(booking_id, venue_id, on_date, m(start), m(end), status)
+    return TimedBooking(
+        id=booking_id,
+        venue_id=venue_id,
+        start_date=dates[0],
+        end_date=dates[1],
+        start_minute=m(start),
+        end_minute=m(end),
+        status=status,
+    )
 
 
 def conflict_ids(
-    hall: Venue, start: str, end: str, bookings: list[TimedBooking], **kwargs
+    hall: Venue,
+    start: str,
+    end: str,
+    bookings: list[TimedBooking],
+    *,
+    dates: tuple[date, date] = (DAY, DAY),
+    **kwargs,
 ) -> list[str]:
-    return [b.id for b in find_conflicts(hall, DAY, m(start), m(end), bookings, **kwargs)]
+    found = find_conflicts(hall, *dates, m(start), m(end), bookings, **kwargs)
+    return [b.id for b in found]
 
 
 def refusal(start: str, end: str, setup: int = 0, turnaround: int = 0) -> str:
@@ -170,10 +186,45 @@ def test_only_approved_bookings_count(status: BookingRequestStatus) -> None:
 def test_other_venues_and_dates_never_conflict() -> None:
     existing = [
         booking("other-venue", "10:00", "12:00", venue_id="venue-2"),
-        booking("next-day", "10:00", "12:00", on_date=date(2026, 10, 21)),
+        booking("next-day", "10:00", "12:00", dates=(date(2026, 10, 21),) * 2),
     ]
 
     assert conflict_ids(venue(), "10:00", "12:00", existing) == []
+
+
+# AC1-P3 (partition): multi-day bookings clash when their date ranges share a day
+def test_multi_day_bookings_clash_on_a_shared_day() -> None:
+    existing = [booking("A", "10:00", "12:00", dates=(date(2026, 10, 19), DAY))]
+
+    assert conflict_ids(
+        venue(), "11:00", "13:00", existing, dates=(DAY, date(2026, 10, 22))
+    ) == ["A"]
+
+
+# AC1-P4 (partition): same times on date ranges that share no day never clash
+def test_same_times_on_separate_date_ranges_do_not_clash() -> None:
+    existing = [booking("A", "10:00", "12:00", dates=(date(2026, 10, 19), DAY))]
+
+    assert conflict_ids(
+        venue(),
+        "10:00",
+        "12:00",
+        existing,
+        dates=(date(2026, 10, 21), date(2026, 10, 22)),
+    ) == []
+
+
+# AC1-B2 (boundary): date ranges are inclusive at both ends
+def test_date_ranges_are_inclusive() -> None:
+    existing = [booking("A", "10:00", "12:00", dates=(DAY, date(2026, 10, 21)))]
+    hall = venue()
+
+    assert conflict_ids(
+        hall, "10:00", "12:00", existing, dates=(date(2026, 10, 21),) * 2
+    ) == ["A"]
+    assert conflict_ids(
+        hall, "10:00", "12:00", existing, dates=(date(2026, 10, 22),) * 2
+    ) == []
 
 
 # AC1-B1 (boundary): touching bookings do not overlap; one step of overlap does
@@ -293,14 +344,25 @@ def test_only_approved_bookings_are_affected() -> None:
     assert affected_ids(existing, (0, 0), (0, 45)) == []
 
 
-# AC6-B2 (boundary): bookings that have already ended are not flagged; today's still are
+# AC6-B2 (boundary): bookings that ended before today are not flagged; one that
+# ends today, including a multi-day one that started earlier, still is
 def test_ended_bookings_are_not_affected() -> None:
     yesterday = date(2026, 10, 19)
     existing = [
-        booking("A", "10:00", "12:00", on_date=yesterday),
-        booking("B", "12:30", "14:00", on_date=yesterday),
-        booking("C", "10:00", "12:00"),
+        booking("A", "10:00", "12:00", dates=(yesterday, yesterday)),
+        booking("B", "12:30", "14:00", dates=(yesterday, yesterday)),
+        booking("C", "10:00", "12:00", dates=(yesterday, DAY)),
         booking("D", "12:30", "14:00"),
     ]
 
     assert affected_ids(existing, (0, 0), (0, 45)) == ["C", "D"]
+
+
+# AC6-P5 (partition): a newly conflicting pair must share a day
+def test_new_conflict_needs_a_shared_day() -> None:
+    existing = [
+        booking("A", "10:00", "12:00", dates=(DAY, DAY)),
+        booking("B", "12:30", "14:00", dates=(date(2026, 10, 21),) * 2),
+    ]
+
+    assert affected_ids(existing, (0, 0), (0, 45)) == []
