@@ -40,6 +40,8 @@ class FakeEventRequestRepository:
         # SCRUM-64 stand-ins: arrangements as (event, kind, id), and review flags.
         self.arrangements: set[tuple[str, str, str]] = set()
         self.arrangement_review_rows: list[dict[str, Any]] = []
+        # SCRUM-58 stand-in: event_readiness_issues per event ([] when ready).
+        self.readiness_issues: dict[str, list[dict[str, Any]]] = {}
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()
@@ -292,8 +294,8 @@ class FakeEventRequestRepository:
             for target in targets
         ):
             raise EventRequestRpcError("target not in event", errcode="22023")
-        # 0045: approval waits until every review flag on the event is cleared.
-        outstanding = [
+        # 0047: approval waits for ordinary readiness, then for every review flag.
+        outstanding = list(self.readiness_issues.get(event_request_id, [])) + [
             {
                 "kind": "arrangement_needs_review",
                 "review_id": review["id"],
