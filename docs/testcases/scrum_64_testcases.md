@@ -662,3 +662,110 @@ SCRUM64_NOTIFICATION_RUNTIME=/tmp/scrum64-notification-runtime/bin/python /Users
 ```
 
 Actual result: **432 passed, 0 failed/skipped and 2 existing deprecation warnings in 3.85s**. Full Ruff, promoted-driver Ruff and whitespace checks passed. The full count includes all 11 new staff/coordinator findings executions and existing regressions; focused/real-HTTP counts are non-additive. Vera independently checked the raw full-service and promoted-wire logs. This closes the previously stated **local coordinator response-cap limitation** for the tested contract, while preserving all historical staff-only evidence. CI, publication/merge, real Supabase deployment and real authenticated browser evidence remain separate; the test owner made no production, shared database or Jira writes.
+
+## Shared-rollout verification preparation — 20 October 2026
+
+This requester-authorised follow-up uses `fix/scrum-64-shared-rollout` at `/tmp/spm-scrum64-rollout`, based on dev `d3acb09`. The seven approved criteria are unchanged; Jira's recorded Done status is not a substitute for deployment evidence and is not changed by this test audit. No original SCRUM-35 checkout is modified.
+
+### Existing source audit and safe execution boundary
+
+There are **10** original `verify_arrangement_review*.sql` scripts, **including** the cancelled-venue verifier, not ten plus that file. All contain `BEGIN`/`ROLLBACK` and no `COMMIT`, but this alone does not make them safe for shared execution:
+
+| Existing verifier | AC evidence | Shared-safety assessment |
+| --- | --- | --- |
+| `verify_arrangement_review_reads.sql` | AC5-X5 schema/constraints/server visibility | Uses fixed fixture review UUIDs and an existing Auth ID for fixture references. Requires absence/timeout review; not blanket shared approval. |
+| `verify_arrangement_review_flags.sql` | AC1/AC2 significant fields, eligibility, no-op and atomicity | Disposable-only fault trigger on the live review table; retain as a strict isolated oracle. |
+| `verify_arrangement_review_clears.sql` | AC4 exact clearing, stale/refused actions and audit | Disposable-only fault trigger; no shared replay of that DDL. |
+| `verify_arrangement_review_unavailability.sql` | AC6 equipment causes, eligibility, replay and rollback | Disposable-only fault trigger and fixture GRANTs. |
+| `verify_arrangement_review_safety_compatibility.sql` | AC1/AC4/AC5/AC6 in Safety Review | Includes fixture GRANT changes; retain unchanged for isolated verification. |
+| `verify_arrangement_review_shared_reads.sql` | AC5-X2 shared complete facts before/after clear | Fixture DML and temporary functions; snapshots include unrelated live rows, so do not assume an unchanged global snapshot during normal concurrent traffic. |
+| `verify_arrangement_review_safety_rechecks.sql` | AC7 trusted helper targets, validation/replay/atomicity/privacy | Disposable-only fault trigger; does not prove a saved-decision caller or HTTP role binding. |
+| `verify_arrangement_review_notification_enqueue.sql` | AC3 all causes, replay and atomic outbox work | Disposable-only fault trigger; pending rows prove enqueue, not external delivery. |
+| `verify_arrangement_review_notification_delivery.sql` | AC3 recipient rules, partial progress, retry/fairness and privacy | **Never run unchanged on shared:** explicitly renames the local `auth.users` double and inserts/changes Auth fixtures. Its global recipient/fairness assumptions are isolated-database assumptions. |
+| `verify_arrangement_review_cancelled_venues.sql` | AC1-P3 actual cancellation retains old flags and excludes new ordinary venue flags | Fixture-only cancellation/updates with whole-table snapshots; not an automatic-clear policy or live Auth proof. |
+
+Per-file source hashes and labels are recorded in `/tmp/scrum64-rollout-evidence/vera-verifier-source-audit.json`. None of these original oracles was weakened or edited. They remain appropriate for an owned disposable schema with the canonical migrations; rollback does not eliminate production-table lock risks from fault DDL or make an Auth rename acceptable on shared.
+
+### Small shared-safe verifiers — prepared, not yet executed
+
+`database/verify_arrangement_review_shared_rollout.sql` reuses existing AC IDs and mechanisms rather than adding acceptance cases. It uses one new Planning event, venue/approved booking and requirement-linked equipment reservation. Fixed UUIDs `f0640000-0000-4000-8000-000000000001` through `...0007` are checked for collisions before DML; a collision aborts without deleting or overwriting anything. Existing Auth is read only to obtain a valid FK reference. All business reads/updates are scoped to the fixture IDs. No Auth account, metadata, membership, privilege or schema changes are made.
+
+| Approved criterion | Existing evidence reused by the smoke | Remaining distinction |
+| --- | --- | --- |
+| AC1 | AC1-H1: attendance `25`→`40` produces exactly two targeted reviews with complete reasons and one cause. | Native accepted update mechanism, not a new public change-approval workflow. |
+| AC2 | AC2-N1: unchanged attendance plus unrelated description retains all review/job facts. | The full field/boundary matrix remains in the strict disposable scripts. |
+| AC3 | AC3-P1/N1: complete pending jobs match reviews; exact helper replay adds no job and preserves evidence. | No external HTTP delivery, recipient directory mutation or exactly-once delivery claim. |
+| AC4 | AC4-H1: clear the older equipment cause only, retaining its evidence/audit and the newer outstanding cause. | Trusted server caller passes actor/domain; this does not prove real staff JWT authority. |
+| AC5 | AC5-X2: the shared helper agrees with exact persisted outstanding rows; event lifecycle/history and arrangements remain unchanged. | HTTP pagination and logged-in UI require their separate evidence. |
+| AC6 | AC6-H1: real `transition_equipment_status` adds a DAMAGED audit/cause and preserves older reviews. | Normal equipment status/history changes are allowed; reservations and requirements stay unchanged. |
+| AC7 | AC7-H1: the private helper raises two exact targets under a test cause and refuses to rewrite them on replay. | This is a trusted helper test, not an actual saved safety decision or verified SafetyOfficer HTTP workflow. Migration0045 deployment/integration must be established separately. |
+
+The smoke has a 15-second statement timeout, 2-second lock timeout, no fault trigger and mandatory rollback. Uncommitted notification jobs are invisible to separate relay sessions; the script calls no HTTP sender. PostgreSQL sequence allocation may leave harmless gaps after rollback, so zero retained fixture rows is not a claim that sequences never advanced. On **any** SQL error, the executor must roll back the same connection before reuse. A final success marker is selected only after the explicit rollback.
+
+`database/check_arrangement_review_rollout_privileges.sql` runs in a **read-only transaction**, with 10-second statement/2-second lock bounds. It checks review/outbox RLS, server SELECT-only table access, denied browser access, service-only public RPCs, empty RPC search paths and denied direct app-role execution of private writers/directory/safety helper. It alters no grants and executes no mutation RPC.
+
+Both files are prepared for root's local canonical-schema validation, then explicitly approved shared execution. They are **Not executed**, not Green and not product Red. Automatic approval review rejected the proposed shared full-bundle DDL dry run because of lock risk; root reports no shared writes occurred. Shared deployment/verification is therefore **Blocked pending the separate human approval step**, not a failed acceptance assertion. Root owns the concrete migration-source review and deployment record.
+
+Suggested source execution, only in an approved single privileged session:
+
+```sh
+psql "$SCRUM64_APPROVED_DSN" -X -v ON_ERROR_STOP=1 -f database/check_arrangement_review_rollout_privileges.sql
+psql "$SCRUM64_APPROVED_DSN" -X -v ON_ERROR_STOP=1 -f database/verify_arrangement_review_shared_rollout.sql
+```
+
+The DSN is an executor-provided destination, never a value to read from or print out of application secrets. MCP execution must send a whole script as one connection-bound operation, retain the assertion result and confirm zero fixture rows after rollback. No script execution is claimed by these commands alone.
+
+### Real authenticated coverage still to establish
+
+A real staff/coordinator UI journey can use an existing normal logged-in browser session, or normal sign-in using test-account credentials explicitly visible in the application's development UI. Do not dump cookies, read stored passwords, mint sessions or modify users/roles to create coverage. The browser must read a **committed**, clearly labelled review fixture; the rollback smoke cannot simultaneously supply a visible UI row. Any retained fixture must be created through approved normal actions or separately authorised as test data, and retained/deleted under the requester's instruction.
+
+AC5-X4 requires the assigned coordinator to see outstanding work, a same-domain staff member to clear the exact row and the coordinator to reload and see it removed while newer causes remain. Actual availability of those sessions/committed fixtures is currently **Unverified**, not fabricated from a service-role SQL call. AC7 additionally needs the published saved-decision caller and the normal SafetyOfficer-authenticated route to bind the real actor, saved cause, targets and atomic state/history/jobs. The private-helper smoke and a borrowed existing Auth FK do not close those checks. Real JWT/session expiry, shared HTTP delivery and CI/merged deployment evidence must retain their own status.
+
+### Canonical local rehearsal — 20 October 2026
+
+This supersedes the preparation-only status **for the local rehearsal only**. Root provisioned owned PostgreSQL **16.15**, applied the unchanged guarded bootstrap and **30 canonical supplemental migrations** and executed the prepared sources. No future0039/0046/0047 helper or replacement function was added to make this pass.
+
+The first smoke run stopped with `42501: permission denied for table equipment` inside the real status RPC, before its unavailable-equipment assertions. The plain PostgreSQL bootstrap did not reproduce Supabase's existing platform grants. Root then freshly checked the shared database **read only**, confirming service-role equipment SELECT/UPDATE, equipment-history INSERT and sequence USAGE. Guarded local-only `/tmp/scrum64-rollout-evidence/local_platform_acl_fixture.sql` reproduced exactly those four facts in database `scrum48_64_rollout_review` (SHA256 `dd55c9453c051e39225d43aa1795f3c2942b76df5b826a2753e313825941a847`). It is not a production migration, was not applied to shared and grants no Auth/browser access. The initial failure is a **fixture precondition**, not product Red or a reason to weaken the smoke.
+
+| Source / frozen SHA256 | Actual local result | Evidence |
+| --- | --- | --- |
+| `verify_arrangement_review_shared_rollout.sql` / `0ed847acb20282fd6d0a2ea7d613d970707f94a9b1f5425455971f5fe1b7b52b` | Pass, exit 0: existing AC mechanism assertions reached, explicit ROLLBACK completed and final success marker returned. The optional saved-decision collision check runs only if that table exists; no caller-schema dependency is invented. | `/tmp/scrum64-rollout-evidence/local-shared-smoke-final.log` |
+| `check_arrangement_review_rollout_privileges.sql` / `8a5cff3c035dbe3409cf82a0af905d6ccc79dc58ed8c407e114a7c290e76d22c` | Pass, exit 0: read-only RLS/grant/private-callability assertions, explicit ROLLBACK and success marker. | `/tmp/scrum64-rollout-evidence/local-shared-privileges.log` |
+
+Vera independently read both raw final logs, rehashed the unchanged sources and checked explicit rollback plus absence of Auth mutation, DDL, GRANT/REVOKE, DELETE/TRUNCATE or COMMIT statements in both verifiers. The smoke source initially acquired stronger collision guards before execution; these reject existing review-target, history, assignment/outbox and optional saved-decision references as well as fixture resource IDs. These are reused acceptance checks, not new story cases or an independent real-JWT test count.
+
+**Shared status remains Blocked pending explicit approval.** Automatic approval review rejected the shared bundle dry run on lock risk before any shared writes. Local passes show that the reviewable rollout/verifier sources execute against the canonical disposable schema with the observed baseline ACLs; they do not prove shared deployment, zero live operational impact, real user-role binding, an actual saved-decision workflow or external delivery. Root owns the concrete source review, approval request and any later shared execution record. No Jira status was changed by this test phase.
+
+### Current shared result — approved deployment and rollback verification, 20 October 2026
+
+**Shared deployment and the two bounded verification scripts now pass.** This supersedes the approval-pending/Not-executed shared statuses in the preparation and local-rehearsal records above; those records remain as historical evidence. Root reports that explicit human approval was obtained before the shared write. Supabase project `rrmvhxrxrrnigjdxcbwt` recorded migration **`20261020093041`**, named **`scrum64_arrangement_reviews_atomic_rollout`**, containing the reviewed nine-file SCRUM-64 bundle. This is one recorded atomic rollout, not a claim of nine separately applied migration-history entries.
+
+| Shared check | Actual result observed by root | Scope / source identity |
+| --- | --- | --- |
+| Read-only RLS/privilege checker | PASS; read-only transaction completed and success marker returned. | Unchanged `check_arrangement_review_rollout_privileges.sql`, SHA256 `8a5cff3c035dbe3409cf82a0af905d6ccc79dc58ed8c407e114a7c290e76d22c`. |
+| Guarded shared mechanism smoke | PASS; assertions reached, explicit ROLLBACK completed and success marker returned. | Unchanged `verify_arrangement_review_shared_rollout.sql`, SHA256 `0ed847acb20282fd6d0a2ea7d613d970707f94a9b1f5425455971f5fe1b7b52b`. |
+| Post-rollback fixture check | **0 fixture events, 0 fixture reviews and 0 fixture notification-outbox rows retained.** | Fixed fixture UUID/event scope checked after the rollback. |
+
+Provenance: root executed the shared operations through the Supabase connector and supplied the actual outcomes; Vera rechecked the verifier source hashes and records root's execution evidence here. This is distinct from Vera's independent reading of the earlier local raw logs and does not claim a second independent shared execution. No original disposable Auth/fault-trigger verifier was transplanted onto the live database.
+
+These results establish the deployed native mechanisms and grant boundary covered by the smoke, including flags/no-op behaviour, enqueue/replay facts, exact older-review clearing, equipment unavailability, shared reads and the trusted safety helper. They **do not establish** real Auth/API actor binding, a committed normal-user browser journey, HTTP notification acceptance, operational relay delivery or a saved SafetyOfficer decision workflow. Jaren's separate **0045 caller rollout/integration remains outside this nine-file deployment** and must be verified separately. AC7's helper must not be reported as that caller. Normal-role/session checks, end-to-end delivery and any publication/CI/merge gates retain their separate evidence requirements; this entry is not a whole-story Done declaration or Jira-status change.
+
+Root's concise observed-results transcript is `/tmp/scrum64-rollout-evidence/shared-rollout-observed-results.json`; it is explicitly a faithful MCP-outcome transcription, **not a raw connector export**. The post-deployment equipment-history check retained **9 existing rows**, all 9 with non-null `review_trigger_id`; the initial post-apply check also found 9 distinct values. This confirms the persisted cause UUID backfill, not nine new history entries created by the rollback smoke. Shared raw connector outputs remain in root's execution conversation.
+
+### Post-rollout workflow regression check — 20 October 2026
+
+Following the request to check for workflow disruption, Vera reran **existing** focused suites against isolated dev source `d3acb095bbd15c8b6d58231309dad13b099aaaf8` in `/tmp/spm-scrum64-rollout`; the dirty SCRUM-35 checkout was not used as application source. No new cases, expected results, purpose comments or production files were changed. Python import resolution was explicitly verified as `/private/tmp/spm-scrum64-rollout/backend/eventRequestService/app/__init__.py`.
+
+| Layer / existing workflow coverage | Exact command and working directory | Actual result / evidence |
+| --- | --- | --- |
+| Backend: coordinator/staff access, complete pagination, exact clear/stale refusal, Safety Review compatibility, notification retry/current groups/idempotency/fairness and receiver HTTP contract | From `backend/eventRequestService`: `SCRUM64_NOTIFICATION_RUNTIME=/tmp/scrum64-notification-runtime/bin/python /Users/tionghengrui/Documents/SCH/Y2S2/SPM/Project/spm/backend/eventRequestService/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_arrangement*.py` | **43 passed**, 0 failed/skipped, 2 existing Starlette/httpx/AnyIO warnings, **1.20s**. `/tmp/scrum64-rollout-evidence/post-rollout-arrangement-regression.log` |
+| Frontend: review action contracts, queue/clear recovery edges, notice destinations and Safety Review rendering | From `frontend`: `npm test -- --run __tests__/arrangement-review-actions.test.ts __tests__/arrangement-review-edges.test.tsx __tests__/arrangement-notifications.test.tsx __tests__/arrangement-review-safety-compatibility.test.tsx` | **14 passed across 4 files**, 0 failed/skipped, **1.04s**. `/tmp/scrum64-rollout-evidence/post-rollout-arrangement-frontend.log` |
+| Native significant flags/no-ops, eligibility, equipment/safety causes, exact clear/rollback, shared facts, enqueue/retry boundaries and cancelled venues | Independent review of all 10 existing canonical disposable-PG results and frozen source hashes in `local-native-results.json`. | Every source hash matches the current file; every raw log reaches **PASSED and ROLLBACK**, exit 0. These are the local executions recorded above, not 10 new shared runs. |
+
+The explicit backend environment enabled **AC3-X5's actual loopback notificationService subprocess**, with real HTTP acceptance and per-recipient/event receiver deduplication; it was not skipped. The matching collection record lists `test_real_notification_http_acceptance_and_retry_dedup` among the 43 tests (`post-rollout-arrangement-collected.log`). Storage is an in-memory repository and inbox authentication is a deliberate double, so this is not a live inbox/JWT/delivery claim. Other API tests use local Auth/repository doubles. Frontend tests use mocks; dependencies were reused through an ignored `node_modules` symlink, with no package/lockfile change or Next build. Focused counts and native checks are non-additive regression evidence, not new story cases or a statement that every possible workflow was exercised.
+
+Root's limited runtime probe was also reviewed: `/tmp/scrum64-rollout-evidence/runtime-readonly-http-results.json` records health HTTP **200** and exact **401 Authentication required** responses from staff/coordinator review endpoints. It deliberately configured `notification_service_url=None`, so neither relay was constructed for that **owned read-only probe**; the process was stopped afterwards. This is **not evidence that a hosted/normal runtime is misconfigured or that deployed delivery is disabled**. Normal runtime startup/delivery remains unobserved.
+
+Root then observed the separate shared migration **`20261020093706` — `safety_review_arrangement_reviews` (0045)**. After that migration, both unchanged shared verifiers passed again; smoke rollback retained zero scoped fixture events/reviews/jobs. The persisted raw MCP result capture `/tmp/scrum64-rollout-evidence/shared-regression-after-0045.json` also shows all three SCRUM-64 triggers enabled (`O`), expected helper/clear/safety-caller signatures and empty search paths. Vera independently read that capture. This supersedes the earlier 0045-deployment-pending statement **for deployment presence only**: neither the smoke nor these focused suites execute an actual saved SafetyOfficer decision through a real authenticated application journey. The separate readiness/handover publication and committed operational delivery must not be inferred from mechanism checks.
+
+No failure was found in the existing paths exercised here. That bounded conclusion is supported by fresh focused source-level regressions, canonical native evidence and shared post-migration smoke; it is not an absolute no-disruption guarantee. Real user/session binding, committed cross-role UI and notification delivery, full consuming-workflow execution and publication/CI retain their separate status. No shared writes were performed by Vera.

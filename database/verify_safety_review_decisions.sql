@@ -29,11 +29,21 @@ BEGIN
     END IF;
     INSERT INTO public.staff_roles (user_id, role) VALUES (v_officer, 'safety_officer')
         ON CONFLICT DO NOTHING;
+    INSERT INTO public.venues (name, location, max_capacity, facilities,
+            accessibility_features, supported_layouts, operating_slots)
+        VALUES ('verify SCRUM-60 venue', 'Test wing', 100, '{}', '{}',
+            ARRAY['theatre']::public.room_layout[], ARRAY['AM']::public.booking_slot[])
+        RETURNING id INTO v_venue;
 
     -- AC3-X1: approval confirms, records the review and the history actor.
+    -- The event is ready (one approved booking), so this also holds from 0047.
     INSERT INTO public.event_requests (organiser_id, event_name, status)
         VALUES (v_officer, 'verify SCRUM-60 approve', 'Safety Review')
         RETURNING id INTO v_event;
+    INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id,
+            start_date, end_date, slots, status, decided_by, decided_at)
+        VALUES (v_venue, v_officer, v_event, current_date + 6, current_date + 6,
+            ARRAY['AM']::public.booking_slot[], 'approved', v_officer, now());
     PERFORM public.decide_safety_review(v_event, v_officer, 'approved', NULL, '[]');
     SELECT status INTO v_status FROM public.event_requests WHERE id = v_event;
     IF v_status <> 'Confirmed' THEN
@@ -64,11 +74,6 @@ BEGIN
     INSERT INTO public.event_requests (organiser_id, event_name, status)
         VALUES (v_officer, 'verify SCRUM-60 changes', 'Safety Review')
         RETURNING id INTO v_event;
-    INSERT INTO public.venues (name, location, max_capacity, facilities,
-            accessibility_features, supported_layouts, operating_slots)
-        VALUES ('verify SCRUM-60 venue', 'Test wing', 100, '{}', '{}',
-            ARRAY['theatre']::public.room_layout[], ARRAY['AM']::public.booking_slot[])
-        RETURNING id INTO v_venue;
     INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id,
             start_date, end_date, slots, status)
         VALUES (v_venue, v_officer, v_event, current_date + 7, current_date + 7,
