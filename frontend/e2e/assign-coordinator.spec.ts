@@ -10,6 +10,8 @@ test.describe.serial("SCRUM-14 coordinator assignment", () => {
   // Purpose: Covers AC1, AC2, AC3 and AC6 end to end — the manager finds an
   // unassigned submission, assigns it, the coordinator sees it, then the
   // manager reassigns it and the first coordinator loses it.
+  // AC3-H2 (happy): SCRUM-62 AC3 on the real page — the event sits in its
+  // coordinator's group and moves to the new coordinator's group on reassignment.
   test("manager assigns and reassigns a submitted request", async ({ page, request }) => {
     const seeded = await request.post(`${EVENT_API}/__seed`, {
       data: { event_name: "Harbour Lights Gala", organiser_id: "playwright-user", status: "Submitted", purpose: "Annual fundraiser" },
@@ -34,6 +36,9 @@ test.describe.serial("SCRUM-14 coordinator assignment", () => {
       .getByRole("article", { name: "Harbour Lights Gala" });
     await expect(assignedCard).toContainText("coordinator@example.com");
     await expect(assignedCard).toContainText("Submitted");
+    await expect(page.getByRole("region", { name: /^coordinator@example\.com \(\d+\)$/ })
+      .getByRole("article", { name: "Harbour Lights Gala" })).toBeVisible();
+    await expect(page.getByRole("region", { name: /^other\.coordinator@example\.com \(\d+\)$/ })).toBeVisible();
 
     await page.context().clearCookies();
     await page.context().addCookies(sessionCookie("coordinator-session"));
@@ -50,6 +55,10 @@ test.describe.serial("SCRUM-14 coordinator assignment", () => {
     await picker.selectOption({ label: "reassign.coordinator@example.com" });
     await card.getByRole("button", { name: "Reassign" }).click();
     await expect(card).toContainText("reassign.coordinator@example.com");
+    const movedTo = page.getByRole("region", { name: /^reassign\.coordinator@example\.com \(\d+\)$/ });
+    const movedFrom = page.getByRole("region", { name: /^coordinator@example\.com \(\d+\)$/ });
+    await expect(movedTo.getByRole("article", { name: "Harbour Lights Gala" })).toBeVisible();
+    await expect(movedFrom.getByRole("article", { name: "Harbour Lights Gala" })).toHaveCount(0);
 
     await page.context().clearCookies();
     await page.context().addCookies(sessionCookie("coordinator-session"));

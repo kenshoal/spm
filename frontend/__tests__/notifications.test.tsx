@@ -40,6 +40,19 @@ test("describes a coordinator assignment with a link to the coordination view", 
   });
 });
 
+// AC4-H3 (happy): SCRUM-62 AC4 — the old coordinator is told the event moved on, with no link to a page they can no longer open.
+test("describes losing a coordinated event without a link", () => {
+  const notification = makeNotification({
+    event_type: "coordinator_unassigned",
+    payload: { event_request_id: "req-2", coordinator_id: "coord-1", assigned_by: "ops-1" },
+  });
+
+  expect(describeNotification(notification, ["event_coordinator"])).toEqual({
+    message: "An event request you coordinated has been reassigned to another coordinator.",
+    href: null,
+  });
+});
+
 // AC3-H1 (happy): SCRUM-37 AC3 — the Organiser is told a clarification was requested, is shown what
 // the Coordinator needs, and is linked to the request where they can respond.
 test("describes a clarification request with the reason and a link to the request", () => {

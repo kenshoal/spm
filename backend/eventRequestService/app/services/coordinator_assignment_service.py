@@ -110,7 +110,31 @@ class CoordinatorAssignmentService:
             coordinator_id=payload.coordinator_id,
             assigned_by=assigned_by,
         )
+        previous = self._previous_coordinator_id(event_request_id, int(row["id"]))
+        if previous is not None and previous != payload.coordinator_id:
+            self.notification_client.notify_coordinator_unassigned(
+                event_request_id=event_request_id,
+                coordinator_id=previous,
+                assigned_by=assigned_by,
+            )
         return CoordinatorAssignmentResponse.model_validate(row)
+
+    def _previous_coordinator_id(
+        self, event_request_id: str, new_assignment_id: int
+    ) -> str | None:
+        """The coordinator held the request just before this assignment.
+
+        The assignment RPC inserts under the event row lock, ids only grow and
+        rows are never deleted, so the highest id below the new one is exactly
+        the previous holder, even when reassignments race (SCRUM-62 AC4)."""
+        earlier = [
+            row
+            for row in self.repository.list_for_event_requests([event_request_id])
+            if int(row["id"]) < new_assignment_id
+        ]
+        if not earlier:
+            return None
+        return str(max(earlier, key=lambda row: int(row["id"]))["coordinator_id"])
 
     def list_awaiting_assignment(self) -> list[EventRequestResponse]:
         """Submitted requests nobody is responsible for yet. Assignments are
