@@ -16,6 +16,9 @@ from app.controllers.event_transition_controller import (
     router as event_transition_router,
 )
 from app.controllers.registration_controller import router as registration_router
+from app.controllers.technical_support_controller import (
+    router as technical_support_router,
+)
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.repositories.coordinator_assignment_repository import (
@@ -61,6 +64,13 @@ from app.services.registration_rules import (
 from app.services.registration_service import (
     AlreadyRegisteredError,
     RegistrationService,
+)
+from app.services.technical_support_service import (
+    AlreadyAssignedError,
+    StaffNotSuitableError,
+    SupportNotAllowedError,
+    TechnicalSupportNotFoundError,
+    TechnicalSupportService,
 )
 
 
@@ -115,11 +125,17 @@ def create_app(
         if event_request_service is not None
         else None
     )
-    # SCRUM-19 seam: the technical support routes and service arrive with the
-    # implementation commit; tests already inject the fakes through here.
-    application.state.technical_support_repository = technical_support_repository
-    application.state.technical_support_notification_client = (
-        technical_support_notification_client
+    application.state.technical_support_service = (
+        TechnicalSupportService(
+            technical_support_repository,
+            event_request_service,
+            coordinator_repository,
+            technical_support_notification_client,
+        )
+        if technical_support_repository is not None
+        and event_request_service is not None
+        and coordinator_repository is not None
+        else None
     )
     # Before event_request_router: routes match in registration order, and its
     # /event-requests/{event_request_id} would otherwise swallow the literal
@@ -128,6 +144,7 @@ def create_app(
     # (SCRUM-60), so keep both routers above event_request_router.
     application.include_router(coordinator_assignment_router)
     application.include_router(event_transition_router)
+    application.include_router(technical_support_router)
     application.include_router(event_request_router)
     application.include_router(arrangement_review_router)
     application.include_router(registration_router)
@@ -304,6 +321,50 @@ def create_app(
             content={
                 "detail": "You are already registered for this event",
                 "code": "already_registered",
+            },
+        )
+
+    @application.exception_handler(TechnicalSupportNotFoundError)
+    async def technical_support_not_found(
+        request: Request, error: TechnicalSupportNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "detail": {"code": error.code, "message": str(error)},
+            },
+        )
+
+    @application.exception_handler(SupportNotAllowedError)
+    async def technical_support_not_allowed(
+        request: Request, error: SupportNotAllowedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": {"code": error.code, "message": str(error)},
+            },
+        )
+
+    @application.exception_handler(StaffNotSuitableError)
+    async def technical_support_staff_not_suitable(
+        request: Request, error: StaffNotSuitableError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": {"code": error.code, "message": str(error)},
+            },
+        )
+
+    @application.exception_handler(AlreadyAssignedError)
+    async def technical_support_already_assigned(
+        request: Request, error: AlreadyAssignedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": {"code": error.code, "message": str(error)},
             },
         )
 

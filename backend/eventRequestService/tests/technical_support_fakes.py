@@ -232,11 +232,8 @@ class RecordingNotificationClient:
 
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
-        self.fail = False
 
     def notify_technical_support_assigned(self, **kwargs: Any) -> None:
-        if self.fail:
-            raise RuntimeError("notification service down")
         self.calls.append(kwargs)
 
 

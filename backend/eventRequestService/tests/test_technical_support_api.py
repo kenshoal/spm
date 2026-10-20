@@ -5,6 +5,7 @@ functions' check order; the real functions are proven by
 database/verify_technical_support_assignments.sql.
 """
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from technical_support_fakes import (
@@ -41,6 +42,7 @@ from test_event_request_controller import (
 
 from app.main import create_app
 from app.repositories import SupabaseRepositoryError
+from app.services.notification_client import NotificationClient
 
 ROLES = USER_ROLES
 
@@ -89,12 +91,12 @@ EXPECTED_VIEW = [
         "description": "Two wireless mics and a mixing-desk operator for the keynote",
         "skill_tag": "audio_visual",
         "recorded_by": COORD,
-        "recorded_at": "2030-03-01T09:00:00+00:00",
+        "recorded_at": "2030-03-01T09:00:00Z",
         "assigned_staff": [
             {
                 "staff_id": TSS_AV,
                 "assigned_by": COORD,
-                "assigned_at": "2030-03-01T09:30:00+00:00",
+                "assigned_at": "2030-03-01T09:30:00Z",
             }
         ],
     }
@@ -741,7 +743,7 @@ def test_any_technical_support_sees_the_view() -> None:
 
 # AC4-P1 (partition): a requirement with nobody assigned shows an empty list
 def test_unstaffed_requirement_shows_empty_list() -> None:
-    event_requests, technical_support, _ = seeded_assignment_fixture()
+    event_requests, technical_support = seeded_view_fixture()
     seed_requirement(
         technical_support,
         requirement_id=REQ_IT,
@@ -850,12 +852,21 @@ def test_only_the_new_staff_member_is_notified() -> None:
     assert [call["staff_id"] for call in notification.calls] == [TSS_AV, TSS_AV2]
 
 
-# AC5-N2 (negative): a notification failure never undoes the assignment
-def test_notification_failure_keeps_the_assignment() -> None:
-    event_requests, technical_support, notification = seeded_assignment_fixture()
-    notification.fail = True
+# AC5-N2 (negative): a notification failure never undoes the assignment — the
+# real client swallows the delivery failure, so the assignment stands
+def test_notification_failure_keeps_the_assignment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event_requests, technical_support, _ = seeded_assignment_fixture()
 
-    with make_client(event_requests, technical_support, notification) as client:
+    def failing_post(*args: object, **kwargs: object) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(httpx, "post", failing_post)
+
+    with make_client(
+        event_requests, technical_support, NotificationClient("https://n.example/e")
+    ) as client:
         response = client.post(
             assignments_path(EVENT, REQ_AV), json={"staff_id": TSS_AV}
         )
