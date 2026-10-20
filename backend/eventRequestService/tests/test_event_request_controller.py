@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -33,6 +34,9 @@ class FakeEventRequestRepository:
         self.change_request_rows: list[dict[str, Any]] = []
         self.safety_officer_ids: set[str] = set()
         self.safety_review_rows: list[dict[str, Any]] = []
+        # SCRUM-64 stand-ins: arrangements as (event, kind, id), and review flags.
+        self.arrangements: set[tuple[str, str, str]] = set()
+        self.arrangement_review_rows: list[dict[str, Any]] = []
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()
@@ -249,9 +253,46 @@ class FakeEventRequestRepository:
             decision == "changes_requested" and not (reason or "").strip()
         ):
             raise EventRequestRpcError("invalid decision", errcode="22023")
+        # 0045: a target outside this event is invalid input, not a missing event.
+        if any(
+            (event_request_id, target["arrangement"], target["id"]) not in self.arrangements
+            for target in targets
+        ):
+            raise EventRequestRpcError("target not in event", errcode="22023")
+        # 0045: approval waits until every review flag on the event is cleared.
+        outstanding = [
+            {
+                "kind": "arrangement_needs_review",
+                "review_id": review["id"],
+                "arrangement": review["arrangement"],
+                "arrangement_id": review["arrangement_id"],
+                "reason": review["reason"],
+            }
+            for review in self.arrangement_review_rows
+            if review["event_request_id"] == event_request_id
+            and review["cleared_at"] is None
+        ]
+        if decision == "approved" and outstanding:
+            raise EventRequestRpcError(
+                "not ready", errcode="P0005", details=json.dumps(outstanding)
+            )
+        review_id = str(uuid4())
+        for target in targets:
+            self.arrangement_review_rows.append(
+                {
+                    "id": str(uuid4()),
+                    "event_request_id": event_request_id,
+                    "arrangement": target["arrangement"],
+                    "arrangement_id": target["id"],
+                    "trigger_type": "safety_recheck",
+                    "trigger_id": review_id,
+                    "reason": reason,
+                    "cleared_at": None,
+                }
+            )
         self.safety_review_rows.append(
             {
-                "id": str(uuid4()),
+                "id": review_id,
                 "event_request_id": event_request_id,
                 "decision": decision,
                 "reason": reason,

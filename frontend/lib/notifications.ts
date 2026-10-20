@@ -50,6 +50,9 @@ export function describeNotification(notification: AppNotification, roles: reado
       return { message: "Your event request was submitted.", href: id && `/event-requests/${id}/edit` };
     case "coordinator_assigned":
       return { message: "You've been assigned an event request.", href: id && `/coordination/requests/${id}` };
+    case "coordinator_unassigned":
+      // No link: the former coordinator can no longer open the request (SCRUM-62 AC4).
+      return { message: "An event request you coordinated has been reassigned to another coordinator.", href: null };
     case "clarification_requested": {
       // The Organiser answers on the same page they edit and track the request from.
       const reason = notification.payload.reason;

@@ -31,13 +31,42 @@ class NotificationClient:
     def notify_coordinator_assigned(
         self, *, event_request_id: str, coordinator_id: str, assigned_by: str
     ) -> None:
+        self._notify_coordinator(
+            "coordinator_assigned",
+            "assignment to",
+            event_request_id=event_request_id,
+            coordinator_id=coordinator_id,
+            assigned_by=assigned_by,
+        )
+
+    def notify_coordinator_unassigned(
+        self, *, event_request_id: str, coordinator_id: str, assigned_by: str
+    ) -> None:
+        """Tell a coordinator an event they held now has someone else (SCRUM-62 AC4)."""
+        self._notify_coordinator(
+            "coordinator_unassigned",
+            "reassignment away from",
+            event_request_id=event_request_id,
+            coordinator_id=coordinator_id,
+            assigned_by=assigned_by,
+        )
+
+    def _notify_coordinator(
+        self,
+        event_type: str,
+        described_as: str,
+        *,
+        event_request_id: str,
+        coordinator_id: str,
+        assigned_by: str,
+    ) -> None:
         if self._url is None:
             return
         try:
             response = httpx.post(
                 self._url,
                 json={
-                    "event_type": "coordinator_assigned",
+                    "event_type": event_type,
                     "recipient_id": coordinator_id,
                     "payload": {
                         "event_request_id": event_request_id,
@@ -50,8 +79,9 @@ class NotificationClient:
             response.raise_for_status()
         except httpx.HTTPError:
             logger.warning(
-                "Failed to notify coordinator %s of assignment to event request %s",
+                "Failed to notify coordinator %s of %s event request %s",
                 coordinator_id,
+                described_as,
                 event_request_id,
                 exc_info=True,
             )
