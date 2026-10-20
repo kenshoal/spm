@@ -6,7 +6,7 @@ Source: [Jira SCRUM-21](https://is212g9t4.atlassian.net/browse/SCRUM-21) and `do
 
 As an Attendee, I want to register for a confirmed event, so that my place is recorded.
 
-The AC wording and decisions D1 to D9 below are the proposals in the implementation plan. Yang (story owner) asked for the plan to be implemented on 18 October 2026, and they were built as written. **D3, D5 and D8 still need Product Owner confirmation** (plan §8). The rewording is recorded here, not written back to Jira.
+The AC wording and decisions D1 to D9 below are the proposals in the implementation plan. Yang (story owner) asked for the plan to be implemented on 18 October 2026, and they were built as written. **The Product Owner approved D3, D5 and D8 on 20 October 2026** (see Decisions; SCRUM-48 and SCRUM-33 confirm D5, Q&A #17 confirms D8). The rewording is recorded here, not written back to Jira.
 
 | Jira AC | Outcome | Approved wording |
 | --- | --- | --- |
@@ -24,12 +24,12 @@ Cross-cutting: only the `attendee` role registers. Other roles get 403, no sessi
 | --- | --- |
 | D1 | Built in eventRequestService. |
 | D2 | `registration_opens_at`, `registration_closes_at` (closes > opens) and `registration_capacity` (> 0), nullable, on `event_requests`. The coordinator screen to set them is a separate, not yet existing story. |
-| D3 | Open from `registration_opens_at` (inclusive) until `registration_closes_at` (exclusive). Null window or null capacity = not open. **Needs PO confirmation.** |
+| D3 | Open from `registration_opens_at` (inclusive) until `registration_closes_at` (exclusive). Null window or null capacity = not open. **Approved by the PO on 20 Oct 2026.** |
 | D4 | Public fields: `id, event_name, purpose, description, proposed_date_times, registration_opens_at, registration_closes_at, registration_capacity, places_remaining`. |
-| D5 | One active registration per attendee per event; a second attempt is 409 `already_registered`. **Needs PO confirmation.** |
+| D5 | One active registration per attendee per event; a second attempt is 409 `already_registered`. **Approved by the PO on 20 Oct 2026** (SCRUM-48 limits how many events a person joins, not places in one event; SCRUM-33 routes attendees who do not self-register through the coordinator). |
 | D6 | A registration stores only the attendee's account id and timestamp. |
 | D7 | Viewing or registering for a non-Confirmed event is 404. |
-| D8 | `GET /attendee/events` lists Confirmed events with an open window. **Needs PO confirmation.** |
+| D8 | `GET /attendee/events` lists Confirmed events with an open window. **Approved by the PO on 20 Oct 2026** (Q&A #17: attendees "can access appropriate events that are open for registration"), on two conditions, both held: only Confirmed events inside their window are listed (AC1-H2), and capacity is always reflected through `places_remaining` — a full open event is listed at 0 (AC1-H2, strengthened; AC1-H1, AC4-B1…B3). |
 | D9 | `get_now()` dependency returns aware UTC; the DB function takes `p_now`. |
 
 ## Scope
@@ -51,7 +51,7 @@ An event is registrable only while `status = 'Confirmed'` and `registration_open
 
 ## Assumptions and open questions
 
-1. D3, D5, D8 need PO confirmation.
+1. ~~D3, D5, D8 need PO confirmation.~~ Approved by the PO on 20 Oct 2026.
 2. Who owns the "set window and capacity" story? Until it exists, live tests need SQL-seeded values.
 3. Capacity versus venue `max_capacity` (Q&A #99) is for the setter story.
 4. Add the SCRUM-60 to SCRUM-21 "blocks" link in Jira.
@@ -113,5 +113,6 @@ Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_regi
 | AC5-H1, AC5-N2, AC3-B1…B6, AC3-N1, AC4-B1/B2/N1, AC2-X1, AC5-X3 (DB) | Green | `ALL EVENT REGISTRATION VERIFICATIONS PASSED` | Pass | disposable docker `postgres:16` container, fresh `scrum48_scrum21_verify` database: auth fixture + dev's `0001`–`0038`, `0040`–`0044`, then `0048` (one transaction per file; `0041`'s new enum value cannot share a transaction) | Claude for Yang, 20 Oct 2026 | Post-merge rebuild (plan U5). The CHECKs and the function hold with `Safety Review` in the status list and SCRUM-64's trigger present — its `OF` column list (`proposed_date_times`, `expected_attendance`, `venue_requirements`, `equipment_requirements`) excludes the registration columns, so it never fires |
 | AC4-X1 (DB race) | Green | `RACE VERIFICATION PASSED`: one row stored, the second session refused with `event full` | Pass | as above | Claude for Yang, 20 Oct 2026 | `verify_event_registrations_race.sh` run inside the container against the merged schema; container removed afterwards |
 | AC2-P10 (DB spot check) | Green | A `Safety Review` event with an open window: `register_for_event` raises `P0002` and no row is stored | Pass | as above | Claude for Yang, 20 Oct 2026 | Ad-hoc psql check beyond the script; the AC2-P10 matrix row keeps its U + A layers |
+| AC1-H2 (strengthened), whole service | Green | Full open event is listed with `places_remaining` 0 alongside the open event; whole service `pytest -q`: 508 passed, 1 skipped; `ruff check .`: clean | Pass | branch at `0bca882`, local venv | Claude for Yang, 20 Oct 2026 | Re-run after the PO approved D3, D5 and D8: AC1-H2 now proves D8's capacity condition. Decisions rows and the contract preamble updated to approved |
 
-Still open: PO confirmation of D3, D5 and D8; teammate review of these AI-drafted cases (`testing.md` §10); applying `0048` to shared development; increment 2 (frontend and Playwright journey) after SCRUM-60.
+Still open: teammate review of these AI-drafted cases (`testing.md` §10); applying `0048` to shared development; increment 2 (frontend and Playwright journey).

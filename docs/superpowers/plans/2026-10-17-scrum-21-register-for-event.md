@@ -1,6 +1,6 @@
 # SCRUM-21 Implementation Plan: Register for a Confirmed Event
 
-Drafted 17 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status: implemented on this branch on 18 October 2026** (commits `ca5fe6b` to `e24386c`, built as written below). **Updated 19 October 2026** after SCRUM-60 and SCRUM-64 merged into `dev`: `dev` is merged into the branch (`83db01f`), and §0 lists what is left before the PR, including two fixes from the plan review (U7, U8). **Completed 20 October 2026**: commits 10–15 are done (U3–U8; the AC5-N3 case was renumbered **AC5-N4** because the outage case already held that ID) and the pull request into `dev` is open (U9). D3, D5 and D8 (§3) still need Product Owner confirmation.
+Drafted 17 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status: implemented on this branch on 18 October 2026** (commits `ca5fe6b` to `e24386c`, built as written below). **Updated 19 October 2026** after SCRUM-60 and SCRUM-64 merged into `dev`: `dev` is merged into the branch (`83db01f`), and §0 lists what is left before the PR, including two fixes from the plan review (U7, U8). **Completed 20 October 2026**: commits 10–15 are done (U3–U8; the AC5-N3 case was renumbered **AC5-N4** because the outage case already held that ID) and the pull request into `dev` is open (U9). **The PO approved D3, D5 and D8 on 20 October 2026** — recorded in the test-case doc and PR #69; AC1-H2 was strengthened to prove D8's capacity condition.
 
 **Goal:** An Attendee can see the public details of a Confirmed event, register during its registration window while places remain, and view their registration.
 
@@ -24,7 +24,7 @@ SCRUM-60 (PR #62, merge `38ac2a5`) and SCRUM-64 (PR #63, merge `29e535b`) are on
 | U6 | Re-run `pytest` and `ruff check .` in `backend/eventRequestService`, and record the new execution record | Earlier results are no longer current evidence (`testing.md` §8). The merged `main.py` has only been compiled so far | test-case doc | **Done** (20 Oct: 508 passed, 1 skipped; ruff clean; record added) |
 | U7 | **Fix: refuse a repeat registration as `already_registered`, even when the event is full** | `RegistrationService.register` runs `check_registration` (capacity) before the RPC, but the RPC checks duplicates *before* capacity. An attendee who holds the last place and registers again gets 409 `event_full`. AC5-N2 only covers a not-full event. Fix: check for an active registration before `check_registration`, so the API matches the DB function's order | `registration_service.py`, `registration_repository.py` (`has_active(event_id, attendee_id)`), `tests/registration_support.py`, `tests/test_registration_api.py`, test-case doc (new **AC5-N4** — the outage case already holds AC5-N3, `testing.md` §3) | **Done** (Red `b0d9d53`, Green `8f8d520`) |
 | U8 | **Fix: count active registrations with a count query, not by fetching rows** | `count_active_for_events` fetches every `Registered` row and counts in Python. The Supabase Data API returns at most 1,000 rows by default, so `places_remaining` is wrong past that. Use `Prefer: count=exact` with `HEAD` (or `limit=1`) and read `Content-Range`, once per event | `registration_repository.py`, `tests/test_registration_repository.py` | **Done** (`de651d0`; `HEAD` + `count=exact`, one request per event) |
-| U9 | Say in the PR description that D3, D5 and D8 are provisional, naming the tests that change if the PO decides otherwise (AC3-B2/B5, AC5-N2/N3, AC1-H2) | The §2 approval gate was not completed before building | PR description | At PR |
+| U9 | Say in the PR description that D3, D5 and D8 are provisional, naming the tests that change if the PO decides otherwise (AC3-B2/B5, AC5-N2/N4, AC1-H2) | The §2 approval gate was not completed before building | PR description | **Done** — flagged at PR open; the PO approved all three on 20 Oct 2026, PR and test-case doc updated |
 
 **Commit sequence:**
 
@@ -197,7 +197,7 @@ SCRUM-60 and SCRUM-64 are merged, so this no longer waits on them. A live run ne
 
 ## 8. Open questions (take to standup or the PO)
 
-1. D3 window boundaries, D5 duplicates, D8 list: need PO sign-off.
+1. ~~D3 window boundaries, D5 duplicates, D8 list: need PO sign-off.~~ Approved by the PO on 20 Oct 2026: D3 and D5 as proposed; D8 kept in this story, conditional on listing only in-window Confirmed events and always reflecting capacity (both proven by the strengthened AC1-H2).
 2. Who owns the "set registration window and capacity" story (D2)? Until it exists, live testing needs SQL-seeded values. **Still no Jira story as of 19 Oct; now the main gap for a live demo.**
 3. Should capacity be checked against the confirmed venue's `max_capacity` (Q&A #99)? Proposed: the setter story enforces it, not SCRUM-21.
 4. Discussion #127 (separate Open/Closed registration status) is unanswered. This plan derives "open" from the window, so no new status is needed.
