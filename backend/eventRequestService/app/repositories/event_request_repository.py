@@ -6,6 +6,18 @@ from app.config import Settings
 
 
 class EventRequestRepository(Protocol):
+    def list_arrangement_reviews(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]: ...
+
+    def list_arrangement_reviews_for_arrangement(
+        self, arrangement: str
+    ) -> list[dict[str, Any]]: ...
+
+    def clear_arrangement_review(
+        self, review_id: str, actor_id: str, allowed_arrangements: list[str]
+    ) -> dict[str, Any]: ...
+
     def list_status_history(self, event_request_id: str) -> list[dict[str, Any]]: ...
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]: ...
@@ -109,12 +121,20 @@ class EventRequestRpcError(SupabaseRepositoryError):
 
     errcode carries the Postgres ERRCODE the function raised (P0002 not
     found, P0003 not the assigned coordinator, P0004 transition not
-    allowed) so callers can map failures without parsing message text.
+    allowed, P0005 not ready for safety review) so callers can map failures
+    without parsing message text. details is the DETAIL the function set, if
+    any: for P0005, the outstanding items as a JSON array.
     """
 
-    def __init__(self, message: str, errcode: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        errcode: str | None = None,
+        details: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.errcode = errcode
+        self.details = details
 
 
 class SupabaseEventRequestRepository:
@@ -152,6 +172,74 @@ class SupabaseEventRequestRepository:
             headers={"Prefer": "return=representation"},
         )
         return rows[0]
+
+    def list_arrangement_reviews(
+        self, event_request_id: str
+    ) -> list[dict[str, Any]]:
+        """Page the shared outstanding predicate without changing visibility."""
+        return self._list_arrangement_review_pages(
+            "POST",
+            "/rpc/get_outstanding_arrangement_reviews",
+            json={"p_event_request_id": event_request_id},
+        )
+
+    def list_arrangement_reviews_for_arrangement(
+        self, arrangement: str
+    ) -> list[dict[str, Any]]:
+        """Read every outstanding domain row without offset drift after clears."""
+        return self._list_arrangement_review_pages(
+            "GET", "/arrangement_reviews",
+            filters={"arrangement": f"eq.{arrangement}", "cleared_at": "is.null"},
+        )
+
+    def _list_arrangement_review_pages(
+        self, method: str, path: str, *, filters: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        """Keep table and table-valued RPC reads complete under server row caps."""
+        reviews: list[dict[str, Any]] = []
+        cursor: tuple[str, str] | None = None
+        while True:
+            params = {
+                **(filters or {}),
+                "order": "raised_at.desc,id.desc",
+                "select": "*",
+                "limit": "1000",
+            }
+            if cursor is not None:
+                raised_at, review_id = cursor
+                params["or"] = (
+                    f"(raised_at.lt.{raised_at},"
+                    f"and(raised_at.eq.{raised_at},id.lt.{review_id}))"
+                )
+            page = self._request_table(method, path, params=params, **kwargs)
+            # Deployments may cap a response below our requested limit. Only an
+            # empty page proves exhaustion; a short page still needs continuation.
+            if not page:
+                return reviews
+            reviews.extend(page)
+            cursor = (page[-1]["raised_at"], page[-1]["id"])
+
+    def clear_arrangement_review(
+        self, review_id: str, actor_id: str, allowed_arrangements: list[str]
+    ) -> dict[str, Any]:
+        """Only the exact-ID server RPC may write review audit fields."""
+        try:
+            response = self._client.post(
+                "/rpc/clear_arrangement_review",
+                json={
+                    "p_review_id": review_id,
+                    "p_actor_id": actor_id,
+                    "p_allowed_arrangements": allowed_arrangements,
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError("Arrangement reviews unavailable") from error
+        return response.json()
 
     def list_status_history(self, event_request_id: str) -> list[dict[str, Any]]:
         """The controller checks SCRUM-39 visibility before this server-only read."""
@@ -485,12 +573,13 @@ class SupabaseEventRequestRepository:
     @staticmethod
     def _rpc_rejection(response: httpx.Response) -> EventRequestRpcError:
         try:
-            errcode = response.json().get("code")
+            body = response.json()
         except ValueError:
-            errcode = None
+            body = {}
         return EventRequestRpcError(
             "Supabase rejected the coordinator status transition",
-            errcode=errcode,
+            errcode=body.get("code"),
+            details=body.get("details"),
         )
 
     def update_for_organiser(

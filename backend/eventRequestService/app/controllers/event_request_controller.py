@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import ValidationError
 
 from app.config import get_settings
+from app.models.arrangement_review import ArrangementReviewResponse
 from app.models.event_request import (
     AttendeeEventResponse,
     EventChangeDecision,
@@ -279,6 +280,39 @@ def list_review_decisions(
     if roles.isdisjoint({"event_organiser", "event_coordinator"}):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
+
+
+@router.get(
+    "/{event_request_id}/arrangement-reviews",
+    response_model=list[ArrangementReviewResponse],
+)
+def list_arrangement_reviews(
+    event_request_id: UUID,
+    caller: CallerDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> list[ArrangementReviewResponse]:
+    """Event-wide review evidence belongs only to its current coordinator."""
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "ARRANGEMENT_REVIEWS_FORBIDDEN",
+                "message": "Arrangement reviews are not accessible",
+            },
+        )
+    request_id = str(event_request_id)
+    not_found = {
+        "code": "ARRANGEMENT_REVIEWS_NOT_FOUND",
+        "message": "Arrangement reviews are not accessible",
+    }
+    try:
+        assignment = _coordinator_assignment_service(request).get_current(request_id)
+    except (CoordinatorAssignmentNotFoundError, EventRequestNotFoundError) as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=not_found) from error
+    if assignment.coordinator_id != caller.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=not_found)
+    return service.list_arrangement_reviews(request_id)
 
 
 @router.get(

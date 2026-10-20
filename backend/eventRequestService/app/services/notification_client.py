@@ -9,11 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationClient:
-    """Sends domain events to notificationService (SCRUM-37); without
-    notification_service_url configured nothing is sent. A failed or
-    unreachable notification is logged, never raised: notifying is a side
-    effect of assignment or a review decision, not part of its contract, and
-    must never be the reason either fails.
+    """Send domain events without failing the originating workflow.
+
+    Assignment and clarification methods remain best-effort side effects.
+    Durable outbox methods return acceptance to their relays; review delivery
+    records progress only for notificationService's 202 response.
     """
 
     def __init__(self, notification_service_url: str | None) -> None:
@@ -31,13 +31,42 @@ class NotificationClient:
     def notify_coordinator_assigned(
         self, *, event_request_id: str, coordinator_id: str, assigned_by: str
     ) -> None:
+        self._notify_coordinator(
+            "coordinator_assigned",
+            "assignment to",
+            event_request_id=event_request_id,
+            coordinator_id=coordinator_id,
+            assigned_by=assigned_by,
+        )
+
+    def notify_coordinator_unassigned(
+        self, *, event_request_id: str, coordinator_id: str, assigned_by: str
+    ) -> None:
+        """Tell a coordinator an event they held now has someone else (SCRUM-62 AC4)."""
+        self._notify_coordinator(
+            "coordinator_unassigned",
+            "reassignment away from",
+            event_request_id=event_request_id,
+            coordinator_id=coordinator_id,
+            assigned_by=assigned_by,
+        )
+
+    def _notify_coordinator(
+        self,
+        event_type: str,
+        described_as: str,
+        *,
+        event_request_id: str,
+        coordinator_id: str,
+        assigned_by: str,
+    ) -> None:
         if self._url is None:
             return
         try:
             response = httpx.post(
                 self._url,
                 json={
-                    "event_type": "coordinator_assigned",
+                    "event_type": event_type,
                     "recipient_id": coordinator_id,
                     "payload": {
                         "event_request_id": event_request_id,
@@ -50,8 +79,9 @@ class NotificationClient:
             response.raise_for_status()
         except httpx.HTTPError:
             logger.warning(
-                "Failed to notify coordinator %s of assignment to event request %s",
+                "Failed to notify coordinator %s of %s event request %s",
                 coordinator_id,
+                described_as,
                 event_request_id,
                 exc_info=True,
             )
@@ -148,6 +178,40 @@ class NotificationClient:
                 "Failed to send submission confirmation %s to organiser %s",
                 event_id,
                 organiser_id,
+                exc_info=True,
+            )
+            return False
+        return True
+
+    def notify_arrangement_needs_review(
+        self, *, event_id: str, recipient_id: str, payload: dict[str, Any]
+    ) -> bool:
+        """Only durable 202 acceptance permits recording review-delivery progress."""
+        if self._url is None:
+            return False
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": "arrangement_needs_review",
+                    "recipient_id": recipient_id,
+                    "event_id": event_id,
+                    "payload": payload,
+                },
+                timeout=5,
+            )
+            if response.status_code != 202:
+                logger.warning(
+                    "Review notification %s was not accepted for %s",
+                    event_id,
+                    recipient_id,
+                )
+                return False
+        except httpx.HTTPError:
+            logger.warning(
+                "Review notification %s could not reach recipient %s",
+                event_id,
+                recipient_id,
                 exc_info=True,
             )
             return False

@@ -31,6 +31,9 @@ export function workspaceLinks(roles: string[]): NavLink[] {
   if (roles.includes("technical_support")) {
     links.push({ href: "/equipment", label: "Equipment" });
   }
+  if (roles.includes("venue_staff") || roles.includes("technical_support")) {
+    links.push({ href: "/arrangement-reviews", label: "Arrangement reviews" });
+  }
   if (roles.includes("safety_officer")) {
     links.push({ href: "/safety", label: "Safety checks" });
   }
