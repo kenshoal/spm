@@ -18,6 +18,7 @@ from app.controllers.event_request_controller import (
     get_authenticated_caller,
 )
 from app.main import create_app
+from app.repositories import SupabaseRepositoryError
 from app.services.event_transition_service import EventTransitionService
 
 OFFICER = "safety-1"
@@ -486,3 +487,28 @@ def test_duplicate_targets_are_refused() -> None:
     assert response.status_code == 422
     assert_unchanged(events, event_request_id)
 
+
+
+# AC4b-N1 (negative): the decision is already saved when the coordinator lookup
+# fails, so the officer still gets 200 (not 502, then 409 on retry) and no notice
+# is sent (Tate, Agent Discussions #2405).
+def test_failed_coordinator_lookup_keeps_the_saved_decision(caplog) -> None:
+    client, events, event_request_id, spy = safety_fixture()
+
+    def unavailable(_event_request_id: str) -> str | None:
+        raise SupabaseRepositoryError("Supabase is unavailable")
+
+    events.latest_coordinator_id = unavailable
+
+    response = decide(
+        client,
+        event_request_id,
+        {"decision": "changes_requested", "reason": REASON, "targets": TARGETS},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "Planning"
+    assert events.rows[event_request_id]["status"] == "Planning"
+    assert len(events.safety_review_rows) == 1
+    assert spy.safety_changes == []
+    assert "safety changes requested" in caplog.text
