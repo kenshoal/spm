@@ -277,6 +277,14 @@ class EventRequestService:
         )
         return self._row_to_response(row)
 
+    def send_for_safety_review(
+        self, event_request_id: str, coordinator_id: str
+    ) -> EventRequestResponse:
+        row = self.repository.send_for_safety_review(
+            event_request_id, coordinator_id
+        )
+        return self._row_to_response(row)
+
     def decide_by_coordinator(
         self,
         event_request_id: str,

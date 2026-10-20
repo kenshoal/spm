@@ -102,6 +102,8 @@ def test_create_posts_the_row_and_returns_what_was_stored() -> None:
     assert sent["venue_id"] == VENUE_ID
     assert sent["requested_by"] == USER_ID
     assert sent["slots"] == ["AM", "PM"]
+    # SCRUM-65 AC1-H1: the times are sent too (07:00-18:00 for AM and PM).
+    assert (sent["start_minute"], sent["end_minute"]) == (420, 1080)
     assert sent["status"] == "pending"
     assert sent["start_date"] == "2030-01-10"
     assert sent["decided_by"] is None

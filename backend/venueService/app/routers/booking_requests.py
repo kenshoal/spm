@@ -72,7 +72,8 @@ def submit_booking_request(
             requirements_note=snapshot.venue_requirements,
             start_date=payload.start_date,
             end_date=payload.end_date,
-            slots=payload.slots,
+            start_minute=payload.start_minute,
+            end_minute=payload.end_minute,
         )
     )
 

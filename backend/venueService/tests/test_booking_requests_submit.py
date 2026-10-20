@@ -68,12 +68,12 @@ def test_assigned_coordinator_submits_a_pending_request(events: FakeEventService
     assert stored_count() == 1
 
 
-# AC1-H4 (happy): a multi-day request with all three slots is stored
+# AC1-H4 (happy): a multi-day request for 07:00-24:00 (all three old slots) is stored
 def test_multi_day_request_with_all_slots_is_stored(events: FakeEventService) -> None:
     venue = make_venue()
 
     response = submit(
-        submit_body(venue.id, end_date="2030-01-12", slots=["AM", "PM", "NIGHT"])
+        submit_body(venue.id, end_date="2030-01-12", start_minute=420, end_minute=1440)
     )
 
     assert response.status_code == 201
@@ -100,12 +100,18 @@ def test_end_date_boundary(events: FakeEventService, end_date: str, expected: in
         assert stored_count() == 1
 
 
-# AC1-P4, AC1-P5, AC1-P6 (partition): each slot value alone is accepted
-@pytest.mark.parametrize("slot", ["AM", "PM", "NIGHT"], ids=["AC1-P4", "AC1-P5", "AC1-P6"])
-def test_each_slot_alone_is_accepted(events: FakeEventService, slot: str) -> None:
+# AC1-P4, AC1-P5, AC1-P6 (partition): each old slot's time range alone is accepted
+@pytest.mark.parametrize(
+    ("slot", "start", "end"),
+    [("AM", 420, 720), ("PM", 720, 1080), ("NIGHT", 1080, 1440)],
+    ids=["AC1-P4", "AC1-P5", "AC1-P6"],
+)
+def test_each_slot_alone_is_accepted(
+    events: FakeEventService, slot: str, start: int, end: int
+) -> None:
     venue = make_venue()
 
-    response = submit(submit_body(venue.id, slots=[slot]))
+    response = submit(submit_body(venue.id, start_minute=start, end_minute=end))
 
     assert response.status_code == 201
     assert response.json()["slots"] == [slot]
@@ -154,15 +160,16 @@ def test_server_owned_fields_cannot_be_set_by_the_caller(
     assert events.calls == []
 
 
-# AC1-N14 to AC1-N23 (negative): invalid or missing fields are refused and nothing is stored
+# AC1-N14 to AC1-N23 (negative): invalid, missing or retired fields are refused and nothing is stored
 @pytest.mark.parametrize(
     ("overrides", "field"),
     [
-        ({"slots": []}, "slots"),
-        ({"slots": ["AM", "AM"]}, "slots"),
-        ({"slots": ["MORNING"]}, "slots"),
-        ({"slots": None}, "slots"),
-        ({"slots": OMIT}, "slots"),
+        # Times replace slots (SCRUM-65); slots are now refused as unknown.
+        ({"slots": ["AM"]}, "slots"),
+        ({"start_minute": "ten"}, "start_minute"),
+        ({"end_minute": None}, "end_minute"),
+        ({"start_minute": OMIT}, "start_minute"),
+        ({"end_minute": OMIT}, "end_minute"),
         ({"start_date": OMIT}, "start_date"),
         ({"end_date": OMIT}, "end_date"),
         ({"start_date": "2030-02-30"}, "start_date"),

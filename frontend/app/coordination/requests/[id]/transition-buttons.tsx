@@ -5,6 +5,7 @@ import {
   cancelEventRequest,
   completeEventRequest,
   resumeEventRequestReview,
+  sendForSafetyReview,
   startEventPlanning,
   startEventRequestReview,
   type TransitionState,
@@ -13,6 +14,7 @@ import {
 type TransitionKind =
   | "review"
   | "planning"
+  | "safety-review"
   | "resume-review"
   | "cancellation"
   | "completion";
@@ -20,6 +22,7 @@ type TransitionKind =
 const actions = {
   review: startEventRequestReview,
   planning: startEventPlanning,
+  "safety-review": sendForSafetyReview,
   "resume-review": resumeEventRequestReview,
   cancellation: cancelEventRequest,
   completion: completeEventRequest,
@@ -31,6 +34,7 @@ const buttons: Record<
 > = {
   review: { label: "Start review", pending: "Starting review…" },
   planning: { label: "Start planning", pending: "Starting planning…" },
+  "safety-review": { label: "Send for safety review", pending: "Sending…" },
   "resume-review": { label: "Continue review", pending: "Continuing review…" },
   cancellation: {
     label: "Cancel event",
@@ -105,12 +109,26 @@ export function TransitionButton({
       )}
 
       {state.message && !(dialog && isOpen) ? (
-        <p
-          role="alert"
-          className="mt-3 rounded-lg bg-[#fff0f0] px-3 py-2 text-sm text-[#a23939]"
-        >
-          {state.message}
-        </p>
+        state.outstanding?.length ? (
+          <div
+            role="alert"
+            className="mt-3 rounded-lg bg-[#fff0f0] px-3 py-2 text-sm text-[#a23939]"
+          >
+            <p className="font-semibold">{state.message}</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {state.outstanding.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p
+            role="alert"
+            className="mt-3 rounded-lg bg-[#fff0f0] px-3 py-2 text-sm text-[#a23939]"
+          >
+            {state.message}
+          </p>
+        )
       ) : null}
 
       {dialog && isOpen ? (
