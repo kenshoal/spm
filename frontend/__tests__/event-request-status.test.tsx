@@ -34,8 +34,7 @@ function makeRequest(status: EventRequestStatus): EventRequest {
 }
 
 // Purpose: Every backend status is representable — the UI never drops a workflow state.
-// AC6-P2 (partition, SCRUM-60): Safety Review sits between Planning and Confirmed.
-// AC5-X8 (cross-cutting): the recognised status universe retains the approved Safety Review state.
+// AC5-X8, SCRUM-60 AC6-P2 (cross-cutting): the full status universe retains Safety Review between Planning and Confirmed.
 test("covers all eleven event request statuses", () => {
   expect(EVENT_REQUEST_STATUSES).toEqual([
     "Draft",
