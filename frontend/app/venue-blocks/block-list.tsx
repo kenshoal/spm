@@ -1,4 +1,5 @@
 import { blockReasonText, type VenueBlock } from "@/lib/venue-block-options";
+import { timeRangeLabel } from "@/lib/venue-options";
 
 function formatDate(date: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -17,7 +18,7 @@ export function BlockList({ blocks }: { blocks: VenueBlock[] }) {
           {sorted.map((block) => (
             <li key={block.id} className="rounded-xl border border-[#eef2f0] px-4 py-3 text-sm text-[#273832]">
               <span className="font-semibold">{formatDate(block.start_date)} – {formatDate(block.end_date)}</span>
-              {" · "}{block.slots.join(", ")}
+              {" · "}{timeRangeLabel(block.start_minute, block.end_minute)}
               {" · "}{blockReasonText(block)}
               {" · "}
               <span className={block.status === "active" ? "font-bold text-[#8c3a2b]" : "text-[#718078]"}>{block.status === "active" ? "Active" : "Lifted"}</span>

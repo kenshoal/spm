@@ -122,7 +122,7 @@ export default async function VenueBlocksPage({ searchParams }: { searchParams: 
       <div className="mb-8">
         <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0f6b5b]">Venue workspace</p>
         <h1 className="text-3xl font-bold tracking-[-0.035em] text-[#17211d] sm:text-4xl">Venue blocks</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#68776f] sm:text-base">Block a venue for maintenance, renovation, safety or internal use. Blocked dates and slots are not offered in venue search.</p>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#68776f] sm:text-base">Block a venue for maintenance, renovation, safety or internal use. Blocked dates and times are not offered in venue search.</p>
       </div>
       {await VenueBlocksContent({ params })}
     </AppShell>

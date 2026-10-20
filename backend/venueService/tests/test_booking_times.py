@@ -281,12 +281,12 @@ def test_dates_must_share_a_day(staff) -> None:
     assert response.json()["detail"]["refusal_codes"] == ["booking_conflict"]
 
 
-# AC2-X1 (cross-cutting): whole-slot blocks still refuse by the touched slots
+# AC2-X1 (cross-cutting): a PM block (12:00-18:00 since slice 2) refuses an overlapping time
 def test_blocks_refuse_by_touched_slots(staff) -> None:
     venue = make_venue()
     block = client.post(
         f"/venues/{venue.id}/blocks",
-        json={"start_date": DAY, "end_date": DAY, "slots": ["PM"],
+        json={"start_date": DAY, "end_date": DAY, "start_minute": 720, "end_minute": 1080,
               "reason_category": "maintenance"},
     )
     assert block.status_code == 201

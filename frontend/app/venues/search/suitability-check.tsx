@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { layoutLabel, ROOM_LAYOUTS, SLOTS } from "@/lib/venue-options";
+import { TimeRangeFields } from "@/app/components/time-range-fields";
+import { layoutLabel, ROOM_LAYOUTS } from "@/lib/venue-options";
 import { ATTRIBUTE_LABELS, type SuitabilityFormValues, type SuitabilityResult } from "@/lib/venue-suitability";
 import { checkVenueSuitability, type SuitabilityState } from "./actions";
 
@@ -41,12 +42,9 @@ export function SuitabilityCheck({ venueId, defaults }: { venueId: string; defau
             {ROOM_LAYOUTS.map((layout) => <option key={layout} value={layout}>{layoutLabel(layout)}</option>)}
           </select>
         </label>
-        <label className={labelClass}>Required slot
-          <select name="required_slot" defaultValue={values.required_slot} className={inputClass}>
-            <option value="">Any slot</option>
-            {SLOTS.map((slot) => <option key={slot} value={slot}>{slot}</option>)}
-          </select>
-        </label>
+        <div className="sm:col-span-2">
+          <TimeRangeFields start={values.start_time} end={values.end_time} errors={errors} inputClass={inputClass} labelClass={labelClass} optional />
+        </div>
         <label className={labelClass}>Required facilities<input name="required_facilities" defaultValue={values.required_facilities} placeholder="Projector, WiFi" className={inputClass} /></label>
         <label className={`${labelClass} sm:col-span-2`}>Required accessibility<input name="required_accessibility" defaultValue={values.required_accessibility} placeholder="Ramp access" className={inputClass} /></label>
         <div className="sm:col-span-2"><button type="submit" disabled={isPending} className="min-h-10 rounded-xl border border-[#0f6b5b] px-4 text-sm font-bold text-[#0f6b5b] hover:bg-[#f1faf6] disabled:opacity-60">Check this venue</button></div>

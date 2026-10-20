@@ -2,6 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from time_support import slot_times
 
 from app.block_models import BlockStatus
 from app.block_repository import block_repository
@@ -19,13 +20,15 @@ def make_venue(**overrides):
     return response.json()["id"]
 
 
-def make_block(venue_id, **overrides):
+def make_block(venue_id, slots=("AM",), **overrides):
+    # SCRUM-65: blocks take times; the slot names map to AM 07:00-12:00,
+    # PM 12:00-18:00 and NIGHT 18:00-24:00.
     response = client.post(
         f"/venues/{venue_id}/blocks",
         json={
             "start_date": "2026-09-20",
             "end_date": "2026-09-22",
-            "slots": ["AM"],
+            **slot_times(slots),
             "reason_category": "maintenance",
         }
         | overrides,
@@ -34,7 +37,9 @@ def make_block(venue_id, **overrides):
     return response.json()
 
 
-def search(**params):
+def search(slot=None, **params):
+    if slot is not None:
+        params |= slot_times([slot])
     response = client.get("/venues/search", params=params)
     assert response.status_code == 200
     return {venue["id"] for venue in response.json()}
@@ -107,20 +112,19 @@ def test_lifted_block_does_not_restrict_search():
     assert search(date="2026-09-21") == {venue_id}
 
 
-# AC2-P4 (partition): a search without a date makes no dated availability claim
+# AC2-P4 (partition): a search without a date makes no dated availability claim (times need a date, SCRUM-65)
 def test_search_without_date_does_not_apply_dated_blocks():
     venue_id = make_venue()
     make_block(venue_id, slots=["AM", "PM", "NIGHT"])
     assert search() == {venue_id}
-    assert search(slot="AM") == {venue_id}
 
 
-# AC2-P5 (partition): a date-only search needs one operating slot free across all blocks
+# AC2-P5 (partition): a date-only search needs some of 07:00-24:00 free across all blocks
 def test_date_only_search_requires_one_free_operating_slot_across_all_blocks():
     venue_id = make_venue(operating_slots=["AM", "PM"])
     make_block(venue_id, slots=["AM"])
     assert search(date="2026-09-21") == {venue_id}
-    make_block(venue_id, slots=["PM"])
+    make_block(venue_id, slots=["PM", "NIGHT"])
     assert search(date="2026-09-21") == set()
     assert search(date="2026-09-23") == {venue_id}
 
@@ -132,7 +136,7 @@ def test_full_day_block_excludes_date_only_search():
     assert search(date="2026-09-21") == set()
 
 
-# AC2-P6 (partition): a block on a non-operating slot does not hide the venue
+# AC2-P6 (partition): a PM block leaves the rest of the day offered, not 12:00-18:00
 def test_date_only_search_ignores_blocks_outside_operating_slots():
     venue_id = make_venue(operating_slots=["AM"])
     make_block(venue_id, slots=["PM"])
@@ -140,10 +144,10 @@ def test_date_only_search_ignores_blocks_outside_operating_slots():
     assert search(date="2026-09-21", slot="PM") == set()
 
 
-# AC2-P7 (partition): a venue with no operating slots is not offered for a date
+# AC2-P7 (partition): old operating slots no longer restrict search; every venue runs 07:00-24:00
 def test_date_only_search_excludes_venue_without_operating_slots():
-    make_venue(operating_slots=[])
-    assert search(date="2026-09-21") == set()
+    venue_id = make_venue(operating_slots=[])
+    assert search(date="2026-09-21") == {venue_id}
 
 
 # AC2-B5 (boundary): a NIGHT block affects its starting date only
@@ -173,7 +177,6 @@ def test_dated_search_preserves_catalogue_filters():
         {"facilities": []},
         {"accessibility_features": []},
         {"supported_layouts": []},
-        {"operating_slots": ["AM"]},
     ]:
         make_venue(**(attributes | mismatch))
     closed = make_venue(**attributes)
@@ -189,7 +192,11 @@ def test_dated_search_preserves_catalogue_filters():
     ) == {match}
 
 
-# AC2-N2 (negative): an invalid date or slot in search returns 422
-@pytest.mark.parametrize("params", [{"date": "invalid"}, {"slot": "invalid"}], ids=["AC2-N2a", "AC2-N2b"])
+# AC2-N2 (negative): an invalid date or time in search returns 422
+@pytest.mark.parametrize(
+    "params",
+    [{"date": "invalid"}, {"date": "2026-09-21", "start_minute": "x", "end_minute": 720}],
+    ids=["AC2-N2a", "AC2-N2b"],
+)
 def test_invalid_search_parameters(params):
     assert client.get("/venues/search", params=params).status_code == 422

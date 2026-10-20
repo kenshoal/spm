@@ -38,6 +38,8 @@ const repairs: VenueBlock = {
   venue_id: "v1",
   start_date: "2026-10-20",
   end_date: "2026-10-21",
+  start_minute: 420,
+  end_minute: 1080,
   slots: ["AM", "PM"],
   reason_category: "maintenance",
   reason_detail: "Air-con repairs",
@@ -61,19 +63,20 @@ beforeEach(() => {
   data.listApprovedBookings.mockResolvedValue([]);
 });
 
-// AC4-H1 (happy): the selected venue's covered cells read "Blocked" with the reason
+// AC4-H1 (happy): the selected venue's covered dates show the blocked time with the reason (SCRUM-65)
 test("shows the selected venue's blocked cells with their reason", async () => {
   await openPage({ venue: "v1" });
 
   expect(data.listVenueBlocks).toHaveBeenCalledWith("v1");
   const table = screen.getByRole("table", { name: "Riverside Hall availability, October 2026" });
   const row = within(table).getByRole("row", { name: /Tue 20 Oct/ });
-  expect(within(row).getAllByText("Blocked")).toHaveLength(2);
-  expect(within(row).getAllByText("Maintenance — Air-con repairs")).toHaveLength(2);
-  expect(within(row).getByText("Not offered")).toBeDefined();
+  expect(within(row).getByText("07:00–18:00")).toBeDefined();
+  expect(within(row).getByText("Blocked")).toBeDefined();
+  expect(within(row).getByText("Maintenance — Air-con repairs")).toBeDefined();
+  expect(within(row).getByText("Other times available")).toBeDefined();
   const nextDay = within(table).getByRole("row", { name: /Thu 22 Oct/ });
   expect(within(nextDay).queryByText("Blocked")).toBeNull();
-  expect(within(nextDay).getAllByText("Available")).toHaveLength(2);
+  expect(within(nextDay).getByText("Available all day")).toBeDefined();
   expect(screen.getByRole("link", { name: "Next month" }).getAttribute("href")).toBe("/venue-blocks?venue=v1&month=2026-11");
   expect(screen.getByRole("link", { name: "Previous month" }).getAttribute("href")).toBe("/venue-blocks?venue=v1&month=2026-09");
 });
@@ -86,10 +89,9 @@ test("flags a venue that is blocked in the catalogue", async () => {
 
   expect(screen.getByRole("note").textContent).toContain("This venue is blocked in the catalogue, so it is unavailable on every date.");
   const table = screen.getByRole("table", { name: "Riverside Hall availability, October 2026" });
-  expect(within(table).queryByText("Available")).toBeNull();
+  expect(within(table).queryByText("Available all day")).toBeNull();
   const row = within(table).getByRole("row", { name: /Thu 22 Oct/ });
-  expect(within(row).getAllByText("Unavailable")).toHaveLength(2);
-  expect(within(table).getAllByText("Maintenance — Air-con repairs")).toHaveLength(4);
+  expect(within(row).getByText("Unavailable")).toBeDefined();
   expect(screen.getByRole("form", { name: "Block a venue" })).toBeDefined();
 });
 
@@ -108,7 +110,7 @@ test("confirms a saved block and lists it", async () => {
   const list = screen.getByRole("list", { name: "Recorded blocks" });
   const item = within(list).getByRole("listitem");
   expect(item.textContent).toContain("20 Oct 2026 – 21 Oct 2026");
-  expect(item.textContent).toContain("AM, PM");
+  expect(item.textContent).toContain("07:00–18:00");
   expect(item.textContent).toContain("Maintenance — Air-con repairs");
   expect(item.textContent).toContain("Active");
 });
@@ -121,9 +123,11 @@ test("offers every block field with the viewed venue preselected", async () => {
   expect((within(form).getByLabelText("Venue") as HTMLSelectElement).value).toBe("v2");
   expect(within(form).getByLabelText("Start date")).toBeDefined();
   expect(within(form).getByLabelText("End date")).toBeDefined();
-  for (const slot of ["AM", "PM", "NIGHT"]) {
-    expect(within(form).getByRole("checkbox", { name: slot })).toBeDefined();
-  }
+  // SCRUM-65: start and end times in 15-minute steps replace the slot checkboxes.
+  const start = within(form).getByLabelText("Start time") as HTMLSelectElement;
+  expect(start.options[1].value).toBe("07:00");
+  expect(within(form).getByLabelText("End time")).toBeDefined();
+  expect(within(form).queryByRole("checkbox")).toBeNull();
   const reason = within(form).getByLabelText("Reason") as HTMLSelectElement;
   expect([...reason.options].map((o) => o.textContent)).toEqual(["Choose a reason", "Maintenance", "Renovation", "Safety", "Internal use"]);
   expect(within(form).getByLabelText(/Detail/)).toBeDefined();
@@ -187,7 +191,7 @@ test("never shows an open calendar when blocks could not be loaded", async () =>
 
   expect(screen.getByRole("alert").textContent).toContain("Blocks for this venue could not be loaded.");
   expect(screen.queryByRole("table")).toBeNull();
-  expect(screen.queryByText("Available")).toBeNull();
+  expect(screen.queryByText("Available all day")).toBeNull();
 });
 
 // AC4-P5 (partition): an empty catalogue is stated plainly
@@ -204,17 +208,17 @@ test("explains when the catalogue has no venues", async () => {
 // AC3-H4 (happy): the calendar shows the selected venue's approved bookings as booked
 test("shows approved bookings for the selected venue as booked", async () => {
   data.listApprovedBookings.mockResolvedValue([
-    { id: "r1", venue_id: "v1", event_name: "Open day", start_date: "2026-10-22", end_date: "2026-10-22", slots: ["PM"], status: "approved" },
-    { id: "r2", venue_id: "v2", event_name: "Other venue", start_date: "2026-10-22", end_date: "2026-10-22", slots: ["AM"], status: "approved" },
+    { id: "r1", venue_id: "v1", event_name: "Open day", start_date: "2026-10-22", end_date: "2026-10-22", start_minute: 720, end_minute: 1080, slots: ["PM"], status: "approved" },
+    { id: "r2", venue_id: "v2", event_name: "Other venue", start_date: "2026-10-22", end_date: "2026-10-22", start_minute: 420, end_minute: 720, slots: ["AM"], status: "approved" },
   ]);
 
   await openPage({ venue: "v1" });
 
   const row = within(screen.getByRole("table")).getByRole("row", { name: /Thu 22 Oct/ });
+  expect(within(row).getByText("12:00–18:00")).toBeDefined();
   expect(within(row).getByText("Booked")).toBeDefined();
-  expect(within(row).getByText("Booked — Open day")).toBeDefined();
-  expect(within(row).getAllByText("Available")).toHaveLength(1);
-  expect(screen.queryByText("Booked — Other venue")).toBeNull();
+  expect(within(row).getByText("Open day")).toBeDefined();
+  expect(screen.queryByText("Other venue")).toBeNull();
 });
 
 // AC3-N1 (negative): a failed booking lookup never shows an all-available calendar
@@ -236,9 +240,9 @@ test("lists the confirmed bookings a new block affects", async () => {
     vi.useRealTimers();
   });
   data.listApprovedBookings.mockResolvedValue([
-    { id: "r1", venue_id: "v1", event_name: "Open day", start_date: "2026-10-21", end_date: "2026-10-22", slots: ["AM"], status: "approved" },
-    { id: "r2", venue_id: "v1", event_name: "Evening talk", start_date: "2026-10-20", end_date: "2026-10-20", slots: ["NIGHT"], status: "approved" },
-    { id: "r3", venue_id: "v2", event_name: "Elsewhere", start_date: "2026-10-20", end_date: "2026-10-20", slots: ["AM"], status: "approved" },
+    { id: "r1", venue_id: "v1", event_name: "Open day", start_date: "2026-10-21", end_date: "2026-10-22", start_minute: 420, end_minute: 720, slots: ["AM"], status: "approved" },
+    { id: "r2", venue_id: "v1", event_name: "Evening talk", start_date: "2026-10-20", end_date: "2026-10-20", start_minute: 1080, end_minute: 1440, slots: ["NIGHT"], status: "approved" },
+    { id: "r3", venue_id: "v2", event_name: "Elsewhere", start_date: "2026-10-20", end_date: "2026-10-20", start_minute: 420, end_minute: 720, slots: ["AM"], status: "approved" },
   ]);
 
   await openPage({ venue: "v1", created: "1", block: "b1" });

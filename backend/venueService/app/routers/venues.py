@@ -15,8 +15,9 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic_core import PydanticCustomError
 
-from app.availability import available_slots
+from app.availability import is_free
 from app.block_models import VenueBlock, VenueBlockCreate
 from app.booking_models import BookingRequestStatus
 from app.booking_notifications import (
@@ -35,7 +36,6 @@ from app.dependencies import (
 )
 from app.models import (
     RoomLayout,
-    Slot,
     Venue,
     VenueCreate,
     VenueLocation,
@@ -43,7 +43,7 @@ from app.models import (
     VenueUpdate,
 )
 from app.repository import VenueStore, get_repository
-from app.slots import overlaps
+from app.slots import check_time_range, times_overlap
 from app.storage import BlockStore, get_block_repository
 
 router = APIRouter(prefix="/venues", tags=["venues"])
@@ -94,8 +94,8 @@ def create_venue_block(
 ) -> VenueBlock:
     """Store a dated block, then alert the Coordinators of affected bookings.
 
-    An approved booking that shares a date and slot with the block and has not
-    ended is affected (SCRUM-23 AC3). The block is saved regardless; notifying
+    An approved booking that shares a date with the block, overlaps it in time
+    and has not ended is affected (SCRUM-23 AC3, SCRUM-65). The block is saved regardless; notifying
     never fails or undoes it.
     """
     venue = repo.get(venue_id)
@@ -108,13 +108,15 @@ def create_venue_block(
         if (
             booking.venue_id == venue_id
             and booking.end_date >= today
-            and overlaps(
+            and times_overlap(
                 block.start_date,
                 block.end_date,
-                block.slots,
+                block.start_minute,
+                block.end_minute,
                 booking.start_date,
                 booking.end_date,
-                booking.slots,
+                booking.start_minute,
+                booking.end_minute,
             )
         ):
             notifier.send(block_affects_booking_event(block, booking, venue.name))
@@ -159,20 +161,23 @@ def search_venues(
     bookings: BookingRepoDep,
     required_capacity: Annotated[int | None, Query(gt=0)] = None,
     location: Annotated[str | None, Query()] = None,
-    slot: Annotated[Slot | None, Query()] = None,
     on_date: Annotated[date | None, Query(alias="date")] = None,
+    start_minute: Annotated[int | None, Query()] = None,
+    end_minute: Annotated[int | None, Query()] = None,
     layout: Annotated[RoomLayout | None, Query()] = None,
     facility: Annotated[list[str] | None, Query()] = None,
     accessibility: Annotated[list[str] | None, Query()] = None,
 ) -> list[Venue]:
     """Return venues matching every supplied filter.
 
-    With a date and slot, exclude venues blocked or booked for that period.
-    With only a date, require at least one operating slot free of active blocks
-    and approved bookings. Without a date, no dated availability claim is made.
+    With a date and a start and end time (minutes after midnight, SCRUM-65),
+    exclude venues blocked or booked at an overlapping time. With only a date,
+    require some free time within 07:00-24:00 that day. Without a date, no
+    dated availability claim is made, so times need a date.
     """
 
     del principal
+    _check_search_times(on_date, start_minute, end_minute)
 
     wanted_facilities = {f.lower() for f in facility} if facility else set()
     wanted_accessibility = {a.lower() for a in accessibility} if accessibility else set()
@@ -190,8 +195,6 @@ def search_venues(
             continue
         if location is not None and location.lower() not in venue.location.lower():
             continue
-        if slot is not None and slot not in venue.operating_slots:
-            continue
         if layout is not None and layout not in venue.supported_layouts:
             continue
         if wanted_facilities and not wanted_facilities.issubset(
@@ -202,14 +205,34 @@ def search_venues(
             {a.lower() for a in venue.accessibility_features}
         ):
             continue
-        if on_date is not None:
-            remaining_slots = available_slots(
-                venue, on_date, blocks.list_for_venue(venue.id), approved
-            )
-            if not remaining_slots or (slot is not None and slot not in remaining_slots):
-                continue
+        if on_date is not None and not is_free(
+            venue, on_date, start_minute, end_minute,
+            blocks.list_for_venue(venue.id), approved,
+        ):
+            continue
         results.append(venue)
     return results
+
+
+def _check_search_times(
+    on_date: date | None, start_minute: int | None, end_minute: int | None
+) -> None:
+    """422 with the same reason codes as a booking (SCRUM-65)."""
+    if start_minute is None and end_minute is None:
+        return
+    try:
+        if start_minute is None or end_minute is None:
+            raise PydanticCustomError(
+                "times_incomplete", "Give both a start and an end time."
+            )
+        if on_date is None:
+            raise PydanticCustomError("date_required", "Times need a date.")
+        check_time_range(start_minute, end_minute)
+    except PydanticCustomError as error:
+        raise HTTPException(
+            422,
+            [{"type": error.type, "loc": ["query"], "msg": error.message()}],
+        ) from None
 
 
 @router.get("/{venue_id}", response_model=Venue)

@@ -37,17 +37,17 @@ const names = new Map([["v-a", "Hall A"], ["v-b", "Hall B"]]);
 function booking(overrides: Partial<EventBooking>): EventBooking {
   return {
     id: "b1", venue_id: "v-a", start_date: "2030-01-10", end_date: "2030-01-10",
-    slots: ["AM"], status: "pending", created_at: "2030-01-01T00:00:00Z", cancelled_at: null, ...overrides,
+    start_minute: 420, end_minute: 720, slots: ["AM"], status: "pending", created_at: "2030-01-01T00:00:00Z", cancelled_at: null, ...overrides,
   };
 }
 
 const three: EventBooking[] = [
   booking({ id: "b1", venue_id: "v-a", status: "pending" }),
-  booking({ id: "b2", venue_id: "v-b", status: "approved", start_date: "2030-01-10", end_date: "2030-01-12", slots: ["AM", "PM"] }),
+  booking({ id: "b2", venue_id: "v-b", status: "approved", start_date: "2030-01-10", end_date: "2030-01-12", start_minute: 420, end_minute: 1080, slots: ["AM", "PM"] }),
   booking({ id: "b3", venue_id: "v-a", status: "cancelled", cancelled_at: "2030-01-05T00:00:00Z" }),
 ];
 
-// AC3-U1 (happy): each booking shows its venue, dates, slots and status in words
+// AC3-U1 (happy): each booking shows its venue, dates, times (SCRUM-65) and status in words
 test("lists each booking with venue, dates, slots and status", () => {
   render(<VenueBookingsList bookings={three} venueNames={names} eventRequestId={EVENT_ID} />);
 
@@ -55,10 +55,10 @@ test("lists each booking with venue, dates, slots and status", () => {
   expect(rows).toHaveLength(3);
   expect(within(rows[0]).getByText("Hall A")).toBeDefined();
   expect(within(rows[0]).getByText("10 Jan 2030")).toBeDefined();
-  expect(within(rows[0]).getByText("AM")).toBeDefined();
+  expect(within(rows[0]).getByText("07:00–12:00")).toBeDefined();
   expect(within(rows[0]).getByText("Pending")).toBeDefined();
   expect(within(rows[1]).getByText("10 Jan 2030 – 12 Jan 2030")).toBeDefined();
-  expect(within(rows[1]).getByText("AM, PM")).toBeDefined();
+  expect(within(rows[1]).getByText("07:00–18:00")).toBeDefined();
   expect(within(rows[1]).getByText("Approved")).toBeDefined();
   expect(within(rows[2]).getByText("Cancelled")).toBeDefined();
 });

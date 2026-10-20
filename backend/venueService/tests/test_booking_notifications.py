@@ -80,6 +80,9 @@ def test_approval_notifies_the_requesting_coordinator(notifier):
                 "start_date": "2026-10-20",
                 "end_date": "2026-10-21",
                 "slots": ["AM"],
+                # SCRUM-65: the time the AM slot became.
+                "start_minute": 420,
+                "end_minute": 720,
                 "decision_reason": None,
                 "suggested_alternative": None,
                 "decided_by": STAFF,

@@ -5,8 +5,10 @@ date. Callers handle venue identity, active/confirmed status, and side effects.
 Irregular daily schedules must be compared as separate periods.
 """
 
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from datetime import date, timedelta
+
+from pydantic_core import PydanticCustomError
 
 from app.models import Slot
 
@@ -95,3 +97,34 @@ def times_overlap(
 ) -> bool:
     """Whether two date ranges share a day and their daily time ranges overlap."""
     return a_start <= b_end and b_start <= a_end and a_from < b_to and b_from < a_to
+
+
+OPEN_MINUTE, CLOSE_MINUTE, STEP_MINUTES = 420, 1440, 15
+
+
+def check_time_range(start_minute: int, end_minute: int) -> None:
+    """Raise a 422-ready error unless a range is on 15-minute steps within
+    07:00-24:00 and ends after it starts. The codes match SCRUM-20's
+    check_booking_time; the database checks the same rules (0050, 0051)."""
+    if start_minute % STEP_MINUTES or end_minute % STEP_MINUTES:
+        raise PydanticCustomError("off_step", "Times must be on a 15-minute step.")
+    if start_minute < OPEN_MINUTE or end_minute > CLOSE_MINUTE:
+        raise PydanticCustomError(
+            "outside_operating_window", "Times must fall between 07:00 and 24:00."
+        )
+    if end_minute <= start_minute:
+        raise PydanticCustomError("end_not_after_start", "The end must be after the start.")
+
+
+def has_free_time(on_date: date, taken: Iterable[tuple[date, date, int, int]]) -> bool:
+    """Whether any of 07:00-24:00 on a date is outside the taken ranges."""
+    covered = OPEN_MINUTE
+    for start, end in sorted(
+        (a_from, a_to)
+        for first, last, a_from, a_to in taken
+        if first <= on_date <= last
+    ):
+        if start > covered:
+            return True
+        covered = max(covered, end)
+    return covered < CLOSE_MINUTE

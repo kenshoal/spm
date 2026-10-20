@@ -146,22 +146,20 @@ def test_block_added_since_request_prevents_approval_and_returns_recordable_evid
     assert conflict.block_id == "block-1"
     assert conflict.start_date.isoformat() == "2026-10-03"
     assert conflict.end_date.isoformat() == "2026-10-04"
-    assert conflict.slots == ["PM"]
+    # SCRUM-65: the shared part in time, 12:00-18:00 (the PM slot).
+    assert (conflict.start_minute, conflict.end_minute) == (720, 1080)
 
 
-# AC5-P4 (partition): an unavailable venue or unsupported slot prevents approval
-@pytest.mark.parametrize(
-    "changes,expected",
-    [
-        ({"status": "blocked"}, "venue_unavailable"),
-        ({"operating_slots": ["AM"]}, "outside_operating_slots"),
-    ],
-    ids=["AC5-P4a", "AC5-P4b"],
-)
-def test_unavailable_venue_or_unsupported_slot_prevents_approval(changes, expected):
-    result = assess(venue=venue(**changes))
+# AC5-P4a (partition): an unavailable venue prevents approval
+def test_unavailable_venue_or_unsupported_slot_prevents_approval():
+    result = assess(venue=venue(status="blocked"))
     assert not result.allowed
-    assert result.refusal_codes == [expected]
+    assert result.refusal_codes == ["venue_unavailable"]
+
+
+# AC5-P4b (partition): the venue's old operating slots no longer refuse approval (SCRUM-65)
+def test_operating_slots_no_longer_refuse_approval():
+    assert assess(venue=venue(operating_slots=["AM"])).allowed
 
 
 # AC5-P5 (partition): lifted or unrelated blocks do not prevent approval
@@ -219,7 +217,6 @@ def test_all_conflicts_are_returned_with_unique_stable_booking_ids():
     )
     assert result.refusal_codes == [
         "venue_unavailable",
-        "outside_operating_slots",
         "active_block",
         "booking_conflict",
     ]
@@ -292,7 +289,7 @@ def test_assessment_does_not_mutate_request_venue_or_availability_data(choice):
 # AC1-N5 (negative): an invalid requested period cannot be assessed
 @pytest.mark.parametrize(
     "changes",
-    [{"slots": []}, {"slots": ["AM", "AM"]}, {"end_date": "2026-10-01"}],
+    [{"slots": []}, {"start_minute": 600, "end_minute": 600}, {"end_date": "2026-10-01"}],
     ids=["AC1-N5a", "AC1-N5b", "AC1-N5c"],
 )
 def test_invalid_requested_period_cannot_be_assessed(changes):

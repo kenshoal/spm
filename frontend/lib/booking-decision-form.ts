@@ -16,6 +16,9 @@ export interface BookingRequestItem {
   requirements_note: string | null;
   start_date: string;
   end_date: string;
+  // SCRUM-65: the requested time on each date; slots are what it touches.
+  start_minute: number;
+  end_minute: number;
   slots: Slot[];
   status: BookingStatus;
   decision_reason: string | null;
@@ -61,6 +64,7 @@ export function parseDecisionForm(formData: FormData): { payload: DecisionPayloa
 
 const REFUSAL_TEXT: Record<string, string> = {
   venue_unavailable: "The venue is blocked in the catalogue.",
+  // Not produced since SCRUM-65 (every venue runs 07:00-24:00); kept for old refusals.
   outside_operating_slots: "The venue does not operate one of the requested slots.",
   active_block: "The venue is blocked for part of this period.",
   booking_conflict: "Another approved booking already holds part of this period.",

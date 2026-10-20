@@ -6,9 +6,9 @@ function sessionCookie(value: string) {
   return [{ name: "cs_access_token", value, url: "http://127.0.0.1:3100" }];
 }
 
-// AC1-H1, AC4-H1, AC2-H1 (happy): SCRUM-23 end to end — Venue Staff block a venue
-// through the form, see the blocked slots on the calendar, and a Coordinator's
-// dated search no longer offers that slot while other slots stay offered.
+// AC1-H1, AC4-H1, AC2-H1 (happy): SCRUM-23 end to end, on SCRUM-65 times — Venue Staff
+// block a venue through the form, see the blocked time on the calendar, and a
+// Coordinator's dated search no longer offers that time while other times stay offered.
 test("venue staff block a venue and search stops offering the blocked slot", async ({ page, request }) => {
   const name = `Block Hall ${Date.now()}`;
   const location = `Block Wing ${Date.now()}`;
@@ -25,11 +25,12 @@ test("venue staff block a venue and search stops offering the blocked slot", asy
 
   const form = page.getByRole("form", { name: "Block a venue" });
   await form.getByRole("button", { name: "Block venue" }).click();
-  await expect(form.getByText("Choose at least one slot.")).toBeVisible();
+  await expect(form.getByText("Choose a start time.")).toBeVisible();
 
   await form.getByLabel("Start date").fill("2026-11-20");
   await form.getByLabel("End date").fill("2026-11-21");
-  await form.getByRole("checkbox", { name: "AM" }).check();
+  await form.getByLabel("Start time").selectOption("07:00");
+  await form.getByLabel("End time").selectOption("12:00");
   await form.getByLabel("Reason").selectOption("maintenance");
   await form.getByLabel(/Detail/).fill("Air-con repairs");
   await form.getByRole("button", { name: "Block venue" }).click();
@@ -38,15 +39,16 @@ test("venue staff block a venue and search stops offering the blocked slot", asy
   await expect(page.getByRole("status")).toHaveText("Block saved.");
   const calendar = page.getByRole("table", { name: `${name} availability, November 2026` });
   const blockedDay = calendar.getByRole("row", { name: /Fri 20 Nov/ });
+  await expect(blockedDay.getByText("07:00–12:00")).toBeVisible();
   await expect(blockedDay.getByText("Blocked")).toBeVisible();
   await expect(blockedDay.getByText("Maintenance — Air-con repairs")).toBeVisible();
   await expect(calendar.getByRole("row", { name: /Sun 22 Nov/ }).getByText("Blocked")).toHaveCount(0);
 
   await page.context().clearCookies();
   await page.context().addCookies(sessionCookie("coordinator-session"));
-  await page.goto(`/venues/search?location=${encodeURIComponent(location)}&date=2026-11-20&slot=AM`);
+  await page.goto(`/venues/search?location=${encodeURIComponent(location)}&date=2026-11-20&start_time=10:00&end_time=13:00`);
   await expect(page.getByRole("article", { name })).toHaveCount(0);
-  await page.goto(`/venues/search?location=${encodeURIComponent(location)}&date=2026-11-20&slot=PM`);
+  await page.goto(`/venues/search?location=${encodeURIComponent(location)}&date=2026-11-20&start_time=12:00&end_time=18:00`);
   await expect(page.getByRole("article", { name })).toBeVisible();
 });
 
@@ -81,7 +83,8 @@ test("blocking a booked venue alerts the booking's coordinator", async ({ page, 
   const form = page.getByRole("form", { name: "Block a venue" });
   await form.getByLabel("Start date").fill(`${year}-12-21`);
   await form.getByLabel("End date").fill(`${year}-12-21`);
-  await form.getByRole("checkbox", { name: "PM" }).check();
+  await form.getByLabel("Start time").selectOption("12:00");
+  await form.getByLabel("End time").selectOption("18:00");
   await form.getByLabel("Reason").selectOption("safety");
   await form.getByLabel(/Detail/).fill("Fire alarm testing");
   await form.getByRole("button", { name: "Block venue" }).click();
@@ -94,5 +97,5 @@ test("blocking a booked venue alerts the booking's coordinator", async ({ page, 
   await page.context().addCookies(sessionCookie("coordinator-session"));
   await page.goto("/notifications");
   const alert = page.getByRole("article", { name: `${name} has been blocked during your booking for ${event}.` });
-  await expect(alert).toContainText(`Blocked ${year}-12-21 to ${year}-12-21 · PM · Safety — Fire alarm testing.`);
+  await expect(alert).toContainText(`Blocked ${year}-12-21 to ${year}-12-21 · 12:00–18:00 · Safety — Fire alarm testing.`);
 });

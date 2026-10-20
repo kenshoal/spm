@@ -4,6 +4,7 @@ Every test carries its case ID from docs/testcases/scrum_12_testcases.md.
 """
 
 import pytest
+from time_support import slot_times
 
 from app.models import RoomLayout, Slot, Venue
 from app.suitability import check_suitability
@@ -87,7 +88,8 @@ def test_venue_meeting_every_requirement_is_suitable() -> None:
         SuitabilityRequest(
             expected_attendance=100,
             required_layout=RoomLayout.THEATRE,
-            required_slot=Slot.PM,
+            required_start_minute=720,
+            required_end_minute=1080,
             required_facilities=["Projector", "Microphone"],
             required_accessibility=["Wheelchair ramp"],
         ),
@@ -113,7 +115,8 @@ def test_unsupported_layout_is_flagged(layout: RoomLayout) -> None:
     assert _attributes(result) == ["layout"]
 
 
-# AC3-P6, AC3-P7, AC3-P8 (partition): each slot the venue does not operate is flagged
+# SCRUM-65: per-venue operating slots are retired; a time outside 07:00-24:00 is refused with 422.
+# AC3-P6, AC3-P7, AC3-P8 (partition): each old slot's time is inside the fixed window, so none is flagged
 @pytest.mark.parametrize(
     "slot",
     list(Slot),
@@ -122,11 +125,15 @@ def test_unsupported_layout_is_flagged(layout: RoomLayout) -> None:
 def test_slot_outside_operating_slots_is_flagged(slot: Slot) -> None:
     result = check_suitability(
         _venue(operating_slots=[]),
-        SuitabilityRequest(expected_attendance=10, required_slot=slot),
+        SuitabilityRequest(
+            expected_attendance=10,
+            required_start_minute=slot_times([slot])["start_minute"],
+            required_end_minute=slot_times([slot])["end_minute"],
+        ),
     )
 
-    assert result.suitable is False
-    assert _attributes(result) == ["operating_slot"]
+    assert result.suitable is True
+    assert result.mismatches == []
 
 
 # AC3-P9 (partition): an accessibility feature the venue lacks is flagged
@@ -178,7 +185,7 @@ def test_no_optional_requirements_compares_attendance_only() -> None:
     assert result.mismatches == []
 
 
-# AC3-X1 (cross-cutting): every unmet attribute is reported together, each once
+# AC3-X1 (cross-cutting): every unmet attribute is reported together, each once (no operating slot since SCRUM-65)
 def test_all_unmet_attributes_are_reported_once() -> None:
     result = check_suitability(
         _venue(
@@ -191,7 +198,8 @@ def test_all_unmet_attributes_are_reported_once() -> None:
         SuitabilityRequest(
             expected_attendance=50,
             required_layout=RoomLayout.THEATRE,
-            required_slot=Slot.AM,
+            required_start_minute=420,
+            required_end_minute=720,
             required_facilities=["Stage"],
             required_accessibility=["Hearing loop"],
         ),
@@ -203,7 +211,6 @@ def test_all_unmet_attributes_are_reported_once() -> None:
         "capacity",
         "facilities",
         "layout",
-        "operating_slot",
     ]
 
 
@@ -220,7 +227,6 @@ def test_reasons_name_the_failing_values() -> None:
         SuitabilityRequest(
             expected_attendance=50,
             required_layout=RoomLayout.BOARDROOM,
-            required_slot=Slot.NIGHT,
             required_facilities=["Stage"],
             required_accessibility=["Hearing loop"],
         ),
@@ -229,6 +235,5 @@ def test_reasons_name_the_failing_values() -> None:
     reasons = {mismatch.attribute: mismatch.reason for mismatch in result.mismatches}
     assert "10" in reasons["capacity"] and "50" in reasons["capacity"]
     assert "boardroom" in reasons["layout"]
-    assert "NIGHT" in reasons["operating_slot"]
     assert "Stage" in reasons["facilities"]
     assert "Hearing loop" in reasons["accessibility"]

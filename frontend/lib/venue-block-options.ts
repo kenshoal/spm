@@ -14,6 +14,9 @@ export interface VenueBlock {
   venue_id: string;
   start_date: string;
   end_date: string;
+  // SCRUM-65: the blocked time on each date; slots are what it touches.
+  start_minute: number;
+  end_minute: number;
   slots: Slot[];
   reason_category: BlockReason;
   reason_detail: string | null;

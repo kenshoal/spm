@@ -2,7 +2,7 @@
 
 Last reviewed: 20 October 2026
 
-Status: **contract approved by the story owner and Product Owner (Jaren) on 20 October 2026**, with the three decisions below. Slice 1 is in progress; results are recorded below as work proceeds.
+Status: **contract approved by the story owner and Product Owner (Jaren) on 20 October 2026**, with the decisions below. Slice 1 is merged (PR #73) and applied to shared (`0050`). Slice 2 (blocks, search, suitability, calendar, screens) is on `feat/scrum-65-blocks-search-screens`.
 
 ## Story
 
@@ -10,7 +10,7 @@ Status: **contract approved by the story owner and Product Owner (Jaren) on 20 O
 | --- | --- |
 | Jira key | SCRUM-65 |
 | Title | Book Venues in 15-Minute Increments |
-| Sprint | Sprint 3 (ends 22 October 2026) for slice 1; the rest carries into Sprint 4 |
+| Sprint | Sprint 3 (ends 22 October 2026): slice 1, and slice 2 pulled forward by the Product Owner on 20 October 2026 |
 | User story | As a coordinator, I want to book a venue for an exact start and end time in 15-minute steps, so that the booking matches the time my event actually needs. |
 | Source | Customer ruling, GitHub Discussion #131: the 15-minute unit replaces AM / PM / Night for venue timing, and the 07:00–24:00 operating window stays. Product Owner approval 18 October 2026. Moved into Sprint 3 in place of SCRUM-57 by team decision (Agent Discussions #2401, #2405). |
 | Related | SCRUM-20 (conflict rules, padding; Koei), SCRUM-31 (availability view; Kai Jie), SCRUM-35 (change requests; Heng Rui), SCRUM-59 (setup and turnaround) |
@@ -33,7 +33,8 @@ The seven live Jira criteria (read on 20 October 2026) were reviewed with the vo
 
 1. **Slot ranges:** AM = 07:00–12:00, PM = 12:00–18:00, Night = 18:00–24:00. These replace Jira's proposed 07–12 / 13–18 / 19–24. They leave no gaps, so consecutive slots become one exact range: the active AM + PM blocks on shared become 07:00–18:00 with nothing added or lost.
 2. **Operating window:** one fixed 07:00–24:00 window for every venue (#131). Per-venue operating slots retire in Sprint 4, with the venue form, search and suitability. Every venue on shared already operates all three slots.
-3. **Sprint split:** slice 1 in Sprint 3; the rest in Sprint 4.
+3. **Sprint split:** slice 1 in Sprint 3; the rest in Sprint 4. **Changed 20 October 2026 (Product Owner):** slice 2 is pulled into Sprint 3 as well.
+4. **SCRUM-31's calendar stays on slots** (Kai Jie's story): its slot states read the derived `slots` column. Its "Not offered" state still follows the venue's old operating slots, which no longer limit booking or search; Kai Jie to decide how the calendar moves to times.
 
 ### Approved criteria
 
@@ -123,3 +124,46 @@ Slice 1, branch `feat/scrum-65-time-model`, 20 October 2026. Windows 11, Python 
 Not run: the frontend (unchanged in slice 1) and a browser journey.
 
 Known flake, not from this story: `test_venue_setup_turnaround.py::test_update_changes_both_times_only` (SCRUM-59) sometimes fails on Windows because two `updated_at` values share a microsecond. It fails the same way on unchanged `dev`.
+
+## Slice 2: blocks, search, suitability, calendar and screens
+
+### Design
+
+- **Database `0051_venue_block_times.sql`:** `venue_blocks.start_minute` and `end_minute` with the same checks as bookings; existing blocks convert with the slice 1 ranges (a non-consecutive block stops the migration); `0050`'s trigger keeps `slots` derived. `create_venue_block` takes the times instead of slots (same venue lock, `service_role` only). `decide_venue_booking_request` compares blocks by time and no longer refuses on the venue's operating slots (decision 2); `outside_operating_slots` stays an allowed code for old refusals.
+- **venueService:** blocks are created with times (422 codes as in AC1, `slots` refused); approval, block alerts, `POST /venues/{id}/availability` and search compare by date and time. Search takes `date`, `start_minute`, `end_minute` (times need a date: `date_required`, `times_incomplete`); with only a date, a venue needs some free time in 07:00-24:00. Suitability takes `required_start_minute` / `required_end_minute` (422 when invalid); the `operating_slot` mismatch is retired. Decision and block notices add the time ranges.
+- **Frontend:** a shared start/end time picker (15-minute steps, 07:00-24:00). The block form, search and suitability check use it; the block list, the Venue Staff calendar (one row per date listing blocked and booked times), booking lists, the coordinator's bookings panel, the Safety Officer page and notifications show times (older notices without times still show their slots). The venue form no longer edits operating slots.
+
+### Specification (slice 2)
+
+| ID | AC | Test scenario | Technique | Expected result | Layer |
+| --- | --- | --- | --- | --- | --- |
+| AC3-H1 | AC3 | Venue Staff block 12:30-14:00 | Happy | 201; times stored; `slots` [PM] | API, DB |
+| AC3-N1 | AC3 | Off step, outside 07:00-24:00, end not after start | Negative | 422 with the code; nothing stored | API, DB |
+| AC3-N2 | AC3 | The retired `slots` field | Negative | 422 | API |
+| AC3-B1 | AC3 | Booking 11:00-12:45 vs block 12:30-14:00; 11:00-12:30; 14:00-15:00 | Boundary | `active_block`; approved; approved | API, DB |
+| AC3-H2 | AC3 | Search a blocked time and a later time that day | Happy | Not offered; offered | API |
+| AC3-X1 | AC3 | A new block alerts only time-overlapping approved bookings | Cross-cutting | One notice, with both time ranges | API, unit |
+| AC4-H1 | AC4 | Search around an approved booking; a pending one | Happy | Overlap hidden; adjacent and pending-only offered | API |
+| AC4-B1 | AC4 | Date-only search: 07:00-24:00 fully taken vs 15 minutes free | Boundary | Hidden; offered | API |
+| AC4-N1 | AC4 | Invalid search times; times without a date | Negative | 422 with the code | API, unit |
+| AC4-H2 | AC4 | Availability check reports the overlapping part in time | Happy | Block 12:30-14:00 and booking 12:00-13:00 parts | API |
+| AC4-P1 | AC4 | A free time | Partition | Available, no reasons | API |
+| AC4-H3, AC4-N2 | AC4 | Suitability with a valid time; invalid or partial time; old slot field | Happy, negative | 200 suitable; 422 | API, unit |
+| AC4-P3 | AC4 | A PM-time booking at a venue whose old operating slots are AM only | Partition | Approved (fixed window) | DB |
+| AC5-H2 | AC5 | Existing blocks hold their slots' range | Happy | No mismatches | DB |
+| AC6-H1, AC6-B1, AC6-H2, AC6-N1 | AC6 | Time labels, 15-minute choices, form parsing and its messages | Happy, boundary, negative | As in `__tests__/time-range.test.ts` | Unit |
+
+### Existing tests changed (AC7)
+
+Converted from slots to the times they stand for (AM 07:00-12:00, PM 12:00-18:00, NIGHT 18:00-24:00) with outcomes unchanged, through `tests/time_support.py`: SCRUM-23 (`test_block_*`, `test_venue_blocks.py`), SCRUM-15 (`test_booking_decision*`, `test_booked_availability.py`), SCRUM-12 (`test_suitability.py`, `test_venues_suitability.py`), SCRUM-31 (`test_venue_calendar.py`, block helper only), SCRUM-59, SCRUM-60 and the frontend tests of the same screens. Cases whose rule changed by decision 2 now assert the new rule and say so: SCRUM-15 AC5-P2 and AC5-P4b, SCRUM-23 AC2-P5, P6, P7 and P9, SCRUM-12 AC3-P6 to P8 and AC3-X1, and the SCRUM-31 cross-check, which leaves out a partial-hours venue until its calendar moves to times.
+
+### Execution record (slice 2, 20 October 2026, Windows 11)
+
+| Layer | Command | Result | Notes |
+| --- | --- | --- | --- |
+| venueService | `pytest`, `ruff check .` | 548 passed; clean | Red first: 21 of the 25 new cases failed before the change (the other 4 refused for other reasons) |
+| equipmentService | `pytest` | 333 passed | |
+| Frontend unit | `npm test`, `npm run typecheck`, `npm run lint` | 419 passed; clean | Red first: the 8 time-helper cases failed before `venue-options.ts` had them |
+| Frontend browser | `npm run test:e2e` (mock services) | 45 passed | The mock venue API mirrors the time rules |
+| Frontend build | `npm run build` | Passed | |
+| Shared database (`rrmvhxrxrrnigjdxcbwt`) | `0051` applied by the owner in the SQL Editor; `verify_venue_block_times.sql` and `verify_venue_booking_times.sql` run rolled back through the Supabase MCP, 20 October 2026 | Applied; both verifiers passed | Live `create_venue_block` and `decide_venue_booking_request` bodies match the file (md5, ignoring CRLF line endings from the paste). The 3 existing blocks converted to 07:00-18:00, 07:00-18:00 and 07:00-24:00 with slots unchanged; `venue_blocks_times_valid` and `set_block_time_slots` present; one `create_venue_block` (times signature), EXECUTE for `service_role` and `postgres` only; no verifier rows left |
