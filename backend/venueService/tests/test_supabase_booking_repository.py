@@ -294,3 +294,25 @@ def test_create_does_not_send_the_cancel_columns() -> None:
     sent = json.loads(api.requests[0].content)
     assert "cancelled_by" not in sent
     assert "cancelled_at" not in sent
+
+
+# AC2-X3 (cross-cutting): the Supabase query asks for one venue's approved bookings that touch the window
+def test_list_approved_for_venue_filters_in_the_query() -> None:
+    api = FakeDataAPI(200, [_row(status="approved", decided_by=USER_ID, decided_at="2026-10-06T01:00:00+00:00")])
+
+    result = api.repo().list_approved_for_venue(VENUE_ID, date(2026, 10, 1), date(2026, 10, 31))
+
+    params = api.requests[0].url.params
+    assert params["venue_id"] == f"eq.{VENUE_ID}"
+    assert params["status"] == "eq.approved"
+    assert params["start_date"] == "lte.2026-10-31"
+    assert params["end_date"] == "gte.2026-10-01"
+    assert [item.id for item in result] == [BOOKING_ID]
+
+
+# AC2-X3 (cross-cutting): a malformed venue id is answered without calling Supabase
+def test_list_approved_for_venue_with_a_malformed_id_returns_nothing_without_querying() -> None:
+    api = FakeDataAPI()
+
+    assert api.repo().list_approved_for_venue("not-a-uuid", date(2026, 10, 1), date(2026, 10, 31)) == []
+    assert api.requests == []
