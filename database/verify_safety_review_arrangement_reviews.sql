@@ -90,8 +90,10 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0005' THEN
         GET STACKED DIAGNOSTICS v_detail = PG_EXCEPTION_DETAIL;
     END;
-    IF v_detail::jsonb -> 0 ->> 'kind' <> 'arrangement_needs_review'
-       OR (v_detail::jsonb -> 0 ->> 'arrangement_id')::uuid <> v_booking THEN
+    -- From 0047 the list may also start with readiness items, so look for the
+    -- review item rather than assuming it is first.
+    IF NOT v_detail::jsonb @> jsonb_build_array(jsonb_build_object(
+            'kind', 'arrangement_needs_review', 'arrangement_id', v_booking)) THEN
         RAISE EXCEPTION 'AC6-X6: unexpected detail %', v_detail;
     END IF;
     SELECT status INTO v_status FROM public.event_requests WHERE id = v_event;
@@ -100,9 +102,14 @@ BEGIN
         RAISE EXCEPTION 'AC6-X6: refused approval changed % / % reviews', v_status, v_count;
     END IF;
 
-    -- AC6-X8: a cleared review no longer blocks approval.
+    -- AC6-X8: a cleared review no longer blocks approval (the event is ready:
+    -- one approved booking, so this also holds from 0047).
     INSERT INTO public.event_requests (organiser_id, event_name, status)
         VALUES (v_officer, 'VERIFY SCRUM60 cleared', 'Safety Review') RETURNING id INTO v_event;
+    INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id,
+            start_date, end_date, slots, status, decided_by, decided_at)
+        VALUES (v_venue, v_officer, v_event, v_today + 11, v_today + 11,
+            ARRAY['AM']::public.booking_slot[], 'approved', v_officer, now());
     INSERT INTO public.arrangement_reviews (event_request_id, arrangement, arrangement_id,
             trigger_id, trigger_type, changed_fields, reason, cleared_at, cleared_by)
         VALUES (v_event, 'venue_booking', gen_random_uuid(), gen_random_uuid(), 'event_change',

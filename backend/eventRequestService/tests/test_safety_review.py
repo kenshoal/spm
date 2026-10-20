@@ -18,6 +18,7 @@ from app.controllers.event_request_controller import (
     get_authenticated_caller,
 )
 from app.main import create_app
+from app.repositories import SupabaseRepositoryError
 from app.services.event_transition_service import EventTransitionService
 
 OFFICER = "safety-1"
@@ -439,6 +440,39 @@ def test_only_safety_officers_see_the_queue(caller: str) -> None:
     assert response.status_code == 403
 
 
+# AC6-N7 (negative, SCRUM-60 0047): approval also waits for ordinary readiness
+# (SCRUM-58's event_readiness_issues); readiness items come first, then review
+# flags, the same order as the handover refusal.
+def test_approval_refused_until_event_is_ready() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+    events.readiness_issues[event_request_id] = [
+        {"kind": "equipment_not_reserved", "requirement_id": str(uuid4()),
+         "equipment_type": "Wireless microphone", "required": 4, "reserved": 2},
+    ]
+    review = flag(events, event_request_id)
+
+    response = decide(client, event_request_id, {"decision": "approved"})
+
+    assert response.status_code == 409
+    items = response.json()["outstanding"]
+    assert [item["kind"] for item in items] == ["equipment_not_reserved", "arrangement_needs_review"]
+    assert items[0]["message"] == "Wireless microphone: 2 of 4 reserved"
+    assert items[1]["review_id"] == review["id"]
+    assert_unchanged(events, event_request_id)
+
+
+# AC6-P3 (partition): readiness does not block asking for changes, which is how
+# the officer sends an unready event back to planning.
+def test_changes_allowed_while_not_ready() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+    events.readiness_issues[event_request_id] = [{"kind": "no_venue_booking"}]
+
+    response = decide(client, event_request_id, {"decision": "changes_requested", "reason": REASON})
+
+    assert response.status_code == 200
+    assert events.rows[event_request_id]["status"] == "Planning"
+
+
 # AC4a-N6 (negative, review of PR #62): the same arrangement ticked twice is
 # refused rather than saved twice.
 def test_duplicate_targets_are_refused() -> None:
@@ -453,3 +487,28 @@ def test_duplicate_targets_are_refused() -> None:
     assert response.status_code == 422
     assert_unchanged(events, event_request_id)
 
+
+
+# AC4b-N1 (negative): the decision is already saved when the coordinator lookup
+# fails, so the officer still gets 200 (not 502, then 409 on retry) and no notice
+# is sent (Tate, Agent Discussions #2405).
+def test_failed_coordinator_lookup_keeps_the_saved_decision(caplog) -> None:
+    client, events, event_request_id, spy = safety_fixture()
+
+    def unavailable(_event_request_id: str) -> str | None:
+        raise SupabaseRepositoryError("Supabase is unavailable")
+
+    events.latest_coordinator_id = unavailable
+
+    response = decide(
+        client,
+        event_request_id,
+        {"decision": "changes_requested", "reason": REASON, "targets": TARGETS},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "Planning"
+    assert events.rows[event_request_id]["status"] == "Planning"
+    assert len(events.safety_review_rows) == 1
+    assert spy.safety_changes == []
+    assert "safety changes requested" in caplog.text
