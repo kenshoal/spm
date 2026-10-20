@@ -15,11 +15,13 @@ from app.controllers.event_request_controller import router as event_request_rou
 from app.controllers.event_transition_controller import (
     router as event_transition_router,
 )
+from app.controllers.registration_controller import router as registration_router
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
 )
+from app.repositories.registration_repository import RegistrationRepository
 from app.services.arrangement_review_notification_relay import (
     ArrangementReviewNotificationRelay,
     build_arrangement_review_notification_relay,
@@ -49,6 +51,15 @@ from app.services.event_transition_service import (
     TransitionNotAllowedError,
 )
 from app.services.outbox_relay import OutboxRelay, build_outbox_relay
+from app.services.registration_rules import (
+    EventFullError,
+    EventNotVisibleError,
+    RegistrationNotOpenError,
+)
+from app.services.registration_service import (
+    AlreadyRegisteredError,
+    RegistrationService,
+)
 
 
 def create_app(
@@ -56,6 +67,7 @@ def create_app(
     coordinator_repository: CoordinatorAssignmentRepository | None = None,
     outbox_relay: OutboxRelay | None = None,
     arrangement_review_relay: ArrangementReviewNotificationRelay | None = None,
+    registration_repository: RegistrationRepository | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -89,6 +101,11 @@ def create_app(
     )
     application.state.event_request_service = event_request_service
     application.state.coordinator_assignment_service = coordinator_assignment_service
+    application.state.registration_service = (
+        RegistrationService(registration_repository)
+        if registration_repository is not None
+        else None
+    )
     application.state.event_transition_service = (
         EventTransitionService(event_request_service)
         if event_request_service is not None
@@ -103,6 +120,7 @@ def create_app(
     application.include_router(event_transition_router)
     application.include_router(event_request_router)
     application.include_router(arrangement_review_router)
+    application.include_router(registration_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(
@@ -237,6 +255,46 @@ def create_app(
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": str(error)},
+        )
+
+    @application.exception_handler(EventNotVisibleError)
+    async def event_not_visible(
+        request: Request, error: EventNotVisibleError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "Event not found", "code": "event_not_found"},
+        )
+
+    @application.exception_handler(RegistrationNotOpenError)
+    async def registration_not_open(
+        request: Request, error: RegistrationNotOpenError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Registration is not open for this event",
+                "code": "registration_not_open",
+            },
+        )
+
+    @application.exception_handler(EventFullError)
+    async def event_full(request: Request, error: EventFullError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "This event is full", "code": "event_full"},
+        )
+
+    @application.exception_handler(AlreadyRegisteredError)
+    async def already_registered(
+        request: Request, error: AlreadyRegisteredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "You are already registered for this event",
+                "code": "already_registered",
+            },
         )
 
     @application.exception_handler(SupabaseRepositoryError)
