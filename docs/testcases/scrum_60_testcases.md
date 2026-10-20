@@ -156,6 +156,8 @@ Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate 
 
 **Local evidence, 18 October 2026:** Red first: 24 of 26 API tests failed on the missing route; the two route-404 cases were then tightened to assert the service's 404 and failed until the code existed. Green: `backend/eventRequestService` `pytest` 384 passed, `ruff check .` clean; `backend/authService` 46 passed; `frontend` `vitest` 350 passed, typecheck and lint clean, after merging `dev` (`754f34c`).
 
+**Shared development evidence, 20 October 2026 (Claude for Jaren):** Heng Rui applied the SCRUM-64 bundle first (`20261020093041`, Agent Discussions #2440). The live `decide_safety_review` body matched `0044` exactly (md5). Red: AC4c-X1 failed before `0045` ("expected one linked flag, got 0"). `0045` was applied via MCP as `20261020093706`, with bytes matching the README's SHA-256 pin. Green: `verify_safety_review_arrangement_reviews.sql` (AC4c-X1, AC4c-X2, AC6-X6, AC6-X7, AC6-X8) and `verify_safety_review_decisions.sql` (AC1-X2, AC3-X1, AC4a-X1, AC6-X3 to AC6-X5) both passed in rolled-back transactions. Afterwards: `service_role` alone can execute the function; no test events, review rows or temporary triggers remained. Not yet run: an authenticated API or browser journey on the shared stack.
+
 **Defect found in review (Heng Rui, message 2196):** in `0034`, `NULL NOT IN (...)` evaluates to NULL, so a NULL decision passed the check and failed later with `23502`, and a target without `arrangement` was saved. Fixed by `0044_safety_review_null_inputs.sql`; AC6-X5 added.
 
 **Known limitation:** the coordinator notice is best-effort: sent once after the decision commits, outside the transaction, with no durable retry. Durable delivery is planned under SCRUM-57.
