@@ -63,7 +63,7 @@ Layers: U = unit (`tests/test_registration_rules.py`), A = API (`tests/test_regi
 | ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | AC1-H1 | AC1 | Attendee views a Confirmed event | Happy | Confirmed event, capacity 10, 3 registered, open window | GET `/attendee/events/{id}` as an attendee | — | 200, D4 fields, `places_remaining` 7 | — | A |
-| AC1-H2 | AC1 | List shows only Confirmed events with an open window | Happy | Open Confirmed, closed Confirmed, not-yet-open Confirmed, Planning | GET `/attendee/events` | — | Only the open Confirmed event | — | A |
+| AC1-H2 | AC1 | List shows only Confirmed events inside their window; a full open event is still listed, with `places_remaining` 0 (D8's PO condition, added 20 Oct) | Happy | Open Confirmed, full open Confirmed, closed Confirmed, not-yet-open Confirmed, windowless Confirmed, Planning | GET `/attendee/events` | — | Only the open and full Confirmed events; the full one shows 0 places | — | A |
 | AC1-X1 | AC1 | No internal field leaks | Cross-cutting | Confirmed event with organiser, venue, equipment and accessibility data | GET the event; call `to_public_event` | — | Keys equal the D4 whitelist exactly | — | U + A |
 | AC1-P1…P10 | AC1 | Each non-Confirmed status is not visible | Partition | Event in the given status | GET `/attendee/events/{id}` | Draft, Submitted, Under Review, Changes Requested, Rejected, Approved, Planning, Safety Review, Completed, Cancelled | 404 | — | A |
 | AC1-N1 | AC1 | Unknown id | Negative | Empty repository | GET `/attendee/events/{random}` | — | 404 | — | A |

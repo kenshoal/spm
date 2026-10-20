@@ -52,10 +52,14 @@ def test_attendee_views_confirmed_event() -> None:
     assert body["places_remaining"] == 7
 
 
-# AC1-H2 (happy): the list shows only Confirmed events whose window is open now
+# AC1-H2 (happy): the list shows Confirmed events inside their window only —
+# closed, not-yet-open, windowless and non-Confirmed events are absent — and a
+# full open event is still listed, with zero places remaining (D8's condition)
 def test_list_shows_only_confirmed_events_with_open_window() -> None:
     repo = FakeRegistrationRepository()
     open_id = add_event(repo, event_name="Open")
+    full_id = add_event(repo, event_name="Full", registration_capacity=1)
+    fill(repo, full_id, 1)
     add_event(repo, event_name="Closed", registration_closes_at=NOW)
     add_event(repo, event_name="Not yet", registration_opens_at=NOW + timedelta(1),
               registration_closes_at=NOW + timedelta(5))
@@ -67,7 +71,8 @@ def test_list_shows_only_confirmed_events_with_open_window() -> None:
         response = client.get("/attendee/events")
 
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [open_id]
+    assert [(item["id"], item["places_remaining"])
+            for item in response.json()] == [(open_id, 10), (full_id, 0)]
 
 
 # AC1-X1 (cross-cutting): the response keys equal the public whitelist exactly
