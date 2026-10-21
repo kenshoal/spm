@@ -56,11 +56,23 @@ test.each([
 
 // AC5-H3 (happy): every refusal code has a plain-language explanation
 test("explains each refusal code", () => {
-  expect(refusalMessages(["venue_unavailable", "outside_operating_slots", "active_block", "booking_conflict", "new_code"])).toEqual([
+  expect(
+    refusalMessages([
+      "venue_unavailable",
+      "outside_operating_slots",
+      "active_block",
+      "setup_outside_window",
+      "turnaround_outside_window",
+      "booking_conflict",
+      "new_code",
+    ]),
+  ).toEqual([
     "The venue is blocked in the catalogue.",
     "The venue does not operate one of the requested slots.",
     "The venue is blocked for part of this period.",
-    "Another approved booking already holds part of this period.",
+    "The venue's setup time would start before 07:00.",
+    "The venue's turnaround time would end after 24:00.",
+    "Another approved booking, including the venue's setup and turnaround time, already holds part of this period.",
     "The venue is not available for this period.",
   ]);
 });
@@ -116,7 +128,7 @@ test("explains a refused approval", async () => {
   const state = await decideBookingRequest("b1", {}, form({ decision: "approved" }));
 
   expect(state.message).toBe(
-    "Approval refused. The venue is blocked for part of this period. Another approved booking already holds part of this period. The refusal has been recorded.",
+    "Approval refused. The venue is blocked for part of this period. Another approved booking, including the venue's setup and turnaround time, already holds part of this period. The refusal has been recorded.",
   );
   expect(navigation.redirect).not.toHaveBeenCalled();
   expect(navigation.revalidatePath).not.toHaveBeenCalled();

@@ -67,7 +67,10 @@ const REFUSAL_TEXT: Record<string, string> = {
   // Not produced since SCRUM-65 (every venue runs 07:00-24:00); kept for old refusals.
   outside_operating_slots: "The venue does not operate one of the requested slots.",
   active_block: "The venue is blocked for part of this period.",
-  booking_conflict: "Another approved booking already holds part of this period.",
+  // SCRUM-20: the venue's setup and turnaround must fit 07:00-24:00 and count towards conflicts.
+  setup_outside_window: "The venue's setup time would start before 07:00.",
+  turnaround_outside_window: "The venue's turnaround time would end after 24:00.",
+  booking_conflict: "Another approved booking, including the venue's setup and turnaround time, already holds part of this period.",
 };
 
 export function refusalMessages(codes: readonly string[]): string[] {
