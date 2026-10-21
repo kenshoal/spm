@@ -14,6 +14,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from time_support import slot_times
 
 from app import booking_decision_store
 from app.booking_models import BookingRequest
@@ -57,7 +58,7 @@ def make_block(venue_id: str, start: str, end: str, slots: list[str]) -> str:
         json={
             "start_date": start,
             "end_date": end,
-            "slots": slots,
+            **slot_times(slots),
             "reason_category": "maintenance",
         },
     )
@@ -219,26 +220,28 @@ def test_an_active_block_refuses_approval_and_is_recorded():
     assert refusal["created_at"]
 
 
-# AC5-P1, AC5-P2 (partition): a catalogue-blocked venue or a non-operating slot refuses approval
-@pytest.mark.parametrize(
-    "venue_changes,slots,codes",
-    [
-        ({"status": "blocked"}, ["AM"], ["venue_unavailable"]),
-        ({"operating_slots": ["AM", "PM"]}, ["NIGHT"], ["outside_operating_slots"]),
-    ],
-    ids=["AC5-P1", "AC5-P2"],
-)
-def test_unavailable_venue_or_slot_refuses_approval(venue_changes, slots, codes):
+# AC5-P1 (partition): a catalogue-blocked venue refuses approval
+def test_unavailable_venue_or_slot_refuses_approval():
     venue = make_venue()
-    assert client.patch(f"/venues/{venue}", json=venue_changes).status_code == 200
-    request = make_request(venue, "2026-10-20", "2026-10-20", slots)
+    assert client.patch(f"/venues/{venue}", json={"status": "blocked"}).status_code == 200
+    request = make_request(venue, "2026-10-20", "2026-10-20", ["AM"])
 
     response = decide(request, decision="approved")
 
     assert response.status_code == 409
-    assert response.json()["detail"]["refusal_codes"] == codes
+    assert response.json()["detail"]["refusal_codes"] == ["venue_unavailable"]
     assert status_of(request) == "pending"
-    assert [r["refusal_codes"] for r in refusals(request)] == [codes]
+    assert [r["refusal_codes"] for r in refusals(request)] == [["venue_unavailable"]]
+
+
+# AC5-P2 (partition): an old non-operating slot no longer refuses; every venue runs 07:00-24:00 (SCRUM-65)
+def test_operating_slots_no_longer_refuse_approval():
+    venue = make_venue()
+    assert client.patch(f"/venues/{venue}", json={"operating_slots": ["AM", "PM"]}).status_code == 200
+    request = make_request(venue, "2026-10-20", "2026-10-20", ["NIGHT"])
+
+    assert decide(request, decision="approved").status_code == 200
+    assert refusals(request) == []
 
 
 # AC5-P3 (partition): lifted blocks and blocks on other slots or dates do not refuse

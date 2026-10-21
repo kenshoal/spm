@@ -13,6 +13,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from time_support import slot_times
 
 from app.block_repository import block_repository
 from app.booking_models import BookingRequest, BookingRequestStatus
@@ -219,7 +220,7 @@ def test_changing_times_leaves_bookings_and_blocks_unchanged() -> None:
         json={
             "start_date": "2026-11-02",
             "end_date": "2026-11-02",
-            "slots": ["PM"],
+            **slot_times(["PM"]),
             "reason_category": "maintenance",
         },
     )

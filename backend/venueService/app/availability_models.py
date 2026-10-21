@@ -1,34 +1,35 @@
-"""Requests and results for venue-block checks, not booking creation."""
+"""Requests and results for venue availability checks, not booking creation.
+
+A period is an inclusive date range with one start and end time on each date,
+in minutes after midnight (SCRUM-65).
+"""
 
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.models import Slot
+from app.slots import check_time_range
 
 
 class Period(BaseModel):
     model_config = ConfigDict(extra="forbid")
     start_date: date
     end_date: date
-    slots: list[Slot] = Field(min_length=1)
-
-    @field_validator("slots")
-    @classmethod
-    def validate_slots(cls, slots: list[Slot]) -> list[Slot]:
-        if len(set(slots)) != len(slots):
-            raise ValueError("slots must not contain duplicates")
-        return [slot for slot in Slot if slot in slots]
+    start_minute: int
+    end_minute: int
 
     @model_validator(mode="after")
-    def validate_dates(self) -> "Period":
+    def validate_dates_and_times(self) -> "Period":
         if self.end_date < self.start_date:
             raise ValueError("end_date must be on or after start_date")
+        check_time_range(self.start_minute, self.end_minute)
         return self
 
 
 class BlockConflict(Period):
+    """The part of an active block that a requested period shares."""
+
     block_id: str
 
 
@@ -41,14 +42,6 @@ class BookingOverlap(Period):
 class AvailabilityResult(BaseModel):
     venue_id: str
     available: bool
-    reasons: list[
-        Literal[
-            "venue_unavailable",
-            "outside_operating_slots",
-            "active_block",
-            "booking_conflict",
-        ]
-    ]
-    unsupported_slots: list[Slot]
+    reasons: list[Literal["venue_unavailable", "active_block", "booking_conflict"]]
     conflicts: list[BlockConflict]
-    booking_conflicts: list[BookingOverlap] = Field(default_factory=list)
+    booking_conflicts: list[BookingOverlap] = []

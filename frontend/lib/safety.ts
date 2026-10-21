@@ -1,7 +1,6 @@
 import { getJson } from "./api";
 import { equipmentApiUrl } from "./equipment";
 import type { EventRequest } from "./event-requests";
-import type { Slot } from "./venue-options";
 import type { VenueBlock } from "./venue-block-options";
 
 // SCRUM-60: the Safety Officer's check of an event in Safety Review.
@@ -81,17 +80,19 @@ export function parseSafetyDecisionForm(formData: FormData): {
   return { payload: { decision, reason, targets }, errors };
 }
 
-// An active block is a restriction on a booking when their dates and slots overlap.
+// An active block is a restriction on a booking when they share a date and
+// overlap in time (SCRUM-65).
 export function overlappingBlocks(
   blocks: VenueBlock[],
-  booking: { start_date: string; end_date: string; slots: readonly Slot[] },
+  booking: { start_date: string; end_date: string; start_minute: number; end_minute: number },
 ): VenueBlock[] {
   return blocks.filter(
     (block) =>
       block.status === "active" &&
       block.start_date <= booking.end_date &&
       block.end_date >= booking.start_date &&
-      block.slots.some((slot) => booking.slots.includes(slot)),
+      block.start_minute < booking.end_minute &&
+      booking.start_minute < block.end_minute,
   );
 }
 

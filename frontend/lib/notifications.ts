@@ -1,4 +1,5 @@
 import { getJson } from "./api";
+import { timeRangeLabel } from "./venue-options";
 import { reasonLabel, type BlockReason } from "./venue-block-options";
 
 export interface AppNotification {
@@ -25,6 +26,16 @@ export async function listNotifications(): Promise<AppNotification[]> {
 // Each known type links to the view its recipient can open: the Organiser's own
 // request page, or the assigned Coordinator's coordination page. A type added by
 // another story still shows, with a generic message and no guessed link.
+// SCRUM-65: a notice carries its time range in minutes; notices sent before
+// then only have slots, which are shown as they were.
+function whenText(payload: Record<string, unknown>, startKey: string, endKey: string, slotsKey: string): string | null {
+  const start = payload[startKey];
+  const end = payload[endKey];
+  if (typeof start === "number" && typeof end === "number") return timeRangeLabel(start, end);
+  const slots = payload[slotsKey];
+  return Array.isArray(slots) && slots.length ? slots.join(", ") : null;
+}
+
 export function describeNotification(notification: AppNotification, roles: readonly string[] = []): NotificationSummary {
   const requestId = notification.payload.event_request_id;
   const id = typeof requestId === "string" && requestId ? encodeURIComponent(requestId) : null;
@@ -73,11 +84,10 @@ export function describeNotification(notification: AppNotification, roles: reado
       const event = text("event_name");
       const href = id && `/coordination/requests/${id}`;
       if (notification.event_type === "venue_booking_approved") {
-        const slots = notification.payload.slots;
         const where = [
           text("venue_name"),
           text("start_date") && text("end_date") && `${text("start_date")} to ${text("end_date")}`,
-          Array.isArray(slots) && slots.length ? slots.join(", ") : null,
+          whenText(notification.payload, "start_minute", "end_minute", "slots"),
         ].filter(Boolean);
         return {
           message: `Your venue booking${event ? ` for ${event}` : ""} was approved.`,
@@ -104,14 +114,13 @@ export function describeNotification(notification: AppNotification, roles: reado
       };
       const venue = text("venue_name");
       const event = text("event_name");
-      const slots = notification.payload.block_slots;
       const category = text("reason_category");
       const reason = category
         ? [reasonLabel(category as BlockReason), text("reason_detail")].filter(Boolean).join(" — ")
         : null;
       const parts = [
         text("block_start_date") && text("block_end_date") && `Blocked ${text("block_start_date")} to ${text("block_end_date")}`,
-        Array.isArray(slots) && slots.length ? slots.join(", ") : null,
+        whenText(notification.payload, "block_start_minute", "block_end_minute", "block_slots"),
         reason,
       ].filter(Boolean);
       return {

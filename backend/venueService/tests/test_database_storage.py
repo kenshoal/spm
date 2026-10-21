@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from time_support import slot_times
 
 from app import storage
 from app.block_models import VenueBlock
@@ -60,7 +61,8 @@ def database(monkeypatch):
                 venue_id=args["p_venue_id"],
                 start_date=args["p_start_date"],
                 end_date=args["p_end_date"],
-                slots=args["p_slots"],
+                start_minute=args["p_start_minute"],
+                end_minute=args["p_end_minute"],
                 reason_category=args["p_reason_category"],
                 reason_detail=args["p_reason_detail"],
                 created_by=args["p_created_by"],
@@ -131,7 +133,7 @@ def create_block(client, venue_id, slots=None):
         json={
             "start_date": "2026-09-20",
             "end_date": "2026-09-21",
-            "slots": slots or ["AM"],
+            **slot_times(slots or ["AM"]),
             "reason_category": "maintenance",
             "reason_detail": "Repairs",
         },
@@ -161,14 +163,14 @@ def test_database_creation_retrieval_update_and_search_across_requests(database)
         }
         assert (
             client.get(
-                "/venues/search", params={"date": "2026-09-20", "slot": "PM"}
+                "/venues/search", params={"date": "2026-09-20", **slot_times(["PM"])}
             ).json()
             == []
         )
         assert (
             len(
                 client.get(
-                    "/venues/search", params={"date": "2026-09-20", "slot": "AM"}
+                    "/venues/search", params={"date": "2026-09-20", **slot_times(["AM"])}
                 ).json()
             )
             == 1
@@ -207,7 +209,7 @@ def test_database_blocks_are_scoped_to_venue(database):
         assert create_block(client, first["id"]).status_code == 201
         assert client.get(f"/venues/{second['id']}/blocks").json() == []
         results = client.get(
-            "/venues/search", params={"date": "2026-09-20", "slot": "AM"}
+            "/venues/search", params={"date": "2026-09-20", **slot_times(["AM"])}
         )
         assert {v["id"] for v in results.json()} == {second["id"]}
 
@@ -261,7 +263,7 @@ def test_invalid_creator_is_not_sent_to_database():
         data = VenueBlockCreate(
             start_date="2026-09-20",
             end_date="2026-09-20",
-            slots=["AM"],
+            **slot_times(["AM"]),
             reason_category="maintenance",
         )
         with pytest.raises(StorageError, match="creator UUID"):

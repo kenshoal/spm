@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { BLOCK_REASONS, REASON_DETAIL_MAX, reasonLabel } from "@/lib/venue-block-options";
-import { SLOTS } from "@/lib/venue-options";
+import { TimeRangeFields } from "@/app/components/time-range-fields";
 import { createVenueBlock, type BlockFormState } from "./actions";
 
 const initialState: BlockFormState = {};
@@ -33,19 +33,10 @@ export function BlockForm({ venues, selectedVenueId }: { venues: { id: string; n
         <label className={labelClass}>Start date<input name="start_date" type="date" defaultValue={values?.start_date} className={inputClass} /><FieldError message={errors.start_date} /></label>
         <label className={labelClass}>End date<input name="end_date" type="date" defaultValue={values?.end_date} className={inputClass} /><FieldError message={errors.end_date} /></label>
       </div>
-      <fieldset>
-        <legend className={labelClass}>Slots</legend>
-        <p className="mt-1 text-xs text-[#718078]">Applied on every date in the range. NIGHT belongs to its starting date.</p>
-        <div className="mt-2 flex flex-wrap gap-4">
-          {SLOTS.map((slot) => (
-            <label key={slot} className="inline-flex items-center gap-2 text-sm text-[#273832]">
-              <input type="checkbox" name="slots" value={slot} defaultChecked={values?.slots.includes(slot)} />
-              {slot}
-            </label>
-          ))}
-        </div>
-        <FieldError message={errors.slots} />
-      </fieldset>
+      <div>
+        <TimeRangeFields start={values?.start_time} end={values?.end_time} errors={errors} inputClass={inputClass} labelClass={labelClass} />
+        <p className="mt-1 text-xs text-[#718078]">Blocked at these times on every date in the range.</p>
+      </div>
       <label className={labelClass}>Reason
         <select name="reason_category" defaultValue={values?.reason_category ?? ""} className={inputClass}>
           <option value="">Choose a reason</option>

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from time_support import slot_times
 
 from app.booking_models import BookingRequest, BookingRequestStatus
 from app.booking_repository import booking_repository
@@ -53,8 +54,8 @@ def test_search_excludes_a_booked_slot():
     venue = make_venue()
     book(venue, "2026-10-20", "2026-10-21", ["AM"])
 
-    assert venue not in search(date="2026-10-20", slot="AM")
-    assert venue not in search(date="2026-10-21", slot="AM")
+    assert venue not in search(date="2026-10-20", **slot_times(["AM"]))
+    assert venue not in search(date="2026-10-21", **slot_times(["AM"]))
 
 
 # AC3-P1 (partition): pending and rejected requests reserve nothing
@@ -63,7 +64,7 @@ def test_pending_and_rejected_requests_do_not_hide_a_venue(status):
     venue = make_venue()
     book(venue, "2026-10-20", "2026-10-20", ["AM"], status=status)
 
-    assert venue in search(date="2026-10-20", slot="AM")
+    assert venue in search(date="2026-10-20", **slot_times(["AM"]))
 
 
 # AC3-P2 (partition): other slots, other dates and other venues stay offered
@@ -71,12 +72,12 @@ def test_other_slots_dates_and_venues_stay_offered():
     venue, other = make_venue(), make_venue()
     book(venue, "2026-10-20", "2026-10-20", ["AM"])
 
-    assert venue in search(date="2026-10-20", slot="PM")
-    assert venue in search(date="2026-10-21", slot="AM")
-    assert other in search(date="2026-10-20", slot="AM")
+    assert venue in search(date="2026-10-20", **slot_times(["PM"]))
+    assert venue in search(date="2026-10-21", **slot_times(["AM"]))
+    assert other in search(date="2026-10-20", **slot_times(["AM"]))
 
 
-# AC3-B1 (boundary): a date-only search needs one operating slot free of blocks and bookings
+# AC3-B1 (boundary): a date-only search needs some of 07:00-24:00 free of blocks and bookings (SCRUM-65)
 def test_date_only_search_counts_blocks_and_bookings_together():
     venue = make_venue(slots=("AM", "PM"))
     book(venue, "2026-10-20", "2026-10-20", ["AM"])
@@ -84,7 +85,8 @@ def test_date_only_search_counts_blocks_and_bookings_together():
 
     client.post(
         f"/venues/{venue}/blocks",
-        json={"start_date": "2026-10-20", "end_date": "2026-10-20", "slots": ["PM"], "reason_category": "safety"},
+        json={"start_date": "2026-10-20", "end_date": "2026-10-20",
+              **slot_times(["PM", "NIGHT"]), "reason_category": "safety"},
     )
     assert venue not in search(date="2026-10-20")
 
@@ -94,9 +96,9 @@ def test_booking_dates_are_inclusive_in_search():
     venue = make_venue()
     book(venue, "2026-10-20", "2026-10-21", ["AM"])
 
-    assert venue in search(date="2026-10-19", slot="AM")
-    assert venue not in search(date="2026-10-21", slot="AM")
-    assert venue in search(date="2026-10-22", slot="AM")
+    assert venue in search(date="2026-10-19", **slot_times(["AM"]))
+    assert venue not in search(date="2026-10-21", **slot_times(["AM"]))
+    assert venue in search(date="2026-10-22", **slot_times(["AM"]))
 
 
 # AC3-H2 (happy): the availability check reports an approved booking as a conflict
@@ -107,7 +109,7 @@ def test_availability_check_reports_booking_conflicts():
 
     response = client.post(
         f"/venues/{venue}/availability",
-        json={"start_date": "2026-10-21", "end_date": "2026-10-22", "slots": ["AM", "PM"]},
+        json={"start_date": "2026-10-21", "end_date": "2026-10-22", **slot_times(["AM", "PM"])},
     )
 
     assert response.status_code == 200
@@ -115,7 +117,7 @@ def test_availability_check_reports_booking_conflicts():
     assert body["available"] is False
     assert body["reasons"] == ["booking_conflict"]
     assert body["booking_conflicts"] == [
-        {"booking_id": booked, "start_date": "2026-10-21", "end_date": "2026-10-21", "slots": ["AM"]}
+        {"booking_id": booked, "start_date": "2026-10-21", "end_date": "2026-10-21", **slot_times(["AM"])}
     ]
     assert body["conflicts"] == []
 
@@ -127,7 +129,7 @@ def test_availability_check_free_period():
 
     response = client.post(
         f"/venues/{venue}/availability",
-        json={"start_date": "2026-10-20", "end_date": "2026-10-20", "slots": ["PM"]},
+        json={"start_date": "2026-10-20", "end_date": "2026-10-20", **slot_times(["PM"])},
     )
 
     assert response.json()["available"] is True

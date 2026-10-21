@@ -22,12 +22,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_core import PydanticCustomError
 
 from app.models import Slot, _now
-from app.slots import slots_to_range, touched_slots
-
-OPEN_MINUTE, CLOSE_MINUTE, STEP_MINUTES = 420, 1440, 15
+from app.slots import check_time_range, slots_to_range, touched_slots
 
 
 class BookingRequestStatus(str, Enum):
@@ -59,19 +56,7 @@ class BookingRequestCreate(BaseModel):
 
     @model_validator(mode="after")
     def _valid_times(self) -> BookingRequestCreate:
-        # The codes match SCRUM-20's check_booking_time; the database checks
-        # the same rules (0050).
-        start, end = self.start_minute, self.end_minute
-        if start % STEP_MINUTES or end % STEP_MINUTES:
-            raise PydanticCustomError("off_step", "Times must be on a 15-minute step.")
-        if start < OPEN_MINUTE or end > CLOSE_MINUTE:
-            raise PydanticCustomError(
-                "outside_operating_window", "Bookings must fall between 07:00 and 24:00."
-            )
-        if end <= start:
-            raise PydanticCustomError(
-                "end_not_after_start", "The end must be after the start."
-            )
+        check_time_range(self.start_minute, self.end_minute)
         return self
 
 

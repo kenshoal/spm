@@ -16,6 +16,7 @@ from booking_support import (
     seed_booking,
 )
 from fastapi.testclient import TestClient
+from time_support import slot_times
 
 from app.block_models import BlockReason, BlockStatus, VenueBlockCreate
 from app.block_repository import block_repository
@@ -51,7 +52,8 @@ def block(venue_id: str, start: str, end: str, slots: list[str], **extra):
         VenueBlockCreate(
             start_date=date.fromisoformat(start),
             end_date=date.fromisoformat(end),
-            slots=slots,
+            # SCRUM-65: blocks take the times the slot names map to.
+            **slot_times(slots),
             reason_category=BlockReason.MAINTENANCE,
             reason_detail=extra.pop("detail", "Air-con repairs"),
         ),
@@ -344,14 +346,16 @@ def test_cancelled_booking_frees_its_slots() -> None:
 
 # AC3-X1 (cross-cutting): the calendar and venue search agree for every date and slot
 def test_calendar_agrees_with_venue_search() -> None:
+    # SCRUM-65: search takes the slot's times, and a venue's old operating slots
+    # no longer limit search (every venue runs 07:00-24:00), so a partial-hours
+    # venue is left out until this calendar moves to times (SCRUM-31).
     plain = make_venue(name="Plain Hall")
     busy = make_venue(name="Busy Hall")
-    am_only = make_venue(name="Morning Hall", operating_slots=["AM"])
     closed = make_venue(name="Closed Hall", status="blocked")
     approved(busy.id, "2026-10-03", "2026-10-04", ["AM", "PM"])
     block(busy.id, "2026-10-06", "2026-10-06", ["NIGHT"])
     block(plain.id, "2026-10-07", "2026-10-08", ["PM"])
-    venues = [plain, busy, am_only, closed]
+    venues = [plain, busy, closed]
 
     for venue in venues:
         body = calendar(venue.id).json()
@@ -359,7 +363,7 @@ def test_calendar_agrees_with_venue_search() -> None:
             date_text = f"2026-10-{day:02d}"
             for slot in ("AM", "PM", "NIGHT"):
                 found = client.get(
-                    "/venues/search", params={"date": date_text, "slot": slot}
+                    "/venues/search", params={"date": date_text, **slot_times([slot])}
                 ).json()
                 in_search = venue.id in [item["id"] for item in found]
                 is_open = states(body, date_text)[slot] == "open"

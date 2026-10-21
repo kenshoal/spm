@@ -7,6 +7,7 @@ import {
 } from "@/lib/event-bookings";
 import { listVenues } from "@/lib/venues";
 import { CancelBookingButton } from "./cancel-booking-button";
+import { timeRangeLabel } from "@/lib/venue-options";
 
 // Status is written out, never conveyed by colour alone.
 const STATUS_STYLES: Record<EventBooking["status"], string> = {
@@ -37,7 +38,7 @@ export function VenueBookingsList({
             <div>
               <p className="font-semibold text-[#1b2b25]">{venueName}</p>
               <p className="mt-1 text-sm text-[#526159]"><span>{formatBookingDates(booking.start_date, booking.end_date)}</span></p>
-              <p className="text-sm text-[#526159]"><span>{booking.slots.join(", ")}</span></p>
+              <p className="text-sm text-[#526159]"><span>{timeRangeLabel(booking.start_minute, booking.end_minute)}</span></p>
             </div>
             <div className="flex flex-col items-end gap-2">
               <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[booking.status]}`}>{BOOKING_STATUS_LABELS[booking.status]}</span>

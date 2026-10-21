@@ -15,6 +15,7 @@ import { listVenueBlocks } from "@/lib/venue-blocks";
 import { getVenue, layoutLabel, type Venue } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../components/app-shell";
 import { SafetyDecisionForm, type ArrangementOption } from "./decision-form";
+import { timeRangeLabel } from "@/lib/venue-options";
 
 const DECIDED_MESSAGES: Record<string, string> = {
   approved: "Event approved. It is now Confirmed.",
@@ -94,7 +95,7 @@ function CheckCard({ check }: { check: SafetyCheck }) {
         <ul className="mt-2 space-y-3">
           {check.bookings.map(({ booking, venue, restrictions }) => (
             <li key={booking.id} className="rounded-xl border border-[#eef2f0] p-3 text-sm text-[#273832]">
-              <p className="font-semibold">{venue?.name ?? "Unknown venue"} · {formatBookingDates(booking.start_date, booking.end_date)} · {booking.slots.join(", ")}</p>
+              <p className="font-semibold">{venue?.name ?? "Unknown venue"} · {formatBookingDates(booking.start_date, booking.end_date)} · {timeRangeLabel(booking.start_minute, booking.end_minute)}</p>
               {venue ? (
                 <p className="mt-1">
                   Capacity {venue.max_capacity}
@@ -108,7 +109,7 @@ function CheckCard({ check }: { check: SafetyCheck }) {
               ) : restrictions.length > 0 ? (
                 <ul className="mt-1 text-[#8e3d35]">
                   {restrictions.map((block) => (
-                    <li key={block.id}>Restriction: {reasonLabel(block.reason_category)}{block.reason_detail ? ` (${block.reason_detail})` : ""}, {formatBookingDates(block.start_date, block.end_date)} · {block.slots.join(", ")}</li>
+                    <li key={block.id}>Restriction: {reasonLabel(block.reason_category)}{block.reason_detail ? ` (${block.reason_detail})` : ""}, {formatBookingDates(block.start_date, block.end_date)} · {timeRangeLabel(block.start_minute, block.end_minute)}</li>
                   ))}
                 </ul>
               ) : (

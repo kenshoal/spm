@@ -24,6 +24,8 @@ const pending: BookingRequestItem = {
   requirements_note: "Projector and ramp",
   start_date: "2026-10-20",
   end_date: "2026-10-21",
+  start_minute: 420,
+  end_minute: 1080,
   slots: ["AM", "PM"],
   status: "pending",
   decision_reason: null,
@@ -52,7 +54,7 @@ test("lists pending requests with their details and decision controls", async ()
 
   expect(data.listBookingRequests).toHaveBeenCalledWith("pending");
   const card = screen.getByRole("article", { name: "Open day" });
-  for (const text of ["Riverside Hall", "20 Oct 2026 – 21 Oct 2026", "AM, PM", "80 attendees", "Projector and ramp"]) {
+  for (const text of ["Riverside Hall", "20 Oct 2026 – 21 Oct 2026", "07:00–18:00", "80 attendees", "Projector and ramp"]) {
     expect(within(card).getByText(new RegExp(text))).toBeDefined();
   }
   expect(within(card).getByRole("button", { name: "Approve" })).toBeDefined();

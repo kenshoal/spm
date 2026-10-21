@@ -6,6 +6,7 @@ import { listBookingRequests } from "@/lib/booking-requests";
 import { listVenues } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../components/app-shell";
 import { DecisionForm } from "./decision-form";
+import { timeRangeLabel } from "@/lib/venue-options";
 
 const TAB_LABELS: Record<BookingStatus, string> = { pending: "Pending", approved: "Approved", rejected: "Rejected" };
 const DECIDED_MESSAGES: Record<string, string> = {
@@ -27,7 +28,7 @@ function RequestCard({ request, venueName }: { request: BookingRequestItem; venu
     <article aria-labelledby={`booking-${request.id}`} className="rounded-2xl border border-[#dce4e0] bg-white p-5 sm:p-6">
       <h2 id={`booking-${request.id}`} className="text-lg font-bold text-[#1b2b25]">{title}</h2>
       <p className="mt-1 text-sm text-[#273832]">
-        {venueName} · {formatDate(request.start_date)} – {formatDate(request.end_date)} · {request.slots.join(", ")}
+        {venueName} · {formatDate(request.start_date)} – {formatDate(request.end_date)} · {timeRangeLabel(request.start_minute, request.end_minute)}
       </p>
       <p className="mt-1 text-xs text-[#718078]">
         {request.expected_attendance !== null ? `${request.expected_attendance} attendees · ` : ""}

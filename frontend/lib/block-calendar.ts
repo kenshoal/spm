@@ -2,21 +2,35 @@
 // strings compared lexically, so no time zone can shift a block by a day.
 import { blockReasonText, type VenueBlock } from "./venue-block-options";
 import type { VenueBooking } from "./venue-booking-options";
-import { SLOTS, type Slot } from "./venue-options";
+import { CLOSE_MINUTE, OPEN_MINUTE, timeRangeLabel } from "./venue-options";
 
-// "unavailable": the venue is blocked as a whole in the catalogue (status "blocked").
-// "booked": an approved booking request holds the slot (SCRUM-15).
-export type CellState = "blocked" | "booked" | "open" | "unavailable" | "not_offered";
-
-export interface CalendarCell {
-  slot: Slot;
-  state: CellState;
-  reasons: string[];
+// SCRUM-65: each date lists the times that are blocked or booked (an approved
+// booking request, SCRUM-15), earliest first; any other time in 07:00-24:00
+// is open. "unavailable": the venue is blocked as a whole in the catalogue.
+export interface CalendarEntry {
+  state: "blocked" | "booked";
+  start_minute: number;
+  end_minute: number;
+  time: string;
+  text: string;
 }
 
 export interface CalendarDay {
   date: string;
-  cells: CalendarCell[];
+  unavailable: boolean;
+  entries: CalendarEntry[];
+  // Some time in 07:00-24:00 is neither blocked nor booked.
+  free: boolean;
+}
+
+// entries are sorted by start time.
+function hasFreeTime(entries: readonly CalendarEntry[]): boolean {
+  let reached = OPEN_MINUTE;
+  for (const entry of entries) {
+    if (entry.start_minute > reached) return true;
+    reached = Math.max(reached, entry.end_minute);
+  }
+  return reached < CLOSE_MINUTE;
 }
 
 export interface BlockCalendar {
@@ -42,8 +56,9 @@ export function currentMonth(now: Date = new Date()): string {
   return currentDate(now).slice(0, 7);
 }
 
-// Approved bookings for the block's venue that share a date and slot with it
-// and have not ended: the ones whose Coordinators venueService notifies.
+// Approved bookings for the block's venue that share a date with it, overlap
+// it in time and have not ended: the ones whose Coordinators venueService
+// notifies.
 export function bookingsAffectedBy(block: VenueBlock, bookings: readonly VenueBooking[], today: string): VenueBooking[] {
   return bookings.filter(
     (booking) =>
@@ -52,7 +67,8 @@ export function bookingsAffectedBy(block: VenueBlock, bookings: readonly VenueBo
       booking.end_date >= today &&
       booking.start_date <= block.end_date &&
       block.start_date <= booking.end_date &&
-      booking.slots.some((slot) => block.slots.includes(slot)),
+      booking.start_minute < block.end_minute &&
+      block.start_minute < booking.end_minute,
   );
 }
 
@@ -63,7 +79,7 @@ function shiftMonth(month: string, delta: number): string {
 }
 
 export function buildBlockCalendar(
-  venue: { id: string; operating_slots: readonly Slot[]; status?: "available" | "blocked" },
+  venue: { id: string; status?: "available" | "blocked" },
   blocks: readonly VenueBlock[],
   month: string,
   bookings: readonly VenueBooking[] = [],
@@ -72,25 +88,23 @@ export function buildBlockCalendar(
   const dayCount = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
   const active = blocks.filter((block) => block.status === "active" && block.venue_id === venue.id);
   const approved = bookings.filter((booking) => booking.status === "approved" && booking.venue_id === venue.id);
+  const entry = (state: CalendarEntry["state"], item: { start_minute: number; end_minute: number }, text: string): CalendarEntry => ({
+    state,
+    start_minute: item.start_minute,
+    end_minute: item.end_minute,
+    time: timeRangeLabel(item.start_minute, item.end_minute),
+    text,
+  });
 
   const days: CalendarDay[] = [];
   for (let day = 1; day <= dayCount; day += 1) {
     const date = `${month}-${String(day).padStart(2, "0")}`;
-    const cells = SLOTS.map((slot): CalendarCell => {
-      const reasons = active
-        .filter((block) => block.start_date <= date && date <= block.end_date && block.slots.includes(slot))
-        .map(blockReasonText);
-      const booked = approved
-        .filter((booking) => booking.start_date <= date && date <= booking.end_date && booking.slots.includes(slot))
-        .map((booking) => `Booked — ${booking.event_name ?? "event"}`);
-      // An active block always shows, even on a slot the venue does not operate,
-      // and still names any booking it now overlaps.
-      if (reasons.length) return { slot, state: "blocked", reasons: [...reasons, ...booked] };
-      if (booked.length) return { slot, state: "booked", reasons: booked };
-      if (!venue.operating_slots.includes(slot)) return { slot, state: "not_offered", reasons: [] };
-      return { slot, state: venue.status === "blocked" ? "unavailable" : "open", reasons: [] };
-    });
-    days.push({ date, cells });
+    const on = (item: { start_date: string; end_date: string }) => item.start_date <= date && date <= item.end_date;
+    const entries = [
+      ...active.filter(on).map((block) => entry("blocked", block, blockReasonText(block))),
+      ...approved.filter(on).map((booking) => entry("booked", booking, booking.event_name ?? "event")),
+    ].sort((a, b) => a.start_minute - b.start_minute || a.end_minute - b.end_minute);
+    days.push({ date, unavailable: venue.status === "blocked", entries, free: hasFreeTime(entries) });
   }
 
   return {

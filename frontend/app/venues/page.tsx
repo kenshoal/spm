@@ -25,7 +25,7 @@ async function VenueData() {
               <h2 id={`venue-${venue.id}`} className="text-lg font-bold text-[#1b2b25]">{venue.name}</h2>
               <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${venue.status === "available" ? "bg-[#e3f2ea] text-[#145c40]" : "bg-[#fdecea] text-[#8c3a2b]"}`}>{venue.status === "available" ? "Available" : "Blocked"}</span>
             </div>
-            <p className="mt-1 text-sm text-[#68776f]">{venue.location} · up to {venue.max_capacity} people · {venue.operating_slots.join(", ")}</p>
+            <p className="mt-1 text-sm text-[#68776f]">{venue.location} · up to {venue.max_capacity} people</p>
             <p className="mt-1 text-xs text-[#718078]">Layouts: {venue.supported_layouts.map(layoutLabel).join(", ") || "none recorded"} · Facilities: {venue.facilities.join(", ") || "none recorded"} · Accessibility: {venue.accessibility_features.join(", ") || "none recorded"}</p>
             <p className="mt-1 text-xs text-[#718078]">Setup: {prepTimeLabel(venue.setup_minutes)} · Turnaround: {prepTimeLabel(venue.turnaround_minutes)}</p>
           </div>

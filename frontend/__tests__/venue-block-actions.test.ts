@@ -23,7 +23,9 @@ const valid = {
   venue_id: "v1",
   start_date: "2026-10-20",
   end_date: "2026-10-21",
-  slots: ["AM", "PM"],
+  // SCRUM-65: times replace the AM and PM slots.
+  start_time: "07:00",
+  end_time: "18:00",
   reason_category: "maintenance",
   reason_detail: "Air-con repairs",
 };
@@ -55,7 +57,8 @@ test("posts the block and opens the venue's month", async () => {
     body: JSON.stringify({
       start_date: "2026-10-20",
       end_date: "2026-10-21",
-      slots: ["AM", "PM"],
+      start_minute: 420,
+      end_minute: 1080,
       reason_category: "maintenance",
       reason_detail: "Air-con repairs",
     }),

@@ -39,14 +39,6 @@ def check_suitability(venue: Venue, request: SuitabilityRequest) -> SuitabilityR
             )
         )
 
-    if request.required_slot is not None and request.required_slot not in venue.operating_slots:
-        mismatches.append(
-            SuitabilityMismatch(
-                attribute="operating_slot",
-                reason=f"Venue does not operate during the {request.required_slot.value} slot.",
-            )
-        )
-
     venue_facilities = {facility.lower() for facility in venue.facilities}
     missing_facilities = [
         facility

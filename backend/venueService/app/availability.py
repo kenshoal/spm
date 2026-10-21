@@ -1,38 +1,42 @@
-"""Availability against venue blocks and approved bookings (SCRUM-15)."""
+"""Dated availability for venue search (SCRUM-15, SCRUM-65)."""
 
 from collections.abc import Iterable
 from datetime import date
 
 from app.block_models import BlockStatus, VenueBlock
 from app.booking_models import BookingRequest, BookingRequestStatus
-from app.models import Slot, Venue, VenueStatus
-from app.slots import overlaps
+from app.models import Venue, VenueStatus
+from app.slots import has_free_time, times_overlap
 
 
-def available_slots(
+def _taken(
+    venue: Venue, blocks: Iterable[VenueBlock], bookings: Iterable[BookingRequest]
+) -> list[tuple[date, date, int, int]]:
+    return [
+        (item.start_date, item.end_date, item.start_minute, item.end_minute)
+        for item in [
+            *(b for b in blocks if b.status == BlockStatus.ACTIVE),
+            *(b for b in bookings if b.status is BookingRequestStatus.APPROVED),
+        ]
+        if item.venue_id == venue.id
+    ]
+
+
+def is_free(
     venue: Venue,
     on_date: date,
+    start_minute: int | None,
+    end_minute: int | None,
     blocks: Iterable[VenueBlock],
     bookings: Iterable[BookingRequest] = (),
-) -> list[Slot]:
-    """Return operating slots free of active blocks and approved bookings."""
+) -> bool:
+    """Whether the venue is free at that time on that date, or, without a time,
+    free for at least part of 07:00-24:00 that day."""
     if venue.status != VenueStatus.AVAILABLE:
-        return []
-    taken = [
-        (block.start_date, block.end_date, block.slots)
-        for block in blocks
-        if block.venue_id == venue.id and block.status == BlockStatus.ACTIVE
-    ] + [
-        (booking.start_date, booking.end_date, booking.slots)
-        for booking in bookings
-        if booking.venue_id == venue.id
-        and booking.status is BookingRequestStatus.APPROVED
-    ]
-    return [
-        slot
-        for slot in venue.operating_slots
-        if not any(
-            overlaps(on_date, on_date, [slot], start, end, slots)
-            for start, end, slots in taken
-        )
-    ]
+        return False
+    taken = _taken(venue, blocks, bookings)
+    if start_minute is None or end_minute is None:
+        return has_free_time(on_date, taken)
+    return not any(
+        times_overlap(on_date, on_date, start_minute, end_minute, *item) for item in taken
+    )

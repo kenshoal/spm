@@ -6,6 +6,7 @@ rules neither authorize the caller nor save, reserve, notify or prevent races.
 """
 
 from collections.abc import Sequence
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -13,22 +14,36 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.availability_models import AvailabilityResult, Period
 from app.block_checks import check_availability
 from app.block_models import VenueBlock
-from app.models import Venue
-from app.slots import slots_to_range, times_overlap
+from app.models import Slot, Venue
+from app.slots import check_time_range, slots_to_range, times_overlap
 
 
-class _TimedPeriod(Period):
-    """A period with its daily time range (SCRUM-65). Without times, the
+class _TimedPeriod(BaseModel):
+    """A date range with its daily time range (SCRUM-65). Without times, the
     consecutive slots give the range, as the 0050 conversion does."""
 
+    model_config = ConfigDict(extra="forbid")
+
+    start_date: date
+    end_date: date
     start_minute: int | None = None
     end_minute: int | None = None
+    slots: list[Slot] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _default_times(self) -> "_TimedPeriod":
+        if self.end_date < self.start_date:
+            raise ValueError("end_date must be on or after start_date")
         if self.start_minute is None or self.end_minute is None:
             self.start_minute, self.end_minute = slots_to_range(self.slots)
+        check_time_range(self.start_minute, self.end_minute)
         return self
+
+    def period(self) -> Period:
+        return Period(
+            start_date=self.start_date, end_date=self.end_date,
+            start_minute=self.start_minute, end_minute=self.end_minute,
+        )
 
 
 class BookingDecisionSubject(_TimedPeriod):
@@ -135,7 +150,7 @@ def assess_booking_decision(
     if blocks is None:
         refusals.append("block_check_unavailable")
     else:
-        availability = check_availability(venue, booking, blocks)
+        availability = check_availability(venue, booking.period(), blocks)
         refusals.extend(availability.reasons)
 
     conflicting_ids = []

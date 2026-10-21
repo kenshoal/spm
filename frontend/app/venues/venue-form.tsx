@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { layoutLabel, MAX_PREP_MINUTES, PREP_MINUTES_STEP, ROOM_LAYOUTS, SLOTS } from "@/lib/venue-options";
+import { layoutLabel, MAX_PREP_MINUTES, PREP_MINUTES_STEP, ROOM_LAYOUTS } from "@/lib/venue-options";
 import type { Venue } from "@/lib/venues";
 import { createVenue, updateVenue, type VenueFormState } from "./actions";
 
@@ -57,18 +57,7 @@ export function VenueForm({ venue }: { venue?: Venue }) {
           ))}
         </div>
       </fieldset>
-      <fieldset>
-        <legend className={labelClass}>Operating slots</legend>
-        <div className="mt-2 flex flex-wrap gap-4">
-          {SLOTS.map((slot) => (
-            <label key={slot} className="inline-flex items-center gap-2 text-sm text-[#273832]">
-              <input type="checkbox" name="operating_slots" value={slot} defaultChecked={values ? values.operating_slots.includes(slot) : venue ? venue.operating_slots.includes(slot) : true} />
-              {slot}
-            </label>
-          ))}
-        </div>
-        <FieldError message={errors.operating_slots} />
-      </fieldset>
+      <p className="text-xs text-[#718078]">Every venue is bookable from 07:00 to 24:00 in 15-minute steps.</p>
       {state.message ? <p role="alert" className="rounded-xl bg-[#fff4f3] px-4 py-3 text-sm text-[#8e3d35]">{state.message}</p> : null}
       <button type="submit" disabled={isPending} className="min-h-11 rounded-xl bg-[#0f6b5b] px-5 text-sm font-bold text-white hover:bg-[#0b5b4d] disabled:opacity-60">
         {isPending ? "Saving…" : venue ? "Save changes" : "Add venue"}
