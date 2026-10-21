@@ -2,8 +2,11 @@ import { arrangementLabels, type ArrangementReview } from "@/lib/arrangement-rev
 import { formatDateTime } from "@/lib/event-requests";
 import { ClearReviewForm } from "../arrangement-reviews/clear-review-form";
 
-const causeLabels = {
-  event_change: "Event change", equipment_unavailable: "Equipment unavailable", safety_recheck: "Safety recheck",
+const causeLabels: Record<ArrangementReview["trigger_type"], string> = {
+  event_change: "Event change",
+  equipment_unavailable: "Equipment unavailable",
+  safety_recheck: "Safety recheck",
+  venue_timing_change: "Venue timing change",
 };
 
 export function ArrangementReviewList({ reviews, canClear = false }: { reviews: ArrangementReview[]; canClear?: boolean }) {
