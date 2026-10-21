@@ -121,6 +121,30 @@ Build: Sprint 3 increment (conflict rules) at `b824b72` (20 October), updated to
 
 Not yet run: database, API, frontend and pull-request CI (Sprint 4, after SCRUM-65).
 
+### Approval guard (0054, PR #84) and shared rollout — 21 October 2026
+
+Build: `feat/scrum-20-approval-conflict-guard` (`7d0dc00`, `11804e2`, `295e08b`), merged to `dev` as `a5ce402` (PR #84). Executed with Claude Code, pending human review. Code: `database/migrations/0054_venue_booking_conflict_guard.sql` (`private.check_booking_candidate`, used by `decide_venue_booking_request`), `backend/venueService/app/booking_decisions.py`, `frontend/lib/booking-decision-form.ts`. Tests: `database/verify_venue_booking_conflict_guard.sql`, `database/tests/test_venue_booking_conflict_concurrency.py`, `backend/venueService/tests/test_booking_decisions.py`.
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC3-H2, AC5-B1, AC5-B2, AC1-H3, AC1-P1, AC1-P3, AC1-P4 (DB) | Green | Guard: 12:15–13:00 conflicts with 10:00–12:00 at 30 / 45; 75-minute gaps allowed and 60 refused on both sides; several conflicts in start order; pending, rejected and cancelled ignored; date ranges clash only when they share a day | Pass | `a5ce402`, disposable PostgreSQL 16 and shared | Claude Code (local), Koei (shared), 21 Oct 2026 | `verify_venue_booking_conflict_guard.sql`; Red before 0054 (guard missing) |
+| AC4-H1, AC4-P1, AC4-H2 (DB) | Green | Moving C onto A's time refused with `booking_conflict` [A]; a booking excluded by `p_exclude_ids` never conflicts with itself; a free time is clear | Pass | same | same | same verifier |
+| AC3-B1, AC3-B2 (DB) | Green | 07:15 start with 30 setup → `setup_outside_window`; 23:30 end with 45 turnaround → `turnaround_outside_window`; 07:30 and 23:15 clear | Pass | same | same | same verifier |
+| AC1, AC3, AC5 in approval (DB) | Green | Padded overlap refused, recorded in `venue_booking_refusals` and left pending; setup outside the window refused and recorded; the exact gap approved | Pass | same | same | same verifier |
+| AC1-X1 (DB, two connections) | Green | The second padded-overlapping approval waited on the venue lock, then was refused with `booking_conflict` [first]; one refusal row; first approved | Pass | `a5ce402` + this branch, disposable PostgreSQL 16 | Claude Code, 21 Oct 2026 | `test_venue_booking_conflict_concurrency.py`; Red before 0054 (second approved) |
+| AC4-X1 (DB, two connections) | Green | A reschedule caller holding the venue lock waited for an in-flight approval, then the guard reported it | Pass | same | same | same test; Red before 0054 (guard missing). SCRUM-35 owns the approval-versus-reschedule integration race |
+| AC1, AC3, AC5 in approval (unit) | Green | Memory store applies the same padding and window rules | Pass | `11804e2` | Claude Code, 21 Oct 2026 | `test_booking_decisions.py`; 4 of the 7 new cases Red on the pre-change code |
+
+| Check | Command and environment | Result | Remarks |
+| --- | --- | --- | --- |
+| Backend regression | `pytest` (whole venueService suite) and `ruff check .` in `python:3.12-slim` | 596 passed; Ruff clean | — |
+| Frontend | `vitest run`, `npm run lint`, `npm run typecheck` | 425 passed; clean | New refusal messages; `booking_conflict` wording mentions setup and turnaround |
+| Production build and E2E | `npx playwright test` (builds with `next build --webpack`) | Build passed; 45/45 journeys | Canned APIs |
+| Database regression | `verify_venue_booking_decisions.sql`, `verify_venue_booking_times.sql`, `verify_venue_block_times.sql`, `verify_venue_setup_turnaround.sql` on disposable PostgreSQL 16 | Passed | `verify_venue_booking_requests.sql` fails AC1-N1 on `dev` with or without 0054 (from 0050) |
+| Shared rollout | SQL Editor on shared development, after PR #84 merged | 0054 applied; function bodies match the file (whitespace-normalised md5); only `service_role` can run the guard; the four venue verifiers passed, rolled back | `verify_venue_booking_decisions.sql` needed a real auth user as staff (fixed on this branch); `verify_venue_block_times.sql` AC5-H2 skipped because block `f32e1398` (12:30–14:00, created after 0051) is valid data that is not a full slot range |
+
+Not yet done: AC6 (0055, after PR #85's readers are deployed), the SCRUM-35 reschedule integration (Heng Rui), padding in availability and dated search, and refusing conflicting requests at submission.
+
 ## Isolated reader-compatibility increment — 21 October 2026
 
 The requester approved this reader prerequisite and its publication separately from the outstanding SCRUM-35 work. This branch, `fix/scrum-20-timing-review-readers`, starts at `dev` `a5ce402`. Its runtime scope is limited to the API cause extension and frontend type/label extension, with two test files, rollout notes and this appendix. It does not contain SCRUM-35 decision changes or migration 0053, introduce migration 0055 or reopen SCRUM-64.
