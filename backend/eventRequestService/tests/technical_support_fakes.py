@@ -23,7 +23,11 @@ from app.controllers.event_request_controller import (
     get_authenticated_caller,
 )
 from app.main import create_app
-from app.repositories.technical_support_repository import TechnicalSupportRpcError
+from app.repositories.technical_support_repository import (
+    EVENT_REQUEST_NOT_FOUND_REASON,
+    REQUIREMENT_NOT_FOUND_REASON,
+    TechnicalSupportRpcError,
+)
 from app.services.technical_support_rules import (
     SupportNotAllowedError,
     ensure_support_allowed,
@@ -102,7 +106,9 @@ class FakeTechnicalSupportRepository:
         event = self.event_requests.rows.get(event_request_id)
         if event is None:
             raise TechnicalSupportRpcError(
-                "event request not found", "P0002", "event request not found"
+                EVENT_REQUEST_NOT_FOUND_REASON,
+                "P0002",
+                EVENT_REQUEST_NOT_FOUND_REASON,
             )
         if self._latest_coordinator_id(event_request_id) != coordinator_id:
             raise TechnicalSupportRpcError(
@@ -148,9 +154,9 @@ class FakeTechnicalSupportRepository:
             requirement["event_request_id"] != values["event_request_id"]
         ):
             raise TechnicalSupportRpcError(
-                "technical support requirement not found",
+                REQUIREMENT_NOT_FOUND_REASON,
                 "P0002",
-                "technical support requirement not found",
+                REQUIREMENT_NOT_FOUND_REASON,
             )
         staff_id = values["staff_id"]
         if not is_suitable(

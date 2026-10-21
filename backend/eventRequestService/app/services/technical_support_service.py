@@ -16,6 +16,7 @@ from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
 )
 from app.repositories.technical_support_repository import (
+    REQUIREMENT_NOT_FOUND_REASON,
     TechnicalSupportRepository,
     TechnicalSupportRpcError,
 )
@@ -234,7 +235,7 @@ class TechnicalSupportService:
         P0002 names what was missing through the function's reason — the event
         check runs first, so a later P0002 is the requirement's."""
         if error.errcode == "P0002":
-            if error.reason == "technical support requirement not found":
+            if error.reason == REQUIREMENT_NOT_FOUND_REASON:
                 return TechnicalSupportNotFoundError(
                     REQUIREMENT_NOT_FOUND,
                     f"Technical support requirement not found on event request "

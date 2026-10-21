@@ -35,7 +35,12 @@ CREATE TABLE IF NOT EXISTS public.technical_support_requirements (
         CONSTRAINT technical_support_requirements_skill_tag_known
         CHECK (skill_tag IN ('audio_visual', 'lighting', 'it_network', 'livestream')),
     recorded_by varchar(64) NOT NULL,
-    recorded_at timestamptz NOT NULL DEFAULT now()
+    recorded_at timestamptz NOT NULL DEFAULT now(),
+    -- Names the (requirement, event) pair so an assignment can reference both
+    -- columns and can never be filed under a different event than the
+    -- requirement's own.
+    CONSTRAINT technical_support_requirements_id_event_key
+        UNIQUE (id, event_request_id)
 );
 
 -- Serves the per-event read the event page renders, in its stable order.
@@ -53,15 +58,20 @@ CREATE TABLE IF NOT EXISTS public.technical_support_skills (
 
 CREATE TABLE IF NOT EXISTS public.technical_support_assignments (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    requirement_id uuid NOT NULL
-        REFERENCES public.technical_support_requirements (id) ON DELETE CASCADE,
+    requirement_id uuid NOT NULL,
     -- Denormalised from the requirement so the per-event read needs no join.
+    -- The composite foreign key below pairs it with the requirement, so the
+    -- copy can never disagree with the requirement's own event.
     event_request_id uuid NOT NULL
         REFERENCES public.event_requests (id) ON DELETE CASCADE,
     staff_id varchar(64) NOT NULL,
     assigned_by varchar(64) NOT NULL,
     assigned_at timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT technical_support_assignments_once UNIQUE (requirement_id, staff_id)
+    CONSTRAINT technical_support_assignments_once UNIQUE (requirement_id, staff_id),
+    CONSTRAINT technical_support_assignments_requirement_event_fkey
+        FOREIGN KEY (requirement_id, event_request_id)
+        REFERENCES public.technical_support_requirements (id, event_request_id)
+        ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS technical_support_assignments_event_idx

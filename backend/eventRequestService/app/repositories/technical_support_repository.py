@@ -13,6 +13,12 @@ import httpx
 from app.config import Settings
 from app.repositories.event_request_repository import SupabaseRepositoryError
 
+# The P0002 reasons migration 0052's functions raise. The service maps on
+# these and the DB verifier pins the SQL side (AC2-N9), so rewording either
+# half fails a check instead of silently changing which 404 the API returns.
+EVENT_REQUEST_NOT_FOUND_REASON = "event request not found"
+REQUIREMENT_NOT_FOUND_REASON = "technical support requirement not found"
+
 
 class TechnicalSupportRpcError(SupabaseRepositoryError):
     """A technical support database function refused the call.
