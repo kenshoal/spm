@@ -1,5 +1,6 @@
 """Technical support requirements and assignments for one event (SCRUM-19)."""
 
+import logging
 from typing import Any
 
 from app.models.event_request import EventRequestResponse
@@ -28,6 +29,8 @@ from app.services.technical_support_rules import group_by_requirement
 
 EVENT_REQUEST_NOT_FOUND = "event_request_not_found"
 REQUIREMENT_NOT_FOUND = "requirement_not_found"
+
+logger = logging.getLogger(__name__)
 
 
 class TechnicalSupportNotFoundError(Exception):
@@ -148,17 +151,28 @@ class TechnicalSupportService:
         except TechnicalSupportRpcError as error:
             raise self._map_refusal(error, event_request_id) from error
         assigned = AssignmentResponse.model_validate(row)
-        # Best-effort, after the commit: NotificationClient never raises, and a
-        # failed notice must not undo the assignment (D9).
-        self.notification_client.notify_technical_support_assigned(
-            event_request_id=event_request_id,
-            event_name=event.event_name,
-            requirement_id=requirement_id,
-            skill_tag=str(requirement["skill_tag"]),
-            staff_id=payload.staff_id,
-            assigned_by=assigned_by,
-            assignment_id=str(assigned.id),
-        )
+        # Best-effort, after the commit: the client logs delivery failures
+        # itself, but nothing it (or any notifier) raises may undo the
+        # committed assignment (D9).
+        try:
+            self.notification_client.notify_technical_support_assigned(
+                event_request_id=event_request_id,
+                event_name=event.event_name,
+                requirement_id=requirement_id,
+                skill_tag=str(requirement["skill_tag"]),
+                staff_id=payload.staff_id,
+                assigned_by=assigned_by,
+                assignment_id=str(assigned.id),
+            )
+        except Exception:
+            logger.warning(
+                "Failed to notify technical support staff %s of assignment to "
+                "requirement %s on event request %s",
+                payload.staff_id,
+                requirement_id,
+                event_request_id,
+                exc_info=True,
+            )
         return assigned
 
     def _requirement_on_event(
