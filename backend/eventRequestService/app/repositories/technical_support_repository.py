@@ -80,52 +80,26 @@ class SupabaseTechnicalSupportRepository:
         )
 
     def record_requirement(self, values: dict[str, Any]) -> dict[str, Any]:
-        try:
-            response = self._client.post(
-                "/rpc/record_technical_support_requirement",
-                json={
-                    "p_event_request_id": values["event_request_id"],
-                    "p_coordinator_id": values["coordinator_id"],
-                    "p_description": values["description"],
-                    "p_skill_tag": values["skill_tag"],
-                },
-                headers={"Accept": "application/vnd.pgrst.object+json"},
-            )
-        except httpx.HTTPError as error:
-            raise SupabaseRepositoryError(
-                "Supabase could not complete the technical support operation"
-            ) from error
-        if response.status_code >= 500:
-            raise SupabaseRepositoryError(
-                "Supabase could not complete the technical support operation"
-            )
-        if response.is_error:
-            raise self._refusal(response)
-        return response.json()
+        return self._rpc(
+            "record_technical_support_requirement",
+            {
+                "p_event_request_id": values["event_request_id"],
+                "p_coordinator_id": values["coordinator_id"],
+                "p_description": values["description"],
+                "p_skill_tag": values["skill_tag"],
+            },
+        )
 
     def assign(self, values: dict[str, Any]) -> dict[str, Any]:
-        try:
-            response = self._client.post(
-                "/rpc/assign_technical_support_staff",
-                json={
-                    "p_event_request_id": values["event_request_id"],
-                    "p_requirement_id": values["requirement_id"],
-                    "p_staff_id": values["staff_id"],
-                    "p_coordinator_id": values["coordinator_id"],
-                },
-                headers={"Accept": "application/vnd.pgrst.object+json"},
-            )
-        except httpx.HTTPError as error:
-            raise SupabaseRepositoryError(
-                "Supabase could not complete the technical support operation"
-            ) from error
-        if response.status_code >= 500:
-            raise SupabaseRepositoryError(
-                "Supabase could not complete the technical support operation"
-            )
-        if response.is_error:
-            raise self._refusal(response)
-        return response.json()
+        return self._rpc(
+            "assign_technical_support_staff",
+            {
+                "p_event_request_id": values["event_request_id"],
+                "p_requirement_id": values["requirement_id"],
+                "p_staff_id": values["staff_id"],
+                "p_coordinator_id": values["coordinator_id"],
+            },
+        )
 
     def get_requirement(self, requirement_id: str) -> dict[str, Any] | None:
         rows = self._get(
@@ -155,16 +129,38 @@ class SupabaseTechnicalSupportRepository:
         )
 
     def list_candidates(self, requirement_id: str) -> list[dict[str, Any]]:
+        return self._rpc(
+            "list_technical_support_candidates",
+            {"p_requirement_id": requirement_id},
+            single=False,
+        )
+
+    def _rpc(
+        self, name: str, json: dict[str, Any], single: bool = True
+    ) -> Any:
+        """Post to one of the schema's functions.
+
+        The single-row functions ask PostgREST for the object shape and turn
+        a 4xx into the RPC refusal; the candidate list returns many rows and
+        reports every failure as the shared repository error.
+        """
+        headers = (
+            {"Accept": "application/vnd.pgrst.object+json"} if single else None
+        )
         try:
             response = self._client.post(
-                "/rpc/list_technical_support_candidates",
-                json={"p_requirement_id": requirement_id},
+                f"/rpc/{name}", json=json, headers=headers
             )
-            response.raise_for_status()
         except httpx.HTTPError as error:
             raise SupabaseRepositoryError(
                 "Supabase could not complete the technical support operation"
             ) from error
+        if response.status_code >= 500 or (not single and response.is_error):
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the technical support operation"
+            )
+        if single and response.is_error:
+            raise self._refusal(response)
         return response.json()
 
     @staticmethod

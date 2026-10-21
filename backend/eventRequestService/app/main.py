@@ -66,10 +66,7 @@ from app.services.registration_service import (
     RegistrationService,
 )
 from app.services.technical_support_service import (
-    AlreadyAssignedError,
-    StaffNotSuitableError,
-    SupportNotAllowedError,
-    TechnicalSupportNotFoundError,
+    TechnicalSupportError,
     TechnicalSupportService,
 )
 
@@ -324,45 +321,14 @@ def create_app(
             },
         )
 
-    @application.exception_handler(TechnicalSupportNotFoundError)
-    async def technical_support_not_found(
-        request: Request, error: TechnicalSupportNotFoundError
+    # One handler renders every SCRUM-19 refusal: the error carries its own
+    # code and HTTP status, so subclasses need no handler each (D12).
+    @application.exception_handler(TechnicalSupportError)
+    async def technical_support_refusal(
+        request: Request, error: TechnicalSupportError
     ) -> JSONResponse:
         return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "detail": {"code": error.code, "message": str(error)},
-            },
-        )
-
-    @application.exception_handler(SupportNotAllowedError)
-    async def technical_support_not_allowed(
-        request: Request, error: SupportNotAllowedError
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={
-                "detail": {"code": error.code, "message": str(error)},
-            },
-        )
-
-    @application.exception_handler(StaffNotSuitableError)
-    async def technical_support_staff_not_suitable(
-        request: Request, error: StaffNotSuitableError
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={
-                "detail": {"code": error.code, "message": str(error)},
-            },
-        )
-
-    @application.exception_handler(AlreadyAssignedError)
-    async def technical_support_already_assigned(
-        request: Request, error: AlreadyAssignedError
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=error.status,
             content={
                 "detail": {"code": error.code, "message": str(error)},
             },

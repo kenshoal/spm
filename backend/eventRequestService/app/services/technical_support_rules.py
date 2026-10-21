@@ -25,10 +25,28 @@ SUPPORT_STATUSES = (
 TECHNICAL_SUPPORT_ROLE = "technical_support"
 
 
-class SupportNotAllowedError(Exception):
+class TechnicalSupportError(Exception):
+    """Base for the SCRUM-19 refusals the API renders as one body.
+
+    Lives beside the rules so the service and `main.py` can import it without
+    a cycle; one FastAPI handler turns every subclass into
+    `{"detail": {"code", "message"}}` at the error's status (D12).
+    """
+
+    def __init__(self, code: str, status: int, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status = status
+
+
+class SupportNotAllowedError(TechnicalSupportError):
     """The event's status does not allow support to be arranged."""
 
     code = "support_not_allowed"
+    status = 409
+
+    def __init__(self, message: str) -> None:
+        super().__init__(self.code, self.status, message)
 
 
 def ensure_support_allowed(status: EventRequestStatus | str) -> None:

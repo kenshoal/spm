@@ -27,6 +27,7 @@ from app.services.event_request_service import (
 from app.services.notification_client import NotificationClient
 from app.services.technical_support_rules import (
     SupportNotAllowedError,
+    TechnicalSupportError,
     ensure_support_allowed,
     group_by_requirement,
 )
@@ -37,27 +38,36 @@ REQUIREMENT_NOT_FOUND = "requirement_not_found"
 logger = logging.getLogger(__name__)
 
 
-class TechnicalSupportNotFoundError(Exception):
+class TechnicalSupportNotFoundError(TechnicalSupportError):
     """The event or requirement is missing, or answering would disclose one.
 
     The code names which, so the HTTP body can be specific without revealing
     state the caller must not see (security-and-state.md §2)."""
 
+    status = 404
+
     def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
+        super().__init__(code, self.status, message)
 
 
-class StaffNotSuitableError(Exception):
+class StaffNotSuitableError(TechnicalSupportError):
     """The chosen person does not hold the requirement's role and skill."""
 
     code = "staff_not_suitable"
+    status = 409
+
+    def __init__(self, message: str) -> None:
+        super().__init__(self.code, self.status, message)
 
 
-class AlreadyAssignedError(Exception):
+class AlreadyAssignedError(TechnicalSupportError):
     """That person is already assigned to this requirement."""
 
     code = "already_assigned"
+    status = 409
+
+    def __init__(self, message: str) -> None:
+        super().__init__(self.code, self.status, message)
 
 
 class TechnicalSupportService:
