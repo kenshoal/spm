@@ -1,6 +1,7 @@
 import { getJson } from "./api";
 import { timeRangeLabel } from "./venue-options";
 import { reasonLabel, type BlockReason } from "./venue-block-options";
+import { skillLabel } from "./technical-support-options";
 
 export interface AppNotification {
   id: string;
@@ -127,6 +128,20 @@ export function describeNotification(notification: AppNotification, roles: reado
         message: `${venue ?? "A venue"} has been blocked during your booking${event ? ` for ${event}` : ""}.`,
         href: id && `/coordination/requests/${id}`,
         detail: `${parts.join(" · ")}. Arrange an alternative venue or time.`,
+      };
+    }
+    case "technical_support_assigned": {
+      // SCRUM-19: sent to the assigned staff member. The payload carries the
+      // skill tag, not the description, so the notice names the skill; there
+      // is no link because a TSS assignments page is out of scope and the
+      // coordination page is closed to technical_support.
+      const skill = notification.payload.skill_tag;
+      const event = notification.payload.event_name;
+      const eventText =
+        typeof event === "string" && event.trim() ? event.trim() : null;
+      return {
+        message: `You've been assigned as ${typeof skill === "string" ? skillLabel(skill) : "technical"} support${eventText ? ` for ${eventText}` : ""}.`,
+        href: null,
       };
     }
     default:

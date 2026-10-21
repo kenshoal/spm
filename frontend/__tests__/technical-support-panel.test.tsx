@@ -126,13 +126,19 @@ test("the panel loads requirements, staff labels and candidates", async () => {
   expect(data.staff).toHaveBeenCalledWith();
   expect(screen.getByText("Two wireless mics and a mixing-desk operator for the keynote")).toBeDefined();
   expect(screen.getByText("technical_support@example.com")).toBeDefined();
-  expect(screen.getByText("Recorded by coord-1")).toBeDefined();
+  expect(screen.getAllByText("Recorded by coord-1").length).toBe(2);
 });
 
 // AC4-X1 (cross-cutting): assigned staff are labelled by email, an unknown id
 // falls back to the id, and an unassigned requirement says so.
 test("labels staff by email, falls back to the id, and marks empty requirements", () => {
-  render(<TechnicalSupportList {...listProps([assigned, unlabelled])} />);
+  const empty = requirement({
+    id: "aaaa0000-0000-4000-8000-000000000003",
+    skill_tag: "it_network",
+    description: "Venue Wi-Fi for 300 delegates",
+  });
+
+  render(<TechnicalSupportList {...listProps([assigned, unlabelled, empty])} />);
 
   expect(screen.getByText("technical_support@example.com")).toBeDefined();
   expect(screen.getByText("ghost-id")).toBeDefined();
