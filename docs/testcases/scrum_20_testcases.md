@@ -145,6 +145,40 @@ Build: `feat/scrum-20-approval-conflict-guard` (`7d0dc00`, `11804e2`, `295e08b`)
 
 Not yet done: AC6 (0055, after PR #85's readers are deployed), the SCRUM-35 reschedule integration (Heng Rui), padding in availability and dated search, and refusing conflicting requests at submission.
 
+### AC6 venue timing change (0055) — 21 October 2026
+
+Contract agreed with Heng Rui (21 October): `trigger_type = 'venue_timing_change'`, `arrangement = 'venue_booking'`, `changed_fields` from `{setup_minutes, turnaround_minutes}`, a plain-text reason and no `change_request_id`; the existing `arrangement_needs_review` notice. PR #85 (merged) makes the readers accept this cause; 0055 is applied to shared only once those readers are deployed.
+
+Build: `feat/scrum-20-venue-timing-reviews` on top of `docs/scrum-20-0054-rollout`, uncommitted working tree. Executed with Claude Code, pending human review. Code: `database/migrations/0055_venue_timing_change_reviews.sql` (`public.update_venue_timing`), `backend/venueService/app/routers/venues.py`, `app/repository.py`, `app/supabase_repository.py`. Tests: `database/verify_venue_timing_change_reviews.sql`, `backend/venueService/tests/test_venue_timing_change_reviews.py`.
+
+Day D is today + 10 (Singapore). Venue 0 / 0 unless stated. A 10:00–12:00 and B 12:30–14:00 on D (different events); C 16:00–17:00 on D; X 07:00–08:00 on D+1; Q 10:00–12:00 on D+3 and R 12:30–14:00 on D+4; Y and Z as A and B but ended yesterday; U1 and U2 as A and B on D+5 with events that do not exist; a pending 14:15–15:00 request on D.
+
+| ID | AC | Test scenario | Technique | Test steps and data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| AC6-H1 | AC6 | Raising turnaround flags both bookings of the new pair | Happy | Change to 0 / 45 | A and B flagged with one review each (`venue_timing_change`, `{turnaround_minutes}`, their own events), one queued notice each, change record 0 / 0 → 0 / 45 | Bookings or statuses changed; other bookings flagged | DB |
+| AC6-B2 | AC6 | Ended bookings are ignored | Boundary | Same change; Y and Z ended yesterday | Not flagged | — | DB |
+| AC6-P4 | AC6 | Only approved bookings are considered | Partition | Same change; pending request 14:15 clashes with B under 45 | Not flagged | — | DB |
+| AC6-P5 | AC6 | A pair must share a day | Partition | Same change; Q and R on different days | Not flagged | — | DB |
+| AC6-U1 | AC6 | A booking whose event does not exist cannot carry a review | Partition | Same change; U1 and U2 now clash | Returned in `unlinked_booking_ids`, not flagged; the change still saves | The change failing | DB |
+| AC6-P1 | AC6 | An unchanged save or a replay writes nothing | Partition | Change to 0 / 45 again; then no times | `timing_change_id` null; no new reviews, notices or change records | Duplicate flags or notices | DB |
+| AC6-B1 / AC6-P3 | AC6 | Padding pushed outside the window flags the booking; already-clashing pairs are not flagged again | Boundary | Change to 30 / 45 | Only X flagged (`{setup_minutes}`, reason names 07:00–24:00); A and B not flagged again | — | DB |
+| AC6-P2 | AC6 | Lowering the times flags nothing | Partition | Change to 0 / 0 | Change recorded; nothing flagged | — | DB |
+| AC6-X1 | AC6 | A failed notice rolls back the whole change | Cross-cutting | Inject a notification-outbox failure; change to 0 / 60 | Error; times still 0 / 0; no new change record, reviews or notices | Partial save | DB |
+| AC6-N1 | AC6 | Bad input is an error | Negative | Unknown venue; setup 20; no actor | `P0002`; `23514`; `22023` | Any write | DB |
+| AC6-DB1 | AC6 | Server-only access | Cross-cutting | Check grants | Only `service_role` runs `update_venue_timing`; browser roles cannot read change records | — | DB |
+| AC6-API1 | AC6 | A time change goes through `update_timing` as the signed-in Venue Staff; other fields are a plain update | Happy | PATCH turnaround 45 and a new name | `update_timing(venue, None, 45, staff)` then `update(name)`; 200 with both | — | API |
+| AC6-API2 | AC6 | A request without times never calls `update_timing` | Partition | PATCH capacity only | One plain update | — | API |
+| AC6-API3 | AC6 | An unknown venue is 404 | Negative | PATCH setup 30 and a name on an unknown id | 404; the name is not updated | — | API |
+| AC6-API4 | AC6 | The Supabase store calls `update_venue_timing` | Happy | Fake Data API | POST `/rpc/update_venue_timing` with the four arguments; venue returned | — | Unit |
+| AC6-API5 | AC6 | Failures are mapped | Negative | `P0002`; a malformed id; `23514`; a non-object body | Not found; not found; error; error | — | Unit |
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC6-H1, AC6-B2, AC6-P4, AC6-P5, AC6-U1, AC6-P1, AC6-B1, AC6-P3, AC6-P2, AC6-X1, AC6-N1, AC6-DB1 | Green | As expected | Pass | working tree, disposable PostgreSQL 16 | Claude Code, 21 Oct 2026 | `verify_venue_timing_change_reviews.sql`; Red before 0055 (`update_venue_timing` missing). The ten SCRUM-64 review verifiers and the five venue verifiers still pass with 0055 |
+| AC6-API1 to AC6-API5 | Green | As expected | Pass | working tree, `python:3.12-slim` | Claude Code, 21 Oct 2026 | `test_venue_timing_change_reviews.py`; 4 of 5 Red on `dev`'s code (no `update_timing`); API2 passes on both. Whole venueService suite 601 passed; Ruff clean |
+
+Not yet done for AC6: shared rollout of 0055 (after PR #85's readers are deployed), and a frontend message for Venue Staff about how many bookings a change flagged.
+
 ## Isolated reader-compatibility increment — 21 October 2026
 
 The requester approved this reader prerequisite and its publication separately from the outstanding SCRUM-35 work. This branch, `fix/scrum-20-timing-review-readers`, starts at `dev` `a5ce402`. Its runtime scope is limited to the API cause extension and frontend type/label extension, with two test files, rollout notes and this appendix. It does not contain SCRUM-35 decision changes or migration 0053, introduce migration 0055 or reopen SCRUM-64.
