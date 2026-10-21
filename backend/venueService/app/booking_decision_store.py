@@ -38,7 +38,12 @@ from app.supabase_repository import SupabaseRepositoryError, _is_uuid
 from app.venue_locks import venue_write_lock
 
 RefusalCode = Literal[
-    "venue_unavailable", "outside_operating_slots", "active_block", "booking_conflict"
+    "venue_unavailable",
+    "outside_operating_slots",
+    "active_block",
+    "setup_outside_window",
+    "turnaround_outside_window",
+    "booking_conflict",
 ]
 
 

@@ -52,7 +52,7 @@ test("venue staff approve and reject booking requests and the coordinator is not
   const secondCard = page.getByRole("article", { name: second });
   await secondCard.getByRole("button", { name: "Approve" }).click();
   await expect(secondCard.getByRole("alert")).toContainText("Approval refused.");
-  await expect(secondCard.getByRole("alert")).toContainText("Another approved booking already holds part of this period.");
+  await expect(secondCard.getByRole("alert")).toContainText("Another approved booking, including the venue's setup and turnaround time, already holds part of this period.");
 
   await secondCard.getByLabel("Reason for rejecting").fill("Already booked on 11 Dec");
   await secondCard.getByLabel(/Suggested alternative/).fill("Try 13 Dec");
