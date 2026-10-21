@@ -66,7 +66,28 @@ export function staffLabel(staffId: string, staff: StaffOption[]): string {
   return staff.find((person) => person.id === staffId)?.email ?? staffId;
 }
 
+export const DESCRIPTION_MAX = 2000;
+
+// Counts the description the way the API (Python len) and the database
+// (char_length) do: after trimming, in characters, so an emoji counts once.
+export function descriptionLength(text: string): number {
+  return Array.from(text.trim()).length;
+}
+
 export function validateDescription(text: FormDataEntryValue | null): string | null {
   const trimmed = typeof text === "string" ? text.trim() : "";
-  return trimmed.length >= 1 && trimmed.length <= 2000 ? trimmed : null;
+  const length = descriptionLength(trimmed);
+  return length >= 1 && length <= DESCRIPTION_MAX ? trimmed : null;
+}
+
+// Names a person on the panel: the signed-in coordinator is "you", staff by
+// email, anyone else by id.
+export function personLabel(
+  personId: string,
+  staff: StaffOption[],
+  currentUserId?: string,
+): string {
+  return currentUserId !== undefined && personId === currentUserId
+    ? "you"
+    : staffLabel(personId, staff);
 }

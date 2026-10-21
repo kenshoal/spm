@@ -3,6 +3,7 @@ import {
   listCandidates,
   listEventTechnicalSupport,
   listTechnicalSupportStaff,
+  personLabel,
   skillLabel,
   staffLabel,
   supportsTechnicalSupport,
@@ -19,12 +20,15 @@ export function TechnicalSupportList({
   staff,
   candidates,
   eventRequestId,
+  currentUserId,
 }: {
   requirements: TechnicalSupportRequirement[];
   staff: StaffOption[];
   // null marks a requirement whose candidate list failed to load.
   candidates: ReadonlyMap<string, Candidate[] | null>;
   eventRequestId: string;
+  // The signed-in coordinator, shown as "you" instead of a raw id.
+  currentUserId?: string;
 }) {
   if (requirements.length === 0) {
     return (
@@ -43,7 +47,7 @@ export function TechnicalSupportList({
           <article key={requirement.id} className="rounded-xl border border-[#e1e7e4] p-4">
             <h3 className="font-semibold text-[#1b2b25]">{label} support</h3>
             <p className="mt-1 text-sm text-[#526159]">{requirement.description}</p>
-            <p className="mt-1 text-sm text-[#718078]">Recorded by {requirement.recorded_by}</p>
+            <p className="mt-1 text-sm text-[#718078]">Recorded by {personLabel(requirement.recorded_by, staff, currentUserId)}</p>
             {requirement.assigned_staff.length === 0 ? (
               <p className="mt-2 text-sm text-[#526159]">Nobody assigned yet</p>
             ) : (
@@ -53,7 +57,7 @@ export function TechnicalSupportList({
                     <span className="font-semibold text-[#1b2b25]">
                       {staffLabel(assignment.staff_id, staff)}
                     </span>{" "}
-                    · assigned by {assignment.assigned_by} · {formatDateTime(assignment.assigned_at)}
+                    · assigned by {personLabel(assignment.assigned_by, staff, currentUserId)} · {formatDateTime(assignment.assigned_at)}
                   </li>
                 ))}
               </ul>
@@ -98,9 +102,11 @@ export function TechnicalSupportLoading() {
 export async function TechnicalSupportPanel({
   eventRequestId,
   status,
+  currentUserId,
 }: {
   eventRequestId: string;
   status: string;
+  currentUserId?: string;
 }) {
   if (!supportsTechnicalSupport(status)) return null;
   const [support, staff] = await Promise.all([
@@ -138,6 +144,7 @@ export async function TechnicalSupportPanel({
             staff={staff}
             candidates={candidates}
             eventRequestId={eventRequestId}
+            currentUserId={currentUserId}
           />
           <RequirementForm eventRequestId={eventRequestId} />
         </>

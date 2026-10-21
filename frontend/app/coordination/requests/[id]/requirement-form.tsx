@@ -1,7 +1,12 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { SKILL_TAGS, SKILL_TAG_LABELS } from "@/lib/technical-support-options";
+import {
+  DESCRIPTION_MAX,
+  SKILL_TAGS,
+  SKILL_TAG_LABELS,
+  descriptionLength,
+} from "@/lib/technical-support-options";
 import {
   recordSupportRequirement,
   type TechnicalSupportActionState,
@@ -29,8 +34,10 @@ export function RequirementForm({ eventRequestId }: { eventRequestId: string }) 
     },
     initialState,
   );
-  const trimmed = description.trim();
-  const descriptionValid = trimmed.length >= 1 && trimmed.length <= 2000;
+  // Counted as the API and database count it: trimmed, in characters.
+  const length = descriptionLength(description);
+  const overLimit = length > DESCRIPTION_MAX;
+  const descriptionValid = length >= 1 && !overLimit;
   const skillValid = (SKILL_TAGS as readonly string[]).includes(skillTag);
   return (
     <form action={formAction} className="mt-4 rounded-xl border border-[#e1e7e4] p-4">
@@ -47,17 +54,17 @@ export function RequirementForm({ eventRequestId }: { eventRequestId: string }) 
         className="mt-1 w-full rounded-lg border border-[#cfd9d4] px-3 py-2 text-sm text-[#1b2b25]"
       />
       <div className="mt-1 flex items-baseline justify-between gap-3">
-        {trimmed.length === 0 ? (
+        {length === 0 ? (
           <p className="text-sm text-[#718078]">Describe the support needed</p>
         ) : state.message ? (
           <p role="alert" className="text-sm text-[#a23939]">{state.message}</p>
         ) : null}
         <p
           aria-live="polite"
-          data-error={description.length > 2000 ? "true" : undefined}
-          className={`text-xs ${description.length > 2000 ? "text-[#a23939]" : "text-[#718078]"}`}
+          data-error={overLimit ? "true" : undefined}
+          className={`text-xs ${overLimit ? "text-[#a23939]" : "text-[#718078]"}`}
         >
-          {description.length}/2000
+          {length}/{DESCRIPTION_MAX}
         </p>
       </div>
       <div className="mt-3 flex flex-wrap items-end gap-3">

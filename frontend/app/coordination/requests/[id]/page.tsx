@@ -26,7 +26,7 @@ import { TechnicalSupportLoading, TechnicalSupportPanel } from "./technical-supp
 
 import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
 
-async function CoordinatorRequestView({ id }: { id: string }) {
+async function CoordinatorRequestView({ id, currentUserId }: { id: string; currentUserId: string }) {
   const result = await getEventRequestStatusView(id)
     .then((view) => ({ ...view, failed: false as const }))
     .catch((error: unknown) => {
@@ -111,7 +111,11 @@ async function CoordinatorRequestView({ id }: { id: string }) {
       </Suspense>
       {(SUPPORT_STATUSES as readonly string[]).includes(request.status) ? (
         <Suspense fallback={<TechnicalSupportLoading />}>
-          <TechnicalSupportPanel eventRequestId={request.id} status={request.status} />
+          <TechnicalSupportPanel
+            eventRequestId={request.id}
+            status={request.status}
+            currentUserId={currentUserId}
+          />
         </Suspense>
       ) : null}
       <Link
@@ -157,7 +161,7 @@ export default async function CoordinationRequestPage({ params }: { params: Prom
   return (
     <AppShell signedIn navLinks={workspaceLinks(user.roles)}>
       <Suspense fallback={<DetailLoading />}>
-        {params.then(({ id }) => <CoordinatorRequestView id={id} />)}
+        {params.then(({ id }) => <CoordinatorRequestView id={id} currentUserId={user.id} />)}
       </Suspense>
     </AppShell>
   );
