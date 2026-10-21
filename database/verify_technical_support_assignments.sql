@@ -1,11 +1,11 @@
--- Run after 0051_technical_support_assignments.sql (SCRUM-19). Every change is
+-- Run after 0052_technical_support_assignments.sql (SCRUM-19). Every change is
 -- rolled back, except nothing: BEGIN ... ROLLBACK throughout. Uses no DELETE or
 -- UPDATE except restoring a status and a role it removed for one probe.
 --   psql -X -v ON_ERROR_STOP=1 -f database/verify_technical_support_assignments.sql
 -- On a disposable cluster built with:
 --   python3 -I database/tests/bootstrap_safety_review.py --disposable \
 --       --dsn postgresql://... --psql psql \
---       --through 0051_technical_support_assignments.sql
+--       --through 0052_technical_support_assignments.sql
 -- Case IDs refer to docs/testcases/scrum_19_testcases.md (D layer).
 
 BEGIN;

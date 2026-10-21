@@ -116,7 +116,7 @@ slice.
 | `POST` | `/event-requests/{id}/technical-support/requirements/{rid}/assignments` | Assign (201). 409 `support_not_allowed` / `staff_not_suitable` / `already_assigned`; the repeat of the same person is refused |
 
 Writes run the `record_technical_support_requirement` and
-`assign_technical_support_staff` database functions (migration `0051`, apply
+`assign_technical_support_staff` database functions (migration `0052`, apply
 before deploying this service version), which lock the event row shared with
 coordinator assignment and status transitions and recheck the coordinator,
 status, requirement's event and suitability at write time. Refusal bodies are

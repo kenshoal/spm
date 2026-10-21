@@ -50,7 +50,7 @@ MIGRATIONS = (
     "0046_shared_event_readiness.sql",
     "0048_event_registrations.sql",
     "0050_venue_booking_times.sql",
-    "0051_technical_support_assignments.sql",
+    "0052_technical_support_assignments.sql",
 )
 
 

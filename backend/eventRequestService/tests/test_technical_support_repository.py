@@ -1,7 +1,7 @@
 """SCRUM-19: the Supabase transport for technical support writes and reads.
 
 Case IDs refer to docs/testcases/scrum_19_testcases.md (R layer). The
-payloads and query shapes must match what migration 0051's functions and
+payloads and query shapes must match what migration 0052's functions and
 tables accept.
 """
 

@@ -4,7 +4,7 @@
 # assign_technical_support_staff, so the second insert meets the
 # technical_support_assignments_once unique constraint: exactly one row.
 # Usage: DSN=postgresql://... ./verify_technical_support_assignments_race.sh
-# Needs 0051_technical_support_assignments.sql applied and a DISPOSABLE
+# Needs 0052_technical_support_assignments.sql applied and a DISPOSABLE
 # database: it commits a fixture and leaves one Cancelled event behind (status
 # history is immutable). Prints RACE VERIFICATION PASSED or exits 1.
 
