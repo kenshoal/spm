@@ -234,7 +234,19 @@ requests, atomic approval, rejection without event mutation, stale approval,
 reassignment and server-only table/function access. It requires one Supabase
 Auth user and rolls back all verification data.
 
-## Arrangement review read contract (SCRUM-64, in progress)
+## SCRUM-20 timing-cause reader compatibility
+
+The [API response model](../backend/eventRequestService/app/models/arrangement_review.py) accepts `venue_timing_change` alongside the three existing causes.
+The [frontend review type](../frontend/lib/arrangement-reviews.ts) retains that cause and the [review list](../frontend/app/components/arrangement-review-list.tsx) labels it **Venue timing change**.
+Unknown-cause validation, permissions, acknowledgement and exact-row clearing remain unchanged.
+Generic `arrangement_needs_review` delivery remains compatible; an optional change-request ID is not invented.
+
+Merge **and deploy** these readers before enabling Koei's separate 0055 writer.
+This reader-only change includes no writer, migration, key or environment-variable changes.
+
+## Historical arrangement review read contract (SCRUM-64, 16 October 2026)
+
+This dated technical record is retained for history and does not describe the current Jira status of SCRUM-64.
 
 Number allocation update, 16 October: Jaren reserved **0034** for his SCRUM-60
 safety decision migration in Telegram discussion #2111 (04:13:21 UTC). Our

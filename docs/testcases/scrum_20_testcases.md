@@ -120,3 +120,38 @@ Build: Sprint 3 increment (conflict rules) at `b824b72` (20 October), updated to
 | Lint | `ruff check .` | All checks passed | — |
 
 Not yet run: database, API, frontend and pull-request CI (Sprint 4, after SCRUM-65).
+
+## Isolated reader-compatibility increment — 21 October 2026
+
+The requester approved this reader prerequisite and its publication separately from the outstanding SCRUM-35 work. This branch, `fix/scrum-20-timing-review-readers`, starts at `dev` `a5ce402`. Its runtime scope is limited to the API cause extension and frontend type/label extension, with two test files, rollout notes and this appendix. It does not contain SCRUM-35 decision changes or migration 0053, introduce migration 0055 or reopen SCRUM-64.
+
+**Approved contract (owner agreement DSU #2606):** `venue_timing_change` is the fourth valid arrangement-review cause; preserve `event_change`, `equipment_unavailable` and `safety_recheck`. The API returns its complete review evidence and the UI displays **Venue timing change**. Unknown causes remain invalid. Existing permissions, event state and staff acknowledgement/clear controls remain unchanged. Existing `arrangement_needs_review` notices require no new schema or fabricated `change_request_id` (omitted/null remains valid).
+
+**AC trace:** Jira SCRUM-20 was read live on 21 October. Its sixth bullet concerns the turnaround boundary; this document's separately approved **AC6 venue timing-change** contract is the source for the three integration IDs below. This appendix does not rewrite Jira or Koei's earlier specifications. Those sections and their results remain dated evidence for the broader story.
+
+| ID | Requirement / purpose | Concrete setup | Action and expected result | Plausible fault / forbidden effect | Layer |
+| --- | --- | --- | --- | --- | --- |
+| AC6-X1 | Preserve complete outstanding evidence for the current coordinator. | Existing assigned-coordinator fixture; one venue review with the new cause, target/cause UUIDs, setup/turnaround fields, recorded reason and aware timestamp. | 1. GET `/event-requests/{id}/arrangement-reviews` through real FastAPI/model code. 2. Require `200` and the complete expected row. 3. Compare the full fixture snapshot unchanged. | Retaining a three-value whitelist produces `500` or drops valid evidence; a read must not mutate state. | API with Auth/persistence doubles. |
+| AC6-N1 | Add the named value without accepting arbitrary strings. | Same record with `trigger_type=not_a_review_cause`. | 1. Validate the actual response model. 2. Require `ValidationError`, location `trigger_type`, code `literal_error`. 3. Preserve input. | Replacing the whitelist with a generic string incorrectly accepts it. | Model. |
+| AC6-X2 | Explain the cause while retaining existing review controls. | Same fixed review rendered in staff mode, then default read-only mode. | 1. Require the plain label, reason, references and timestamp. 2. Staff Mark reviewed starts disabled and enables only after acknowledgement, without a mutation. 3. Read-only mode has no clear button/checkbox. 4. Preserve input. | Missing label, automatic acknowledgement or exposed clear controls fails. | Component with mocked action. |
+
+These three executions use approved requirements as the independent oracle. Their fixed inputs, complete nonempty result, specific error and unchanged-state assertions make them deterministic and non-vacuous. Each has a purpose comment and a plausible wrong implementation above. Existing three-cause/security/clear/notification cases are regressions rather than duplicated new cases.
+
+### Original Red provenance
+
+Before reader implementation, the original worktree produced **1 failed / 1 passed** backend test (0.17 s, two known dependency warnings): the new cause returned HTTP `500` instead of `200`, while unknown-cause rejection passed. The component produced **1 assertion failure** (779 ms), with **Venue timing change** missing. Commands were `.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_arrangement_review_venue_timing_compatibility.py` and `npm test -- --run __tests__/arrangement-review-venue-timing-compatibility.test.tsx`. These are earlier observed behaviour failures, not new Red executions in this isolated branch.
+
+The backend source remains frozen at SHA256 `eed83f2d6034fd4f580aca97bb65e7899c80d100916a4a3a7029895a6ae46d95`. Frontend Red source was `1ecf6c067b27f27f0ebf07f0b69657865ae1af27545b68060e5a286aebf85017`; after unchanged-assertion Green, only the temporary cast/comment was removed so the fixture checks the real type union. Final frontend SHA256 is `af7a71619f8a8d043910edb373e9d0d5deb6e15f94e2f5be444773e21c2b20c1`. Original logs/freeze metadata were copied byte-for-byte to `/tmp/scrum20-reader-pr-20261021/vera/original-red/`; the original archive remains under `/tmp/scrum35-0054-integration-20261021/vera/`.
+
+### Isolated-branch Green evidence
+
+Root executed the following on this isolated branch at `a5ce402` plus the scoped reader diff; Vera inspected its logs. The three new executions pass within the suites below. Whole-suite counts include prior stories, are not SCRUM-20-only counts and are not additive. Backend commands use the existing event-service Python environment at `/Users/tionghengrui/Documents/SCH/Y2S2/SPM/Project/spm/backend/eventRequestService/.venv/bin/python`, with the working directory set to this isolated checkout's event service. Frontend commands run from this checkout's `frontend`.
+
+| Check | Actual local result | Boundary / evidence |
+| --- | --- | --- |
+| `python -m pytest -q -p no:cacheprovider`, with `SCRUM64_NOTIFICATION_RUNTIME=/tmp/scrum35-notification-runtime-20261021/bin/python` | **560 passed**, no failures/skips, **4.89 s**, two known Starlette/AnyIO deprecation warnings. | Includes the new FastAPI/model cases and opt-in local notification receiver HTTP test. Auth/persistence are doubles; receiver HTTP is a separate local boundary. `/tmp/scrum20-reader-pr-backend.log`. |
+| `npm test -- --run` | **426 passed / 41 files**, **5.57 s**. | Includes the new component case and existing cause/control/notification regressions. An initial dependency-cache `EPERM` startup restriction was resolved by a permitted rerun; it was not an assertion failure or product Red. `/tmp/scrum20-reader-pr-frontend.log`. |
+| `npx playwright test --reporter=list` | **45 passed**, **17.0 s**, configured Next production build passed. | Real Next/Chromium with canned Auth/APIs. Existing journeys are regression evidence, not a new timing-writer or real-user delivery claim. `/tmp/scrum20-reader-pr-e2e.log`. |
+| Backend Ruff, `npm run lint`, `npm run typecheck` and whitespace check | Passed. | Root's scoped quality gates; frontend logs `/tmp/scrum20-reader-pr-lint.log` and `/tmp/scrum20-reader-pr-typecheck.log`. |
+
+Earlier mixed-worktree full-suite/native results are deliberately not used as this PR's verification. No database migration or write path changes, so this reader PR adds no native persistence/rollback claim. No writer, date approval, real JWT session, live timing-change notification delivery or whole-story Done claim is included. Koei's 0055 writer remains gated until compatible readers are merged and deployed. **PR CI and human review remain pending** and are separate from these local passes. The earlier broad-story execution record is retained unchanged; this appendix does not complete SCRUM-20 or reopen SCRUM-64.
