@@ -22,7 +22,8 @@ export function TechnicalSupportList({
 }: {
   requirements: TechnicalSupportRequirement[];
   staff: StaffOption[];
-  candidates: ReadonlyMap<string, Candidate[]>;
+  // null marks a requirement whose candidate list failed to load.
+  candidates: ReadonlyMap<string, Candidate[] | null>;
   eventRequestId: string;
 }) {
   if (requirements.length === 0) {
@@ -34,7 +35,9 @@ export function TechnicalSupportList({
     <div className="mt-4 space-y-3">
       {requirements.map((requirement) => {
         const label = skillLabel(requirement.skill_tag);
-        const requirementCandidates = candidates.get(requirement.id) ?? [];
+        const loaded = candidates.get(requirement.id);
+        const candidatesFailed = loaded === null;
+        const requirementCandidates = loaded ?? [];
         const selectable = requirementCandidates.filter((candidate) => !candidate.already_assigned);
         return (
           <article key={requirement.id} className="rounded-xl border border-[#e1e7e4] p-4">
@@ -55,7 +58,11 @@ export function TechnicalSupportList({
                 ))}
               </ul>
             )}
-            {requirementCandidates.length === 0 ? (
+            {candidatesFailed ? (
+              <p role="alert" className="mt-3 text-sm text-[#a23939]">
+                Suitable staff could not be loaded. Refresh to try again.
+              </p>
+            ) : requirementCandidates.length === 0 ? (
               <p className="mt-3 text-sm text-[#718078]">
                 No suitable Technical Support Staff hold the {label} skill
               </p>
@@ -103,10 +110,14 @@ export async function TechnicalSupportPanel({
     listTechnicalSupportStaff(),
   ]);
   const requirements = support.value;
-  const candidates = new Map<string, Candidate[]>(
+  // Each requirement's candidates load on their own: one failure becomes an
+  // alert on that requirement instead of throwing out of the Suspense boundary
+  // and replacing the whole request page.
+  const candidates = new Map<string, Candidate[] | null>(
     await Promise.all(
       requirements.map(async (requirement) => {
-        return [requirement.id, await listCandidates(eventRequestId, requirement.id)] as const;
+        const loaded = await listCandidates(eventRequestId, requirement.id).catch(() => null);
+        return [requirement.id, loaded] as const;
       }),
     ),
   );

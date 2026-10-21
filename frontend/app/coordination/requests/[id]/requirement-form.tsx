@@ -13,9 +13,22 @@ const initialState: TechnicalSupportActionState = {};
 // disabled until the text is 1–2000 characters and one of the four skills is
 // chosen, so a dead form can never post a payload the API must refuse.
 export function RequirementForm({ eventRequestId }: { eventRequestId: string }) {
-  const [state, formAction, isPending] = useActionState(recordSupportRequirement, initialState);
   const [description, setDescription] = useState("");
   const [skillTag, setSkillTag] = useState("");
+  // The fields are controlled, so React's automatic form reset does not clear
+  // them; clear them on success so a second click cannot record a duplicate.
+  // A refusal keeps the text for the coordinator to correct.
+  const [state, formAction, isPending] = useActionState(
+    async (previousState: TechnicalSupportActionState, formData: FormData) => {
+      const result = await recordSupportRequirement(previousState, formData);
+      if (!result.message) {
+        setDescription("");
+        setSkillTag("");
+      }
+      return result;
+    },
+    initialState,
+  );
   const trimmed = description.trim();
   const descriptionValid = trimmed.length >= 1 && trimmed.length <= 2000;
   const skillValid = (SKILL_TAGS as readonly string[]).includes(skillTag);
