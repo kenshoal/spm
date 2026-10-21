@@ -12,6 +12,14 @@ createServer(async (request, response) => {
   }
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if (request.method === "GET" && url.pathname === "/auth/users") {
+    // SCRUM-19: a coordinator lists Technical Support Staff for the panel —
+    // this role only, mirroring the authService widening.
+    if (request.headers.authorization === "Bearer coordinator-session" && url.searchParams.get("role") === "technical_support") {
+      send(response, 200, [
+        { id: "playwright-tech", email: "technical_support@example.com" },
+      ]);
+      return;
+    }
     if (request.headers.authorization !== "Bearer ops-session" || url.searchParams.get("role") !== "event_coordinator") {
       send(response, 403, { detail: "Insufficient permissions" });
       return;
