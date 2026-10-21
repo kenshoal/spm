@@ -66,6 +66,8 @@ Requirements may be recorded and staff assigned only while the event's status is
 4. D10 Organiser visibility (proposed: no).
 5. Re-estimate 2 → 3 points.
 6. Shared dev has one TSS account; live partition checks need `technical_support2@example.com` (role `technical_support`, tag `lighting`) created through authService.
+7. The skill-tag vocabulary is duplicated between the API model and the database CHECK constraints; a single source (domain type or generated list) belongs to the future maintain-staff-skills story (review finding #7).
+8. `technical_support_skills.user_id` has no foreign key to `auth.users`; adding one belongs to the same story (review finding #8).
 
 ## Fixtures
 
