@@ -126,7 +126,10 @@ events' state. Skill tags are seeded in SQL
 (`database/seed_technical_support_skills.sql`); a screen to maintain them is a
 separate story. A successful assignment sends one
 `technical_support_assigned` notification to the new staff member after the
-commit; a failed notice is logged and the assignment stands.
+commit. Delivery is best-effort, matching SCRUM-14's coordinator-assignment
+notices rather than the submission outbox: the client logs a failed notice
+and moves on, so a message can be lost while notificationService is down and
+nothing retries it. The assignment stands either way.
 
 
 
