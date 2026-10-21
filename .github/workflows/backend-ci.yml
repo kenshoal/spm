@@ -5,12 +5,14 @@ on:
     branches: [dev, main]
     paths:
       - "backend/**"
+      - "database/**"
       - "docker-compose.yaml"
       - ".github/workflows/backend-ci.yml"
   push:
     branches: [dev, main]
     paths:
       - "backend/**"
+      - "database/**"
       - "docker-compose.yaml"
       - ".github/workflows/backend-ci.yml"
 
@@ -79,3 +81,34 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker build .
+
+  database-verify:
+    name: Verify the SCRUM-19 database schema
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create the empty disposable database
+        run: >-
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres
+          -c 'CREATE DATABASE scrum48_ci'
+      - name: Apply migrations through 0052
+        run: >-
+          python3 -I database/tests/bootstrap_safety_review.py --disposable
+          --dsn postgresql://postgres@127.0.0.1:5432/scrum48_ci
+          --through 0052_technical_support_assignments.sql
+      - name: Run the SCRUM-19 verifier
+        run: >-
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d scrum48_ci
+          -f database/verify_technical_support_assignments.sql
