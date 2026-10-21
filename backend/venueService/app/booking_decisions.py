@@ -16,6 +16,7 @@ from app.block_checks import check_availability
 from app.block_models import VenueBlock
 from app.models import Slot, Venue
 from app.slots import check_time_range, slots_to_range, times_overlap
+from app.time_conflicts import CLOSE_MINUTE, OPEN_MINUTE, padded_range
 
 
 class _TimedPeriod(BaseModel):
@@ -98,6 +99,8 @@ RefusalCode = Literal[
     "venue_unavailable",
     "outside_operating_slots",
     "active_block",
+    "setup_outside_window",
+    "turnaround_outside_window",
     "booking_conflict",
 ]
 
@@ -153,6 +156,14 @@ def assess_booking_decision(
         availability = check_availability(venue, booking.period(), blocks)
         refusals.extend(availability.reasons)
 
+    # SCRUM-20: setup and turnaround pad both bookings and must stay in the window.
+    setup, turnaround = venue.setup_minutes, venue.turnaround_minutes
+    start, end = padded_range(booking.start_minute, booking.end_minute, setup, turnaround)
+    if start < OPEN_MINUTE:
+        refusals.append("setup_outside_window")
+    if end > CLOSE_MINUTE:
+        refusals.append("turnaround_outside_window")
+
     conflicting_ids = []
     if confirmed_bookings is None:
         refusals.append("booking_check_unavailable")
@@ -165,12 +176,11 @@ def assess_booking_decision(
                 and times_overlap(
                     booking.start_date,
                     booking.end_date,
-                    booking.start_minute,
-                    booking.end_minute,
+                    start,
+                    end,
                     other.start_date,
                     other.end_date,
-                    other.start_minute,
-                    other.end_minute,
+                    *padded_range(other.start_minute, other.end_minute, setup, turnaround),
                 )
             }
         )
