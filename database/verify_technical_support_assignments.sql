@@ -391,6 +391,32 @@ BEGIN
         RAISE EXCEPTION 'AC5-X1b: % notification rows', v_count;
     END IF;
 
+    -- AC2-N9: the wrong-event refusal keeps its exact message. The service
+    -- tells P0002 reasons apart to map them onto 404 bodies, so rewording the
+    -- function's message must fail here instead of silently changing which
+    -- code the API returns.
+    BEGIN
+        PERFORM public.assign_technical_support_staff(
+            v_event, v_req_other, v_tss_av2, v_coord);
+        RAISE EXCEPTION 'AC2-N9: other event''s requirement accepted';
+    EXCEPTION WHEN SQLSTATE 'P0002' THEN
+        GET STACKED DIAGNOSTICS v_text = MESSAGE_TEXT;
+        IF v_text <> 'technical support requirement not found' THEN
+            RAISE EXCEPTION 'AC2-N9: wrong-event refusal said ''%''', v_text;
+        END IF;
+    END;
+
+    -- AC2-X7: a direct insert pairing a requirement with another event's id
+    -- is refused: the denormalised event_request_id cannot drift from the
+    -- requirement's own event.
+    BEGIN
+        INSERT INTO public.technical_support_assignments
+            (requirement_id, event_request_id, staff_id, assigned_by)
+        VALUES (v_req_other, v_event, v_tss_av2, v_coord);
+        RAISE EXCEPTION 'AC2-X7: assignment bound to the wrong event accepted';
+    EXCEPTION WHEN SQLSTATE '23503' THEN NULL;
+    END;
+
     RAISE NOTICE 'ALL SCRUM-19 TECHNICAL SUPPORT VERIFICATIONS PASSED';
 END
 $verify$;
