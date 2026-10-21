@@ -12,7 +12,9 @@ class ArrangementReviewResponse(BaseModel):
     arrangement: Literal["venue_booking", "equipment_reservation"]
     arrangement_id: UUID
     trigger_id: UUID
-    trigger_type: Literal["event_change", "equipment_unavailable", "safety_recheck"]
+    trigger_type: Literal[
+        "event_change", "equipment_unavailable", "safety_recheck", "venue_timing_change"
+    ]
     changed_fields: list[str]
     reason: str
     raised_at: AwareDatetime
