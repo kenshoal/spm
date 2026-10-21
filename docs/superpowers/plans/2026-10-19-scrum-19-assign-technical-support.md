@@ -21,7 +21,7 @@ Drafted 19 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 | SCRUM-58 Plan and Confirm | In Progress (Approved → Planning merged) | Planning exists in dev, so all three allowed statuses can be seeded |
 | SCRUM-64 Flag Affected Arrangements for Review (Heng Rui) | In Progress | **Out of scope here.** If SCRUM-64 wants support assignments flagged on a date change, it builds on the table this story adds. Tell Heng Rui the table name at standup |
 | SCRUM-62 Event Coordinator Lead | To Do | None. Coordinator reassignment already moves the right to assign support (AC2-N5) |
-| Migrations | dev ends at `0026`; SCRUM-13 uses `0027`/`0028`; SCRUM-21 uses `0029` | ~~This story takes **`0030`**~~. **Corrected 20 Oct: dev is at `0050` (SCRUM-65), so this story takes `0051`** — as the plan itself required, the next free number was re-checked before committing |
+| Migrations | dev ends at `0026`; SCRUM-13 uses `0027`/`0028`; SCRUM-21 uses `0029` | ~~This story takes **`0030`**~~. ~~Corrected 20 Oct: this story takes `0051`~~. **Corrected 21 Oct: SCRUM-65's `0051_venue_block_times.sql` merged to dev first, so this story takes `0052`** — as the plan itself required, the next free number was re-checked before committing |
 
 **Why this fits in the sprint:** it is the SCRUM-14 pattern (role + relationship check, locked RPC, best-effort notification) applied to a new child table. Sprint 3 ends **22 Oct**, so increment 1 (DB + backend, all five ACs at API level) is the sprint target; increment 2 (frontend panel + Playwright) follows if time allows (§8).
 
