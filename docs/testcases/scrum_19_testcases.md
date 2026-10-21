@@ -248,13 +248,20 @@ recorded here so the Red → Green chain stays honest:
 | AC2-X5 (D race, rerun) | Green | RACE VERIFICATION PASSED: one row; the loser hit the unique constraint | Pass | `b522397` | Claude, same fresh cluster, 21 Oct 2026 | Race script rerun after the composite-FK change |
 | Whole service (review fixes) | Green | 695 passed, 1 skipped (694 baseline + AC2-N8); `ruff check .` clean | Pass | `12795db` (R7) | Claude, local, 21 Oct 2026 | `pytest -q`; R7 made zero test changes (`git diff --stat` on `tests/` empty) |
 | AC2-N9, AC2-X7, AC2-X4 (CI database-verify) | Green | Job "Verify the SCRUM-19 database schema" success; whole Backend CI run success (11/11 jobs) | Pass | `c535a34`, dispatched run 39617016083 | Workflow dispatch on `feat/scrum-19-assign-technical-support`, 21 Oct 2026 | [Run](https://github.com/jarenlimhaan/spm/actions/runs/39617016083): postgres:16 service container, migrations through `0052`, verifier with `ON_ERROR_STOP=1`; backend jobs green on the same run |
-| AC1-X3, AC2-X6, AC3-P6, AC4-X1 (F) | Planned | — | Not executed | — | — | increment 2 |
-| AC5-H3 (E) | Planned | — | Not executed | — | — | increment 2; needs `0052` + `seed_technical_support_skills.sql` on the target database and a running stack |
+| AC4-X1 (G1, authService) | Red → Green | `798d091` Red: coordinator listing `role=technical_support` got 403 (`assert 403 == 200`; 1 failed / 13 passed — the 13 pin the refusals that survive). `141bccb` Green: 60 passed (46 existing + 14 new), `ruff check .` clean | Pass | `798d091`/`141bccb` | Claude, local, 21 Oct 2026 | `backend/authService`: `pytest tests/test_list_technical_support_users.py` then `pytest -q`; mocked dependencies, no live Supabase. Two new tests AC4-X1 and AC4-X1a–l and regression cases live in `tests/test_list_technical_support_users.py` |
+| AC1-X3, AC2-X6, AC3-P6, AC4-X1 (F) | Red → Green | `51705b1` Red: 3 new files, 35 cases — notifications 6 failed / 0 passed on the default-inbox branch (the G2 gap); actions + panel files failed to resolve their not-yet-written modules. `3a073c4` Green | Pass | `51705b1`/`3a073c4` | Claude, local, 21 Oct 2026 | `frontend/__tests__/technical-support-panel.test.tsx`, `technical-support-actions.test.ts`, `technical-support-notifications.test.ts`; vitest/jsdom, APIs mocked. Two Red-test data bugs corrected while reaching Green (both in the panel test): `getAllByText` for the repeated "Recorded by" line, and the labels test now renders an empty requirement so "Nobody assigned yet" can appear |
+| AC5-H4 (F) | Red → Green | Same run as the F row: Red 6 failed on the default branch; Green renders "You've been assigned as Audio-visual support for Tech Summit 2030." with `href` null, each tag's label, and the missing-event-name sentence | Pass | `51705b1`/`3a073c4` | Claude, local, 21 Oct 2026 | `frontend/__tests__/technical-support-notifications.test.ts` |
+| Frontend suite (whole) | Green | 460 passed, 0 failed (43 files; 425 pre-existing + 35 new); `npm run lint`, `npm run typecheck`, `npm run build` clean | Pass | `3a073c4` | Claude, local, 21 Oct 2026 | `npm test` in `frontend/`; no pre-existing test file edited |
+| AC5-H3a (E) | Green | Coordinator records an AV requirement on a seeded Planning event, assigns `technical_support@example.com`, sees the assignment and the all-assigned state; the TSS inbox shows the AC5-H4 message and keeps it across reload | Pass | `a96c772` | Claude, local Chromium via the Playwright mock webServers, 21 Oct 2026 | `npx playwright test` — 46 passed (45 pre-existing + 1 new), 0 failed; notice seeded via `__seed` (no cross-service write in the mocks), so emission evidence stays AC5-H1 |
+| AC5-H3b (E, live) | Planned | — | Not executed | — | — | Blocked for this session: shared dev has not had `0052` + `seed_technical_support_skills.sql` applied (migrations go through the Supabase dashboard/SQL editor), and `technical_support2@example.com` does not exist yet. Manual run with screenshots remains |
 
 Scope note (plan §1): increment 1 delivered commits `8aa0a73`…`4d1488a` on
 `feat/scrum-19-assign-technical-support`, hardened by the review fixes
-`8eb3304`…`c535a34` (21 Oct 2026, review-fix plan §3) before increment 2;
-shared-dev application of `0052` and the seed, live grant checks, one live API
-run and PR CI remain (increment 2).
+`8eb3304`…`c535a34` (21 Oct 2026, review-fix plan §3). Increment 2 (21 Oct
+2026, increment-2 plan) delivered commits `5658584`…`a96c772`: the authService
+widening (G1), the frontend panel and inbox rendering (AC1-X3, AC2-X6, AC3-P6,
+AC4-X1, AC5-H4), and the mock e2e journey (AC5-H3a). Remaining before Done:
+shared-dev application of `0052` and the seed, `technical_support2@example.com`,
+live grant checks, the AC5-H3b manual run and PR CI.
 Closed 21 Oct: PO confirmed D2/D3/D7 as proposed. Still open: teammate review
 of these AI-drafted cases (`testing.md` §10).
