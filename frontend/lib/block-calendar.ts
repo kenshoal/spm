@@ -2,7 +2,7 @@
 // strings compared lexically, so no time zone can shift a block by a day.
 import { blockReasonText, type VenueBlock } from "./venue-block-options";
 import type { VenueBooking } from "./venue-booking-options";
-import { timeRangeLabel } from "./venue-options";
+import { CLOSE_MINUTE, OPEN_MINUTE, timeRangeLabel } from "./venue-options";
 
 // SCRUM-65: each date lists the times that are blocked or booked (an approved
 // booking request, SCRUM-15), earliest first; any other time in 07:00-24:00
@@ -19,6 +19,18 @@ export interface CalendarDay {
   date: string;
   unavailable: boolean;
   entries: CalendarEntry[];
+  // Some time in 07:00-24:00 is neither blocked nor booked.
+  free: boolean;
+}
+
+// entries are sorted by start time.
+function hasFreeTime(entries: readonly CalendarEntry[]): boolean {
+  let reached = OPEN_MINUTE;
+  for (const entry of entries) {
+    if (entry.start_minute > reached) return true;
+    reached = Math.max(reached, entry.end_minute);
+  }
+  return reached < CLOSE_MINUTE;
 }
 
 export interface BlockCalendar {
@@ -92,7 +104,7 @@ export function buildBlockCalendar(
       ...active.filter(on).map((block) => entry("blocked", block, blockReasonText(block))),
       ...approved.filter(on).map((booking) => entry("booked", booking, booking.event_name ?? "event")),
     ].sort((a, b) => a.start_minute - b.start_minute || a.end_minute - b.end_minute);
-    days.push({ date, unavailable: venue.status === "blocked", entries });
+    days.push({ date, unavailable: venue.status === "blocked", entries, free: hasFreeTime(entries) });
   }
 
   return {

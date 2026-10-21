@@ -145,6 +145,7 @@ Known flake, not from this story: `test_venue_setup_turnaround.py::test_update_c
 | AC3-X1 | AC3 | A new block alerts only time-overlapping approved bookings | Cross-cutting | One notice, with both time ranges | API, unit |
 | AC4-H1 | AC4 | Search around an approved booking; a pending one | Happy | Overlap hidden; adjacent and pending-only offered | API |
 | AC4-B1 | AC4 | Date-only search: 07:00-24:00 fully taken vs 15 minutes free | Boundary | Hidden; offered | API |
+| AC4-B2 | AC4 | Venue Staff calendar day: full-day block, blocks meeting end to end, 15 minutes free at either end or between, none | Boundary | "No free time" only when 07:00-24:00 is fully covered; otherwise "Other times available" | Unit (`__tests__/block-calendar.test.ts`) |
 | AC4-N1 | AC4 | Invalid search times; times without a date | Negative | 422 with the code | API, unit |
 | AC4-H2 | AC4 | Availability check reports the overlapping part in time | Happy | Block 12:30-14:00 and booking 12:00-13:00 parts | API |
 | AC4-P1 | AC4 | A free time | Partition | Available, no reasons | API |
@@ -167,3 +168,17 @@ Converted from slots to the times they stand for (AM 07:00-12:00, PM 12:00-18:00
 | Frontend browser | `npm run test:e2e` (mock services) | 45 passed | The mock venue API mirrors the time rules |
 | Frontend build | `npm run build` | Passed | |
 | Shared database (`rrmvhxrxrrnigjdxcbwt`) | `0051` applied by the owner in the SQL Editor; `verify_venue_block_times.sql` and `verify_venue_booking_times.sql` run rolled back through the Supabase MCP, 20 October 2026 | Applied; both verifiers passed | Live `create_venue_block` and `decide_venue_booking_request` bodies match the file (md5, ignoring CRLF line endings from the paste). The 3 existing blocks converted to 07:00-18:00, 07:00-18:00 and 07:00-24:00 with slots unchanged; `venue_blocks_times_valid` and `set_block_time_slots` present; one `create_venue_block` (times signature), EXECUTE for `service_role` and `postgres` only; no verifier rows left |
+
+### Integrated real-app check (20 October 2026, Windows 11)
+
+Local stack (`docker compose up --build`, `npm --prefix frontend run dev`) against shared development after `0051`, signed in as the seeded Venue Staff account, on the `KOEI BLOCK TEST` venue.
+
+| Step | Result |
+| --- | --- |
+| Calendar shows the converted existing blocks | Passed: 4-5 Oct 07:00-18:00, 14-22 Oct 07:00-24:00 |
+| Block 28 Oct 2026, 12:30-14:00, Maintenance | Passed: created, listed as "28 Oct 2026 · 12:30-14:00 · Maintenance · Active", calendar row 12:30-14:00 Blocked |
+| Search 28 Oct, 12:00-13:00 | Passed: venue not offered |
+| Search 28 Oct, 14:00-15:00 (adjacent) | Passed: venue offered |
+| Fully blocked day label | **Failed, fixed (AC4-B2):** 07:00-24:00 days said "Other times available"; now "No free time". Rechecked in the browser after the fix |
+
+The 28 Oct test block remains on `KOEI BLOCK TEST` (no lift action in the app).
