@@ -2,7 +2,7 @@
 
 Source: [Jira SCRUM-19](https://is212g9t4.atlassian.net/browse/SCRUM-19) and `docs/superpowers/plans/2026-10-19-scrum-19-assign-technical-support.md`. Branch: `feat/scrum-19-assign-technical-support`, based on `origin/dev` `a14ed6d` (merged 20 Oct 2026).
 
-> **Status: Approved 20 October 2026.** Yang Xue (story owner) approved the §2 AC wording — including the AC1 narrow-in from E4-2 — and decisions D1–D12 as proposed, and scoped the story to increment 1 (database + backend). PO confirmed D2/D3/D7 as proposed on 21 October 2026 and the 2-to-3-point re-estimate is in Jira (the open questions are closed). The rewording is recorded here, not written back to Jira. Migration numbering: this story takes `0052` — corrected 21 October; SCRUM-65's `0051_venue_block_times.sql` landed on dev first, taking the `0051` this document originally claimed (itself a correction from the plan's `0030`).
+> **Status: Approved 20 October 2026.** Yang Xue (story owner) approved the §2 AC wording — including the AC1 narrow-in from E4-2 — and decisions D1–D12 as proposed, and scoped the story to increment 1 (database + backend). PO confirmed D2/D3/D7 as proposed on 21 October 2026 and the 2-to-3-point re-estimate is in Jira (the open questions are closed). The rewording is recorded here, not written back to Jira. Migration numbering: this story takes `0052` — corrected 21 October; SCRUM-65's `0051_venue_block_times.sql` landed on dev first, taking the `0051` this document originally claimed (itself a correction from the plan's `0030`). On 21 October 2026 Yang Xue approved the review-fix plan (`docs/superpowers/plans/2026-10-21-scrum-19-review-fixes.md`), including its §1 sign-off S1, and the three cases it added (AC2-N8, AC2-N9, AC2-X7) are recorded below.
 
 ## Approved contract
 
@@ -135,6 +135,8 @@ Layers: U = unit (`backend/eventRequestService/tests/test_technical_support_rule
 | AC2-N5 | AC2 | Reassignment between page load and assign is caught at write time | Negative | `EVENT` reassigned from `COORD` to `OTHER_COORD` after `COORD` loaded the page | DB: `assign_technical_support_staff(EVENT, REQ_AV, 'tss-av', 'coord-1')`; API: fake reassigned, ASSIGN-POST as `COORD` | — | `P0003`; 404 | No row; no notification | D + A |
 | AC2-N6 | AC2 | Event cancelled between page load and assign | Negative | `EVENT` Planning with `REQ_AV`; then cancelled via `advance_event_request_by_coordinator(..., 'Cancelled')` | Call `assign_technical_support_staff` | `tss-av` | `P0004` | No row | D |
 | AC2-N7 | AC2 | Supabase unavailable | Negative | Fake repository raises `SupabaseRepositoryError` on `assign`; mocked 503 and `httpx.ConnectError` at R | ASSIGN-POST; `repository.assign(...)` | `tss-av` | 502; `SupabaseRepositoryError` (not `TechnicalSupportRpcError`) | No row; **no notification** | A + R |
+| AC2-N8 | AC2 | A refused status never reaches the database | Negative | AC2-H1 fixtures; `EVENT` status set to a disallowed value | ASSIGN-POST `tss-av` against a fake subclass that counts RPC calls (`tests/test_technical_support_precheck.py`) | status `Completed`; `tss-av` | 409 `support_not_allowed` and the RPC call count is 0 — the service's own status pre-check refuses first | No assignment row; no notification | A |
+| AC2-N9 | AC2 | The wrong-event refusal keeps its exact message, so the 404 mapping cannot drift | Negative | `REQ_OTHER` on `OTHER_EVENT` committed | `assign_technical_support_staff(EVENT, REQ_OTHER, …)`; capture `SQLERRM` | `tss-av2` | `P0002` with `SQLERRM` exactly `technical support requirement not found` | — | D |
 | AC2-B1 | AC2 | Blank staff id | Boundary | as AC2-H1 | ASSIGN-POST | `"staff_id": ""` | 422 | No row | A |
 | AC2-B2 | AC2 | Staff id at the 64-char limit is accepted for checking | Boundary | as AC2-H1 | ASSIGN-POST | `"s" * 64` (unknown user) | 409 `staff_not_suitable` (passes validation, fails suitability) | No row | A |
 | AC2-B3 | AC2 | Staff id over the limit | Boundary | as AC2-H1 | ASSIGN-POST | `"s" * 65` | 422 | No row | A |
@@ -144,6 +146,7 @@ Layers: U = unit (`backend/eventRequestService/tests/test_technical_support_rule
 | AC2-X4 | AC2 | Browser roles cannot reach the new functions or tables | Cross-cutting | Local cluster with `0052` | `has_function_privilege` for the three public functions and the private helper; `has_table_privilege` SELECT/INSERT on the three tables | `anon`, `authenticated`, `service_role` | false for `anon`/`authenticated`; `service_role` can execute and select/insert | — | D |
 | AC2-X5 | AC2 | Two sessions assign the same person concurrently | Cross-cutting | `REQ_AV` committed, no assignments; two `psql` sessions | Both call `assign_technical_support_staff(EVENT, REQ_AV, 'tss-av', 'coord-1')` at the same time | — | Exactly one row; the other session gets `23505` | Never two rows | D (race script) |
 | AC2-X6 | AC2 | Refusals are shown as readable messages in the panel | Cross-cutting | Server action mocked to return each 409 code | Click Assign | `support_not_allowed`, `staff_not_suitable`, `already_assigned` | "Technical support can only be arranged for approved, planning or confirmed events" / "This person doesn't hold the required skill" / "Already assigned to this requirement" | Assigned list not changed | F |
+| AC2-X7 | AC2 | The database refuses an assignment whose event disagrees with its requirement's | Cross-cutting | `REQ_OTHER` on `OTHER_EVENT` committed; composite FK from `0052` | Direct insert of `(REQ_OTHER, EVENT, …)` into `technical_support_assignments`, bypassing the function | — | `23503` (`technical_support_assignments_requirement_event_fkey`) | No row | D |
 
 ### AC3 — Suitability
 
@@ -186,17 +189,40 @@ Layers: U = unit (`backend/eventRequestService/tests/test_technical_support_rule
 | AC5-N2 | AC5 | A notification failure never undoes the assignment | Negative | notificationService returns 500; then raises `httpx.ConnectError` | ASSIGN-POST `tss-av`; call the client directly | — | 201 and the row is kept; client returns `None` and logs one `WARNING` naming the staff id and event | No exception escapes; no rollback | A + N |
 | AC5-X1 | AC5 | Notifications are idempotent and skipped when not configured | Cross-cutting | (a) URL unset; (b) the same assignment notified twice against the real `notifications` table | (a) call the client; (b) insert twice with the same `(recipient_id, event_id)` | — | (a) no HTTP call; (b) one notification row (existing `notifications_recipient_event_key`) | — | N + D |
 
-**ID count:** AC1 29, AC2 28, AC3 12, AC4 8, AC5 6 = **83 IDs** (ranges counted individually; 58 rows).
+**ID count:** AC1 29, AC2 31, AC3 12, AC4 8, AC5 6 = **86 IDs** (ranges counted individually; 61 rows).
 
 ## Coverage check
 
 | AC | Happy | Partition | Boundary | Negative | Cross-cutting |
 | --- | --- | --- | --- | --- | --- |
 | AC1 | H1 | P1–P14 (status ×10, tag ×4) | B1–B5 (description 0 / blank / 1 / 2000 / 2001) | N1–N6 | X1 roles, X2 reassignment race, X3 UI |
-| AC2 | H1, H2 | P1–P10 (status ×10) | B1–B3 (staff id 0 / 64 / 65) | N1–N7 | X1 roles, X2 401, X3 forged actor, X4 grants, X5 race, X6 UI |
+| AC2 | H1, H2 | P1–P10 (status ×10) | B1–B3 (staff id 0 / 64 / 65) | N1–N9 | X1 roles, X2 401, X3 forged actor, X4 grants, X5 race, X6 UI, X7 event pairing |
 | AC3 | H1 | P1–P6 (role × tag) | — (no numeric boundary; empty list is P6) | N1 | X1 no availability, X2 multi-tag, X3 access, X4 list = write |
 | AC4 | H1, H2 | P1–P3 | B1 ordering tie | N1 | X1 field whitelist + UI |
 | AC5 | H1, H2, H3 (E2E) | — | — | N1, N2 | X1 idempotency / unset URL |
+
+## Review corrections (21 October 2026)
+
+A code review of commits `8aa0a73`…`79835b3` (findings and fixes:
+`docs/superpowers/plans/2026-10-21-scrum-19-review-fixes.md`) audited the
+tests this matrix records. The test edits already made during the sprint are
+recorded here so the Red → Green chain stays honest:
+
+1. `4d1488a` corrected three Red tests while reaching Green: AC5-N2 (A) was
+   rewritten to drive the real `NotificationClient` over a monkeypatched
+   `httpx.post` instead of the recording fake's `fail` flag; the AC4 expected
+   timestamps use the `Z` form pydantic serializes; the AC4-P1 fixture gained
+   the assigned-staff contrast it asserts against.
+2. `53b2bcb` corrected three DB-verifier fixture bugs from the Green run, none
+   of them migration defects: the AC3-H1 candidate expectation moved before
+   AC2-H2 assigns the second staff member, the post-reassignment assign now
+   records and assigns on a fresh audio-visual requirement the new coordinator
+   owns, and the race script's loser output needed `2>&1`.
+3. **S1, signed off by Yang Xue on 21 October 2026:** the `4d1488a` rewrite of
+   AC5-N2 is reverted to the `b821d54` oracle — the recording fake's `fail`
+   flag raising `RuntimeError` — because the rewritten case let the real
+   client swallow the failure, so the service's own handling of a raising
+   notifier went untested. Commit R1a restores the test, R1b makes it pass.
 
 ## Latest execution record
 
