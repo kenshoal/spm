@@ -5,7 +5,6 @@ functions' check order; the real functions are proven by
 database/verify_technical_support_assignments.sql.
 """
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 from technical_support_fakes import (
@@ -42,7 +41,6 @@ from test_event_request_controller import (
 
 from app.main import create_app
 from app.repositories import SupabaseRepositoryError
-from app.services.notification_client import NotificationClient
 
 ROLES = USER_ROLES
 
@@ -852,21 +850,12 @@ def test_only_the_new_staff_member_is_notified() -> None:
     assert [call["staff_id"] for call in notification.calls] == [TSS_AV, TSS_AV2]
 
 
-# AC5-N2 (negative): a notification failure never undoes the assignment — the
-# real client swallows the delivery failure, so the assignment stands
-def test_notification_failure_keeps_the_assignment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    event_requests, technical_support, _ = seeded_assignment_fixture()
+# AC5-N2 (negative): a notification failure never undoes the assignment
+def test_notification_failure_keeps_the_assignment() -> None:
+    event_requests, technical_support, notification = seeded_assignment_fixture()
+    notification.fail = True
 
-    def failing_post(*args: object, **kwargs: object) -> httpx.Response:
-        raise httpx.ConnectError("connection refused")
-
-    monkeypatch.setattr(httpx, "post", failing_post)
-
-    with make_client(
-        event_requests, technical_support, NotificationClient("https://n.example/e")
-    ) as client:
+    with make_client(event_requests, technical_support, notification) as client:
         response = client.post(
             assignments_path(EVENT, REQ_AV), json={"staff_id": TSS_AV}
         )
