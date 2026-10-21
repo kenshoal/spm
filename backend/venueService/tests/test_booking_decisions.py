@@ -321,3 +321,45 @@ def test_blank_optional_alternative_is_absent():
     )
     assert decision.reason == "Unsuitable"
     assert decision.suggested_alternative is None
+
+
+# SCRUM-20: approval applies the venue's setup and turnaround (30 / 45 below);
+# the database guard (0054) applies the same rules.
+def padded_assess(start, end, *others):
+    return assess(
+        booking=subject(start_date="2026-10-03", end_date="2026-10-03",
+                        start_minute=start, end_minute=end),
+        venue=venue(setup_minutes=30, turnaround_minutes=45),
+        confirmed_bookings=[
+            confirmed(booking_id=f"b{i}", start_minute=s, end_minute=e)
+            for i, (s, e) in enumerate(others)
+        ],
+    )
+
+
+# SCRUM-20 AC3-H2 (happy): padding creates a conflict the booked times alone would not
+def test_padding_creates_a_conflict_in_approval():
+    result = padded_assess(735, 780, (600, 720))
+    assert result.refusal_codes == ["booking_conflict"]
+    assert result.conflicting_booking_ids == ["b0"]
+
+
+# SCRUM-20 AC5-B1 (boundary): a gap equal to turnaround plus setup is allowed; one step less is not
+@pytest.mark.parametrize("start,allowed", [(795, True), (780, False)], ids=["AC5-B1a", "AC5-B1b"])
+def test_gap_of_turnaround_plus_setup_is_the_approval_boundary(start, allowed):
+    assert padded_assess(start, 840, (600, 720)).allowed is allowed
+
+
+# SCRUM-20 AC3-B1/B2 (boundary): padding must stay inside 07:00-24:00
+@pytest.mark.parametrize(
+    "start,end,codes",
+    [
+        (450, 540, []),
+        (435, 540, ["setup_outside_window"]),
+        (1320, 1395, []),
+        (1320, 1410, ["turnaround_outside_window"]),
+    ],
+    ids=["AC3-B1a", "AC3-B1b", "AC3-B2a", "AC3-B2b"],
+)
+def test_padding_outside_the_window_refuses_approval(start, end, codes):
+    assert padded_assess(start, end).refusal_codes == codes
