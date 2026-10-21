@@ -15,7 +15,6 @@ from app.models.technical_support import (
 from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
 )
-from app.repositories.event_request_repository import SupabaseRepositoryError
 from app.repositories.technical_support_repository import (
     TechnicalSupportRepository,
     TechnicalSupportRpcError,
@@ -25,7 +24,11 @@ from app.services.event_request_service import (
     EventRequestService,
 )
 from app.services.notification_client import NotificationClient
-from app.services.technical_support_rules import group_by_requirement
+from app.services.technical_support_rules import (
+    SupportNotAllowedError,
+    ensure_support_allowed,
+    group_by_requirement,
+)
 
 EVENT_REQUEST_NOT_FOUND = "event_request_not_found"
 REQUIREMENT_NOT_FOUND = "requirement_not_found"
@@ -42,15 +45,6 @@ class TechnicalSupportNotFoundError(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
-
-
-class SupportNotAllowedError(Exception):
-    """The event's status does not allow support to be arranged."""
-
-    code = "support_not_allowed"
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
 
 
 class StaffNotSuitableError(Exception):
@@ -93,7 +87,11 @@ class TechnicalSupportService:
         payload: RequirementCreate,
         recorded_by: str,
     ) -> RequirementResponse:
-        self._require_latest_coordinator(event_request_id, recorded_by)
+        event = self._require_latest_coordinator(event_request_id, recorded_by)
+        # Refuse before the database call: the rules module runs in the
+        # service's request path, while the locked function re-checks the
+        # status and stays authoritative.
+        ensure_support_allowed(event.status)
         try:
             row = self.repository.record_requirement(
                 {
@@ -138,6 +136,7 @@ class TechnicalSupportService:
         assigned_by: str,
     ) -> AssignmentResponse:
         event = self._require_latest_coordinator(event_request_id, assigned_by)
+        ensure_support_allowed(event.status)
         requirement = self._requirement_on_event(event_request_id, requirement_id)
         try:
             row = self.repository.assign(
@@ -259,6 +258,6 @@ class TechnicalSupportService:
             return StaffNotSuitableError("This person doesn't hold the required skill")
         if error.errcode == "23505":
             return AlreadyAssignedError("Already assigned to this requirement")
-        # Transport-shaped failures stay SupabaseRepositoryError (502).
-        assert isinstance(error, SupabaseRepositoryError)
+        # Any other errcode is an unexpected database refusal and stays a 502
+        # through the shared SupabaseRepositoryError handler.
         return error

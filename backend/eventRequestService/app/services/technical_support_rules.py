@@ -28,6 +28,8 @@ TECHNICAL_SUPPORT_ROLE = "technical_support"
 class SupportNotAllowedError(Exception):
     """The event's status does not allow support to be arranged."""
 
+    code = "support_not_allowed"
+
 
 def ensure_support_allowed(status: EventRequestStatus | str) -> None:
     """Raise unless the event's status allows support work to be arranged."""
