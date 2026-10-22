@@ -264,6 +264,9 @@ documents the coordinated bundle and real signed-in journey. Booking creation
 used the normal authenticated API; booking approval and date/conflict review
 used UI. No committed race fixtures or fault triggers ran on shared. Do not
 reapply this bundle or run an old REST-writing creator against it.
+Source `7095a79` is published in [PR #91](https://github.com/jarenlimhaan/spm/pull/91) into `dev`; exact-head CI, human
+review and merge remain pending. The running images remain local, using shared
+Supabase, rather than a remote application publication.
 
 An event can have several booking requests, one per venue (SCRUM-61).
 `GET /booking-requests/event/{event_request_id}` lists all of an event's

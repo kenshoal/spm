@@ -503,8 +503,8 @@ journey proved conflict/no partial writes, valid approval, retained ranges,
 affected staff inbox delivery and registration acknowledgement. Fixture creation
 used authenticated API calls where identified; subsequent approval/review actions
 used UI. See the [deployment and journey record](../docs/deployment/scrum_35_date_rollout.md).
-Git publication, actual PR CI and human review remain pending; this is not a
-whole-story Done claim.
+Source `7095a79` is published in [PR #91](https://github.com/jarenlimhaan/spm/pull/91) into `dev`. Exact-head CI, human
+review and merge remain pending; this is not a whole-story Done claim.
 
 ### Historical reader compatibility and date/timing proposal (21 October 2026)
 

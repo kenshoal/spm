@@ -4,8 +4,9 @@
 0059 bundle to **SPMG9T4**, Supabase project `rrmvhxrxrrnigjdxcbwt` (PostgreSQL
 17.6), as `20261022114717` (`scrum35_versioned_bookings_registration_and_atomic_dates`).
 The migration timestamp is 22 October 2026, 11:47:17 UTC / 19:47:17 Singapore time.
-Do not reapply these sources. Git publication, actual PR CI and human review
-remain pending; this record does not declare SCRUM-35 Done.
+Do not reapply these sources. [PR #91](https://github.com/jarenlimhaan/spm/pull/91) publishes source `7095a79` into
+`dev`; exact-head CI, human review and merge remain pending. This record does
+not declare SCRUM-35 Done.
 The [earlier shared record](scrum_35_shared_rollout.md) applies only to 0049/0053,
 migration `20261022025742`; do not reapply those sources.
 
@@ -167,8 +168,8 @@ staff rearrangement or safety approval.
 Root retained `shared-live-before.json`, `shared-live-refused.json`,
 `shared-live-approved.json`, `shared-live-final.json` and `shared-live-checks.json`
 in the evidence directory above; all 17 final checks were true. Labelled business
-fixtures remain as evidence. Git publication, actual PR CI and human review are
-still pending.
+fixtures remain as evidence. Source `7095a79` is published in [PR #91](https://github.com/jarenlimhaan/spm/pull/91);
+exact-head CI, human review and merge remain pending.
 
 ## Failure and recovery
 

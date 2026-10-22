@@ -114,8 +114,9 @@ See the [dated browser record](../testcases/scrum_35_testcases.md#real-signed-in
 No booking or equipment reservation was created in that journey, so it does not
 prove recipient-visible affected-arrangement review delivery.
 
-Application publication/review/CI and the remaining original acceptance scope
-are still pending. This original 0049/0053 rollout did not install date or
+Source `7095a79` is published in [PR #91](https://github.com/jarenlimhaan/spm/pull/91) into `dev`. Exact-head CI,
+human review, merge and the final story-wide completion assessment remain
+pending; the running local images are not a remote application publication. This original 0049/0053 rollout did not install date or
 registration approval. The separately authorised 0056/0058/0059 bundle was later
 applied on 22 October as `20261022114717`; its
 [deployment and signed-in journey record](scrum_35_date_rollout.md) documents

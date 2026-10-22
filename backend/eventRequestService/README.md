@@ -327,8 +327,9 @@ fixture creation used authenticated API calls; proposal, approval and review
 actions used UI. See the [deployment record](../../docs/deployment/scrum_35_date_rollout.md)
 and [fresh native/CI commands](../../database/README.md#atomic-date-and-mixed-approval-0059).
 The independent native CI job uses PostgreSQL 16, seven rollback scripts and
-duplicate-approval/date races. Git publication, actual PR CI and human review
-remain pending; local and shared evidence remain distinct.
+duplicate-approval/date races. Source `7095a79` is published in [PR #91](https://github.com/jarenlimhaan/spm/pull/91)
+into `dev`; exact-head CI, human review and merge remain pending. Running local
+images are not a remote application publication; local/shared evidence stays distinct.
 
 ## Status history (SCRUM-48)
 
