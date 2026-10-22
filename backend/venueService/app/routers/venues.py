@@ -253,8 +253,25 @@ def update_venue(
     principal: VenueStaffDep,
     repo: RepoDep,
 ) -> Venue:
-    del principal
-    venue = repo.update(venue_id, payload)
+    # SCRUM-20 AC6: setup and turnaround go through update_timing, which flags the
+    # bookings a change affects; the other fields are a plain update.
+    timing = payload.model_dump(
+        include={"setup_minutes", "turnaround_minutes"}, exclude_unset=True
+    )
+    rest = VenueUpdate(
+        **payload.model_dump(exclude={"setup_minutes", "turnaround_minutes"}, exclude_unset=True)
+    )
+    if timing:
+        venue = repo.update_timing(
+            venue_id,
+            timing.get("setup_minutes"),
+            timing.get("turnaround_minutes"),
+            principal.user_id,
+        )
+        if venue is not None and rest.model_fields_set:
+            venue = repo.update(venue_id, rest)
+    else:
+        venue = repo.update(venue_id, payload)
     if venue is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Venue not found"

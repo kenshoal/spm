@@ -95,3 +95,41 @@ class SupabaseVenueRepository:
             headers={"Prefer": "return=representation"},
         )
         return Venue.model_validate(rows[0]) if rows else None
+
+    def update_timing(
+        self,
+        venue_id: str,
+        setup_minutes: int | None,
+        turnaround_minutes: int | None,
+        changed_by: str,
+    ) -> Venue | None:
+        """Change setup and/or turnaround through 0055's update_venue_timing, which
+        saves the change record and flags affected bookings in the same transaction."""
+        if not _is_uuid(venue_id):
+            return None
+        try:
+            response = self._client.post(
+                "/rpc/update_venue_timing",
+                json={
+                    "p_venue_id": venue_id,
+                    "p_setup_minutes": setup_minutes,
+                    "p_turnaround_minutes": turnaround_minutes,
+                    "p_changed_by": changed_by,
+                },
+            )
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError("Venue store unavailable") from error
+        if not response.is_success:
+            try:
+                code = response.json().get("code")
+            except (ValueError, AttributeError):
+                code = None
+            if code == "P0002":
+                return None
+            raise SupabaseRepositoryError(
+                f"Venue store request failed ({response.status_code})"
+            )
+        body = response.json()
+        if not isinstance(body, dict) or not isinstance(body.get("venue"), dict):
+            raise SupabaseRepositoryError("Venue store returned an unexpected response")
+        return Venue.model_validate(body["venue"])

@@ -23,6 +23,13 @@ class VenueStore(Protocol):
     def get(self, venue_id: str) -> Venue | None: ...
     def list(self) -> list[Venue]: ...
     def update(self, venue_id: str, data: VenueUpdate) -> Venue | None: ...
+    def update_timing(
+        self,
+        venue_id: str,
+        setup_minutes: int | None,
+        turnaround_minutes: int | None,
+        changed_by: str,
+    ) -> Venue | None: ...
 
 
 class VenueRepository:
@@ -52,6 +59,20 @@ class VenueRepository:
         updated = venue.model_copy(update={**patch, "updated_at": updated_at})
         self._venues[venue.id] = updated
         return updated
+
+    def update_timing(
+        self,
+        venue_id: str,
+        setup_minutes: int | None,
+        turnaround_minutes: int | None,
+        changed_by: str,
+    ) -> Venue | None:
+        # Review flags live in the database (0055); this store only keeps the times.
+        del changed_by
+        times = {"setup_minutes": setup_minutes, "turnaround_minutes": turnaround_minutes}
+        return self.update(
+            venue_id, VenueUpdate(**{k: v for k, v in times.items() if v is not None})
+        )
 
     def clear(self) -> None:
         self._venues.clear()
