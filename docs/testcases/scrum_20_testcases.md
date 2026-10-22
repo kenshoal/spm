@@ -149,7 +149,7 @@ Not yet done: AC6 (0055, after PR #85's readers are deployed), the SCRUM-35 resc
 
 Contract agreed with Heng Rui (21 October): `trigger_type = 'venue_timing_change'`, `arrangement = 'venue_booking'`, `changed_fields` from `{setup_minutes, turnaround_minutes}`, a plain-text reason and no `change_request_id`; the existing `arrangement_needs_review` notice. PR #85 (merged) makes the readers accept this cause; 0055 is applied to shared only once those readers are deployed.
 
-Build: `feat/scrum-20-venue-timing-reviews` on top of `docs/scrum-20-0054-rollout`, uncommitted working tree. Executed with Claude Code, pending human review. Code: `database/migrations/0055_venue_timing_change_reviews.sql` (`public.update_venue_timing`), `backend/venueService/app/routers/venues.py`, `app/repository.py`, `app/supabase_repository.py`. Tests: `database/verify_venue_timing_change_reviews.sql`, `backend/venueService/tests/test_venue_timing_change_reviews.py`.
+Build: `feat/scrum-20-venue-timing-reviews` (`0840011`, `6700ae5`, `8c86e91`), merged to `dev` as `7f61fb2` (PR #88). Executed with Claude Code, pending human review. Code: `database/migrations/0055_venue_timing_change_reviews.sql` (`public.update_venue_timing`), `backend/venueService/app/routers/venues.py`, `app/repository.py`, `app/supabase_repository.py`. Tests: `database/verify_venue_timing_change_reviews.sql`, `backend/venueService/tests/test_venue_timing_change_reviews.py`.
 
 Day D is today + 10 (Singapore). Venue 0 / 0 unless stated. A 10:00–12:00 and B 12:30–14:00 on D (different events); C 16:00–17:00 on D; X 07:00–08:00 on D+1; Q 10:00–12:00 on D+3 and R 12:30–14:00 on D+4; Y and Z as A and B but ended yesterday; U1 and U2 as A and B on D+5 with events that do not exist; a pending 14:15–15:00 request on D.
 
@@ -176,8 +176,9 @@ Day D is today + 10 (Singapore). Venue 0 / 0 unless stated. A 10:00–12:00 and 
 | --- | --- | --- | --- | --- | --- | --- |
 | AC6-H1, AC6-B2, AC6-P4, AC6-P5, AC6-U1, AC6-P1, AC6-B1, AC6-P3, AC6-P2, AC6-X1, AC6-N1, AC6-DB1 | Green | As expected | Pass | working tree, disposable PostgreSQL 16 | Claude Code, 21 Oct 2026 | `verify_venue_timing_change_reviews.sql`; Red before 0055 (`update_venue_timing` missing). The ten SCRUM-64 review verifiers and the five venue verifiers still pass with 0055 |
 | AC6-API1 to AC6-API5 | Green | As expected | Pass | working tree, `python:3.12-slim` | Claude Code, 21 Oct 2026 | `test_venue_timing_change_reviews.py`; 4 of 5 Red on `dev`'s code (no `update_timing`); API2 passes on both. Whole venueService suite 601 passed; Ruff clean |
+| AC6 shared rollout | Green | 0055 applied; AC6 verifier passed on shared; `update_venue_timing` matches the merged file, `service_role` only; the review constraint allows `venue_timing_change`; change records not readable by browser roles | Pass | `7f61fb2`, shared development | Koei, 22 Oct 2026 | Pre-check: not yet applied, constraint and 0054 guard present. Regression on shared: guard and decisions verifiers passed; block-times verifier passed with AC5-H2 skipped |
 
-Not yet done for AC6: shared rollout of 0055 (after PR #85's readers are deployed), and a frontend message for Venue Staff about how many bookings a change flagged.
+Not done for AC6 (optional, not required by the AC): a frontend message for Venue Staff about how many bookings a change flagged.
 
 ## Isolated reader-compatibility increment — 21 October 2026
 
