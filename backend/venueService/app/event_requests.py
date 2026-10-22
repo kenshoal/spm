@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -22,6 +23,7 @@ class EventSnapshot:
     event_name: str | None
     expected_attendance: int | None
     venue_requirements: str | None
+    updated_at: datetime
 
 
 class EventRequestClient:
@@ -75,10 +77,17 @@ class EventRequestClient:
 
         self.require_coordinator(event_request_id, token, coordinator_id)
         event = self._get(f"/event-requests/{event_request_id}", token)
+        try:
+            updated_at = datetime.fromisoformat(event["updated_at"])
+            if updated_at.utcoffset() is None:
+                raise ValueError("Event version must be timezone-aware")
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, UNAVAILABLE) from error
         return EventSnapshot(
             event_name=event.get("event_name"),
             expected_attendance=event.get("expected_attendance"),
             venue_requirements=event.get("venue_requirements"),
+            updated_at=updated_at,
         )
 
 

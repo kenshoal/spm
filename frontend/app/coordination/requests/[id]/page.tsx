@@ -12,6 +12,7 @@ import { AppShell, workspaceLinks } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { RequestDetails } from "../../../components/request-details";
 import { ArrangementReviewPanel, ArrangementReviewLoading } from "../../../components/arrangement-review-panel";
+import { RegistrationReviews, RegistrationReviewsLoading } from "../../../components/registration-reviews";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { SafetyReviewsPanel } from "../../../components/safety-reviews-panel";
 import { listSafetyReviews } from "@/lib/safety";
@@ -95,10 +96,11 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
       <RequestDetails request={request} coordinatorAssigned />
       <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
       <Suspense fallback={<ArrangementReviewLoading />}><ArrangementReviewPanel eventId={id} /></Suspense>
+      <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} canAcknowledge /></Suspense>
       <div className="mt-5">
         <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
       </div>
-      {changeResult.failed ? <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">Change requests are temporarily unavailable. Decisions are disabled until they can be loaded.</div> : <ChangeRequestPanel requests={changeResult.requests} />}
+      {changeResult.failed ? <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">Change requests are temporarily unavailable. Decisions are disabled until they can be loaded.</div> : <ChangeRequestPanel requests={changeResult.requests} eventStatus={request.status} />}
       {safetyResult.failed ? (
         <div role="alert" className="mt-5 rounded-xl border border-[#eccdbe] bg-[#fff8f3] px-4 py-3 text-sm text-[#793f27]">The safety check is temporarily unavailable.</div>
       ) : request.status === "Safety Review" || safetyResult.reviews.length > 0 ? (

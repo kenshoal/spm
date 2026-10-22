@@ -38,6 +38,7 @@ def ok_handler(coordinator_id: str):
                 "expected_attendance": 120,
                 "venue_requirements": "Stage",
                 "organiser_id": "someone-else",
+                "updated_at": "2026-10-22T00:00:00+00:00",
             },
         )
 

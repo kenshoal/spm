@@ -5,7 +5,7 @@ docs/testcases/scrum_32_testcases.md."""
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime
 
 import httpx
 import pytest
@@ -28,6 +28,7 @@ BOOKING_ID = "2a192261-5e90-4398-90ff-1a2d0eaaff00"
 USER_ID = "11111111-1111-4111-8111-111111111111"
 EVENT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 VENUE_ID = "99999999-9999-4999-8999-999999999999"
+EVENT_VERSION = datetime.fromisoformat("2026-10-22T00:00:00+00:00")
 
 
 def _row(**overrides: object) -> dict:
@@ -86,29 +87,33 @@ def _booking() -> BookingRequest:
     )
 
 
-# AC1-X2 (cross-cutting): the row is posted to venue_booking_requests and the stored row returned
+# AC1-X2, AC3-X13 (cross-cutting): the complete prepared booking and verified version use the atomic creation RPC without changing the returned booking contract.
 def test_create_posts_the_row_and_returns_what_was_stored() -> None:
-    api = FakeDataAPI(201, [_row()])
+    api = FakeDataAPI(200, _row())
+    booking = _booking()
 
-    stored = api.repo().create(_booking())
+    stored = api.repo().create(booking, expected_event_updated_at=EVENT_VERSION)
 
+    assert len(api.requests) == 1
     request = api.requests[0]
     assert request.method == "POST"
-    assert request.url.path == "/rest/v1/venue_booking_requests"
+    assert request.url.path == "/rest/v1/rpc/create_event_venue_booking_request"
     assert request.headers["apikey"] == KEY
     assert request.headers["Authorization"] == f"Bearer {KEY}"
-    assert request.headers["Prefer"] == "return=representation"
+    assert request.headers["Accept"] == "application/vnd.pgrst.object+json"
     sent = json.loads(request.content)
-    assert sent["venue_id"] == VENUE_ID
-    assert sent["requested_by"] == USER_ID
-    assert sent["slots"] == ["AM", "PM"]
-    # SCRUM-65 AC1-H1: the times are sent too (07:00-18:00 for AM and PM).
-    assert (sent["start_minute"], sent["end_minute"]) == (420, 1080)
-    assert sent["status"] == "pending"
-    assert sent["start_date"] == "2030-01-10"
-    assert sent["decided_by"] is None
-    assert stored.id == BOOKING_ID
-    assert stored.slots == [Slot.AM, Slot.PM]
+    assert sent == {
+        "p_booking": booking.model_dump(mode="json"),
+        "p_expected_event_updated_at": EVENT_VERSION.isoformat(),
+    }
+    assert sent["p_booking"]["venue_id"] == VENUE_ID
+    assert sent["p_booking"]["requested_by"] == USER_ID
+    assert sent["p_booking"]["slots"] == ["AM", "PM"]
+    assert (sent["p_booking"]["start_minute"], sent["p_booking"]["end_minute"]) == (420, 1080)
+    assert sent["p_booking"]["status"] == "pending"
+    assert sent["p_booking"]["start_date"] == "2030-01-10"
+    assert sent["p_booking"]["decided_by"] is None
+    assert stored == BookingRequest.model_validate(_row())
 
 
 # AC3-X3 (cross-cutting): pending rows are requested oldest first
@@ -176,7 +181,7 @@ def test_malformed_id_returns_none_without_querying() -> None:
 # AC6-X8 (cross-cutting): an error reply from the Data API is a repository error
 def test_error_status_raises_repository_error() -> None:
     with pytest.raises(SupabaseRepositoryError):
-        FakeDataAPI(500, {"message": "boom"}).repo().create(_booking())
+        FakeDataAPI(500, {"message": "boom"}).repo().create(_booking(), expected_event_updated_at=EVENT_VERSION)
 
 
 # AC6-X8 (cross-cutting): a network failure is a repository error
@@ -286,16 +291,15 @@ def test_cancel_network_failure_raises_repository_error() -> None:
         repo.cancel(BOOKING_ID, USER_ID)
 
 
-# AC1-X2 (cross-cutting): a new request does not send the cancel columns, so
-# submitting keeps working on a database where 0042 has not been applied yet
-def test_create_does_not_send_the_cancel_columns() -> None:
-    api = FakeDataAPI(201, [_row()])
+# AC1-X2 (cross-cutting): complete Pending creation data carries no fabricated cancellation actor or timestamp.
+def test_create_keeps_cancellation_audit_unset() -> None:
+    api = FakeDataAPI(200, _row())
 
-    api.repo().create(_booking())
+    api.repo().create(_booking(), expected_event_updated_at=EVENT_VERSION)
 
-    sent = json.loads(api.requests[0].content)
-    assert "cancelled_by" not in sent
-    assert "cancelled_at" not in sent
+    sent = json.loads(api.requests[0].content)["p_booking"]
+    assert sent["cancelled_by"] is None
+    assert sent["cancelled_at"] is None
 
 
 # AC2-X3 (cross-cutting): the Supabase query asks for one venue's approved bookings that touch the window

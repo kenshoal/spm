@@ -18,6 +18,8 @@ from app.booking_models import (
     BookingRequestStatus,
 )
 from app.booking_repository import (
+    BookingEventChangedError,
+    BookingEventNotFoundError,
     BookingNotCancellableError,
     BookingRequestNotFoundError,
     BookingRequestStore,
@@ -62,20 +64,28 @@ def submit_booking_request(
     snapshot = events.snapshot_for_coordinator(
         event_request_id, token, principal.user_id
     )
-    return bookings.create(
-        BookingRequest(
-            venue_id=venue.id,
-            requested_by=principal.user_id,
-            event_request_id=event_request_id,
-            event_name=snapshot.event_name,
-            expected_attendance=snapshot.expected_attendance,
-            requirements_note=snapshot.venue_requirements,
-            start_date=payload.start_date,
-            end_date=payload.end_date,
-            start_minute=payload.start_minute,
-            end_minute=payload.end_minute,
+    try:
+        return bookings.create(
+            BookingRequest(
+                venue_id=venue.id,
+                requested_by=principal.user_id,
+                event_request_id=event_request_id,
+                event_name=snapshot.event_name,
+                expected_attendance=snapshot.expected_attendance,
+                requirements_note=snapshot.venue_requirements,
+                start_date=payload.start_date,
+                end_date=payload.end_date,
+                start_minute=payload.start_minute,
+                end_minute=payload.end_minute,
+            ),
+            expected_event_updated_at=snapshot.updated_at,
         )
-    )
+    except BookingEventNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found") from error
+    except BookingEventChangedError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Event request changed; refresh before booking",
+        ) from error
 
 
 @router.get("", response_model=list[BookingRequest])

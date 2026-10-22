@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.config import get_notification_settings
 from app.controllers.arrangement_review_controller import (
     router as arrangement_review_router,
 )
@@ -103,7 +104,9 @@ def create_app(
         lifespan=lifespan,
     )
     event_request_service = (
-        EventRequestService(repository) if repository is not None else None
+        EventRequestService(
+            repository, NotificationClient.from_settings(get_notification_settings())
+        ) if repository is not None else None
     )
     coordinator_assignment_service = (
         CoordinatorAssignmentService(coordinator_repository, event_request_service)

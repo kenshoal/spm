@@ -6,6 +6,9 @@ import { ChangeRequestPanel } from "@/app/coordination/requests/[id]/change-requ
 import { RequestList } from "@/app/event-requests/request-list";
 import type { EventChangeRequest, EventRequest } from "@/lib/event-requests";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/app/coordination/actions", () => ({ decideEventChangeRequest: vi.fn(), loadEventChangeBookingPlan: vi.fn() }));
+
 vi.mock("@/app/event-requests/actions", () => ({
   createEventChangeRequest: vi.fn().mockResolvedValue({ submitted: true }),
 }));
@@ -81,12 +84,24 @@ test("submits an organiser change request", async () => {
 });
 
 
-// AC2-X2 (cross-cutting): coordinators can inspect Pending proposals without premature decision controls
-test("shows pending changes without approval or rejection controls", () => {
-  render(<ChangeRequestPanel requests={[pending]} />);
+// AC4-X1 (cross-cutting): a mixed date proposal remains visible and rejectable while approval waits for deliberate complete-booking-plan review
+test("shows mixed changes with booking review and rejection before approval", () => {
+  render(<ChangeRequestPanel requests={[{ ...pending, proposed_changes: { ...pending.proposed_changes, proposed_date_times: ["2026-11-20T02:00:00Z"] } }]} eventStatus="Approved" />);
   expect(screen.getByText(pending.explanation)).toBeDefined();
   expect(screen.getByText("80")).toBeDefined();
-  expect(screen.getByText(/approval and rejection are unavailable/i)).toBeDefined();
+  expect(screen.getByRole("button", { name: "Review booking plan" })).toBeDefined();
   expect(screen.queryByRole("button", { name: "Approve change" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Reject change" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Reject change" })).toBeDefined();
+});
+
+
+// AC2-X3 (cross-cutting): organiser guidance distinguishes routine field approval from complete booking-plan review and whole-batch conflict refusal.
+test("explains supported fields and the complete plan required for date approval", () => {
+  render(<ChangeRequestForm eventRequestId="request-1" />);
+
+  expect(screen.getByText(/attendance.*venue.*equipment.*registration.*approv/i)).toBeDefined();
+  expect(screen.getByText(/Date changes require.*complete.*booking plan.*entire.*refused.*conflicts/i)).toBeDefined();
+  expect(screen.queryByText(/Approval is unavailable;/i)).toBeNull();
+  expect(screen.getByRole("button", { name: "Request change" })).toBeDefined();
+  expect(screen.getByLabelText("Reason for change")).toBeDefined();
 });

@@ -1,9 +1,10 @@
 import logging
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 
-from app.config import Settings
+from app.config import NotificationSettings
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class NotificationClient:
         self._url = notification_service_url
 
     @classmethod
-    def from_settings(cls, settings: Settings) -> "NotificationClient":
+    def from_settings(cls, settings: NotificationSettings) -> "NotificationClient":
         url = (
             str(settings.notification_service_url)
             if settings.notification_service_url
@@ -165,6 +166,80 @@ class NotificationClient:
                 organiser_id,
                 event_request_id,
                 exc_info=True,
+            )
+
+    def notify_event_change_rejected(
+        self, *, event_request_id: str, change_request_id: str,
+        organiser_id: str, reason: str,
+    ) -> None:
+        """Best-effort outcome notice after the rejection has committed.
+
+        The stable key lets the receiver deduplicate an accidental repeat; this
+        sender has no durable retry queue and cannot undo the saved decision.
+        """
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": "event_change_rejected",
+                    "recipient_id": organiser_id,
+                    "event_id": str(uuid5(
+                        NAMESPACE_URL, f"event-change-rejected:{change_request_id}"
+                    )),
+                    "payload": {
+                        "event_request_id": event_request_id,
+                        "change_request_id": change_request_id,
+                        "reason": reason,
+                    },
+                },
+                timeout=5,
+            )
+            if response.status_code != 202:
+                logger.warning(
+                    "Rejection notification was not accepted (HTTP %s) for change %s",
+                    response.status_code, change_request_id,
+                )
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify organiser of rejected change %s",
+                change_request_id, exc_info=True,
+            )
+
+    def notify_event_change_approved(
+        self, *, event_request_id: str, change_request_id: str,
+        organiser_id: str, reason: str | None,
+    ) -> None:
+        """One best-effort organiser outcome after the approved plan is stored."""
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": "event_change_approved",
+                    "recipient_id": organiser_id,
+                    "event_id": str(uuid5(
+                        NAMESPACE_URL, f"event-change-approved:{change_request_id}"
+                    )),
+                    "payload": {
+                        "event_request_id": event_request_id,
+                        "change_request_id": change_request_id,
+                        "reason": reason,
+                    },
+                },
+                timeout=5,
+            )
+            if response.status_code != 202:
+                logger.warning(
+                    "Approval notification was not accepted (HTTP %s) for change %s",
+                    response.status_code, change_request_id,
+                )
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify organiser of approved change %s",
+                change_request_id, exc_info=True,
             )
 
     def notify_safety_changes_requested(

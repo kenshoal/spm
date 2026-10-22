@@ -381,7 +381,7 @@ def test_callers_token_is_forwarded_to_the_event_service(events: FakeEventServic
 # AC6-X8 (cross-cutting): a store failure gives 502 and no created request
 def test_store_failure_gives_502(events: FakeEventService) -> None:
     class BrokenStore:
-        def create(self, booking: object) -> object:
+        def create(self, booking: object, *, expected_event_updated_at: object) -> object:
             raise SupabaseRepositoryError("Venue store unavailable")
 
     app.dependency_overrides[get_booking_repository] = lambda: BrokenStore()

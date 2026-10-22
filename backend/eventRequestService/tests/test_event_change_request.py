@@ -255,8 +255,8 @@ def test_former_coordinator_cannot_decide_after_reassignment() -> None:
     assert events.change_request_rows[0]["status"] == "Pending"
 
 
-@pytest.mark.parametrize("decision", ["Approved", "Rejected"], ids=["AC2-N2", "AC2-N4"])
-# AC2-N2, AC2-N4 (negative): decision calls cannot bypass the Pending-only increment or mutate the plan
+@pytest.mark.parametrize("decision", ["Approved"], ids=["AC2-N2"])
+# AC2-N2 (negative): an unsupported stored capacity proposal cannot call any decision primitive, notify or partially apply otherwise supported values
 def test_change_decisions_are_unavailable_without_side_effects(decision: str, monkeypatch: pytest.MonkeyPatch) -> None:
     client, events, event_request_id = eligible_fixture()
     service = client.app.state.event_request_service
@@ -270,6 +270,8 @@ def test_change_decisions_are_unavailable_without_side_effects(decision: str, mo
             headers=headers("organiser-1"), json=change_payload(),
         )
         assert created.status_code == 201
+        # A stored unsupported key must not be partially applied even though normal creation rejects that field.
+        events.change_request_rows[0]["proposed_changes"]["registration_capacity"] = 99
         before_event = deepcopy(events.rows[event_request_id])
         before_changes = deepcopy(events.change_request_rows)
         response = client.post(

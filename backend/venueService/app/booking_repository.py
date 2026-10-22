@@ -7,7 +7,7 @@ the Supabase store.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from functools import lru_cache
 from typing import Protocol
 
@@ -25,8 +25,18 @@ class BookingNotCancellableError(Exception):
     """Only a pending or approved booking request can be cancelled."""
 
 
+class BookingEventNotFoundError(Exception):
+    """The event is absent or no longer assigned to the requesting coordinator."""
+
+
+class BookingEventChangedError(Exception):
+    """The event changed after the HTTP snapshot was read."""
+
+
 class BookingRequestStore(Protocol):
-    def create(self, booking: BookingRequest) -> BookingRequest: ...
+    def create(
+        self, booking: BookingRequest, *, expected_event_updated_at: datetime,
+    ) -> BookingRequest: ...
     def get(self, booking_id: str) -> BookingRequest | None: ...
     def list_by_status(
         self, status: BookingRequestStatus | str
@@ -45,7 +55,11 @@ class BookingRequestRepository:
     def __init__(self) -> None:
         self._items: list[BookingRequest] = []
 
-    def create(self, booking: BookingRequest) -> BookingRequest:
+    def create(
+        self, booking: BookingRequest, *, expected_event_updated_at: datetime | None = None,
+    ) -> BookingRequest:
+        # Standalone memory storage retains direct seed calls. Shared version
+        # and assignment guarantees belong to the Supabase transaction, not here.
         self._items.append(booking)
         return booking
 

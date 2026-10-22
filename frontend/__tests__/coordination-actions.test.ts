@@ -216,21 +216,23 @@ test("redirects to sign-in when the session is no longer valid", async () => {
   ).rejects.toThrow("NEXT_REDIRECT");
 });
 
-// AC3-H1 (happy): the coordinator decision targets the exact retained change request
-test("approves an event change request", async () => {
+// AC4-H1 (happy): the rejection action targets the exact retained proposal with its required reason
+test("rejects an event change request", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
   vi.stubGlobal("fetch", fetchMock);
 
+  const formData = new FormData();
+  formData.set("reason", "The current venue cannot accommodate this increase.");
   const state = await decideEventChangeRequest(
-    "request/1", "change/1", "Approved", {}, new FormData(),
+    "request/1", "change/1", "Rejected", {}, formData,
   );
 
   expect(fetchMock.mock.calls[0][0]).toBe(
     "http://127.0.0.1:8003/event-requests/request%2F1/change-requests/change%2F1/decision",
   );
   expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
-    decision: "Approved",
-    reason: null,
+    decision: "Rejected",
+    reason: "The current venue cannot accommodate this increase.",
   });
   expect(state).toEqual({});
 });
@@ -248,7 +250,7 @@ test("requires a reason before rejecting an event change", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-// AC2-N3 (negative): old decision forms report the deferred workflow rather than a stale-plan error
+// AC2-N3 (negative): an unsupported proposal reports its scope boundary rather than implying a stale-plan error or successful decision
 test("explains when change decisions are unavailable", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     ok: false,
@@ -258,7 +260,8 @@ test("explains when change decisions are unavailable", async () => {
 
   const state = await decideEventChangeRequest("request-1", "change-1", "Approved", {}, new FormData());
 
-  expect(state.message).toBe("Approval and rejection are unavailable until arrangement review is supported.");
+  expect(state.message).toMatch(/changes.*cannot be applied together/i);
+  expect(state.message).not.toMatch(/date and registration changes remain unavailable/i);
   expect(navigation.revalidatePath).not.toHaveBeenCalled();
 });
 

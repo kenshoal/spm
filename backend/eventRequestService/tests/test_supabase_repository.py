@@ -77,14 +77,16 @@ def test_create_change_request_posts_expected_rpc_payload() -> None:
     assert row["status"] == "Pending"
 
 
-# AC3-H1 (happy): repository decisions target the exact event and amendment atomically
+# AC3-H1 (happy): approval uses the narrow four-argument RPC for the exact proposal and retains its complete saved audit response.
 def test_decide_change_request_posts_expected_rpc_payload() -> None:
     captured: dict[str, object] = {}
+    expected = change_response_row(status="Approved", coordinator_id="coord-1", decision_reason=None, decided_at="2026-10-21T03:00:00+00:00")
 
     def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.method
         captured["path"] = request.url.path
         captured["body"] = json.loads(request.content)
-        return httpx.Response(200, json=change_response_row(status="Approved"))
+        return httpx.Response(200, json=expected)
 
     repository = SupabaseEventRequestRepository(
         "https://project.supabase.co", "sb_secret_test", transport=httpx.MockTransport(handler)
@@ -94,16 +96,16 @@ def test_decide_change_request_posts_expected_rpc_payload() -> None:
     )
 
     assert captured == {
-        "path": "/rest/v1/rpc/decide_event_change_request",
+        "method": "POST",
+        "path": "/rest/v1/rpc/approve_non_date_event_change_request",
         "body": {
             "p_event_request_id": "request-1",
             "p_change_request_id": "change-1",
             "p_coordinator_id": "coord-1",
-            "p_decision": "Approved",
             "p_reason": None,
         },
     }
-    assert row["status"] == "Approved"
+    assert row == expected
 
 
 # Purpose: Verifies draft creation uses the server-only key and organiser identity.
