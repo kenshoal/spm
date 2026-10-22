@@ -32,7 +32,10 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `POST` | `/event-requests/{id}/completion` | Assigned Coordinator marks a confirmed event complete (`Confirmed` → `Completed`) |
 | `POST` | `/event-requests/{id}/change-requests` | Owning Organiser proposes structured changes to an Approved or Planning event |
 | `GET` | `/event-requests/{id}/change-requests` | Owning Organiser or assigned Coordinator reads the amendment history |
-| `POST` | `/event-requests/{id}/change-requests/{change_id}/decision` | Deferred: assigned Coordinator receives 409 `CHANGE_DECISIONS_UNAVAILABLE`; no decision is applied |
+| `POST` | `/event-requests/{id}/change-requests/{change_id}/decision` | Assigned Coordinator approves a supported non-date Pending proposal or rejects it with a reason |
+| `GET` | `/event-requests/{id}/change-requests/{change_id}/date-plan` | Assigned Coordinator reads an advisory date-only venue-booking preview |
+| `GET` | `/event-requests/{id}/registration-reviews` | Owning Organiser or current Coordinator reads all retained registration-review evidence |
+| `POST` | `/event-requests/{id}/registration-reviews/{review_id}/acknowledge` | Current Coordinator acknowledges one exact review; bodyless, actor from verified authentication |
 | `POST` | `/event-requests/{id}/technical-support/requirements` | Assigned Coordinator records a technical-support requirement (description plus one skill tag) on an Approved, Planning or Confirmed event (SCRUM-19) |
 | `GET` | `/event-requests/{id}/technical-support` | The event's requirements with their assigned staff; the assigned Coordinator or any Technical Support Staff |
 | `GET` | `/event-requests/{id}/technical-support/requirements/{rid}/candidates` | Technical Support Staff holding the requirement's skill, with `already_assigned`; assigned Coordinator only |
@@ -168,19 +171,164 @@ attach the owning Organiser's clarification response and return the request to
 read-only throughout. Direct client roles cannot read the history table or
 execute these functions; authorised access goes through this API.
 
-SCRUM-35 uses migration `0018_event_change_requests.sql`. An owning Organiser
-may retain one pending structured amendment while an event is Approved or
-Planning. The current increment retains Pending proposals for the owning
-Organiser and current assigned Coordinator to view. Approval and rejection
-controls are unavailable, and the decision endpoint returns HTTP 409 with
-`detail.code = CHANGE_DECISIONS_UNAVAILABLE` after checking the assignment
-and request. It does not call the decision RPC or change the event/arrangements,
-and no change notifications are sent.
+SCRUM-35 retains one Pending structured amendment for the owning Organiser and
+current assigned Coordinator to read while an event is Approved or Planning.
+`0049_event_change_rejection.sql` and `0053_event_change_non_date_approval.sql`
+were **applied to shared Supabase on 22 October 2026**, together as migration
+`20261022025742` (`scrum35_rejection_and_non_date_approval`). Stored definitions,
+service-only grants, real rollback assertions and service-role PostgREST refusal
+paths passed; existing business-data hashes remained unchanged. See the
+[deployment record](../../docs/deployment/scrum_35_shared_rollout.md). Normal-user
+success and actual inbox delivery remain separate checks. Do not reapply these
+sources to the shared project; no original migration was edited.
 
-The decision primitive and existing migrations are retained for later integration;
-their presence does not enable API decisions. Browser roles cannot read the
-change table or execute either workflow function. The original SCRUM-35 criteria
-remain outstanding.
+The assigned Coordinator can reject a Pending proposal with a required reason
+(up to 2,000 characters). The rejection-only RPC rechecks assignment, event state
+and Pending status under event/proposal locks, then stores the coordinator,
+reason and decision time. It never changes the event plan, arrangements,
+lifecycle, status history or review state. A newer event version does not block
+rejection.
+
+The applied 0053 baseline accepts only `expected_attendance`, `venue_requirements` and
+`equipment_requirements`, alone or together. The whole proposal must be supported:
+date, registration and mixed-date proposals remain 409
+`CHANGE_DECISIONS_UNAVAILABLE` without invoking a decision RPC. The new narrow
+approval RPC independently validates stored values, current assignment, eligible
+event state, Pending status and the proposal's base event version under the same
+event-first lock. Stale, repeated and no-op proposals are refused. Approval
+applies those exact fields, advances the event version and saves the actual
+coordinator/time in one transaction. Original proposal evidence and old decisions
+are retained and the organiser can read the outcome on reload.
+
+Existing SCRUM-64 event-update and enqueue triggers raise review work for affected
+existing arrangements in that transaction; a required flag/job failure rolls the
+whole action back. Their recorded significant-update UUID is **not** the proposal
+ID, so this route does not claim proposal-ID enrichment in review notifications.
+Event lifecycle/status history, bookings, reservations and existing
+`equipment_requirements` records stay unchanged. Approval does not rebook, allocate equipment or
+guarantee resource availability. Date/conflict resolution and registration
+changes remain outside this increment. The public route never uses the broad
+legacy both-decision primitive. Pending creation/viewing and rejection remain.
+
+After a valid stored outcome, the service makes one best-effort organiser POST:
+`event_change_rejected` or `event_change_approved`, with recipient from the
+returned stored row and payload `event_request_id`, `change_request_id`, `reason`.
+The approval reason may be null. Stable `event_id` values use UUID5 with
+`NAMESPACE_URL` and respectively `event-change-rejected:{change_request_id}` or
+`event-change-approved:{change_request_id}`. Only HTTP 202 is accepted. Delivery
+failures are logged without masking the saved decision; this outcome notice has
+**no durable retry/outbox**. SCRUM-64's separate durable review jobs retain their
+own contract. A Pending/incomplete approval RPC response is a safe 502, not a
+successful approval notice; no post-commit reread is used.
+
+With `NOTIFICATION_SERVICE_URL` unset, the client is a no-op. Notification settings
+are read independently of Supabase credentials, preserving injected-repository
+isolation. The inbox constructs the internal organiser event link and ignores
+payload URLs. See `database/README.md` for the exact applied deployment hashes
+and rolled-back native verification. Mocked HTTP/API checks do not prove a normal
+authenticated shared workflow, actual inbox delivery or shared deployment.
+
+### Registration reviews (0058; shared application recorded)
+
+The matching API and migration `0058_event_registration_reviews.sql` extend
+non-date approval to `registration_needs`, alone or with the three fields above.
+0058 alone does not enable date approval; the separate 0059 slice below does.
+0058 was applied with 0056/0059 on 22 October 2026 as `20261022114717`.
+The matching rebuilt services are running. Do not reapply these sources or 0053.
+Registration requirements are text only, without attendee/capacity/window edits.
+
+Actual date, attendance or registration-text changes raise one retained review per
+event version, atomically with the update/decision. The organiser sees retained
+outstanding and acknowledged evidence read-only; only the current coordinator
+can acknowledge an exact ID. A later cause stays outstanding. The same shared
+readiness helper blocks safety handover and confirmation until those reviews are
+acknowledged; ordinary venue/equipment checks remain unchanged. No SCRUM-64 domain
+or notification contract is added. Coordinator and owner pages show loading,
+unavailable and empty states separately, and refresh after acknowledgement.
+
+History uses complete descending timestamp/UUID keyset pages, including acknowledged
+rows. Missing/scope, reassignment and repeat refusals map respectively to 404
+`REGISTRATION_REVIEW_NOT_FOUND`, 403 `REGISTRATION_REVIEW_FORBIDDEN` and 409
+`REGISTRATION_REVIEW_ALREADY_ACKNOWLEDGED`; storage/model failures return safe 502
+`Registration reviews unavailable`. The database rechecks assignment under the
+event-first lock. Browser roles cannot read or acknowledge these rows; the server
+has SELECT-only table access and the narrow acknowledgement RPC.
+
+See the database README for the owned-disposable migration/verifier commands.
+API fixtures and local native checks do not prove shared rollout or normal-user
+delivery. Atomic date approval requires the separate 0059 transaction below.
+
+### Pure date-only booking planner (SCRUM-35)
+
+`app/services/event_change_date_plan.py` calculates candidate booking dates from
+one uniform Singapore-calendar shift of the event's ordered date/time anchors.
+It preserves Singapore wall times and returns deep copies of pending and approved
+bookings, changing only their start/end dates. Unsupported mappings and a zero
+shift have explicit refusal codes. This pure helper performs no availability
+checks, approval, booking writes or transaction locking. The separate 0059
+transaction below recomputes its automatic mapping under authoritative locks.
+
+The coordinator's **Preview date changes** button loads the saved proposal on
+demand through the protected `date-plan` GET. Only a Pending, exact date-only
+proposal for an Approved or Planning event with a matching base-version instant
+can be previewed. The repository looks up the exact event/proposal pair and reads
+all linked bookings by ID keyset until an empty page, including when the server
+caps responses below the requested page size. A late-page failure is an error,
+not a partial or empty success. Existing server-only booking SELECT permissions
+are sufficient; this preview adds no migration or environment variable.
+
+The response contains booking/venue IDs, current and proposed date ranges,
+retained status and minutes, and `advisory: true`. The UI distinguishes no eligible
+bookings from an unavailable plan. Event, assignment, proposal and booking reads
+are independent snapshots: this is not an atomic membership or availability
+guarantee. No rows, flags, notifications or lifecycle state are changed, and no
+approval is enabled by this preview. The separate approval RPC revalidates state
+and concurrency; a successful preview is not permission to apply it.
+
+### Atomic date/mixed approval and booking-plan editor (0059)
+
+The existing decision endpoint accepts Approved date proposals, alone or mixed
+with attendance, venue, equipment and registration requirements. Optional
+`booking_plan` contains the complete five-field ranges for all current pending
+and approved bookings. It is rejected on rejection or non-date decisions.
+Without it, the database computes a uniform Singapore-calendar shift preserving
+event wall times and booking minutes. Empty batches still require a real date
+change; duration-only edits are not silently accepted. Original proposal fields
+remain immutable and nullable `applied_booking_plan` retains the accepted ranges.
+
+The coordinator loads `GET /event-requests/{id}/change-requests/{change_id}/booking-plan`
+on demand. It returns the aware event version, complete scoped current booking
+rows and either an automatic plan or a safe mapping error. Reads are advisory
+snapshots, not availability guarantees. The editor defaults to automatic ranges
+when possible and otherwise current ranges for explicit checking, supports 24:00
+and preserves chosen values after conflicts. Accepted ranges appear in both
+organiser and coordinator history. The old `date-plan` preview is unchanged.
+
+0059 locks sorted venues → event → proposal → booking rows, rechecks complete
+membership, assignment, Pending/state and base version, then validates the whole
+batch using 0054, active blocks, venue availability and candidate-pair checks.
+Conflicts produce safe 409 `BOOKING_CONFLICT` details with booking IDs/refusal
+codes; malformed plans return 422 and unsafe RPC failures return 502
+`Event change decision unavailable`. No partial plan is applied. Booking ranges,
+event changes, decision audit and required review work are atomic. Date changes
+also flag linked past equipment reservations, without moving or reallocating them.
+Lifecycle, inactive bookings and attendee/capacity/window data are unchanged.
+The coordinator must check ranges against the proposed event dates/times; these
+checks do not prove programme coverage. Outcome notification remains the existing
+post-commit best-effort contract, separate from durable arrangement review jobs.
+
+0056/0058/0059 were **applied to shared Supabase on 22 October 2026** as
+`20261022114717` (`scrum35_versioned_bookings_registration_and_atomic_dates`).
+The event/venue images were rebuilt, all five backend services healthy and the
+production frontend running on port 3000. The real signed-in journey proved
+active-block refusal/no partial writes, mixed approval, retained ranges, actual
+affected-staff inbox delivery and registration acknowledgement. Booking/equipment
+fixture creation used authenticated API calls; proposal, approval and review
+actions used UI. See the [deployment record](../../docs/deployment/scrum_35_date_rollout.md)
+and [fresh native/CI commands](../../database/README.md#atomic-date-and-mixed-approval-0059).
+The independent native CI job uses PostgreSQL 16, seven rollback scripts and
+duplicate-approval/date races. Git publication, actual PR CI and human review
+remain pending; local and shared evidence remain distinct.
 
 ## Status history (SCRUM-48)
 

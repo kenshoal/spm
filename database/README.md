@@ -69,11 +69,16 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0045_safety_review_arrangement_reviews.sql` | SCRUM-60 increment 2b: replaces `decide_safety_review` from `0044`. Requires SCRUM-64's `0030`–`0040`. `changes_requested` calls `private.raise_safety_arrangement_reviews` with the saved `safety_reviews.id`, targets and reason in the same transaction (a target outside the event is `22023`; any flag or enqueue failure aborts the decision); `approved` is refused with `P0005` and a JSON list of `arrangement_needs_review` items while `get_outstanding_arrangement_reviews` returns any row. Event row `FOR UPDATE` first; child rows only read. SCRUM-58's ordinary readiness check is not included yet. Verify with `verify_safety_review_arrangement_reviews.sql`. **Applied to shared development via MCP on 20 October 2026, version `20261020093706`**, after the SCRUM-64 bundle (`20261020093041`) and after checking that the live function body matched `0044` exactly (md5). Before it, the verifier stopped at AC4c-X1 (no flag; expected Red). After it, `verify_safety_review_arrangement_reviews.sql` and `verify_safety_review_decisions.sql` both passed (rolled back). Grants: `service_role` only. No test rows, review rows or temporary triggers were left |
 | `migrations/0046_shared_event_readiness.sql` | SCRUM-58 AC3b: `private.event_readiness_issues(p_event_request_id uuid) RETURNS jsonb`, the handover's ordinary readiness moved out of `0039` unchanged so SCRUM-60's approval can share it (approved booking and none pending, rejected/cancelled ignored; every requirement fully reserved). `[]` when ready; items `no_venue_booking`, `venue_booking_pending`, `equipment_not_reserved`. STABLE, SECURITY DEFINER, no row locks, EXECUTE for `service_role` only. Replaces `send_event_request_for_safety_review` to also refuse (`P0005`) on every outstanding SCRUM-64 review, cancelled bookings included, as `arrangement_needs_review` items after the readiness items. Needs `0035` and `0039`. Verify with `verify_shared_event_readiness.sql`; disposable schema from `tests/bootstrap_safety_review.py`. **Not yet applied to shared development** |
 | `migrations/0047_safety_review_approval_readiness.sql` | SCRUM-60: replaces `decide_safety_review` from `0045` (not edited). Requires SCRUM-58's `0046` and SCRUM-64's `0035`. Approval only: before any write it refuses with `P0005` when `private.event_readiness_issues(event)` followed by the outstanding `arrangement_needs_review` items (newest first) is non-empty, the same list as SCRUM-58's handover. Asking for changes, the lock order, NULL checks, `22023` targets and all-or-nothing writes are unchanged; the same target listed twice is also refused with `22023` (PR #62 review). Verify with `verify_safety_review_approval_readiness.sql`. **Applied to shared development via MCP on 20 October 2026, version `20261020132807`**, after PR #79 merged and after checking that the live function body matched `0045` exactly (md5) and that `0046` was present. Applied bytes match the SHA-256 pin. The live body matches the merged file (md5). `verify_safety_review_approval_readiness.sql` (AC6-X9 to X13) passed in a rolled-back transaction; `service_role` alone can execute; no test events were left |
+| `migrations/0049_event_change_rejection.sql` | SCRUM-35 rejection-only RPC: locks event then proposal, rechecks current assignment and Approved/Planning + Pending, requires a trimmed 1–2000-character reason, and records only proposal status/coordinator/time. INVOKER, empty search path, service-only execution; retained legacy approval primitive unchanged. **Applied to shared development on 22 October 2026, version `20261022025742`**. Verify with `verify_event_change_rejection.sql`. |
 | `migrations/0050_venue_booking_times.sql` | SCRUM-65 slice 1: `venue_booking_requests.start_minute` and `end_minute` (minutes after midnight, Singapore time; multiples of 15 from 420 to 1440, end after start; `venue_booking_requests_times_valid`). Existing bookings are converted from their slots (AM 07:00-12:00, PM 12:00-18:00, NIGHT 18:00-24:00; consecutive slots join); a booking with non-consecutive slots stops the migration with its id. Until Sprint 4 a trigger keeps `slots` as the slots the time touches, and an insert that sends only slots gets their range. Replaces `decide_venue_booking_request` from `0024` (not edited, as it is applied): approved bookings now conflict when their dates share a day and their half-open times overlap; lock order, codes and grants unchanged. Run once. Verify with `verify_venue_booking_times.sql`. **Applied to shared development via MCP on 20 October 2026, version `20261020113931`**, after PR #73 merged (`a14ed6d`) and after checking that the live `decide_venue_booking_request` matched `0024` exactly (md5). The 5 existing bookings (3 AM, 2 PM, none non-consecutive) converted to 07:00-12:00 and 12:00-18:00. The live function bodies match the merged file (md5). `verify_venue_booking_times.sql` passed in a rolled-back transaction; afterwards `service_role` alone can execute, the trigger is present, and no test venue was left. An earlier dry run on 20 October also passed. Numbered after `0048`/`0049` (SCRUM-35, Heng Rui) |
 | `migrations/0051_venue_block_times.sql` | SCRUM-65 slice 2: `venue_blocks.start_minute` and `end_minute` (same checks as `0050`, `venue_blocks_times_valid`); existing blocks convert from their slots with `0050`'s ranges, and a non-consecutive block stops the migration; `0050`'s trigger keeps `slots` derived for SCRUM-31's calendar. Replaces `create_venue_block` with a times signature (`uuid, date, date, integer, integer, block_reason, text, uuid`; same venue lock; `service_role` only). Replaces `decide_venue_booking_request` from `0050`: blocks compare by time, and the operating-slot refusal is retired (every venue runs 07:00-24:00). Run once, after `0050`. Verify with `verify_venue_block_times.sql` and `verify_venue_booking_times.sql`. Applied to shared development on 20 October 2026 (run in the SQL Editor by the owner); live function bodies match the file and both verifiers passed, rolled back |
 | `migrations/0052_technical_support_assignments.sql` | SCRUM-19: `technical_support_requirements` (description 1–2000 non-blank, one skill tag of `audio_visual`/`lighting`/`it_network`/`livestream`), `technical_support_skills` (fixed staff tag vocabulary, seeded by `seed_technical_support_skills.sql`) and `technical_support_assignments` (one row per requirement and staff member, denormalised `event_request_id` for the per-event read); all RLS-on with no browser policies, `service_role` reads/inserts. `private.is_suitable_technical_support` (technical_support role **and** the requirement's tag) is the one suitability source for both `list_technical_support_candidates` and `assign_technical_support_staff`; `record_technical_support_requirement` and `assign_technical_support_staff` lock the `event_requests` row `FOR UPDATE` (the 0014/0026 lock) and recheck latest coordinator (`P0003`), status `Approved`/`Planning`/`Confirmed` (`P0004`), requirement-on-event (`P0002`) and suitability (`P0005`); duplicates reject with `23505`. No availability or double-booking check (Jira SCRUM-19). Verify with `verify_technical_support_assignments.sql` and, for the concurrent-assignment race, `verify_technical_support_assignments_race.sh` (disposable database only: it leaves one Cancelled event and its organiser behind because status history is immutable); disposable schema from `tests/bootstrap_safety_review.py --through 0052_technical_support_assignments.sql`. **Not yet applied to shared development**; applying it there plus the seed is increment 2 |
+| `migrations/0053_event_change_non_date_approval.sql` | SCRUM-35 scoped approval RPC: event/proposal locks, current assignment/state/Pending/base-version checks, whole non-date key/value validation and atomic application of attendance/venue/equipment requirements plus saved approval. Existing SCRUM-64 triggers create affected review work atomically. No dates, lifecycle or resource mutation. INVOKER, empty search path, service-only EXECUTE. **Applied to shared development on 22 October 2026, version `20261022025742`**; 0052 is reserved separately. Verify with `verify_event_change_approval.sql`. |
 | `migrations/0054_venue_booking_conflict_guard.sql` | SCRUM-20: `private.check_booking_candidate(venue, start_date, end_date, start_minute, end_minute, exclude_ids uuid[])` returns `{refusal_codes, conflicting_booking_ids}`, the one conflict check for a proposed booking time (approval here, SCRUM-35's reschedule later). A booking occupies start minus the venue's setup to end plus its turnaround; `setup_outside_window` / `turnaround_outside_window` when that leaves 07:00-24:00, and `booking_conflict` (ids in start order) when an approved booking not in `exclude_ids` shares a day and its padded time overlaps. A gap equal to setup plus turnaround is allowed. No locks: callers hold the venue row `FOR UPDATE` first. Errors `P0002` unknown venue, `22023` missing or invalid times. STABLE, SECURITY DEFINER, `service_role` only. Replaces `decide_venue_booking_request` from `0051` to refuse with the guard's codes (excluding the request itself) and widens `venue_booking_refusals_codes_known` to accept the two window codes; lock order, other codes, errors and grants unchanged. Run once, after `0051`. Verify with `verify_venue_booking_conflict_guard.sql`; two-connection checks in `tests/test_venue_booking_conflict_concurrency.py` (disposable database only). **Applied to shared development on 21 October 2026 through the SQL Editor**, after PR #84 merged (`a5ce402`) and after checking that the live `decide_venue_booking_request` matched `0051` (whitespace-normalised md5; only whitespace differed) and that the guard did not exist. Afterwards both function bodies match the merged file (whitespace-normalised md5) and only `service_role` can execute the guard. On shared, rolled back: `verify_venue_booking_conflict_guard.sql` and `verify_venue_booking_times.sql` passed; `verify_venue_booking_decisions.sql` passed with the oldest auth user as staff (the script now does this); `verify_venue_block_times.sql` passed with AC5-H2 skipped, because block `f32e1398` (28 October, 12:30-14:00, created after `0051`) is valid data that is not a full slot range |
 | `migrations/0055_venue_timing_change_reviews.sql` | SCRUM-20 AC6: `venue_timing_changes` (one row per saved setup/turnaround change: venue, old and new times, actor, time; RLS on, `service_role` read only), `venue_timing_change` added to `arrangement_reviews_trigger_type_check`, and server-only `public.update_venue_timing(venue, setup, turnaround, changed_by)`. In one transaction it locks the venue row, updates the times (a null argument keeps that time), saves the change record and flags affected bookings with `trigger_type = 'venue_timing_change'` and `trigger_id` = the change's id; `0037`'s trigger queues `arrangement_needs_review` for each flag and `0038` delivers it with no `change_request_id`. Affected: approved bookings at the venue ending today or later (Singapore), both bookings of each pair that newly clashes and any booking whose padding newly leaves 07:00-24:00; already-broken pairs are not flagged again. Unchanged values write nothing; flags use `ON CONFLICT DO NOTHING`. An affected booking whose event does not exist is returned in `unlinked_booking_ids` instead of flagged. Returns `{venue, timing_change_id, flagged_booking_ids, unlinked_booking_ids}`. Errors `P0002` unknown venue, `22023` missing actor, `23514` invalid times. Locks the venue, then reaches event rows only through FK inserts (`0039` protocol). venueService's `PATCH /venues/{id}` sends setup/turnaround through it. Run once, after `0054`, and only once the PR #85 readers are deployed. Verify with `verify_venue_timing_change_reviews.sql`. **Applied to shared development on 22 October 2026 through the SQL Editor**, after PR #88 merged (`7f61fb2`) and after checking that `venue_timing_changes` did not exist, `arrangement_reviews_trigger_type_check` was present and the `0054` guard was present. On shared, rolled back: `verify_venue_timing_change_reviews.sql`, `verify_venue_booking_conflict_guard.sql` and `verify_venue_booking_decisions.sql` passed; `verify_venue_block_times.sql` passed with AC5-H2 skipped (as for `0054`). Afterwards `update_venue_timing` matches the merged file (whitespace-normalised md5), only `service_role` can execute it, the review constraint allows `venue_timing_change` and browser roles cannot read `venue_timing_changes` |
+| `migrations/0056_event_venue_booking_creation.sql` | SCRUM-35 date-approval prerequisite: service-only `create_event_venue_booking_request(jsonb, timestamptz)` locks venue then event, rechecks the latest coordinator and expected version, and creates only a Pending booking with stored event metadata. Revokes direct service INSERT/DELETE; existing booking venue/event links become immutable (same-value updates allowed). Narrow SECURITY DEFINER/empty search path, no browser execution. Public creation body/states, decisions and cancellation retained; no date approval or event/review/notification write. **Applied to shared development on 22 October 2026, version `20261022114717`**, with the matching rebuilt venueService during the coordinated cutover; no REST fallback. Verify only on an owned disposable target with `verify_versioned_venue_booking_creation.sql`. |
+| `migrations/0058_event_registration_reviews.sql` | SCRUM-35: separate `event_registration_reviews` retains one actual significant event-version cause for date, attendance or registration-requirements changes on nonterminal submitted-or-later events. Private trigger inserts atomically; no backfill or auto-clear. Service-only exact-ID acknowledgement locks event then review and rechecks the current coordinator; service table access stays SELECT-only, browsers denied. Appends outstanding registration facts to the existing shared readiness helper without changing ordinary venue/equipment predicates or either gate caller. Replaces the narrow non-date approval function to also accept registration requirements text, preserving the equipment branch. No attendee, capacity, window, lifecycle or new notification-domain change. **Applied to shared development on 22 October 2026, version `20261022114717`.** Run the fault-injection verifier only on an owned disposable target with `verify_event_registration_reviews.sql`. |
+| `migrations/0059_event_change_date_approval.sql` | SCRUM-35 atomic date/mixed approval: locks sorted venues → event → proposal → the complete pending/approved booking batch, rechecks membership/assignment/version and validates automatic or explicit ranges through the existing conflict guard, active blocks and candidate-pair checks. Stores nullable accepted booking-plan evidence, applies event changes and required review work atomically. Date changes also flag linked past equipment reservations; non-date selection is unchanged. Depends on 0056 and 0058; 0057 is unused. **Applied to shared development on 22 October 2026, version `20261022114717`.** See the current setup and deployment record below. |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
@@ -254,6 +259,269 @@ SCRUM-35 event amendments are verified by
 requests, atomic approval, rejection without event mutation, stale approval,
 reassignment and server-only table/function access. It requires one Supabase
 Auth user and rolls back all verification data.
+
+## Change-request rejection (SCRUM-35)
+
+`0049_event_change_rejection.sql` was applied to shared Supabase on 22 October
+2026 with 0053 as migration `20261022025742`; do not reapply it there. Fresh
+environments require the existing event, assignment and change-request schema.
+See the [deployment record](../docs/deployment/scrum_35_shared_rollout.md) for
+verification and remaining workflow checks. No original migration was edited.
+The service role can execute
+`public.reject_event_change_request(uuid, uuid, varchar, text)`; PUBLIC, anon and
+authenticated cannot. The function uses existing server table privileges rather
+than adding a definer privilege or widening table grants.
+
+The current assigned Coordinator may reject one Pending proposal only while the
+event is Approved or Planning. The reason must contain text after ordinary
+whitespace trimming and be at most 2,000 characters. Errors are `P0002` for a
+missing/wrong-event target, `P0003` for an invalid/current-assignment mismatch,
+`P0004` for an already decided proposal or ineligible event and `22023` for an
+invalid reason. The event lock is acquired before the proposal lock. A newer
+event version does not prevent rejection because no proposed value is applied.
+Only the proposal status, coordinator, reason and decision time change; the
+event, arrangements, status history, reviews and existing jobs stay unchanged.
+The legacy both-decision function is retained; supported API approvals use only
+the separate narrow 0053 function described below.
+
+The native verification also snapshots arrangement reviews and notification jobs.
+For an owned empty local PostgreSQL fixture, use the independent SCRUM-64 setup
+below unchanged, then run these additional commands from the repository root:
+
+```sh
+: "${SCRUM64_TEST_DSN:?Supply the owned disposable loopback scrum48_* database URL}"
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -f database/migrations/0049_event_change_rejection.sql || exit 1
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -f database/verify_event_change_rejection.sql
+```
+
+The verification rolls back and checks durable audit, unchanged nonempty related
+state, assignment/state/refusal boundaries and an actual failed audit write. It
+does not prove notification HTTP delivery or shared deployment. The organiser
+notice is a separate post-commit best-effort API side effect; see the event
+service README for its exact contract and outage limitations.
+
+
+### Non-date approval and shared deployment boundary
+
+Migration `0053_event_change_non_date_approval.sql` adds
+`public.approve_non_date_event_change_request(uuid, uuid, varchar, text)` without
+changing 0049 or the applied legacy functions. Only the latest assigned
+Coordinator can approve a Pending proposal on an Approved/Planning event. The
+whole stored proposal must contain only attendance, venue requirements and
+equipment requirements, with valid existing field types/limits and at least one
+actual change. Date/registration/mixed proposals, stale event versions, repeated
+decisions and invalid stored values are refused with `P0004`; missing/cross-event
+IDs use `P0002` and wrong/null current assignees use `P0003`. An optional decision
+reason is trimmed and limited to 2,000 characters (`22023` if invalid).
+
+The event lock precedes the proposal lock. All validation happens before writes;
+then the three allowed fields/version and Approved actor/time are saved together.
+Existing SCRUM-64 triggers raise only affected existing-arrangement reviews and
+their queued work. Their generic recorded update UUID is distinct from the
+proposal ID; no trusted-cause binding is added. Failure of a review/job or decision
+write rolls back the action, preserving earlier saved history/flags. Lifecycle,
+status history, bookings, reservations and `equipment_requirements` records are unchanged.
+No rebooking, allocation or availability guarantee is implied. The organiser
+outcome notice is separately best-effort after commit, with no new outbox.
+
+For the owned disposable schema prepared by the independent SCRUM-64 recipe,
+apply the two new functions, then run both rolled-back verification scripts:
+
+```sh
+: "${SCRUM64_TEST_DSN:?Supply the owned disposable loopback scrum48_* database URL}"
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -f database/migrations/0049_event_change_rejection.sql \
+  -f database/migrations/0053_event_change_non_date_approval.sql || exit 1
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -f database/verify_event_change_rejection.sql \
+  -f database/verify_event_change_approval.sql
+```
+
+The approval verifier checks actual service-role mutation, complete preserved
+resource/lifecycle/history snapshots, domain-specific native flags/jobs, refusal
+boundaries and injected second-flag failure rollback. These are local native
+checks; they do not prove a normal-auth shared API/browser journey or accepted
+external delivery. The duplicate-approval race uses an owned disposable target;
+see `docs/testcases/scrum_35_testcases.md` for its exact command and environment.
+
+**Applied to shared development on 22 October 2026 after explicit authorisation**,
+in one atomic migration `20261022025742`
+(`scrum35_rejection_and_non_date_approval`). The earlier 21 October preflight
+correctly found both routines absent; that rollout gap is now resolved. Catalogue,
+service-only execution, rollback assertions and unchanged business-data hashes
+were verified. See the [deployment record](../docs/deployment/scrum_35_shared_rollout.md)
+for exact scope and the separate real signed-in evidence. Do not reapply these
+files to that shared project. The deployed sources are:
+
+| File | SHA-256 |
+| --- | --- |
+| `0049_event_change_rejection.sql` | `69aeba1c8217525bfa6c92f27c7defaa583f49b8c8f050b42fbbc1c78796a26b` |
+| `0053_event_change_non_date_approval.sql` | `b038214ef551d296b8eb413356231f2ef11f877742ae13218192776433b9727f` |
+
+For a fresh, explicitly authorised target, apply these two files in one reviewed
+migration transaction with transaction-local
+`lock_timeout = '3s'` and `statement_timeout = '30s'`. Stop/roll back on errors or
+timeouts; do not silently retry with higher limits. The deployment creates only
+two function definitions and their server-only EXECUTE grants: no business-row
+update, backfill, table/RLS change or broader table grant occurs at installation.
+Actual decisions write data only when invoked through the authorised workflow.
+Record the actual migration version and verify definitions/grants afterwards;
+do not reapply these sources once recorded or overwrite a subsequently changed
+function. The separate [real signed-in records](../docs/deployment/scrum_35_date_rollout.md#real-signed-in-mixed-date-journey)
+cover subsequent authenticated outcomes and actual inbox delivery.
+
+
+### Versioned venue-booking creation (0056; shared application recorded)
+
+The matching venueService creator and migration 0056 must be deployed together:
+direct service INSERT/DELETE is revoked, and old callers must not continue writing
+during cutover. The coordinated shared rollout completed on 22 October 2026 as
+`20261022114717`; the local commands below are not instructions to reapply it.
+The RPC takes the server-constructed booking plus an aware event version, locks
+venue then event, derives event metadata under lock and checks current assignment
+and version. It leaves lifecycle, event fields, existing bookings, reviews and
+notification jobs unchanged. Link immutability closes supported reparenting paths;
+this alone is not proof of the future complete date-approval transaction.
+
+With the current prerequisites loaded into an owned disposable `scrum48_*` target:
+
+```sh
+: "${SCRUM64_TEST_DSN:?Supply the owned disposable loopback scrum48_* database URL}"
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -f database/migrations/0056_event_venue_booking_creation.sql || exit 1
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -f database/verify_versioned_venue_booking_creation.sql
+```
+
+The rollback verifier exercises actual service creation, unchanged non-booking
+state, stale/reassigned refusal, immutable links and direct-table/browser denial.
+This creator-only verifier does not prove a normal authenticated shared flow or
+the complete date approval below. See the venueService README for the public
+error and cutover contract.
+
+### Registration reviews (0058; shared application recorded)
+
+0058 was applied with 0056/0059 on 22 October 2026 as shared migration
+`20261022114717`, after existing 0046/0047 readiness callers, 0053 and their
+prerequisites. Do not reapply these sources on shared. The original migrations
+are unchanged. The event update, its per-version registration evidence and any
+proposal decision commit or roll back together. Only date, attendance and
+registration-text changes raise this separate review; semantic no-ops, unrelated
+fields, Draft and terminal events do not. Acknowledging an older exact ID retains
+all evidence and leaves newer reviews outstanding. Both existing confirmation
+gates consume the same appended readiness facts, without child resource locks.
+
+On the owned disposable `scrum48_*` target with current prerequisites:
+
+```sh
+: "${SCRUM64_TEST_DSN:?Supply the owned disposable loopback scrum48_* database URL}"
+psql -X -v ON_ERROR_STOP=1 -1 -d "$SCRUM64_TEST_DSN" \
+  -f database/migrations/0058_event_registration_reviews.sql || exit 1
+psql -X -v ON_ERROR_STOP=1 -d "$SCRUM64_TEST_DSN" \
+  -f database/verify_event_registration_reviews.sql
+```
+
+The verifier uses rollback fixtures and local-only fault triggers; never run it
+on shared infrastructure. Local native success is separate from shared rollout,
+normal-auth UI verification and the separate 0059 date-approval transaction
+proof below. Registration requirements remain text: attendee records, capacity
+and windows are unchanged.
+
+### Atomic date and mixed approval (0059)
+
+0059 follows 0056 and 0058; 0057 is unused. The current coordinator may approve a
+Pending proposal on an Approved/Planning event only at its saved base version.
+With no `booking_plan`, one uniform Singapore-calendar day shift must preserve
+the ordered event anchors and wall times. An explicit complete plan supplies
+`booking_id`, `start_date`, `end_date`, `start_minute` and `end_minute` for every
+current pending/approved booking exactly once. It permits chosen time ranges,
+including an end of 24:00, without inventing venues or programme duration.
+Both modes require an actual event-date/time change, even for an empty batch.
+
+The RPC discovers the batch, locks sorted venues → event → proposal → bookings
+and refuses membership drift rather than acquiring a late venue. It rechecks
+assignment, state, version and replay. The existing 0054 guard, active blocks,
+venue availability and candidate-pair checks validate the whole batch before
+any write. A conflict returns safe 409 `BOOKING_CONFLICT` details for the current
+coordinator. Malformed complete plans return 422; storage failures never expose
+SQL internals. The nullable `applied_booking_plan` records the accepted ranges in
+booking-ID order without replacing the original proposal.
+
+Booking dates/minutes, supported event fields, decision audit and required
+venue/equipment/registration review work commit or roll back together. Cancelled
+and rejected bookings, resource identities, lifecycle/status history, reservation
+dates and attendee/capacity/window data remain unchanged. Actual event-date
+changes flag all linked equipment reservations, including past ones; non-date
+updates retain the existing upcoming-only rule. The recorded review cause is the
+native significant-update UUID, not a fabricated proposal/change-request ID.
+No automatic reallocation, auto-clear or programme-coverage guarantee is added.
+
+For a **fresh empty owned loopback PostgreSQL cluster**, create a `scrum48_*`
+database, then run the same setup and checks as the independent native CI job:
+
+```sh
+(
+  set -eu
+  : "${SCRUM35_TEST_DSN:?Supply an empty owned loopback scrum48_* database URL}"
+  python3 -I database/tests/bootstrap_event_change_approval.py \
+    --dsn "$SCRUM35_TEST_DSN" --disposable
+  for verifier in \
+    verify_event_change_rejection.sql \
+    verify_event_change_approval.sql \
+    verify_versioned_venue_booking_creation.sql \
+    verify_event_registration_reviews.sql \
+    verify_event_change_date_approval.sql \
+    verify_arrangement_review_flags.sql \
+    verify_venue_timing_change_reviews.sql
+  do
+    psql -X -v ON_ERROR_STOP=1 -d "$SCRUM35_TEST_DSN" -f "database/$verifier"
+  done
+  python3 database/tests/test_event_change_approval_concurrency.py \
+    --dsn "$SCRUM35_TEST_DSN" --disposable
+  python3 database/tests/test_date_change_concurrency.py \
+    --dsn "$SCRUM35_TEST_DSN" --disposable
+)
+```
+
+The bootstrap reuses the guarded safety-review foundation, genuine supplemental
+migrations and labelled local Auth doubles. Its narrow local platform ACL fixture
+matches independently observed shared venue permissions; it does not restore
+the INSERT/DELETE bypass revoked by 0056. The seven SQL scripts roll back. The
+race harnesses commit labelled fixtures and require a disposable database; never
+run this setup or these fault-injection/race checks on shared Supabase. Destroy
+the owned cluster afterwards. A fresh PostgreSQL 16 rehearsal passed all seven
+SQL scripts and three date races; actual GitHub CI is separately unverified.
+
+0056/0058/0059 were **applied to shared development on 22 October 2026** as
+`20261022114717` (`scrum35_versioned_bookings_registration_and_atomic_dates`).
+All 20 deployment-time business fingerprints were unchanged; eight routines
+matched the PostgreSQL 16 rehearsal and grants/RLS/trigger checks passed.
+Do not reapply the sources. The rebuilt services and real signed-in mixed-date
+journey proved conflict/no partial writes, valid approval, retained ranges,
+affected staff inbox delivery and registration acknowledgement. Fixture creation
+used authenticated API calls where identified; subsequent approval/review actions
+used UI. See the [deployment and journey record](../docs/deployment/scrum_35_date_rollout.md).
+Git publication, actual PR CI and human review remain pending; this is not a
+whole-story Done claim.
+
+### Historical reader compatibility and date/timing proposal (21 October 2026)
+
+This dated review is retained as history. Current merged 0055 and applied
+0056/0058/0059 are described above. The following text is the original unimplemented
+proposal from 21 October, not the current implementation or deployment standing.
+
+Local readers accept `venue_timing_change` as **Venue timing change**. Unknown-cause validation, permissions, clearing and generic `arrangement_needs_review` delivery remain unchanged; no change-request ID is invented.
+
+**Rollout:** merge and deploy these readers before Koei's 0055 writer. Its source was unavailable here. Merged 0054/native guard verification is not date-caller or shared-deployment proof.
+
+**PROPOSED / UNIMPLEMENTED:** a future date caller could discover the complete pending+approved batch, then lock sorted venues → event → proposal → bookings and recheck it. Current lock sources: [0054](migrations/0054_venue_booking_conflict_guard.sql):160–164, [0053](migrations/0053_event_change_non_date_approval.sql):33–49 and [cancellation](migrations/0042_cancel_venue_booking_request.sql):83–99. Do not add a venue wait after the event lock against a venue-first review writer.
+0054 checks approved blockers only; exclude only the actual moved batch, check candidate pairs and recheck blocks, venue availability, cancellation, assignment/version and replay. A new venue requires fresh discovery rather than an out-of-order lock.
+
+**Unresolved membership:** [0018](migrations/0018_venue_booking_requests.sql):16–17,44 has no event FK/gate. Another venue's booking can commit after the final scan; rechecking alone cannot serialise membership. Creation/reparent/delete participation and stale-event-time revalidation, or an explicitly bounded contract, must be agreed before full-event atomicity is claimed. No table-wide/advisory locks are added.
+
+**Unresolved mapping:** [EventChangeRequestCreate](../backend/eventRequestService/app/models/event_request.py):176–198 supplies only a `proposed_date_times` list, not per-booking start/end overrides. Multi-date anchors and immutable complete candidate times/payload need explicit design before a date RPC/UI. Existing 0053 remains non-date only; this compatibility work does not reopen SCRUM-64 ACs.
 
 ## SCRUM-20 timing-cause reader compatibility
 
@@ -439,7 +707,8 @@ creation and future equipment-status/readiness writers still need their own
 consistent locking design. The trigger observes arrangements visible to its
 statements; it does not serialise concurrent reservation/booking creation with
 event changes. The saved safety caller and shared readiness consumers are not
-implemented here. No SCRUM-35 acceptance route is enabled.
+implemented here. SCRUM-35's separate 0053 route applies only the supported
+non-date fields through this existing trigger; no date acceptance is enabled.
 
 Migration 0032 adds `public.clear_arrangement_review(uuid, uuid, text[])` as a
 narrow `SECURITY DEFINER` RPC with an empty search path and EXECUTE granted only
