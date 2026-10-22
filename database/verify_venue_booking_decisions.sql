@@ -5,12 +5,14 @@
 -- Every mutation is rolled back, so this leaves no venue, block, request or
 -- refusal data behind. Before 0024 is applied it stops at the first call to
 -- decide_venue_booking_request, which is the intended Red result.
--- Needs no Supabase Auth user: actor ids are random uuids.
+-- Borrows the oldest auth user as staff: on shared, venue_blocks.created_by has a
+-- foreign key to auth.users (venue_blocks_created_by_fkey, not in the migrations),
+-- so DB-2's block needs a real user. The requester and event ids stay random.
 
 BEGIN;
 
 CREATE TEMP TABLE verify_ctx ON COMMIT DROP AS
-SELECT gen_random_uuid() AS staff_id,
+SELECT (SELECT id FROM auth.users ORDER BY created_at LIMIT 1) AS staff_id,
        gen_random_uuid() AS requester_id,
        gen_random_uuid() AS event_id;
 
