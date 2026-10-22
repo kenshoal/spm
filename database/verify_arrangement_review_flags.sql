@@ -147,7 +147,7 @@ BEGIN
         WHERE id=v_event;
     RESET ROLE;
     SELECT count(*) INTO v_count FROM public.arrangement_reviews WHERE event_request_id=v_event;
-    ASSERT v_count=4, 'AC1-H1: accepted date change must create four eligible arrangement flags';
+    ASSERT v_count=5, 'AC1-H1: date change must include linked expired equipment and four current arrangements';
     ASSERT (SELECT count(DISTINCT trigger_id)=1 FROM public.arrangement_reviews WHERE event_request_id=v_event),
         'AC1-H1: one accepted update must share one trigger UUID';
     SELECT trigger_id INTO v_first_trigger FROM public.arrangement_reviews WHERE event_request_id=v_event LIMIT 1;
@@ -159,8 +159,8 @@ BEGIN
     ASSERT (SELECT count(*)=2 FROM public.arrangement_reviews WHERE event_request_id=v_event
             AND arrangement='venue_booking' AND arrangement_id=ANY(ARRAY[v_today_booking,v_future_booking])),
         'AC1-H1: wrong venue targets';
-    ASSERT (SELECT count(*)=2 FROM public.arrangement_reviews WHERE event_request_id=v_event
-            AND arrangement='equipment_reservation' AND arrangement_id=ANY(ARRAY[v_today_reservation,v_future_reservation])),
+    ASSERT (SELECT count(*)=3 FROM public.arrangement_reviews WHERE event_request_id=v_event
+            AND arrangement='equipment_reservation' AND arrangement_id=ANY(ARRAY[v_past_reservation,v_today_reservation,v_future_reservation])),
         'AC1-H1: wrong reservation targets';
     ASSERT NOT EXISTS(SELECT 1 FROM public.arrangement_reviews WHERE event_request_id=v_other),
         'AC1-H1: other event received flags';
@@ -187,9 +187,10 @@ BEGIN
     END LOOP;
     ASSERT v_writers>0, 'AC1-H1: no protected native detail-update writer discovered';
 
-    -- AC1-B1 (boundary): arrangements ending yesterday remain historical, not current review work.
-    ASSERT NOT EXISTS(SELECT 1 FROM public.arrangement_reviews
-        WHERE arrangement_id=ANY(ARRAY[v_past_booking,v_past_reservation])), 'AC1-B1: expired arrangement flagged';
+    -- AC1-B1 (boundary): past venues remain excluded; the approved SCRUM35 date exception retains expired linked equipment for review.
+    ASSERT NOT EXISTS(SELECT 1 FROM public.arrangement_reviews WHERE arrangement_id=v_past_booking), 'AC1-B1: expired venue flagged';
+    ASSERT (SELECT count(*)=1 FROM public.arrangement_reviews WHERE arrangement_id=v_past_reservation
+        AND trigger_id=v_first_trigger), 'AC1-B1: date change omitted expired linked equipment';
     -- AC1-B2 (boundary): the Singapore final day is included for both domains.
     ASSERT (SELECT count(*)=2 FROM public.arrangement_reviews
         WHERE arrangement_id=ANY(ARRAY[v_today_booking,v_today_reservation])), 'AC1-B2: final day excluded';
@@ -232,8 +233,10 @@ BEGIN
                      AND strpos(reason,'25')>0 AND strpos(reason,'40')>0)
         FROM public.arrangement_reviews WHERE event_request_id=v_event AND NOT(id=ANY(v_old_ids))),
         'AC1-H1: attendance change must affect both domains';
-    ASSERT (SELECT count(DISTINCT trigger_id)=4 AND count(*)=12 FROM public.arrangement_reviews WHERE event_request_id=v_event),
+    ASSERT (SELECT count(DISTINCT trigger_id)=4 AND count(*)=13 FROM public.arrangement_reviews WHERE event_request_id=v_event),
         'AC1-H1: distinct accepted updates lost or duplicated review work';
+    ASSERT NOT EXISTS(SELECT 1 FROM public.arrangement_reviews WHERE arrangement_id=v_past_reservation
+        AND trigger_id<>v_first_trigger), 'AC1-B1: ordinary requirement/attendance edits broadened expired-equipment eligibility';
     ASSERT (SELECT jsonb_agg(to_jsonb(r) ORDER BY id) FROM public.arrangement_reviews r WHERE id=ANY(v_old_ids))=v_flags,
         'AC1-H1: subsequent update changed older work';
 

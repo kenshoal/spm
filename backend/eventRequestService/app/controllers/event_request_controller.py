@@ -10,9 +10,12 @@ from app.config import get_settings
 from app.models.arrangement_review import ArrangementReviewResponse
 from app.models.event_request import (
     AttendeeEventResponse,
+    EventChangeBookingContext,
+    EventChangeDatePlanResponse,
     EventChangeDecision,
     EventChangeRequestCreate,
     EventChangeRequestResponse,
+    EventChangeRequestStatus,
     EventClarificationResponse,
     EventRequestCreate,
     EventRequestResponse,
@@ -22,18 +25,27 @@ from app.models.event_request import (
     EventReviewDecisionResponse,
     EventStatusHistoryResponse,
 )
-from app.repositories import SupabaseEventRequestRepository
+from app.models.registration_review import RegistrationReviewResponse
+from app.repositories import SupabaseEventRequestRepository, SupabaseRepositoryError
 from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentNotFoundError,
 )
 from app.services.event_request_service import (
+    ArrangementReviewActionError,
+    EventChangeBookingConflictError,
+    EventChangeBookingPlanError,
+    EventChangeDatePlanConflictError,
     EventRequestNotFoundError,
     EventRequestService,
 )
+from app.services.notification_client import NotificationClient
 
 router = APIRouter(prefix="/event-requests", tags=["event requests"])
 EVENT_ORGANISER_ROLE = "event_organiser"
 EVENT_COORDINATOR_ROLE = "event_coordinator"
+_NON_DATE_CHANGE_FIELDS = {
+    "expected_attendance", "venue_requirements", "equipment_requirements", "registration_needs"
+}
 
 _PUBLIC_STATUSES = {EventRequestStatus.CONFIRMED, EventRequestStatus.COMPLETED}
 
@@ -58,7 +70,9 @@ def get_event_request_service(request: Request) -> EventRequestService:
             detail="Supabase is not configured for eventRequestService",
         ) from error
 
-    service = EventRequestService(repository)
+    service = EventRequestService(
+        repository, NotificationClient.from_settings(get_settings())
+    )
     request.app.state.event_request_service = service
     return service
 
@@ -282,6 +296,50 @@ def list_review_decisions(
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
 
 
+def _registration_review_error(status_code: int, code: str) -> HTTPException:
+    return HTTPException(status_code, detail={"code": code, "message": "Registration review is not accessible"})
+
+
+@router.get("/{event_request_id}/registration-reviews", response_model=list[RegistrationReviewResponse])
+def list_registration_reviews(
+    event_request_id: UUID, caller: CallerDependency, request: Request, service: ServiceDependency,
+) -> list[RegistrationReviewResponse]:
+    """Only the owning organiser or current coordinator may read retained evidence."""
+    request_id = str(event_request_id)
+    if EVENT_ORGANISER_ROLE in caller.roles:
+        try:
+            service.get(request_id, caller.id)
+            return service.list_registration_reviews(request_id)
+        except EventRequestNotFoundError:
+            pass
+    if EVENT_COORDINATOR_ROLE in caller.roles:
+        try:
+            assignment = _coordinator_assignment_service(request).get_current(request_id)
+            if assignment.coordinator_id == caller.id:
+                return service.list_registration_reviews(request_id)
+        except (CoordinatorAssignmentNotFoundError, EventRequestNotFoundError):
+            pass
+    raise _registration_review_error(404, "REGISTRATION_REVIEW_NOT_FOUND")
+
+
+@router.post("/{event_request_id}/registration-reviews/{review_id}/acknowledge", response_model=RegistrationReviewResponse)
+def acknowledge_registration_review(
+    event_request_id: UUID, review_id: UUID, caller: CallerDependency, service: ServiceDependency,
+) -> RegistrationReviewResponse:
+    # No body: the verified actor and locked current assignment are authoritative.
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise _registration_review_error(403, "REGISTRATION_REVIEW_FORBIDDEN")
+    try:
+        return service.acknowledge_registration_review(str(event_request_id), str(review_id), caller.id)
+    except ArrangementReviewActionError as error:
+        status_code, code = {
+            "P0002": (404, "REGISTRATION_REVIEW_NOT_FOUND"),
+            "P0003": (403, "REGISTRATION_REVIEW_FORBIDDEN"),
+            "P0004": (409, "REGISTRATION_REVIEW_ALREADY_ACKNOWLEDGED"),
+        }[error.code]
+        raise _registration_review_error(status_code, code) from error
+
+
 @router.get(
     "/{event_request_id}/arrangement-reviews",
     response_model=list[ArrangementReviewResponse],
@@ -382,6 +440,67 @@ def list_change_requests(
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found")
 
 
+@router.get(
+    "/{event_request_id}/change-requests/{change_request_id}/date-plan",
+    response_model=EventChangeDatePlanResponse,
+)
+def preview_change_request_dates(
+    event_request_id: UUID,
+    change_request_id: UUID,
+    coordinator_id: CoordinatorDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> EventChangeDatePlanResponse:
+    request_id = str(event_request_id)
+    try:
+        assignment = _coordinator_assignment_service(request).get_current(request_id)
+        if assignment.coordinator_id != coordinator_id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Only the assigned coordinator can access this change",
+            )
+        plan = service.plan_change_request_dates(request_id, str(change_request_id))
+    except CoordinatorAssignmentNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found") from error
+    except EventChangeDatePlanConflictError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": error.code, "message": "Date change plan is not available for this proposal."},
+        ) from error
+    except (SupabaseRepositoryError, ValidationError) as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Date change plan unavailable",
+        ) from error
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Change request not found")
+    return plan
+
+
+@router.get(
+    "/{event_request_id}/change-requests/{change_request_id}/booking-plan",
+    response_model=EventChangeBookingContext,
+)
+def get_change_booking_context(
+    event_request_id: UUID, change_request_id: UUID, coordinator_id: CoordinatorDependency,
+    request: Request, service: ServiceDependency,
+) -> EventChangeBookingContext:
+    request_id = str(event_request_id)
+    try:
+        assignment = _coordinator_assignment_service(request).get_current(request_id)
+        if assignment.coordinator_id != coordinator_id:
+            raise HTTPException(403, "Only the assigned coordinator can access this change")
+        plan = service.get_change_booking_context(request_id, str(change_request_id))
+    except CoordinatorAssignmentNotFoundError as error:
+        raise HTTPException(404, "Event request not found") from error
+    except EventChangeDatePlanConflictError as error:
+        raise HTTPException(409, detail={"code": error.code, "message": "Date change plan is not available for this proposal."}) from error
+    except (SupabaseRepositoryError, ValidationError) as error:
+        raise HTTPException(502, "Date change plan unavailable") from error
+    if plan is None:
+        raise HTTPException(404, "Change request not found")
+    return plan
+
+
 @router.post(
     "/{event_request_id}/change-requests/{change_request_id}/decision",
     response_model=EventChangeRequestResponse,
@@ -401,15 +520,50 @@ def decide_change_request(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found") from error
     if assignment.coordinator_id != coordinator_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the assigned coordinator can access this change")
-    if not any(change.id == str(change_request_id) for change in service.list_change_requests(request_id)):
+    change = next(
+        (
+            change for change in service.list_change_requests(request_id)
+            if change.id == str(change_request_id)
+        ),
+        None,
+    )
+    if change is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Change request not found")
-    # Pending-only increment: do not call the retained decision RPC until
-    # resource assessment, arrangement updates and notifications are integrated.
+    has_dates = "proposed_date_times" in change.proposed_changes
+    if payload.booking_plan is not None and not has_dates:
+        raise HTTPException(422, "Booking plan is only supported for date approval")
+    if (
+        payload.decision == EventChangeRequestStatus.APPROVED
+        and has_dates
+        and set(change.proposed_changes) <= (_NON_DATE_CHANGE_FIELDS | {"proposed_date_times"})
+    ):
+        try:
+            return service.approve_date_change_request(
+                request_id, str(change_request_id), coordinator_id, payload,
+            )
+        except EventChangeBookingConflictError as error:
+            raise HTTPException(409, detail={
+                "code": "BOOKING_CONFLICT", "message": str(error),
+                "bookings": [booking.model_dump(mode="json") for booking in error.bookings],
+            }) from error
+        except EventChangeBookingPlanError as error:
+            raise HTTPException(422, str(error)) from error
+    # Refuse the whole proposal when any field needs an unsupported workflow.
+    # The narrow RPC rechecks scope and current state under the event lock.
+    supported_approval = (
+        bool(change.proposed_changes)
+        and set(change.proposed_changes) <= _NON_DATE_CHANGE_FIELDS
+    )
+    if payload.decision == EventChangeRequestStatus.REJECTED or supported_approval:
+        return service.decide_change_request(
+            request_id, str(change_request_id), coordinator_id, payload
+        )
+    # Unsupported proposals are never partially applied.
     raise HTTPException(
         status.HTTP_409_CONFLICT,
         detail={
             "code": "CHANGE_DECISIONS_UNAVAILABLE",
-            "message": "Approval and rejection are unavailable until arrangement review is supported.",
+            "message": "This proposal contains unsupported changes.",
         },
     )
 

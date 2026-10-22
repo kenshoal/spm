@@ -387,6 +387,7 @@ class FakeEventRequestRepository:
             "decision_reason": None,
             "created_at": now,
             "decided_at": None,
+            "applied_booking_plan": None,
         }
         self.change_request_rows.append(change)
         return deepcopy(change)

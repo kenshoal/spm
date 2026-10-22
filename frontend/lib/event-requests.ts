@@ -124,6 +124,30 @@ export interface EventReviewDecision {
 
 export type EventChangeRequestStatus = "Pending" | "Approved" | "Rejected";
 
+export interface EventChangeBookingPlanItem {
+  booking_id: string;
+  start_date: string;
+  end_date: string;
+  start_minute: number;
+  end_minute: number;
+}
+
+export interface EventChangeBookingConflict {
+  booking_id: string;
+  refusal_codes: string[];
+  conflicting_booking_ids: string[];
+  conflicting_block_ids: string[];
+}
+
+export interface EventChangeBookingPlan {
+  event_request_id: string;
+  change_request_id: string;
+  event_updated_at: string;
+  bookings: (EventChangeBookingPlanItem & { venue_id: string; status: "pending" | "approved" })[];
+  automatic_plan: EventChangeBookingPlanItem[] | null;
+  automatic_plan_error: "unsupported_date_mapping" | "no_op_date_mapping" | null;
+}
+
 export interface EventChangeRequest {
   id: string;
   event_request_id: string;
@@ -145,6 +169,25 @@ export interface EventChangeRequest {
   decision_reason: string | null;
   created_at: string;
   decided_at: string | null;
+  applied_booking_plan?: EventChangeBookingPlanItem[] | null;
+}
+
+/** A read-only snapshot; these candidates are not availability or approval. */
+export interface EventChangeDatePlan {
+  event_request_id: string;
+  change_request_id: string;
+  advisory: true;
+  bookings: {
+    booking_id: string;
+    venue_id: string;
+    status: "pending" | "approved";
+    current_start_date: string;
+    current_end_date: string;
+    proposed_start_date: string;
+    proposed_end_date: string;
+    start_minute: number;
+    end_minute: number;
+  }[];
 }
 
 const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
@@ -269,6 +312,34 @@ export async function listEventChangeRequests(
   return response.status === 404
     ? []
     : response.json() as Promise<EventChangeRequest[]>;
+}
+
+/** Fetch the saved proposal's advisory plan using the verified server session. */
+export async function getEventChangeDatePlan(
+  eventRequestId: string,
+  changeRequestId: string,
+): Promise<EventChangeDatePlan | null> {
+  const token = await requireAccessToken();
+  const response = await fetch(
+    `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/change-requests/${encodeURIComponent(changeRequestId)}/date-plan`,
+    { method: "GET", headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+  );
+  if (response.status === 401) redirect("/auth");
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Date change plan unavailable");
+  return response.json() as Promise<EventChangeDatePlan>;
+}
+
+/** Complete advisory input for the exact saved proposal, never a write lease. */
+export async function getEventChangeBookingPlan(eventRequestId: string, changeRequestId: string): Promise<EventChangeBookingPlan | null> {
+  const token = await requireAccessToken();
+  const response = await fetch(`${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/change-requests/${encodeURIComponent(changeRequestId)}/booking-plan`, {
+    method: "GET", headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+  });
+  if (response.status === 401) redirect("/auth");
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Booking plan unavailable");
+  return response.json() as Promise<EventChangeBookingPlan>;
 }
 
 export function groupRequests(

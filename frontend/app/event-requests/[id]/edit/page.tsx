@@ -15,6 +15,7 @@ import { RequestDetails } from "../../../components/request-details";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { ClarificationResponseForm } from "../clarification-response-form";
 import { ChangeRequestHistory } from "../../../components/change-request-history";
+import { RegistrationReviews, RegistrationReviewsLoading } from "../../../components/registration-reviews";
 import { ChangeRequestDialog } from "../change-request-dialog";
 
 import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
@@ -61,6 +62,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
         <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">{shared ? SHARED_NOTICE : "Your coordinator requested clarification. The submitted request remains read-only; respond below so review can continue."}</div>
         <RequestDetails request={result.request} coordinatorAssigned />
         <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
+        {!shared ? <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} /></Suspense> : null}
         <div className="mt-5"><ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} /></div>
         <div className="mt-5">
           {decisionResult.failed || shared ? null : latestClarification?.organiser_response ? (
@@ -98,6 +100,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
           action={canRequestChange ? <ChangeRequestDialog eventRequestId={id} /> : null}
         />
         <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
+        {!shared ? <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} /></Suspense> : null}
         <div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div>
         <div>
           {changeResult.failed ? (
@@ -105,7 +108,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
           ) : (
             <div className="mt-5"><ChangeRequestHistory requests={changeResult.requests} /></div>
           )}
-          {hasPendingChange ? <div role="status" className="mt-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">A change request is saved for the assigned coordinator to view. Approval and rejection are not available yet; the event plan remains unchanged.</div> : null}
+          {hasPendingChange ? <div role="status" className="mt-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">A change request is saved for the assigned coordinator to review. The event plan remains unchanged while the proposal is Pending.</div> : null}
         </div>
       </div>
     );

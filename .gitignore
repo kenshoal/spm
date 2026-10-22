@@ -269,3 +269,7 @@ __marimo__/
 
 # Personal Claude Code settings
 .claude/settings.local.json
+
+# Local browser evidence and CLI artefacts
+/output/
+/.playwright-cli/

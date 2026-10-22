@@ -32,6 +32,11 @@ createServer(async (request, response) => {
     return;
   }
   if (request.method === "GET" && request.url === "/auth/me") {
+    // AC4-X4: dedicated organiser identity prevents cross-spec inbox state.
+    if (request.headers.authorization === "Bearer change-request-owner-session") {
+      send(response, 200, { id: "playwright-change-request-owner", email: "change-request-owner@example.com", role: "event_organiser", roles: ["event_organiser"] });
+      return;
+    }
     if (request.headers.authorization === "Bearer test-session") {
       send(response, 200, { id: "playwright-user", email: "playwright@example.com", role: "event_organiser", roles: ["event_organiser"] });
       return;

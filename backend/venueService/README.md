@@ -218,14 +218,55 @@ end after the start; otherwise 422 with `off_step`, `outside_operating_window` o
 `slots` (the slots the time touches) until Sprint 4. The request is for an event
 the Coordinator is currently assigned to. venueService confirms that with eventRequestService
 (`EVENT_REQUEST_API_URL`, default `http://127.0.0.1:8003`) using the caller's own
-token, and copies the event's name, expected attendance and venue-requirements
-text into the request. Submitting creates a `pending` request and reserves
+token, carrying its aware `updated_at` internally to the versioned creation RPC.
+That RPC copies the current event's name, attendance and venue requirements from
+the locked event row. Submitting creates a `pending` request and reserves
 nothing: pending requests never block each other, and approving or rejecting
 one belongs to a later story. Venue Staff list the queue
 (`GET /booking-requests`, pending by default, oldest first) and can open any
 request; a Coordinator lists (`/mine`, newest first) and opens only their own,
 and another Coordinator's request returns 404. A request for a blocked venue or
 for past dates is accepted at submission.
+
+### Versioned creation prerequisite for SCRUM-35
+
+Migration `0056_event_venue_booking_creation.sql` was **applied to shared Supabase
+on 22 October 2026**, with 0058/0059 as version `20261022114717`. It adds the service-only
+`create_event_venue_booking_request(p_booking jsonb, p_expected_event_updated_at timestamptz)`.
+The public booking JSON and previously allowed lifecycle states do not change.
+`EventSnapshot.updated_at` and the store's keyword argument are internal; missing,
+malformed or timezone-naive snapshot versions are a safe 502. The RPC locks venue
+then event, rechecks the latest assignment and expected version, and inserts one
+Pending booking with canonical stored event metadata. A changed version returns
+409, `Event request changed; refresh before booking`; missing events or revoked
+assignment return 404 without exposing database details. Slots remain derived
+from the requested minutes, and no notification or event write is added.
+
+Deploy this venueService version and 0056 together in a reviewed write hold.
+The migration revokes direct server INSERT/DELETE on booking requests, so old
+service versions must not continue writing during cutover. New code uses only the
+RPC and never falls back to REST INSERT; an absent RPC is an unavailable store.
+The coordinated rollout rebuilt venueService; direct service INSERT/DELETE are
+now revoked, UPDATE retained and the membership trigger enabled.
+A trigger keeps each existing booking's venue/event links immutable while allowing
+same-value updates and preserving ordinary approval/cancellation. Other service
+UPDATE privileges remain; this does not promise a lease against arbitrary
+privileged SQL. Memory mode retains optional versions for direct seed calls and
+does not prove the shared database protocol. This creator alone does not
+activate date approval; the separate applied 0059 RPC depends on this protocol.
+
+For an owned disposable schema containing the current event/venue prerequisites,
+run the migration then `database/verify_versioned_venue_booking_creation.sql`.
+That verifier requires a `scrum48_*` database and rolls back; it is not a shared
+deployment command. The 0059 date workflow has separate local full-batch and
+concurrency proof. The [shared deployment record](../../docs/deployment/scrum_35_date_rollout.md)
+documents the coordinated bundle and real signed-in journey. Booking creation
+used the normal authenticated API; booking approval and date/conflict review
+used UI. No committed race fixtures or fault triggers ran on shared. Do not
+reapply this bundle or run an old REST-writing creator against it.
+Source `7095a79` is published in [PR #91](https://github.com/jarenlimhaan/spm/pull/91) into `dev`; exact-head CI, human
+review and merge remain pending. The running images remain local, using shared
+Supabase, rather than a remote application publication.
 
 An event can have several booking requests, one per venue (SCRUM-61).
 `GET /booking-requests/event/{event_request_id}` lists all of an event's

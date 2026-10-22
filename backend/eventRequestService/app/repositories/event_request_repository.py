@@ -6,6 +6,12 @@ from app.config import Settings
 
 
 class EventRequestRepository(Protocol):
+    def list_registration_reviews(self, event_request_id: str) -> list[dict[str, Any]]: ...
+
+    def acknowledge_registration_review(
+        self, event_request_id: str, review_id: str, actor_id: str,
+    ) -> dict[str, Any]: ...
+
     def list_arrangement_reviews(
         self, event_request_id: str
     ) -> list[dict[str, Any]]: ...
@@ -83,6 +89,14 @@ class EventRequestRepository(Protocol):
 
     def list_change_requests(self, event_request_id: str) -> list[dict[str, Any]]: ...
 
+    def get_change_request(
+        self, event_request_id: str, change_request_id: str,
+    ) -> dict[str, Any] | None: ...
+
+    def list_event_venue_bookings(
+        self, event_request_id: str,
+    ) -> list[dict[str, Any]]: ...
+
     def decide_safety_review(
         self, event_request_id: str, officer_id: str, decision: str,
         reason: str | None, targets: list[dict[str, Any]]
@@ -91,6 +105,11 @@ class EventRequestRepository(Protocol):
     def list_safety_reviews(self, event_request_id: str) -> list[dict[str, Any]]: ...
 
     def latest_coordinator_id(self, event_request_id: str) -> str | None: ...
+
+    def approve_date_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        reason: str | None, booking_plan: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]: ...
 
     def decide_change_request(
         self, event_request_id: str, change_request_id: str,
@@ -176,6 +195,31 @@ class SupabaseEventRequestRepository:
             headers={"Prefer": "return=representation"},
         )
         return rows[0]
+
+    def list_registration_reviews(self, event_request_id: str) -> list[dict[str, Any]]:
+        """Retain acknowledged history and exhaust capped responses by keyset."""
+        return self._list_arrangement_review_pages(
+            "GET", "/event_registration_reviews",
+            filters={"event_request_id": f"eq.{event_request_id}"},
+        )
+
+    def acknowledge_registration_review(
+        self, event_request_id: str, review_id: str, actor_id: str,
+    ) -> dict[str, Any]:
+        """The event-first RPC rechecks the current coordinator before audit."""
+        try:
+            response = self._client.post(
+                "/rpc/acknowledge_event_registration_review",
+                json={"p_event_request_id": event_request_id,
+                      "p_review_id": review_id, "p_coordinator_id": actor_id},
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except (httpx.HTTPError, ValueError) as error:
+            raise SupabaseRepositoryError("Registration reviews unavailable") from error
 
     def list_arrangement_reviews(
         self, event_request_id: str
@@ -472,6 +516,57 @@ class SupabaseEventRequestRepository:
             },
         )
 
+    def get_change_request(
+        self, event_request_id: str, change_request_id: str,
+    ) -> dict[str, Any] | None:
+        """Look up the exact proposal without a capped history-list scan."""
+        rows = self._request_table(
+            "GET", "/event_change_requests",
+            params={
+                "select": "*",
+                "event_request_id": f"eq.{event_request_id}",
+                "id": f"eq.{change_request_id}",
+                "limit": "1",
+            },
+        )
+        return rows[0] if rows else None
+
+    def list_event_venue_bookings(
+        self, event_request_id: str,
+    ) -> list[dict[str, Any]]:
+        """Read all linked rows; the pure planner selects eligible statuses."""
+        bookings: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            params = {
+                "select": "*", "event_request_id": f"eq.{event_request_id}",
+                "order": "id.asc", "limit": "1000",
+            }
+            if cursor is not None:
+                params["id"] = f"gt.{cursor}"
+            page = self._request_table("GET", "/venue_booking_requests", params=params)
+            if not isinstance(page, list) or any(not isinstance(row, dict) for row in page):
+                raise SupabaseRepositoryError("Date change plan unavailable")
+            # A short response may reflect the server's row cap. Only an empty
+            # page proves exhaustion; never return partial rows after a failure.
+            if not page:
+                return bookings
+            bookings.extend(page)
+            cursor = page[-1]["id"]
+
+    def approve_date_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        reason: str | None, booking_plan: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        """Only the dedicated transaction may move a complete existing booking set."""
+        return self._call_rpc("approve_date_event_change_request", {
+            "p_event_request_id": event_request_id,
+            "p_change_request_id": change_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_reason": reason,
+            "p_booking_plan": booking_plan,
+        })
+
     def decide_change_request(
         self,
         event_request_id: str,
@@ -480,6 +575,28 @@ class SupabaseEventRequestRepository:
         decision: str,
         reason: str | None,
     ) -> dict[str, Any]:
+        if decision == "Rejected":
+            return self._call_rpc(
+                "reject_event_change_request",
+                {
+                    "p_event_request_id": event_request_id,
+                    "p_change_request_id": change_request_id,
+                    "p_coordinator_id": coordinator_id,
+                    "p_reason": reason,
+                },
+            )
+        if decision == "Approved":
+            return self._call_rpc(
+                "approve_non_date_event_change_request",
+                {
+                    "p_event_request_id": event_request_id,
+                    "p_change_request_id": change_request_id,
+                    "p_coordinator_id": coordinator_id,
+                    "p_reason": reason,
+                },
+            )
+        # Retain the legacy primitive for other internal callers; public final
+        # decisions use only the two narrow workflow functions above.
         return self._call_rpc(
             "decide_event_change_request",
             {

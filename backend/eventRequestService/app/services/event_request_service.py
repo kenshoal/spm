@@ -1,11 +1,22 @@
+import json
+import logging
 from datetime import UTC
 from typing import Any, NoReturn
 
+from pydantic import ValidationError
+
 from app.models.arrangement_review import ArrangementReviewResponse
 from app.models.event_request import (
+    EventChangeBookingConflict,
+    EventChangeBookingContext,
+    EventChangeBookingContextItem,
+    EventChangeBookingPlanItem,
+    EventChangeDatePlanBooking,
+    EventChangeDatePlanResponse,
     EventChangeDecision,
     EventChangeRequestCreate,
     EventChangeRequestResponse,
+    EventChangeRequestStatus,
     EventClarificationResponse,
     EventRequestCreate,
     EventRequestResponse,
@@ -17,11 +28,19 @@ from app.models.event_request import (
     SafetyDecision,
     SafetyReviewResponse,
 )
+from app.models.registration_review import RegistrationReviewResponse
 from app.repositories import EventRequestRepository
 from app.repositories.event_request_repository import (
     EventRequestRpcError,
     SupabaseRepositoryError,
 )
+from app.services.event_change_date_plan import (
+    DateReschedulePlanError,
+    plan_date_only_reschedule,
+)
+from app.services.notification_client import NotificationClient
+
+logger = logging.getLogger(__name__)
 
 
 class ArrangementReviewActionError(Exception):
@@ -72,6 +91,24 @@ class EventChangeRequestForbiddenError(Exception):
         self.event_request_id = event_request_id
 
 
+class EventChangeDatePlanConflictError(Exception):
+    """The saved proposal cannot currently produce an advisory date plan."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+class EventChangeBookingConflictError(Exception):
+    def __init__(self, bookings: list[EventChangeBookingConflict]) -> None:
+        super().__init__("One or more venue bookings conflict with the proposed plan.")
+        self.bookings = bookings
+
+
+class EventChangeBookingPlanError(Exception):
+    """Invalid complete range input; never forward a raw database message."""
+
+
 class EventRequestTransitionConflictError(Exception):
     """The row wasn't in from_status when the transition was attempted —
     a concurrent change, since callers check status before transitioning."""
@@ -87,8 +124,34 @@ class EventRequestTransitionConflictError(Exception):
 class EventRequestService:
     """Owns Draft and submission rules independently of Supabase transport."""
 
-    def __init__(self, repository: EventRequestRepository) -> None:
+    def __init__(
+        self, repository: EventRequestRepository,
+        notification_client: NotificationClient | None = None,
+    ) -> None:
         self.repository = repository
+        self.notification_client = notification_client or NotificationClient(None)
+
+    def list_registration_reviews(self, event_request_id: str) -> list[RegistrationReviewResponse]:
+        """Return complete retained history after controller relationship checks."""
+        try:
+            rows = self.repository.list_registration_reviews(event_request_id)
+            reviews = [RegistrationReviewResponse.model_validate(row) for row in rows]
+            return sorted(reviews, key=lambda row: (row.raised_at.astimezone(UTC), row.id), reverse=True)
+        except (SupabaseRepositoryError, ValidationError, ValueError, TypeError, KeyError) as error:
+            raise SupabaseRepositoryError("Registration reviews unavailable") from error
+
+    def acknowledge_registration_review(
+        self, event_request_id: str, review_id: str, actor_id: str,
+    ) -> RegistrationReviewResponse:
+        try:
+            row = self.repository.acknowledge_registration_review(event_request_id, review_id, actor_id)
+            return RegistrationReviewResponse.model_validate(row)
+        except EventRequestRpcError as error:
+            if error.errcode in {"P0002", "P0003", "P0004"}:
+                raise ArrangementReviewActionError(error.errcode) from error
+            raise SupabaseRepositoryError("Registration reviews unavailable") from error
+        except (SupabaseRepositoryError, ValidationError, ValueError, TypeError) as error:
+            raise SupabaseRepositoryError("Registration reviews unavailable") from error
 
     def list_arrangement_reviews(
         self, event_request_id: str
@@ -358,6 +421,115 @@ class EventRequestService:
             for row in self.repository.list_change_requests(event_request_id)
         ]
 
+    def plan_change_request_dates(
+        self, event_request_id: str, change_request_id: str,
+    ) -> EventChangeDatePlanResponse | None:
+        """Read a complete advisory snapshot without locking or changing state."""
+        try:
+            event = self.get_by_id(event_request_id)
+            row = self.repository.get_change_request(event_request_id, change_request_id)
+            if row is None:
+                return None
+            change = EventChangeRequestResponse.model_validate(row)
+            if change.id != change_request_id or change.event_request_id != event_request_id:
+                return None
+            if (
+                event.status not in {EventRequestStatus.APPROVED, EventRequestStatus.PLANNING}
+                or change.status != EventChangeRequestStatus.PENDING
+            ):
+                raise EventChangeDatePlanConflictError("date_plan_unavailable")
+            if set(change.proposed_changes) != {"proposed_date_times"}:
+                raise EventChangeDatePlanConflictError("unsupported_date_mapping")
+            if event.updated_at.utcoffset() is None or change.base_event_updated_at.utcoffset() is None:
+                raise ValueError("Stored event versions must be timezone-aware")
+            if event.updated_at.astimezone(UTC) != change.base_event_updated_at.astimezone(UTC):
+                raise EventChangeDatePlanConflictError("change_request_stale")
+
+            bookings = self.repository.list_event_venue_bookings(event_request_id)
+            candidates = plan_date_only_reschedule(
+                [value.isoformat() for value in event.proposed_date_times],
+                change.proposed_changes["proposed_date_times"],
+                bookings,
+            )
+            current = {booking["id"]: booking for booking in bookings}
+            return EventChangeDatePlanResponse(
+                event_request_id=event_request_id,
+                change_request_id=change_request_id,
+                bookings=[
+                    EventChangeDatePlanBooking(
+                        booking_id=candidate["id"],
+                        venue_id=candidate["venue_id"],
+                        status=candidate["status"],
+                        current_start_date=current[candidate["id"]]["start_date"],
+                        current_end_date=current[candidate["id"]]["end_date"],
+                        proposed_start_date=candidate["start_date"],
+                        proposed_end_date=candidate["end_date"],
+                        start_minute=candidate["start_minute"],
+                        end_minute=candidate["end_minute"],
+                    )
+                    for candidate in candidates
+                ],
+            )
+        except DateReschedulePlanError as error:
+            raise EventChangeDatePlanConflictError(error.code) from error
+        except (
+            SupabaseRepositoryError, ValidationError, ValueError, TypeError,
+            KeyError, AttributeError, OverflowError,
+        ) as error:
+            raise SupabaseRepositoryError("Date change plan unavailable") from error
+
+    def get_change_booking_context(
+        self, event_request_id: str, change_request_id: str,
+    ) -> EventChangeBookingContext | None:
+        """Complete advisory editor input; authoritative mutation checks happen later."""
+        try:
+            event = self.get_by_id(event_request_id)
+            row = self.repository.get_change_request(event_request_id, change_request_id)
+            if row is None:
+                return None
+            change = EventChangeRequestResponse.model_validate(row)
+            if change.id != change_request_id or change.event_request_id != event_request_id:
+                return None
+            if event.status not in {EventRequestStatus.APPROVED, EventRequestStatus.PLANNING} or change.status != EventChangeRequestStatus.PENDING:
+                raise EventChangeDatePlanConflictError("date_plan_unavailable")
+            fields = set(change.proposed_changes)
+            if "proposed_date_times" not in fields or not fields <= {
+                "proposed_date_times", "expected_attendance", "venue_requirements",
+                "equipment_requirements", "registration_needs",
+            }:
+                raise EventChangeDatePlanConflictError("unsupported_date_mapping")
+            if event.updated_at.utcoffset() is None or change.base_event_updated_at.utcoffset() is None:
+                raise ValueError("Stored event versions must be aware")
+            if event.updated_at.astimezone(UTC) != change.base_event_updated_at.astimezone(UTC):
+                raise EventChangeDatePlanConflictError("change_request_stale")
+            proposed = EventChangeRequestCreate(explanation=change.explanation, **change.proposed_changes)
+            if proposed.proposed_date_times == event.proposed_date_times:
+                raise EventChangeDatePlanConflictError("no_op_date_mapping")
+            rows = self.repository.list_event_venue_bookings(event_request_id)
+            bookings = [EventChangeBookingContextItem(
+                booking_id=booking["id"], venue_id=booking["venue_id"], status=booking["status"],
+                start_date=booking["start_date"], end_date=booking["end_date"],
+                start_minute=booking["start_minute"], end_minute=booking["end_minute"],
+            ) for booking in rows if booking["status"] in {"pending", "approved"}]
+            result = EventChangeBookingContext(
+                event_request_id=event_request_id, change_request_id=change_request_id,
+                event_updated_at=event.updated_at, bookings=bookings,
+            )
+            try:
+                candidates = plan_date_only_reschedule(
+                    [value.isoformat() for value in event.proposed_date_times],
+                    change.proposed_changes["proposed_date_times"], rows,
+                )
+                result.automatic_plan = [EventChangeBookingPlanItem(
+                    booking_id=booking["id"], start_date=booking["start_date"], end_date=booking["end_date"],
+                    start_minute=booking["start_minute"], end_minute=booking["end_minute"],
+                ) for booking in candidates]
+            except DateReschedulePlanError as error:
+                result.automatic_plan_error = error.code
+            return result
+        except (SupabaseRepositoryError, ValidationError, ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
+            raise SupabaseRepositoryError("Date change plan unavailable") from error
+
     def decide_change_request(
         self,
         event_request_id: str,
@@ -365,8 +537,9 @@ class EventRequestService:
         coordinator_id: str,
         payload: EventChangeDecision,
     ) -> EventChangeRequestResponse:
-        """Retained internal primitive; the public API refuses decisions until
-        arrangement review and change notification workflows are integrated.
+        """Save rejection or the supported non-date approval transaction.
+
+        Database functions own current-state checks and atomic plan application.
         """
         try:
             row = self.repository.decide_change_request(
@@ -378,7 +551,96 @@ class EventRequestService:
             )
         except EventRequestRpcError as error:
             self._raise_change_request_error(error, event_request_id)
-        return EventChangeRequestResponse.model_validate(row)
+        return self._saved_change_decision(
+            row, event_request_id, change_request_id, coordinator_id, payload,
+        )
+
+    def approve_date_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        payload: EventChangeDecision,
+    ) -> EventChangeRequestResponse:
+        """SQL owns complete membership, conflict checks and the atomic write."""
+        plan = None if payload.booking_plan is None else [
+            booking.model_dump(mode="json") for booking in payload.booking_plan
+        ]
+        try:
+            row = self.repository.approve_date_change_request(
+                event_request_id, change_request_id, coordinator_id, payload.reason, plan,
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == "P0005":
+                try:
+                    facts = json.loads(error.details)
+                    if not isinstance(facts, list) or not facts:
+                        raise ValueError("Missing conflict facts")
+                    bookings = [EventChangeBookingConflict.model_validate(item) for item in facts]
+                except (ValueError, TypeError, ValidationError) as invalid:
+                    raise SupabaseRepositoryError("Event change decision unavailable") from invalid
+                raise EventChangeBookingConflictError(bookings) from error
+            if error.errcode == "22023":
+                raise EventChangeBookingPlanError("Booking plan is invalid; refresh and check every current booking range.") from error
+            if error.errcode not in {"P0002", "P0003", "P0004"}:
+                raise SupabaseRepositoryError("Event change decision unavailable") from error
+            self._raise_change_request_error(error, event_request_id)
+        except SupabaseRepositoryError as error:
+            raise SupabaseRepositoryError("Event change decision unavailable") from error
+        return self._saved_change_decision(
+            row, event_request_id, change_request_id, coordinator_id, payload,
+            require_booking_plan=True,
+        )
+
+    def _saved_change_decision(
+        self, row: dict[str, Any], event_request_id: str, change_request_id: str,
+        coordinator_id: str, payload: EventChangeDecision, *, require_booking_plan: bool = False,
+    ) -> EventChangeRequestResponse:
+        """Validate the saved outcome before any best-effort organiser notice."""
+        try:
+            change = EventChangeRequestResponse.model_validate(row)
+        except ValidationError as error:
+            if payload.decision == EventChangeRequestStatus.APPROVED:
+                raise SupabaseRepositoryError("Event change decision unavailable") from error
+            raise
+        if payload.decision == EventChangeRequestStatus.APPROVED:
+            # A malformed upstream outcome is not proof of a saved approval.
+            # Do not reread after commit or announce a Pending/incomplete result.
+            if (
+                change.status != EventChangeRequestStatus.APPROVED
+                or change.id != change_request_id
+                or change.event_request_id != event_request_id
+                or change.coordinator_id != coordinator_id
+                or change.decided_at is None
+                or change.decided_at.utcoffset() is None
+                or (require_booking_plan and change.applied_booking_plan is None)
+            ):
+                raise SupabaseRepositoryError("Event change decision unavailable")
+            try:
+                self.notification_client.notify_event_change_approved(
+                    event_request_id=change.event_request_id,
+                    change_request_id=change.id,
+                    organiser_id=change.organiser_id,
+                    reason=change.decision_reason,
+                )
+            except Exception:
+                # Delivery is an independent best-effort side effect after the
+                # stored transaction. Even an unexpected sender bug cannot undo it.
+                logger.warning(
+                    "Failed to notify organiser of approved change %s",
+                    change.id, exc_info=True,
+                )
+        elif (
+            payload.decision == EventChangeRequestStatus.REJECTED
+            and change.status == EventChangeRequestStatus.REJECTED
+            and change.decision_reason is not None
+        ):
+            # The returned stored row supplies the owner and audit. No extra
+            # database read can make a committed rejection appear to have failed.
+            self.notification_client.notify_event_change_rejected(
+                event_request_id=change.event_request_id,
+                change_request_id=change.id,
+                organiser_id=change.organiser_id,
+                reason=change.decision_reason,
+            )
+        return change
 
     @staticmethod
     def _raise_change_request_error(

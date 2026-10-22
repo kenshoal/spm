@@ -58,6 +58,22 @@ export function describeNotification(notification: AppNotification, roles: reado
           typeof reason === "string" && reason.trim() ? reason : null].filter(Boolean).join(" · "),
       };
     }
+    case "event_change_approved": {
+      const reason = notification.payload.reason;
+      return {
+        message: "Your event change request was approved.",
+        href: id && `/event-requests/${id}/edit`,
+        ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
+      };
+    }
+    case "event_change_rejected": {
+      const reason = notification.payload.reason;
+      return {
+        message: "Your event change request was rejected.",
+        href: id && `/event-requests/${id}/edit`,
+        ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
+      };
+    }
     case "event_request_submitted":
       return { message: "Your event request was submitted.", href: id && `/event-requests/${id}/edit` };
     case "coordinator_assigned":

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID
@@ -198,11 +198,42 @@ class EventChangeRequestCreate(BaseModel):
         )
 
 
+class EventChangeBookingPlanItem(BaseModel):
+    """Coordinator-chosen actual range for one existing booking, without venue changes."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    booking_id: UUID
+    start_date: date
+    end_date: date
+    start_minute: int = Field(ge=420, le=1425, multiple_of=15)
+    end_minute: int = Field(ge=435, le=1440, multiple_of=15)
+
+    @model_validator(mode="after")
+    def range_is_valid(self) -> "EventChangeBookingPlanItem":
+        if self.end_date < self.start_date or self.end_minute <= self.start_minute:
+            raise ValueError("booking end must follow its start within the booking rules")
+        return self
+
+
+class EventChangeBookingConflict(BaseModel):
+    """Only authorised, schema-checked conflict facts may cross the API boundary."""
+
+    booking_id: UUID
+    refusal_codes: list[Literal[
+        "venue_unavailable", "active_block", "setup_outside_window",
+        "turnaround_outside_window", "booking_conflict",
+    ]] = Field(min_length=1)
+    conflicting_booking_ids: list[UUID]
+    conflicting_block_ids: list[UUID]
+
+
 class EventChangeDecision(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     decision: EventChangeRequestStatus
     reason: str | None = Field(default=None, max_length=2_000)
+    booking_plan: list[EventChangeBookingPlanItem] | None = None
 
     @field_validator("decision")
     @classmethod
@@ -227,6 +258,12 @@ class EventChangeDecision(BaseModel):
     def rejection_requires_reason(self) -> "EventChangeDecision":
         if self.decision == EventChangeRequestStatus.REJECTED and not self.reason:
             raise ValueError("a rejection reason is required")
+        if self.booking_plan is not None:
+            if self.decision != EventChangeRequestStatus.APPROVED:
+                raise ValueError("Booking plan is only supported for date approval")
+            ids = [booking.booking_id for booking in self.booking_plan]
+            if len(ids) != len(set(ids)):
+                raise ValueError("each booking must appear only once in the booking plan")
         return self
 
 
@@ -307,6 +344,46 @@ class EventChangeRequestResponse(BaseModel):
     decision_reason: str | None = None
     created_at: datetime
     decided_at: datetime | None = None
+    applied_booking_plan: list[EventChangeBookingPlanItem] | None = None
+
+
+class EventChangeDatePlanBooking(BaseModel):
+    """Advisory date candidates; existing booking identity and minutes stay fixed."""
+
+    booking_id: str
+    venue_id: str
+    status: Literal["pending", "approved"]
+    current_start_date: date
+    current_end_date: date
+    proposed_start_date: date
+    proposed_end_date: date
+    start_minute: int
+    end_minute: int
+
+
+class EventChangeDatePlanResponse(BaseModel):
+    """A read snapshot, never an availability verdict or permission to approve."""
+
+    event_request_id: str
+    change_request_id: str
+    advisory: Literal[True] = True
+    bookings: list[EventChangeDatePlanBooking]
+
+
+class EventChangeBookingContextItem(EventChangeBookingPlanItem):
+    """Current booking identity/range only; no editable venue or admin metadata."""
+
+    venue_id: UUID
+    status: Literal["pending", "approved"]
+
+
+class EventChangeBookingContext(BaseModel):
+    event_request_id: str
+    change_request_id: str
+    event_updated_at: AwareDatetime
+    bookings: list[EventChangeBookingContextItem]
+    automatic_plan: list[EventChangeBookingPlanItem] | None = None
+    automatic_plan_error: Literal["unsupported_date_mapping", "no_op_date_mapping"] | None = None
 
 
 class HealthResponse(BaseModel):

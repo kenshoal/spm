@@ -8,13 +8,15 @@ with the server-side secret key, implementing the interface of the in-memory
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 import httpx
 
 from app.booking_models import BookingRequest, BookingRequestStatus
 from app.booking_repository import (
+    BookingEventChangedError,
+    BookingEventNotFoundError,
     BookingNotCancellableError,
     BookingRequestNotFoundError,
 )
@@ -55,19 +57,37 @@ class SupabaseBookingRepository:
             raise SupabaseRepositoryError("Venue store returned an unexpected response")
         return body
 
-    def create(self, booking: BookingRequest) -> BookingRequest:
-        rows = self._request(
-            "POST",
-            # A new request is pending, so the cancel columns (migration 0042) are
-            # left out: submitting then works before and after that migration.
-            json=booking.model_dump(
-                mode="json", exclude={"cancelled_by", "cancelled_at"}
-            ),
-            headers={"Prefer": "return=representation"},
-        )
-        if not rows:
-            raise SupabaseRepositoryError("Venue store returned no row")
-        return BookingRequest.model_validate(rows[0])
+    def create(
+        self, booking: BookingRequest, *, expected_event_updated_at: datetime,
+    ) -> BookingRequest:
+        """Create through the version/assignment gate; never fall back to INSERT."""
+        if not isinstance(expected_event_updated_at, datetime) or expected_event_updated_at.utcoffset() is None:
+            raise SupabaseRepositoryError("Venue store unavailable")
+        try:
+            response = self._client.post(
+                "/rpc/create_event_venue_booking_request",
+                json={
+                    "p_booking": booking.model_dump(mode="json"),
+                    "p_expected_event_updated_at": expected_event_updated_at.isoformat(),
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError("Venue store unavailable") from error
+        try:
+            body = response.json()
+        except ValueError as error:
+            raise SupabaseRepositoryError("Venue store returned an unexpected response") from error
+        if not response.is_success:
+            code = body.get("code") if isinstance(body, dict) else None
+            if code in {"P0002", "P0003"}:
+                raise BookingEventNotFoundError
+            if code == "P0004":
+                raise BookingEventChangedError
+            raise SupabaseRepositoryError("Venue store unavailable")
+        if not isinstance(body, dict):
+            raise SupabaseRepositoryError("Venue store returned an unexpected response")
+        return BookingRequest.model_validate(body)
 
     def get(self, booking_id: str) -> BookingRequest | None:
         # Postgres rejects a malformed uuid literal; an unknown id is simply absent.

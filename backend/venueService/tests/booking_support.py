@@ -50,6 +50,7 @@ class FakeEventService:
             "event_name": event_name,
             "expected_attendance": expected_attendance,
             "venue_requirements": venue_requirements,
+            "updated_at": "2026-10-22T00:00:00+00:00",
         }
 
     def handler(self, request: httpx.Request) -> httpx.Response:

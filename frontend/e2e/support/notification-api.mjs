@@ -7,6 +7,8 @@ const port = 8107;
 // Mirrors the sessions defined in auth-api.mjs — the user id notificationService
 // would resolve each token to.
 const SESSIONS = {
+  // AC4-X4: isolate rejection journey state from the parallel default-owner inbox.
+  "change-request-owner-session": "playwright-change-request-owner",
   "test-session": "playwright-user",
   "coordinator-session": "playwright-coordinator",
   "other-coordinator-session": "other-coordinator",

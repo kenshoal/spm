@@ -17,6 +17,13 @@ const TECHNICAL_SUPPORT_STAFF = [
 ];
 // Prepared UI fixture storage only; real permissions and clear atomicity have separate API/PG tests.
 const arrangementReviews = new Map();
+// AC3-X20: prepared registration evidence/outcomes only; native callers own authorisation and atomicity.
+const registrationReviews = new Map();
+const registrationAcknowledgements = new Map();
+// AC3-X11: prepared advisory response only; the real planner is tested outside this browser double.
+const datePlanBookings = new Map();
+// AC3-X32: prepared date editor context/outcomes only; no planner or transaction rules in the browser fixture.
+const bookingPlanOutcomes = new Map();
 let nextHistoryId = 1;
 let nextAssignmentId = 1;
 let nextDecisionId = 1;
@@ -25,6 +32,8 @@ const port = 8103;
 // Mirrors the sessions defined in auth-api.mjs — one identity each, with the
 // role the authService would report for it.
 const SESSIONS = {
+  // AC4-X4: isolate rejection journey state from the parallel default-owner inbox.
+  "change-request-owner-session": { id: "playwright-change-request-owner", role: "event_organiser" },
   "test-session": { id: "playwright-user", role: "event_organiser" },
   "colleague-session": { id: "playwright-colleague", role: "event_organiser" },
   "coordinator-session": { id: "playwright-coordinator", role: "event_coordinator" },
@@ -128,13 +137,27 @@ createServer(async (request, response) => {
     return;
   }
 
+  // AC3-X32: install exact responses for one known proposal without recalculating dates, writing lifecycle history or faking conflict decisions.
+  if (url.pathname === "/__prepare_change_plan" && request.method === "POST") {
+    const prepared = await readJson(request);
+    const change = changeRequests.find(row => row.id === prepared.change_request_id && row.event_request_id === prepared.event_request_id);
+    if (!change || !records.has(prepared.event_request_id)) {
+      send(response, 404, { detail: "Unknown prepared proposal" }); return;
+    }
+    bookingPlanOutcomes.set(change.id, structuredClone(prepared));
+    send(response, 201, { prepared: true }); return;
+  }
+
   // Test-only seed for statuses no implemented story writes yet (e.g.
   // Confirmed, which the venue/ops stories own on other branches).
   if (url.pathname === "/__seed" && request.method === "POST") {
     const body = await readJson(request);
-    const { coordinator_id, review_decision, arrangement_reviews, ...recordOverrides } = body;
+    const { coordinator_id, review_decision, arrangement_reviews, date_plan_bookings, registration_reviews, registration_acknowledgements, ...recordOverrides } = body;
     const record = recordFields({ ...recordOverrides, status: body.status ?? "Submitted" });
     records.set(record.id, record);
+    if (date_plan_bookings) datePlanBookings.set(record.id, structuredClone(date_plan_bookings));
+    for (const row of registration_reviews ?? []) registrationReviews.set(row.id, { ...row, event_request_id: record.id });
+    for (const row of registration_acknowledgements ?? []) registrationAcknowledgements.set(row.id, { ...row, event_request_id: record.id });
     for (const review of arrangement_reviews ?? []) {
       arrangementReviews.set(review.id, { ...review, event_request_id: record.id, cleared_at: null, cleared_by: null });
     }
@@ -198,6 +221,23 @@ createServer(async (request, response) => {
     records.set(record.id, record);
     recordHistory(record, null, user, "event_request.created", "created");
     send(response, 201, record);
+    return;
+  }
+
+  // AC3-X20: return seeded records and a predeclared acknowledgement response; no review producer or role rules are duplicated here.
+  const registrationReadMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/registration-reviews$/);
+  const registrationAckMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/registration-reviews\/([^/]+)\/acknowledge$/);
+  if (request.method === "GET" && registrationReadMatch) {
+    send(response, 200, [...registrationReviews.values()].filter((row) => row.event_request_id === registrationReadMatch[1]));
+    return;
+  }
+  if (request.method === "POST" && registrationAckMatch) {
+    const row = registrationAcknowledgements.get(registrationAckMatch[2]);
+    if (!row || row.event_request_id !== registrationAckMatch[1]) {
+      send(response, 404, { detail: { code: "REGISTRATION_REVIEW_NOT_FOUND" } }); return;
+    }
+    registrationReviews.set(row.id, structuredClone(row));
+    send(response, 200, row);
     return;
   }
 
@@ -433,13 +473,15 @@ createServer(async (request, response) => {
   const decisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decision$/);
   const decisionsMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decisions$/);
   const clarificationMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/clarification-response$/);
+  const bookingPlanMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/change-requests\/([^/]+)\/booking-plan$/);
+  const datePlanMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/change-requests\/([^/]+)\/date-plan$/);
   const changeDecisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/change-requests\/([^/]+)\/decision$/);
   const changeRequestsMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/change-requests$/);
   const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
   const match = url.pathname.match(/^\/event-requests\/([^/]+)$/);
   const id = decodeURIComponent(
     historyMatch?.[1] ?? coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? decisionMatch?.[1]
-      ?? decisionsMatch?.[1] ?? clarificationMatch?.[1] ?? changeDecisionMatch?.[1]
+      ?? decisionsMatch?.[1] ?? clarificationMatch?.[1] ?? bookingPlanMatch?.[1] ?? datePlanMatch?.[1] ?? changeDecisionMatch?.[1]
       ?? changeRequestsMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
   );
   const record = records.get(id);
@@ -544,6 +586,32 @@ createServer(async (request, response) => {
     return;
   }
 
+  if (bookingPlanMatch && request.method === "GET") {
+    const prepared = bookingPlanOutcomes.get(decodeURIComponent(bookingPlanMatch[2]));
+    if (!prepared || prepared.event_request_id !== id) { send(response, 404, { detail: "Change request not found" }); return; }
+    send(response, 200, structuredClone(prepared.context)); return;
+  }
+
+  // AC3-X11: read a frozen response; do not calculate shifts, mutate bookings or approve the Pending proposal here.
+  if (datePlanMatch && request.method === "GET") {
+    if (user.role !== "event_coordinator" || latestAssignmentFor(id)?.coordinator_id !== user.id) {
+      send(response, 403, { detail: "Only the assigned coordinator can access this change" });
+      return;
+    }
+    const changeId = decodeURIComponent(datePlanMatch[2]);
+    if (!changeRequests.some((change) => change.id === changeId && change.event_request_id === id)) {
+      send(response, 404, { detail: "Change request not found" });
+      return;
+    }
+    const prepared = datePlanBookings.get(id);
+    if (!prepared) {
+      send(response, 502, { detail: "Date change plan unavailable" });
+      return;
+    }
+    send(response, 200, { event_request_id: id, change_request_id: changeId, advisory: true, bookings: structuredClone(prepared) });
+    return;
+  }
+
   if (changeRequestsMatch && request.method === "GET") {
     const assigned = latestAssignmentFor(id)?.coordinator_id === user.id;
     const canRead =
@@ -591,15 +659,45 @@ createServer(async (request, response) => {
     }
     const changeId = decodeURIComponent(changeDecisionMatch[2]);
     const change = changeRequests.find((item) => item.id === changeId && item.event_request_id === id);
-    await readJson(request);
+    const body = await readJson(request);
     if (!change) {
       send(response, 404, { detail: "Change request not found" });
       return;
     }
-    send(response, 409, { detail: {
-      code: "CHANGE_DECISIONS_UNAVAILABLE",
-      message: "Approval and rejection are unavailable until arrangement review is supported.",
-    } });
+    if (!["Approved", "Rejected"].includes(body.decision)) {
+      send(response, 422, { detail: "Invalid change decision" });
+      return;
+    }
+    const prepared = bookingPlanOutcomes.get(change.id);
+    if (prepared && body.decision === "Approved") {
+      if (JSON.stringify(body.booking_plan) !== JSON.stringify(prepared.expected_booking_plan)) {
+        send(response, 422, { detail: "Browser did not submit the prepared complete booking plan" }); return;
+      }
+      records.set(id, structuredClone(prepared.saved_event));
+      Object.assign(change, structuredClone(prepared.saved_change));
+      send(response, 200, change); return;
+    }
+    const fields = Object.keys(change.proposed_changes);
+    if (body.decision === "Approved" && !fields.every((key) => ["expected_attendance", "venue_requirements", "equipment_requirements"].includes(key))) {
+      send(response, 409, { detail: { code: "CHANGE_DECISIONS_UNAVAILABLE", message: "Date and registration changes remain unavailable." } });
+      return;
+    }
+    if (body.decision === "Rejected" && (!body.reason?.trim() || body.reason.trim().length > 2000)) {
+      send(response, 422, { detail: "Enter a rejection reason" });
+      return;
+    }
+    if (change.status !== "Pending" || !["Approved", "Planning"].includes(record.status)
+        || (body.decision === "Approved" && change.base_event_updated_at !== record.updated_at)) {
+      send(response, 409, { detail: "The change cannot be decided in its current state" });
+      return;
+    }
+    // AC3-X6: canned browser response only; native tests own actual atomic application/64 flags and locked authorisation.
+    if (body.decision === "Approved") records.set(id, { ...record, ...change.proposed_changes, updated_at: new Date().toISOString() });
+    change.status = body.decision;
+    change.coordinator_id = user.id;
+    change.decision_reason = body.reason?.trim() || null;
+    change.decided_at = new Date().toISOString();
+    send(response, 200, change);
     return;
   }
 

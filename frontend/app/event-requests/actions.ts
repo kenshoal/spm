@@ -300,6 +300,18 @@ export async function deleteEventRequest(
   return { deleted: true };
 }
 
+function replacementDateToIso(value: string): string | null {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if (!parts) return null;
+  const date = new Date(`${value}+08:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  const local = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  if (local.getUTCFullYear() !== Number(parts[1]) || local.getUTCMonth() + 1 !== Number(parts[2])
+      || local.getUTCDate() !== Number(parts[3]) || local.getUTCHours() !== Number(parts[4])
+      || local.getUTCMinutes() !== Number(parts[5]) || local.getUTCSeconds() !== Number(parts[6] ?? 0)) return null;
+  return date.toISOString();
+}
+
 export async function createEventChangeRequest(
   eventRequestId: string,
   previousState: EventChangeRequestState,
@@ -310,7 +322,7 @@ export async function createEventChangeRequest(
   const explanation = String(formData.get("explanation") ?? "").trim();
   const payload: Record<string, unknown> = { explanation };
   const attendance = String(formData.get("expected_attendance") ?? "").trim();
-  const dateTime = String(formData.get("proposed_date_time") ?? "").trim();
+  const dateTimes = formData.getAll("proposed_date_time").map((value) => String(value).trim()).filter(Boolean);
   for (const field of [
     "venue_requirements",
     "equipment_requirements",
@@ -326,9 +338,12 @@ export async function createEventChangeRequest(
     }
     payload.expected_attendance = parsed;
   }
-  if (dateTime) {
-    const parsedDateTime = singaporeDateTimeToIso(dateTime);
-    if (parsedDateTime) payload.proposed_date_times = [parsedDateTime];
+  if (dateTimes.length) {
+    const parsed = dateTimes.map(replacementDateToIso);
+    if (parsed.some((value) => value === null)) {
+      return { message: "Check every proposed date and time before sending.", errors: { proposed_changes: "Every entered replacement date and time must be valid." } };
+    }
+    payload.proposed_date_times = parsed;
   }
   if (!explanation) {
     return { message: "Explain why the event plan should change.", errors: { explanation: "Enter a reason for the change." } };

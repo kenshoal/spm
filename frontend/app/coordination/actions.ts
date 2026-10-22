@@ -1,14 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAccessToken, requireRole } from "@/lib/auth";
+import { getEventChangeBookingPlan, getEventChangeDatePlan, type EventChangeBookingConflict, type EventChangeBookingPlan, type EventChangeDatePlan } from "@/lib/event-requests";
 
 export interface TransitionState {
   message?: string;
   errors?: { reason?: string };
   // SCRUM-58 AC3: what still blocks sending for safety review, one line each.
   outstanding?: string[];
+  bookingConflicts?: EventChangeBookingConflict[];
 }
 
 export type ReviewDecision = "Approved" | "Changes Requested" | "Rejected";
@@ -196,6 +198,16 @@ export async function decideEventChangeRequest(
   if (decision === "Rejected" && !reason) {
     return { message: "Explain why the change is rejected.", errors: { reason: "Enter a reason for the organiser." } };
   }
+  const rawPlan = formData.get("booking_plan");
+  let bookingPlan: unknown;
+  if (rawPlan !== null) {
+    try {
+      bookingPlan = JSON.parse(String(rawPlan));
+      if (decision !== "Approved" || !Array.isArray(bookingPlan)) throw new Error("Invalid plan");
+    } catch {
+      return { message: "Check the complete booking plan and try again." };
+    }
+  }
   const token = await requireAccessToken();
   let response: Response;
   try {
@@ -204,7 +216,7 @@ export async function decideEventChangeRequest(
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ decision, reason: reason || null }),
+        body: JSON.stringify({ decision, reason: reason || null, ...(rawPlan !== null ? { booking_plan: bookingPlan } : {}) }),
       },
     );
   } catch {
@@ -214,8 +226,11 @@ export async function decideEventChangeRequest(
   if (!response.ok) {
     if (response.status === 409) {
       const body = await response.json().catch(() => null);
+      if (body?.detail?.code === "BOOKING_CONFLICT" && Array.isArray(body.detail.bookings)) {
+        return { message: "One or more venue bookings conflict with this plan. Review the selected ranges.", bookingConflicts: body.detail.bookings };
+      }
       if (body?.detail?.code === "CHANGE_DECISIONS_UNAVAILABLE") {
-        return { message: "Approval and rejection are unavailable until arrangement review is supported." };
+        return { message: "This proposal contains changes that cannot be applied together." };
       }
     }
     return {
@@ -232,4 +247,85 @@ export async function decideEventChangeRequest(
   revalidatePath(`/event-requests/${eventRequestId}/edit`);
   revalidatePath("/event-requests");
   return {};
+}
+
+
+export interface PreviewDateChangeState {
+  plan?: EventChangeDatePlan;
+  message?: string;
+}
+
+/** Load on demand without applying a proposal, refreshing data or accepting form IDs. */
+export async function previewEventChangeDatePlan(
+  eventRequestId: string,
+  changeRequestId: string,
+  previousState: PreviewDateChangeState,
+  formData: FormData,
+): Promise<PreviewDateChangeState> {
+  void previousState;
+  void formData;
+  await requireRole("event_coordinator");
+  try {
+    const plan = await getEventChangeDatePlan(eventRequestId, changeRequestId);
+    return plan ? { plan } : { message: "Date change plan unavailable. Refresh the proposal and try again." };
+  } catch (error: unknown) {
+    unstable_rethrow(error);
+    return { message: "Date change plan unavailable. Refresh the proposal and try again." };
+  }
+}
+
+export interface RegistrationReviewState {
+  acknowledged?: boolean;
+  message?: string;
+}
+
+/** The API rechecks the verified coordinator and exact saved review under lock. */
+export async function acknowledgeRegistrationReview(
+  eventRequestId: string,
+  reviewId: string,
+  previousState: RegistrationReviewState,
+  formData: FormData,
+): Promise<RegistrationReviewState> {
+  void previousState;
+  void formData;
+  await requireRole("event_coordinator");
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/registration-reviews/${encodeURIComponent(reviewId)}/acknowledge`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    return { message: "Registration reviews unavailable. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (response.status === 403) return { message: "You are no longer assigned to acknowledge this registration review." };
+  if (response.status === 404) return { message: "This registration review is no longer available. Refresh the page." };
+  if (response.status === 409) return { message: "This registration review has already been acknowledged. Refresh the page." };
+  if (!response.ok) return { message: "Registration reviews unavailable. Please try again." };
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  return { acknowledged: true };
+}
+
+export interface BookingPlanState {
+  plan?: EventChangeBookingPlan;
+  message?: string;
+}
+
+/** Load complete proposal-scoped editor data only when the coordinator asks. */
+export async function loadEventChangeBookingPlan(
+  eventRequestId: string, changeRequestId: string, previousState: BookingPlanState, formData: FormData,
+): Promise<BookingPlanState> {
+  void previousState;
+  void formData;
+  await requireRole("event_coordinator");
+  try {
+    const plan = await getEventChangeBookingPlan(eventRequestId, changeRequestId);
+    return plan ? { plan } : { message: "Booking plan unavailable. Refresh the proposal and try again." };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { message: "Booking plan unavailable. Refresh the proposal and try again." };
+  }
 }
