@@ -17,14 +17,16 @@ import { SafetyReviewsPanel } from "../../../components/safety-reviews-panel";
 import { listSafetyReviews } from "@/lib/safety";
 import { formatBookingDates, listEventBookings } from "@/lib/event-bookings";
 import { listVenues } from "@/lib/venues";
+import { SUPPORT_STATUSES } from "@/lib/technical-support";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
 import { ChangeRequestPanel } from "./change-request-panel";
 import { VenueBookingsLoading, VenueBookingsPanel } from "./venue-bookings-panel";
+import { TechnicalSupportLoading, TechnicalSupportPanel } from "./technical-support-panel";
 
 import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
 
-async function CoordinatorRequestView({ id }: { id: string }) {
+async function CoordinatorRequestView({ id, currentUserId }: { id: string; currentUserId: string }) {
   const result = await getEventRequestStatusView(id)
     .then((view) => ({ ...view, failed: false as const }))
     .catch((error: unknown) => {
@@ -107,6 +109,15 @@ async function CoordinatorRequestView({ id }: { id: string }) {
       <Suspense fallback={<VenueBookingsLoading />}>
         <VenueBookingsPanel eventRequestId={request.id} />
       </Suspense>
+      {(SUPPORT_STATUSES as readonly string[]).includes(request.status) ? (
+        <Suspense fallback={<TechnicalSupportLoading />}>
+          <TechnicalSupportPanel
+            eventRequestId={request.id}
+            status={request.status}
+            currentUserId={currentUserId}
+          />
+        </Suspense>
+      ) : null}
       <Link
         href={`/venues/search${request.expected_attendance ? `?required_capacity=${request.expected_attendance}` : ""}`}
         className="mt-5 inline-flex min-h-11 items-center rounded-xl border border-[#cfd9d4] bg-white px-4 text-sm font-semibold text-[#0f6b5b] hover:bg-[#f4f7f5]"
@@ -150,7 +161,7 @@ export default async function CoordinationRequestPage({ params }: { params: Prom
   return (
     <AppShell signedIn navLinks={workspaceLinks(user.roles)}>
       <Suspense fallback={<DetailLoading />}>
-        {params.then(({ id }) => <CoordinatorRequestView id={id} />)}
+        {params.then(({ id }) => <CoordinatorRequestView id={id} currentUserId={user.id} />)}
       </Suspense>
     </AppShell>
   );

@@ -62,6 +62,7 @@ Role = Literal[
 
 DEFAULT_ROLE = "attendee"
 ADMIN_ROLE = "admin"
+EVENT_COORDINATOR_ROLE = "event_coordinator"
 EVENT_OPERATIONS_MANAGER_ROLE = "event_operations_manager"
 
 
@@ -341,8 +342,15 @@ def list_users_by_role(
     caller_roles = _staff_roles_of(caller, admin_client)
     can_list_any = ADMIN_ROLE in caller_roles
     can_list_coordinators = EVENT_OPERATIONS_MANAGER_ROLE in caller_roles
-    if not can_list_any and not (
-        can_list_coordinators and role == "event_coordinator"
+    # SCRUM-19: a coordinator lists Technical Support Staff for their event's
+    # assignment panel, and that role only.
+    can_list_technical_support = (
+        EVENT_COORDINATOR_ROLE in caller_roles and role == "technical_support"
+    )
+    if (
+        not can_list_any
+        and not (can_list_coordinators and role == "event_coordinator")
+        and not can_list_technical_support
     ):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
 

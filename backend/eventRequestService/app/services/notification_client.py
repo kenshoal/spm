@@ -86,6 +86,53 @@ class NotificationClient:
                 exc_info=True,
             )
 
+    def notify_technical_support_assigned(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        requirement_id: str,
+        skill_tag: str,
+        staff_id: str,
+        assigned_by: str,
+        assignment_id: str,
+    ) -> None:
+        """Tell the assigned staff member what they are on (SCRUM-19 AC5).
+
+        Sent once, after the assignment commits, with the assignment id as the
+        event id so notificationService's (recipient_id, event_id) key dedupes
+        a retry; a failed notice is logged and the assignment stands.
+        """
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": "technical_support_assigned",
+                    "recipient_id": staff_id,
+                    "event_id": assignment_id,
+                    "payload": {
+                        "event_request_id": event_request_id,
+                        "event_name": event_name,
+                        "requirement_id": requirement_id,
+                        "skill_tag": skill_tag,
+                        "assigned_by": assigned_by,
+                    },
+                },
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify technical support staff %s of assignment to "
+                "requirement %s on event request %s",
+                staff_id,
+                requirement_id,
+                event_request_id,
+                exc_info=True,
+            )
+
     def notify_clarification_requested(
         self, *, event_request_id: str, organiser_id: str, reason: str
     ) -> None:

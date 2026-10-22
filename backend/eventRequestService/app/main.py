@@ -16,12 +16,16 @@ from app.controllers.event_transition_controller import (
     router as event_transition_router,
 )
 from app.controllers.registration_controller import router as registration_router
+from app.controllers.technical_support_controller import (
+    router as technical_support_router,
+)
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.repositories.coordinator_assignment_repository import (
     CoordinatorAssignmentRepository,
 )
 from app.repositories.registration_repository import RegistrationRepository
+from app.repositories.technical_support_repository import TechnicalSupportRepository
 from app.services.arrangement_review_notification_relay import (
     ArrangementReviewNotificationRelay,
     build_arrangement_review_notification_relay,
@@ -50,6 +54,7 @@ from app.services.event_transition_service import (
     TransitionForbiddenError,
     TransitionNotAllowedError,
 )
+from app.services.notification_client import NotificationClient
 from app.services.outbox_relay import OutboxRelay, build_outbox_relay
 from app.services.registration_rules import (
     EventFullError,
@@ -60,6 +65,10 @@ from app.services.registration_service import (
     AlreadyRegisteredError,
     RegistrationService,
 )
+from app.services.technical_support_service import (
+    TechnicalSupportError,
+    TechnicalSupportService,
+)
 
 
 def create_app(
@@ -68,6 +77,8 @@ def create_app(
     outbox_relay: OutboxRelay | None = None,
     arrangement_review_relay: ArrangementReviewNotificationRelay | None = None,
     registration_repository: RegistrationRepository | None = None,
+    technical_support_repository: TechnicalSupportRepository | None = None,
+    technical_support_notification_client: NotificationClient | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -111,6 +122,18 @@ def create_app(
         if event_request_service is not None
         else None
     )
+    application.state.technical_support_service = (
+        TechnicalSupportService(
+            technical_support_repository,
+            event_request_service,
+            coordinator_repository,
+            technical_support_notification_client,
+        )
+        if technical_support_repository is not None
+        and event_request_service is not None
+        and coordinator_repository is not None
+        else None
+    )
     # Before event_request_router: routes match in registration order, and its
     # /event-requests/{event_request_id} would otherwise swallow the literal
     # /event-requests/awaiting-assignment and reject it as a malformed UUID.
@@ -118,6 +141,7 @@ def create_app(
     # (SCRUM-60), so keep both routers above event_request_router.
     application.include_router(coordinator_assignment_router)
     application.include_router(event_transition_router)
+    application.include_router(technical_support_router)
     application.include_router(event_request_router)
     application.include_router(arrangement_review_router)
     application.include_router(registration_router)
@@ -294,6 +318,19 @@ def create_app(
             content={
                 "detail": "You are already registered for this event",
                 "code": "already_registered",
+            },
+        )
+
+    # One handler renders every SCRUM-19 refusal: the error carries its own
+    # code and HTTP status, so subclasses need no handler each (D12).
+    @application.exception_handler(TechnicalSupportError)
+    async def technical_support_refusal(
+        request: Request, error: TechnicalSupportError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status,
+            content={
+                "detail": {"code": error.code, "message": str(error)},
             },
         )
 

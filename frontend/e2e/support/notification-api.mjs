@@ -11,6 +11,7 @@ const SESSIONS = {
   "coordinator-session": "playwright-coordinator",
   "other-coordinator-session": "other-coordinator",
   "ops-session": "playwright-ops",
+  "tech-session": "playwright-tech",
 };
 
 function send(response, status, body) {

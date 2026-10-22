@@ -33,6 +33,10 @@ decisions and lifecycle transitions. Records are persisted in Supabase.
 | `POST` | `/event-requests/{id}/change-requests` | Owning Organiser proposes structured changes to an Approved or Planning event |
 | `GET` | `/event-requests/{id}/change-requests` | Owning Organiser or assigned Coordinator reads the amendment history |
 | `POST` | `/event-requests/{id}/change-requests/{change_id}/decision` | Deferred: assigned Coordinator receives 409 `CHANGE_DECISIONS_UNAVAILABLE`; no decision is applied |
+| `POST` | `/event-requests/{id}/technical-support/requirements` | Assigned Coordinator records a technical-support requirement (description plus one skill tag) on an Approved, Planning or Confirmed event (SCRUM-19) |
+| `GET` | `/event-requests/{id}/technical-support` | The event's requirements with their assigned staff; the assigned Coordinator or any Technical Support Staff |
+| `GET` | `/event-requests/{id}/technical-support/requirements/{rid}/candidates` | Technical Support Staff holding the requirement's skill, with `already_assigned`; assigned Coordinator only |
+| `POST` | `/event-requests/{id}/technical-support/requirements/{rid}/assignments` | Assigned Coordinator assigns a suitable staff member; the staff member is notified |
 | `GET` | `/health` | Service health check |
 
 Every event-request operation requires `Authorization: Bearer <access-token>`.
@@ -92,7 +96,42 @@ registration_capacity, places_remaining`. The write runs `register_for_event`
 (migration `0029`), which locks the event row, so two attendees racing for the
 last place cannot both succeed. Refusals carry a `code` beside `detail`.
 
-## Status transitions
+## Technical support (SCRUM-19)
+
+Recording, listing candidates and assigning require the event's
+**latest-assigned** `event_coordinator` (an unrelated coordinator gets 404, any
+other role 403); the view also answers any `technical_support` (no session 401).
+Support work is only allowed from `Approved`, `Planning` and `Confirmed`; a
+requirement is a description (1–2000 characters, not blank) plus one skill tag
+of `audio_visual`, `lighting`, `it_network` or `livestream`. A person is
+suitable only when they hold the `technical_support` role **and** the
+requirement's tag — no availability or double-booking check exists in this
+slice.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/event-requests/{id}/technical-support/requirements` | Record a requirement (201). 409 `support_not_allowed` from any other status |
+| `GET` | `/event-requests/{id}/technical-support` | Requirements with their assigned staff (who, assigned by, when), stable order, `[]` when none |
+| `GET` | `/event-requests/{id}/technical-support/requirements/{rid}/candidates` | Suitable staff ids ascending with `already_assigned` |
+| `POST` | `/event-requests/{id}/technical-support/requirements/{rid}/assignments` | Assign (201). 409 `support_not_allowed` / `staff_not_suitable` / `already_assigned`; the repeat of the same person is refused |
+
+Writes run the `record_technical_support_requirement` and
+`assign_technical_support_staff` database functions (migration `0052`, apply
+before deploying this service version), which lock the event row shared with
+coordinator assignment and status transitions and recheck the coordinator,
+status, requirement's event and suitability at write time. Refusal bodies are
+`{"detail": {"code", "message"}}` with the codes above; 404s say
+`event_request_not_found` or `requirement_not_found` without disclosing other
+events' state. Skill tags are seeded in SQL
+(`database/seed_technical_support_skills.sql`); a screen to maintain them is a
+separate story. A successful assignment sends one
+`technical_support_assigned` notification to the new staff member after the
+commit. Delivery is best-effort, matching SCRUM-14's coordinator-assignment
+notices rather than the submission outbox: the client logs a failed notice
+and moves on, so a message can be lost while notificationService is down and
+nothing retries it. The assignment stands either way.
+
+
 
 The database migration `0011_event_request_review_status.sql` permits the full
 agreed status vocabulary. This service writes only the following transitions:

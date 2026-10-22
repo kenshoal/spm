@@ -30,6 +30,7 @@ Optionally set `SUPABASE_SECRET_KEY` (service-role key) to enable role assignmen
 - `GET /auth/me` verifies a `Bearer` access token with Supabase and returns the authenticated user ID plus all assigned roles; missing or invalid tokens receive 401.
 - Roles are read per request from the `staff_roles` table. During migration, `app_metadata.role(s)` remains a fallback; without any stored role the caller is treated as `attendee`.
 - `PATCH /auth/users/{user_id}/role` assigns a role (`admin`, `attendee`, `event_coordinator`, `event_operations_manager`, `event_organiser`, `technical_support`, `venue_staff`). Admin can assign any role; Event Coordinator Lead (role id `event_operations_manager`) can assign only `event_coordinator`; requires `SUPABASE_SECRET_KEY` (503 if unset). authService sees table changes immediately; clients using JWT role claims must refresh their token.
+- `GET /auth/users?role=<role>` lists the holders of a role (id and email, ids ascending). Admin can list any role; Event Coordinator Lead can list `event_coordinator`; since SCRUM-19 an Event Coordinator can list `technical_support` only, for the assignment panel on their events. Anyone else receives 403.
 
 The previous in-memory user store and local password hashing have been removed to avoid maintaining a second authentication source.
 

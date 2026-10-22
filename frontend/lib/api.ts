@@ -42,3 +42,17 @@ export async function readDetail(response: Response): Promise<string | null> {
     return null;
   }
 }
+
+// Some refusals carry a coded body, {"detail": {"code", "message"}}; the
+// wording for each code belongs to the action that made the call.
+export async function readErrorCode(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    const detail = body.detail;
+    if (typeof detail !== "object" || detail === null) return null;
+    const code = (detail as { code?: unknown }).code;
+    return typeof code === "string" ? code : null;
+  } catch {
+    return null;
+  }
+}

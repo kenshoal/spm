@@ -6,6 +6,15 @@ const assignments = [];
 const reviewDecisions = [];
 const changeRequests = [];
 const statusHistory = [];
+// SCRUM-19 UI fixtures only; the real rules live in eventRequestService's own tests.
+const technicalSupportRequirements = new Map();
+const technicalSupportAssignments = new Map();
+const SKILL_TAGS = new Set(["audio_visual", "lighting", "it_network", "livestream"]);
+const SUPPORT_STATUSES = new Set(["Approved", "Planning", "Confirmed"]);
+// Mirrors the technical_support session defined in auth-api.mjs.
+const TECHNICAL_SUPPORT_STAFF = [
+  { id: "playwright-tech", email: "technical_support@example.com", tags: ["audio_visual", "it_network"] },
+];
 // Prepared UI fixture storage only; real permissions and clear atomicity have separate API/PG tests.
 const arrangementReviews = new Map();
 let nextHistoryId = 1;
@@ -294,6 +303,128 @@ createServer(async (request, response) => {
   if (safetyReviewsMatch && request.method === "GET") {
     const eventId = decodeURIComponent(safetyReviewsMatch[1]);
     send(response, 200, safetyReviews.filter((review) => review.event_request_id === eventId));
+    return;
+  }
+
+  // SCRUM-19: mirrors eventRequestService's technical support endpoints. The
+  // real rules (locked rechecks inside the database functions, notification
+  // emission) are covered by its own API and database tests; this only
+  // prepares the UI fixtures the panel needs. Additive to the routes above.
+  const techViewMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/technical-support$/);
+  const techReqMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/technical-support\/requirements$/);
+  const techCandMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/technical-support\/requirements\/([^/]+)\/candidates$/);
+  const techAssignMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/technical-support\/requirements\/([^/]+)\/assignments$/);
+  if (techViewMatch || techReqMatch || techCandMatch || techAssignMatch) {
+    const eventId = decodeURIComponent(
+      techViewMatch?.[1] ?? techReqMatch?.[1] ?? techCandMatch?.[1] ?? techAssignMatch?.[1] ?? "",
+    );
+    const requirementId = techCandMatch ? decodeURIComponent(techCandMatch[2]) : techAssignMatch ? decodeURIComponent(techAssignMatch[2]) : null;
+    const event = records.get(eventId);
+    const requirements = technicalSupportRequirements.get(eventId) ?? [];
+    const latestCoordinator = latestAssignmentFor(eventId)?.coordinator_id;
+    const isAssignedCoordinator = user.role === "event_coordinator" && latestCoordinator === user.id;
+    const isTechnicalSupport = user.role === "technical_support";
+    const requirement = requirementId ? requirements.find((row) => row.id === requirementId) : null;
+
+    if (techViewMatch && request.method === "GET") {
+      if (!isAssignedCoordinator && !isTechnicalSupport) {
+        send(response, 403, { detail: "Insufficient permissions" });
+        return;
+      }
+      if (!event) {
+        send(response, 404, { detail: { code: "event_request_not_found", message: "Event request not found" } });
+        return;
+      }
+      if (user.role === "event_coordinator" && latestCoordinator !== user.id) {
+        send(response, 404, { detail: { code: "event_request_not_found", message: "Event request not found" } });
+        return;
+      }
+      send(response, 200, requirements.map((row) => ({
+        ...row,
+        assigned_staff: (technicalSupportAssignments.get(row.id) ?? [])
+          .sort((a, b) => a.assigned_at.localeCompare(b.assigned_at) || a.staff_id.localeCompare(b.staff_id)),
+      })));
+      return;
+    }
+
+    if (techReqMatch && request.method === "POST") {
+      if (!isAssignedCoordinator) {
+        send(response, isTechnicalSupport ? 403 : 404, { detail: { code: "event_request_not_found", message: "Event request not found" } });
+        return;
+      }
+      if (!event || !SUPPORT_STATUSES.has(event.status)) {
+        send(response, 409, { detail: { code: "support_not_allowed", message: "Technical support is not allowed in this status" } });
+        return;
+      }
+      const body = await readJson(request);
+      const description = typeof body.description === "string" ? body.description.trim() : "";
+      if (description.length < 1 || description.length > 2000 || !SKILL_TAGS.has(body.skill_tag)) {
+        send(response, 422, { detail: "Invalid requirement" });
+        return;
+      }
+      const row = {
+        id: randomUUID(),
+        event_request_id: eventId,
+        description,
+        skill_tag: body.skill_tag,
+        recorded_by: user.id,
+        recorded_at: new Date().toISOString(),
+      };
+      requirements.push(row);
+      technicalSupportRequirements.set(eventId, requirements);
+      send(response, 201, { ...row, assigned_staff: [] });
+      return;
+    }
+
+    if (!event) {
+      send(response, 404, { detail: { code: "event_request_not_found", message: "Event request not found" } });
+      return;
+    }
+    if (!isAssignedCoordinator) {
+      send(response, isTechnicalSupport ? 403 : 404, { detail: { code: "event_request_not_found", message: "Event request not found" } });
+      return;
+    }
+    if (!requirement) {
+      send(response, 404, { detail: { code: "requirement_not_found", message: "Technical support requirement not found" } });
+      return;
+    }
+
+    if (techCandMatch && request.method === "GET") {
+      const assigned = new Set((technicalSupportAssignments.get(requirementId) ?? []).map((row) => row.staff_id));
+      send(response, 200, TECHNICAL_SUPPORT_STAFF
+        .filter((staff) => staff.tags.includes(requirement.skill_tag))
+        .map((staff) => ({ staff_id: staff.id, already_assigned: assigned.has(staff.id) })));
+      return;
+    }
+
+    if (techAssignMatch && request.method === "POST") {
+      if (!SUPPORT_STATUSES.has(event.status)) {
+        send(response, 409, { detail: { code: "support_not_allowed", message: "Technical support is not allowed in this status" } });
+        return;
+      }
+      const body = await readJson(request);
+      const staff = TECHNICAL_SUPPORT_STAFF.find((person) => person.id === body.staff_id);
+      if (!staff || !staff.tags.includes(requirement.skill_tag)) {
+        send(response, 409, { detail: { code: "staff_not_suitable", message: "The staff member does not hold the required skill" } });
+        return;
+      }
+      const assignments = technicalSupportAssignments.get(requirementId) ?? [];
+      if (assignments.some((row) => row.staff_id === body.staff_id)) {
+        send(response, 409, { detail: { code: "already_assigned", message: "Already assigned to this requirement" } });
+        return;
+      }
+      const row = {
+        staff_id: body.staff_id,
+        assigned_by: user.id,
+        assigned_at: new Date().toISOString(),
+      };
+      assignments.push(row);
+      technicalSupportAssignments.set(requirementId, assignments);
+      send(response, 201, { id: randomUUID(), requirement_id: requirementId, event_request_id: eventId, ...row });
+      return;
+    }
+
+    send(response, 405, { detail: "Method not allowed" });
     return;
   }
   const historyMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/status-history$/);
