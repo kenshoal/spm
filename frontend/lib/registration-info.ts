@@ -7,6 +7,8 @@ export interface EventRegistration {
   attendee_id: string;
   status: string;
   created_at: string;
+  /** SCRUM-41: the coordinator who entered it; null when self-registered. */
+  registered_by: string | null;
 }
 
 export interface RegistrationInfo {

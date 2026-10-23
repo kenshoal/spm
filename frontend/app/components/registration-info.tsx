@@ -1,11 +1,14 @@
 import { unstable_rethrow } from "next/navigation";
 import { formatDateTime } from "@/lib/event-requests";
 import { getRegistrationInfo, type RegistrationInfo } from "@/lib/registration-info";
+import { ManualRegistrationForm } from "../coordination/requests/[id]/manual-registration-form";
 
 const sectionClass = "mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6";
 
 /** SCRUM-34: attendees are shown by account id only; no contact details exist here. */
-export async function RegistrationInfoPanel({ eventRequestId }: { eventRequestId: string }) {
+export async function RegistrationInfoPanel({ eventRequestId, canAddAttendee = false }: {
+  eventRequestId: string; canAddAttendee?: boolean;
+}) {
   let info: RegistrationInfo;
   try {
     info = await getRegistrationInfo(eventRequestId);
@@ -33,18 +36,20 @@ export async function RegistrationInfoPanel({ eventRequestId }: { eventRequestId
         <p className="mt-4 text-sm text-[#68776f]">No one has registered yet.</p>
       ) : (
         <table className="mt-4 w-full text-left text-sm">
-          <thead className="text-xs text-[#68776f]"><tr><th className="py-2">Attendee</th><th>Status</th><th>Registered</th></tr></thead>
+          <thead className="text-xs text-[#68776f]"><tr><th className="py-2">Attendee</th><th>Status</th><th>Registered</th><th>Added by</th></tr></thead>
           <tbody>
             {info.registrations.map((row) => (
               <tr key={row.id} className="border-t border-[#e1e7e4]">
                 <td className="py-2 font-mono text-xs break-all">{row.attendee_id}</td>
                 <td>{row.status}</td>
                 <td><time dateTime={row.created_at}>{formatDateTime(row.created_at)}</time></td>
+                <td>{row.registered_by ? `Coordinator ${row.registered_by}` : "Self"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      {canAddAttendee ? <ManualRegistrationForm eventRequestId={eventRequestId} /> : null}
     </section>
   );
 }
