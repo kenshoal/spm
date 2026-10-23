@@ -14,13 +14,16 @@ EVENT_COLUMNS = (
     "registration_opens_at,registration_closes_at,registration_capacity"
 )
 
+REGISTRATION_COLUMNS = "id,event_request_id,attendee_id,status,created_at,withdrawn_at"
+
 
 class RegistrationRpcError(SupabaseRepositoryError):
-    """`register_for_event` refused the call.
+    """`register_for_event` or `withdraw_registration` refused the call.
 
     errcode is the Postgres ERRCODE (P0002 event not found, P0004 refused) and
     reason the function's message ('registration not open', 'already registered',
-    'event full'), so callers never parse prose written for people.
+    'event full', and for `withdraw_registration` 'registration not found',
+    'already withdrawn', 'withdrawal not permitted'), so callers never parse prose written for people.
     """
 
     def __init__(
@@ -48,6 +51,12 @@ class RegistrationRepository(Protocol):
 
     def register(
         self, event_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
+    def get_registration(self, registration_id: str) -> dict[str, Any] | None: ...
+
+    def withdraw(
+        self, registration_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]: ...
 
 
@@ -148,7 +157,7 @@ class SupabaseRegistrationRepository:
         return self._get(
             "/event_registrations",
             {
-                "select": "id,event_request_id,attendee_id,status,created_at",
+                "select": REGISTRATION_COLUMNS,
                 "attendee_id": f"eq.{attendee_id}",
                 "order": "created_at.desc",
             },
@@ -157,29 +166,58 @@ class SupabaseRegistrationRepository:
     def register(
         self, event_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]:
+        return self._rpc(
+            "register_for_event",
+            {
+                "p_event_request_id": event_id,
+                "p_attendee_id": attendee_id,
+                "p_now": now.isoformat(),
+            },
+            action="registration",
+        )
+
+    def get_registration(self, registration_id: str) -> dict[str, Any] | None:
+        rows = self._get(
+            "/event_registrations",
+            {"select": REGISTRATION_COLUMNS, "id": f"eq.{registration_id}"},
+        )
+        return rows[0] if rows else None
+
+    def withdraw(
+        self, registration_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        return self._rpc(
+            "withdraw_registration",
+            {
+                "p_registration_id": registration_id,
+                "p_attendee_id": attendee_id,
+                "p_now": now.isoformat(),
+            },
+            action="withdrawal",
+        )
+
+    def _rpc(
+        self, function: str, payload: dict[str, str], action: str
+    ) -> dict[str, Any]:
         try:
             response = self._client.post(
-                "/rpc/register_for_event",
-                json={
-                    "p_event_request_id": event_id,
-                    "p_attendee_id": attendee_id,
-                    "p_now": now.isoformat(),
-                },
+                f"/rpc/{function}",
+                json=payload,
                 headers={"Accept": "application/vnd.pgrst.object+json"},
             )
         except httpx.HTTPError as error:
             raise SupabaseRepositoryError(
-                "Supabase could not complete the registration"
+                f"Supabase could not complete the {action}"
             ) from error
         if response.status_code >= 500:
-            raise SupabaseRepositoryError("Supabase could not complete the registration")
+            raise SupabaseRepositoryError(f"Supabase could not complete the {action}")
         if response.is_error:
             try:
                 body = response.json()
             except ValueError:
                 body = {}
             raise RegistrationRpcError(
-                "Supabase rejected the registration",
+                f"Supabase rejected the {action}",
                 errcode=body.get("code"),
                 reason=body.get("message"),
             )

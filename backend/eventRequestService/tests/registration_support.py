@@ -132,6 +132,65 @@ class FakeRegistrationRepository:
         self.registrations.append(row)
         return dict(row)
 
+    # -- SCRUM-22: withdrawal ----------------------------------------------
+    def get_registration(self, registration_id: str) -> dict[str, Any] | None:
+        for r in self.registrations:
+            if r["id"] == registration_id:
+                return dict(r)
+        return None
+
+    def withdraw(
+        self, registration_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """Mirrors `withdraw_registration`: owner, already withdrawn, event state."""
+        row = next(
+            (
+                r
+                for r in self.registrations
+                if r["id"] == registration_id and r["attendee_id"] == attendee_id
+            ),
+            None,
+        )
+        if row is None:
+            raise RegistrationRpcError(
+                "registration not found", "P0002", "registration not found"
+            )
+        if row["status"] == "Withdrawn":
+            raise RegistrationRpcError(
+                "already withdrawn", "P0004", "already withdrawn"
+            )
+        event = self.events[row["event_request_id"]]
+        dates = event.get("proposed_date_times") or []
+        if event["status"] != "Confirmed" or not dates or now >= min(dates):
+            raise RegistrationRpcError(
+                "withdrawal not permitted", "P0004", "withdrawal not permitted"
+            )
+        row["status"] = "Withdrawn"
+        row["withdrawn_at"] = now
+        return dict(row)
+
+
+def add_registration(
+    repository: FakeRegistrationRepository,
+    event_id: str,
+    attendee_id: str,
+    **overrides: Any,
+) -> str:
+    """Store one registration directly and return its id."""
+    registration_id = str(uuid4())
+    repository.registrations.append(
+        {
+            "id": registration_id,
+            "event_request_id": event_id,
+            "attendee_id": attendee_id,
+            "status": "Registered",
+            "created_at": NOW - timedelta(days=1),
+            "withdrawn_at": None,
+            **overrides,
+        }
+    )
+    return registration_id
+
 
 def add_event(
     repository: FakeRegistrationRepository, **overrides: Any
