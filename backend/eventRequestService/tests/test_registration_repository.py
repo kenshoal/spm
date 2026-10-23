@@ -188,3 +188,20 @@ def test_has_active_queries_event_and_attendee() -> None:
     assert seen[0].url.params["attendee_id"] == "eq.a1"
     assert seen[0].url.params["status"] == "eq.Registered"
     assert seen[0].url.params["limit"] == "1"
+
+
+# AC3-X1 (cross-cutting): every registration is read, past the Data API's 1,000-row cap
+def test_list_for_event_pages_past_the_row_cap() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        size = 1000 if request.url.params["offset"] == "0" else 1
+        return httpx.Response(200, json=[{"id": str(i)} for i in range(size)])
+
+    rows = make_repository(handler).list_for_event("e1")
+
+    assert len(rows) == 1001
+    assert [r.url.params["offset"] for r in seen] == ["0", "1000"]
+    assert seen[0].url.params["event_request_id"] == "eq.e1"
+    assert seen[0].url.params["select"] == "id,attendee_id,status,created_at"

@@ -16,6 +16,9 @@ from app.controllers.event_request_controller import router as event_request_rou
 from app.controllers.event_transition_controller import (
     router as event_transition_router,
 )
+from app.controllers.registration_controller import (
+    management_router as registration_info_router,
+)
 from app.controllers.registration_controller import router as registration_router
 from app.controllers.technical_support_controller import (
     router as technical_support_router,
@@ -116,7 +119,7 @@ def create_app(
     application.state.event_request_service = event_request_service
     application.state.coordinator_assignment_service = coordinator_assignment_service
     application.state.registration_service = (
-        RegistrationService(registration_repository)
+        RegistrationService(registration_repository, coordinator_repository)
         if registration_repository is not None
         else None
     )
@@ -148,6 +151,7 @@ def create_app(
     application.include_router(event_request_router)
     application.include_router(arrangement_review_router)
     application.include_router(registration_router)
+    application.include_router(registration_info_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(

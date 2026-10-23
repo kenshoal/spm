@@ -13,6 +13,8 @@ EVENT_COLUMNS = (
     "id,status,event_name,purpose,description,proposed_date_times,"
     "registration_opens_at,registration_closes_at,registration_capacity"
 )
+# The Data API's default max-rows; list_for_event pages past it.
+PAGE_SIZE = 1000
 
 
 class RegistrationRpcError(SupabaseRepositoryError):
@@ -45,6 +47,10 @@ class RegistrationRepository(Protocol):
     def has_active(self, event_id: str, attendee_id: str) -> bool: ...
 
     def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]: ...
+
+    def get_event_access(self, event_id: str) -> dict[str, Any] | None: ...
+
+    def list_for_event(self, event_id: str) -> list[dict[str, Any]]: ...
 
     def register(
         self, event_id: str, attendee_id: str, now: datetime
@@ -153,6 +159,31 @@ class SupabaseRegistrationRepository:
                 "order": "created_at.desc",
             },
         )
+
+    def get_event_access(self, event_id: str) -> dict[str, Any] | None:
+        """Who may manage the event and its capacity (SCRUM-34)."""
+        rows = self._get(
+            "/event_requests",
+            {"select": "id,organiser_id,registration_capacity", "id": f"eq.{event_id}"},
+        )
+        return rows[0] if rows else None
+
+    def list_for_event(self, event_id: str) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        while True:
+            page = self._get(
+                "/event_registrations",
+                {
+                    "select": "id,attendee_id,status,created_at",
+                    "event_request_id": f"eq.{event_id}",
+                    "order": "created_at.asc,id.asc",
+                    "limit": str(PAGE_SIZE),
+                    "offset": str(len(rows)),
+                },
+            )
+            rows.extend(page)
+            if len(page) < PAGE_SIZE:
+                return rows
 
     def register(
         self, event_id: str, attendee_id: str, now: datetime

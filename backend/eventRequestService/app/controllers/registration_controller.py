@@ -11,11 +11,23 @@ from app.controllers.event_request_controller import (
     AuthenticatedCaller,
     get_authenticated_caller,
 )
-from app.models.registration import PublicEventResponse, RegistrationResponse
+from app.models.registration import (
+    PublicEventResponse,
+    RegistrationInfoResponse,
+    RegistrationResponse,
+)
+from app.repositories.coordinator_assignment_repository import (
+    SupabaseCoordinatorAssignmentRepository,
+)
 from app.repositories.registration_repository import SupabaseRegistrationRepository
-from app.services.registration_service import RegistrationService
+from app.services.registration_service import (
+    EVENT_COORDINATOR_ROLE,
+    EVENT_ORGANISER_ROLE,
+    RegistrationService,
+)
 
 router = APIRouter(prefix="/attendee", tags=["attendee registration"])
+management_router = APIRouter(prefix="/event-requests", tags=["registration info"])
 ATTENDEE_ROLE = "attendee"
 
 
@@ -27,13 +39,16 @@ def get_registration_service(request: Request) -> RegistrationService:
 
     try:
         repository = SupabaseRegistrationRepository.from_settings(get_settings())
+        coordinators = SupabaseCoordinatorAssignmentRepository.from_settings(
+            get_settings()
+        )
     except ValidationError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Supabase is not configured for eventRequestService",
         ) from error
 
-    service = RegistrationService(repository)
+    service = RegistrationService(repository, coordinators)
     request.app.state.registration_service = service
     return service
 
@@ -89,3 +104,16 @@ def list_my_registrations(
     service: ServiceDependency,
 ) -> list[dict]:
     return service.list_registrations(attendee_id)
+
+
+@management_router.get(
+    "/{event_request_id}/registrations", response_model=RegistrationInfoResponse
+)
+def get_registration_info(
+    event_request_id: UUID,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+) -> dict:
+    if set(caller.roles).isdisjoint({EVENT_ORGANISER_ROLE, EVENT_COORDINATOR_ROLE}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return service.registration_info(str(event_request_id), caller.id, caller.roles)

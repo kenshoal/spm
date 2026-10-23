@@ -18,6 +18,26 @@ class PublicEventResponse(BaseModel):
     places_remaining: int | None
 
 
+class EventRegistrationRow(BaseModel):
+    """One registration as its organiser or coordinator sees it: no contact data."""
+
+    id: str
+    attendee_id: str
+    status: str
+    created_at: datetime
+
+
+class RegistrationInfoResponse(BaseModel):
+    """SCRUM-34 AC3: every registration on the event plus the aggregate counts."""
+
+    event_request_id: str
+    registration_capacity: int | None
+    registered: int
+    withdrawn: int
+    places_available: int | None
+    registrations: list[EventRegistrationRow]
+
+
 class RegistrationResponse(BaseModel):
     id: str
     event_request_id: str

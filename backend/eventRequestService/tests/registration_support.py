@@ -89,6 +89,16 @@ class FakeRegistrationRepository:
             for r in self.registrations
         )
 
+    def get_event_access(self, event_id: str) -> dict[str, Any] | None:
+        row = self.events.get(event_id)
+        if row is None:
+            return None
+        return {k: row.get(k) for k in ("id", "organiser_id", "registration_capacity")}
+
+    def list_for_event(self, event_id: str) -> list[dict[str, Any]]:
+        rows = [r for r in self.registrations if r["event_request_id"] == event_id]
+        return [dict(r) for r in sorted(rows, key=lambda r: (r["created_at"], r["id"]))]
+
     def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]:
         mine = [r for r in self.registrations if r["attendee_id"] == attendee_id]
         return [dict(r) for r in sorted(mine, key=lambda r: r["created_at"],
@@ -174,13 +184,26 @@ def fill(
         )
 
 
+class FakeCoordinatorAssignments:
+    """Only what SCRUM-34 reads: assignment rows, latest last."""
+
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+        self.rows = rows or []
+
+    def latest_for_event_request(self, event_request_id: str) -> dict[str, Any] | None:
+        rows = [r for r in self.rows if r["event_request_id"] == event_request_id]
+        return dict(rows[-1]) if rows else None
+
+
 def make_client(
     repository: FakeRegistrationRepository | None = None,
     caller_id: str = ATTENDEE_A,
     roles: tuple[str, ...] = ("attendee",),
+    coordinators: FakeCoordinatorAssignments | None = None,
 ) -> TestClient:
     application = create_app(
-        registration_repository=repository or FakeRegistrationRepository()
+        registration_repository=repository or FakeRegistrationRepository(),
+        coordinator_repository=coordinators or FakeCoordinatorAssignments(),
     )
     application.dependency_overrides[
         event_request_controller.get_authenticated_caller
