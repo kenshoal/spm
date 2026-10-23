@@ -55,23 +55,45 @@ class BookingNotifier:
                 "event_type": f"venue_booking_{booking.status.value}",
                 "recipient_id": booking.requested_by,
                 "event_id": f"booking-decision:{booking.id}",
-                "payload": {
-                    "booking_request_id": booking.id,
-                    "event_request_id": booking.event_request_id,
-                    "event_name": booking.event_name,
-                    "venue_id": booking.venue_id,
-                    "venue_name": venue_name,
-                    "start_date": booking.start_date.isoformat(),
-                    "end_date": booking.end_date.isoformat(),
-                    "slots": [slot.value for slot in booking.slots],
-                    "start_minute": booking.start_minute,
-                    "end_minute": booking.end_minute,
-                    "decision_reason": booking.decision_reason,
-                    "suggested_alternative": booking.suggested_alternative,
-                    "decided_by": booking.decided_by,
-                },
+                "payload": _decision_payload(booking, venue_name),
             }
         )
+
+    def notify_organiser_of_rejection(
+        self, booking: BookingRequest, venue_name: str | None, organiser_id: str
+    ) -> None:
+        """Tell the event's Organiser a venue was refused (SCRUM-36 AC2).
+
+        Same payload as the Coordinator's notice, under its own key so neither
+        notice hides the other. Approvals are not sent: the Organiser can do
+        nothing with them.
+        """
+        self.send(
+            {
+                "event_type": "venue_booking_rejected",
+                "recipient_id": organiser_id,
+                "event_id": f"booking-organiser:{booking.id}",
+                "payload": _decision_payload(booking, venue_name),
+            }
+        )
+
+
+def _decision_payload(booking: BookingRequest, venue_name: str | None) -> dict[str, Any]:
+    return {
+        "booking_request_id": booking.id,
+        "event_request_id": booking.event_request_id,
+        "event_name": booking.event_name,
+        "venue_id": booking.venue_id,
+        "venue_name": venue_name,
+        "start_date": booking.start_date.isoformat(),
+        "end_date": booking.end_date.isoformat(),
+        "slots": [slot.value for slot in booking.slots],
+        "start_minute": booking.start_minute,
+        "end_minute": booking.end_minute,
+        "decision_reason": booking.decision_reason,
+        "suggested_alternative": booking.suggested_alternative,
+        "decided_by": booking.decided_by,
+    }
 
 
 def block_affects_booking_event(
