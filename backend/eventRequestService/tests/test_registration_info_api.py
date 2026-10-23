@@ -149,7 +149,10 @@ def test_rows_are_whitelisted_ordered_and_scoped_to_the_event() -> None:
         rows = client.get(info_path(event_id)).json()["registrations"]
 
     assert [r["id"] for r in rows] == [earlier["id"], later["id"]]
-    assert all(set(r) == {"id", "attendee_id", "status", "created_at"} for r in rows)
+    assert all(
+        set(r) == {"id", "attendee_id", "status", "created_at", "registered_by"}
+        for r in rows
+    )
     assert rows[0]["attendee_id"] == earlier["attendee_id"]
     assert rows[0]["status"] == "Registered"
 

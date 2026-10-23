@@ -67,6 +67,9 @@ from app.services.registration_rules import (
 )
 from app.services.registration_service import (
     AlreadyRegisteredError,
+    AttendeeAlreadyRegisteredError,
+    AttendeeNotFoundError,
+    CapacityNotSetError,
     RegistrationService,
 )
 from app.services.technical_support_service import (
@@ -325,6 +328,42 @@ def create_app(
             content={
                 "detail": "You are already registered for this event",
                 "code": "already_registered",
+            },
+        )
+
+    @application.exception_handler(AttendeeAlreadyRegisteredError)
+    async def attendee_already_registered(
+        request: Request, error: AttendeeAlreadyRegisteredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This attendee is already registered for this event",
+                "code": "already_registered",
+            },
+        )
+
+    @application.exception_handler(AttendeeNotFoundError)
+    async def attendee_not_found(
+        request: Request, error: AttendeeNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "detail": "No attendee account has that email",
+                "code": "attendee_not_found",
+            },
+        )
+
+    @application.exception_handler(CapacityNotSetError)
+    async def capacity_not_set(
+        request: Request, error: CapacityNotSetError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This event has no registration capacity set",
+                "code": "capacity_not_set",
             },
         )
 

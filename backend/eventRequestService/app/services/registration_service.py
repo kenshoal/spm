@@ -29,6 +29,18 @@ class AlreadyRegisteredError(Exception):
     """The attendee already holds an active registration for this event."""
 
 
+class AttendeeAlreadyRegisteredError(AlreadyRegisteredError):
+    """SCRUM-41: the same refusal, worded for the coordinator."""
+
+
+class AttendeeNotFoundError(Exception):
+    """No account with that email holds the attendee role."""
+
+
+class CapacityNotSetError(Exception):
+    """The event has no registration capacity, so no place can be given."""
+
+
 class RegistrationService:
     """Attendee view of Confirmed events and registration for them (SCRUM-21).
 
@@ -67,6 +79,24 @@ class RegistrationService:
             "places_available": places_remaining(event, registered),
             "registrations": rows,
         }
+
+    def register_attendee(
+        self, event_id: str, coordinator_id: str, attendee_email: str
+    ) -> dict[str, Any]:
+        """SCRUM-41: the database function checks assignment, status, attendee,
+        duplicate and capacity under the event lock, so there is no early check."""
+        try:
+            return self.repository.coordinator_register(
+                event_id, coordinator_id, attendee_email
+            )
+        except RegistrationRpcError as error:
+            if error.reason == "attendee not found":
+                raise AttendeeNotFoundError from error
+            if error.reason == "already registered":
+                raise AttendeeAlreadyRegisteredError from error
+            if error.reason == "capacity not set":
+                raise CapacityNotSetError from error
+            raise self._map_refusal(error) from error
 
     def _manages(
         self, event: dict[str, Any], caller_id: str, caller_roles: tuple[str, ...]

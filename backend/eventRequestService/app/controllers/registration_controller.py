@@ -12,6 +12,8 @@ from app.controllers.event_request_controller import (
     get_authenticated_caller,
 )
 from app.models.registration import (
+    ManualRegistrationCreate,
+    ManualRegistrationResponse,
     PublicEventResponse,
     RegistrationInfoResponse,
     RegistrationResponse,
@@ -117,3 +119,21 @@ def get_registration_info(
     if set(caller.roles).isdisjoint({EVENT_ORGANISER_ROLE, EVENT_COORDINATOR_ROLE}):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     return service.registration_info(str(event_request_id), caller.id, caller.roles)
+
+
+@management_router.post(
+    "/{event_request_id}/registrations",
+    response_model=ManualRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register_attendee(
+    event_request_id: UUID,
+    payload: ManualRegistrationCreate,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+) -> dict:
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return service.register_attendee(
+        str(event_request_id), caller.id, payload.attendee_email
+    )

@@ -56,6 +56,10 @@ class RegistrationRepository(Protocol):
         self, event_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]: ...
 
+    def coordinator_register(
+        self, event_id: str, coordinator_id: str, attendee_email: str
+    ) -> dict[str, Any]: ...
+
 
 class SupabaseRegistrationRepository:
     def __init__(
@@ -174,7 +178,7 @@ class SupabaseRegistrationRepository:
             page = self._get(
                 "/event_registrations",
                 {
-                    "select": "id,attendee_id,status,created_at",
+                    "select": "id,attendee_id,status,created_at,registered_by",
                     "event_request_id": f"eq.{event_id}",
                     "order": "created_at.asc,id.asc",
                     "limit": str(PAGE_SIZE),
@@ -188,14 +192,33 @@ class SupabaseRegistrationRepository:
     def register(
         self, event_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]:
+        return self._rpc(
+            "register_for_event",
+            {
+                "p_event_request_id": event_id,
+                "p_attendee_id": attendee_id,
+                "p_now": now.isoformat(),
+            },
+        )
+
+    def coordinator_register(
+        self, event_id: str, coordinator_id: str, attendee_email: str
+    ) -> dict[str, Any]:
+        """SCRUM-41: `coordinator_register_attendee` rechecks everything under a lock."""
+        return self._rpc(
+            "coordinator_register_attendee",
+            {
+                "p_event_request_id": event_id,
+                "p_coordinator_id": coordinator_id,
+                "p_attendee_email": attendee_email,
+            },
+        )
+
+    def _rpc(self, function: str, payload: dict[str, str]) -> dict[str, Any]:
         try:
             response = self._client.post(
-                "/rpc/register_for_event",
-                json={
-                    "p_event_request_id": event_id,
-                    "p_attendee_id": attendee_id,
-                    "p_now": now.isoformat(),
-                },
+                f"/rpc/{function}",
+                json=payload,
                 headers={"Accept": "application/vnd.pgrst.object+json"},
             )
         except httpx.HTTPError as error:
