@@ -188,3 +188,50 @@ def test_has_active_queries_event_and_attendee() -> None:
     assert seen[0].url.params["attendee_id"] == "eq.a1"
     assert seen[0].url.params["status"] == "eq.Registered"
     assert seen[0].url.params["limit"] == "1"
+
+
+# SCRUM-38 AC2-X1 (cross-cutting): the Organiser is fetched by its own query, one
+# column of one event, so the public event columns stay free of internal ones.
+def test_organiser_lookup_selects_only_the_organiser() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[{"organiser_id": "org-1"}])
+
+    assert make_repository(handler).get_organiser_id("e1") == "org-1"
+    assert seen[0].url.path == "/rest/v1/event_requests"
+    assert seen[0].url.params["select"] == "organiser_id"
+    assert seen[0].url.params["id"] == "eq.e1"
+    assert "organiser_id" not in EVENT_COLUMNS
+
+
+# SCRUM-38 AC2-P1 (partition): an unknown event has no Organiser.
+def test_organiser_lookup_of_an_unknown_event_is_none() -> None:
+    repo = make_repository(lambda request: httpx.Response(200, json=[]))
+
+    assert repo.get_organiser_id("missing") is None
+
+
+# SCRUM-38 AC2-H4 (happy): the Coordinator is the newest assignment row for the event.
+def test_coordinator_lookup_reads_the_latest_assignment() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[{"coordinator_id": "coord-2"}])
+
+    assert make_repository(handler).latest_coordinator_id("e1") == "coord-2"
+    params = seen[0].url.params
+    assert seen[0].url.path == "/rest/v1/event_coordinator_assignments"
+    assert params["event_request_id"] == "eq.e1"
+    assert params["order"] == "id.desc"
+    assert params["limit"] == "1"
+    assert params["select"] == "coordinator_id"
+
+
+# SCRUM-38 AC2-P1 (partition): an event with no assignment has no Coordinator.
+def test_coordinator_lookup_without_assignment_is_none() -> None:
+    repo = make_repository(lambda request: httpx.Response(200, json=[]))
+
+    assert repo.latest_coordinator_id("e1") is None

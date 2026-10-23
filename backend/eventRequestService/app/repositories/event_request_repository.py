@@ -106,6 +106,8 @@ class EventRequestRepository(Protocol):
 
     def latest_coordinator_id(self, event_request_id: str) -> str | None: ...
 
+    def list_registered_attendee_ids(self, event_request_id: str) -> list[str]: ...
+
     def approve_date_change_request(
         self, event_request_id: str, change_request_id: str, coordinator_id: str,
         reason: str | None, booking_plan: list[dict[str, Any]] | None,
@@ -650,6 +652,20 @@ class SupabaseEventRequestRepository:
             },
         )
         return rows[0]["coordinator_id"] if rows else None
+
+    def list_registered_attendee_ids(self, event_request_id: str) -> list[str]:
+        """Attendees with an active registration, for event-wide notices (SCRUM-38)."""
+        rows = self._request_table(
+            "GET",
+            "/event_registrations",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "status": "eq.Registered",
+                "order": "created_at.asc",
+                "select": "attendee_id",
+            },
+        )
+        return [row["attendee_id"] for row in rows]
 
     def _call_rpc(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:

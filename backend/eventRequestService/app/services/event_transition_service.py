@@ -183,9 +183,12 @@ class EventTransitionService:
             raise
 
     def cancel(self, event_request_id: str, caller_id: str) -> EventRequestResponse:
-        return self._advance(
+        event_request = self._advance(
             event_request_id, caller_id, EventRequestStatus.CANCELLED
         )
+        # Only after the cancellation is saved (SCRUM-38 AC4); best-effort.
+        self.event_request_service.notify_attendees_of_cancellation(event_request)
+        return event_request
 
     def complete(self, event_request_id: str, caller_id: str) -> EventRequestResponse:
         return self._advance(

@@ -1,10 +1,13 @@
+import logging
 from datetime import datetime
 from typing import Any
 
+from app.repositories.event_request_repository import SupabaseRepositoryError
 from app.repositories.registration_repository import (
     RegistrationRepository,
     RegistrationRpcError,
 )
+from app.services.notification_client import NotificationClient
 from app.services.registration_rules import (
     EventFullError,
     EventNotVisibleError,
@@ -13,6 +16,8 @@ from app.services.registration_rules import (
     is_window_open,
     to_public_event,
 )
+
+logger = logging.getLogger(__name__)
 
 NOT_FOUND_ERRCODE = "P0002"
 REFUSED_ERRCODE = "P0004"
@@ -33,8 +38,14 @@ class RegistrationService:
     last place is told they are already registered, not that the event is full.
     """
 
-    def __init__(self, repository: RegistrationRepository) -> None:
+    def __init__(
+        self,
+        repository: RegistrationRepository,
+        notification_client: NotificationClient | None = None,
+    ) -> None:
         self.repository = repository
+        # No client means nothing is sent (tests, or no service configured).
+        self.notification_client = notification_client or NotificationClient(None)
 
     def list_open_events(self, now: datetime) -> list[dict[str, Any]]:
         events = [
@@ -62,10 +73,53 @@ class RegistrationService:
             registration = self.repository.register(event_id, attendee_id, now)
         except RegistrationRpcError as error:
             raise self._map_refusal(error) from error
-        return {
-            **registration,
-            "event": to_public_event(event, self.repository.count_active(event_id)),
-        }
+        # Only after the write succeeded: a refused registration tells nobody
+        # (SCRUM-38 AC1). Best-effort, so a notice failure never undoes it.
+        self.notification_client.notify_registration_confirmed(
+            event_request_id=event_id,
+            attendee_id=attendee_id,
+            event_name=event.get("event_name"),
+            registration_id=registration["id"],
+        )
+        registered = self.repository.count_active(event_id)
+        if registered >= event["registration_capacity"]:
+            self._notify_registration_full(event, registration["id"])
+        return {**registration, "event": to_public_event(event, registered)}
+
+    def _notify_registration_full(
+        self, event: dict[str, Any], registration_id: str
+    ) -> None:
+        """SCRUM-38 AC2: the last place was taken; tell the Organiser and Coordinator.
+
+        The registration is already saved, so nothing here may fail it: a
+        person we cannot look up is logged and skipped.
+        """
+        recipients: list[str] = []
+        for role, lookup in (
+            ("organiser", self.repository.get_organiser_id),
+            ("coordinator", self.repository.latest_coordinator_id),
+        ):
+            try:
+                person_id = lookup(event["id"])
+            except SupabaseRepositoryError:
+                logger.warning(
+                    "Could not find the %s of event request %s to tell that "
+                    "registration is full",
+                    role,
+                    event["id"],
+                    exc_info=True,
+                )
+                continue
+            if person_id is not None and person_id not in recipients:
+                recipients.append(person_id)
+        for recipient_id in recipients:
+            self.notification_client.notify_registration_full(
+                event_request_id=event["id"],
+                recipient_id=recipient_id,
+                event_name=event.get("event_name"),
+                registration_id=registration_id,
+                capacity=event["registration_capacity"],
+            )
 
     def list_registrations(self, attendee_id: str) -> list[dict[str, Any]]:
         registrations = self.repository.list_for_attendee(attendee_id)

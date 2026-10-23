@@ -42,6 +42,14 @@ class FakeEventRequestRepository:
         self.arrangement_review_rows: list[dict[str, Any]] = []
         # SCRUM-58 stand-in: event_readiness_issues per event ([] when ready).
         self.readiness_issues: dict[str, list[dict[str, Any]]] = {}
+        # SCRUM-38 AC4 stand-in: active registrations per event, and a failure switch.
+        self.registered_attendees: dict[str, list[str]] = {}
+        self.attendee_lookup_fails = False
+
+    def list_registered_attendee_ids(self, event_request_id: str) -> list[str]:
+        if self.attendee_lookup_fails:
+            raise SupabaseRepositoryError("registrations unavailable")
+        return list(self.registered_attendees.get(event_request_id, []))
 
     def create(self, values: dict[str, Any]) -> dict[str, Any]:
         now = (datetime.now(UTC) + timedelta(microseconds=len(self.rows))).isoformat()

@@ -116,7 +116,10 @@ def create_app(
     application.state.event_request_service = event_request_service
     application.state.coordinator_assignment_service = coordinator_assignment_service
     application.state.registration_service = (
-        RegistrationService(registration_repository)
+        RegistrationService(
+            registration_repository,
+            NotificationClient.from_settings(get_notification_settings()),
+        )
         if registration_repository is not None
         else None
     )

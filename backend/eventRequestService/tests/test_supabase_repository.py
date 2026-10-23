@@ -687,3 +687,33 @@ def test_latest_coordinator_id_reads_newest_assignment() -> None:
         "select": "coordinator_id",
     }
 
+
+
+# SCRUM-38 AC4-X1 (cross-cutting): the attendee lookup asks for only the attendee ids of
+# one event's active registrations, oldest first, and returns them as a plain list.
+def test_list_registered_attendee_ids_queries_active_registrations_of_one_event() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200, json=[{"attendee_id": "attendee-1"}, {"attendee_id": "attendee-2"}]
+        )
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert repository.list_registered_attendee_ids("event-1") == [
+        "attendee-1",
+        "attendee-2",
+    ]
+    assert seen[0].url.path == "/rest/v1/event_registrations"
+    assert dict(seen[0].url.params) == {
+        "event_request_id": "eq.event-1",
+        "status": "eq.Registered",
+        "order": "created_at.asc",
+        "select": "attendee_id",
+    }

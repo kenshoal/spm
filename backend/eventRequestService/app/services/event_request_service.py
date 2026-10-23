@@ -589,6 +589,48 @@ class EventRequestService:
             require_booking_plan=True,
         )
 
+    def _registered_attendee_ids(self, event_request_id: str) -> list[str]:
+        """Who to tell about an event-wide change. Never raises: the change that
+        triggered the notice is already saved."""
+        try:
+            return self.repository.list_registered_attendee_ids(event_request_id)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not list the attendees of event request %s to notify them",
+                event_request_id,
+                exc_info=True,
+            )
+            return []
+
+    def notify_attendees_of_cancellation(self, event_request: EventRequestResponse) -> None:
+        """SCRUM-38 AC4: a saved cancellation reaches every registered Attendee."""
+        attendee_ids = self._registered_attendee_ids(event_request.id)
+        if attendee_ids:
+            self.notification_client.notify_event_cancelled(
+                event_request_id=event_request.id,
+                event_name=event_request.event_name,
+                attendee_ids=attendee_ids,
+            )
+
+    def _notify_attendees_of_date_change(self, change: EventChangeRequestResponse) -> None:
+        """SCRUM-38 AC4: an approved change to the dates reaches every registered
+        Attendee. Attendees see only the dates of a change, so any other approved
+        change (attendance, venue, equipment) tells them nothing."""
+        new_dates = change.proposed_changes.get("proposed_date_times")
+        if not new_dates:
+            return
+        attendee_ids = self._registered_attendee_ids(change.event_request_id)
+        if not attendee_ids:
+            return
+        event = self.repository.get_by_id(change.event_request_id) or {}
+        self.notification_client.notify_event_changed(
+            event_request_id=change.event_request_id,
+            event_name=event.get("event_name"),
+            change_request_id=change.id,
+            proposed_date_times=new_dates,
+            attendee_ids=attendee_ids,
+        )
+
     def _saved_change_decision(
         self, row: dict[str, Any], event_request_id: str, change_request_id: str,
         coordinator_id: str, payload: EventChangeDecision, *, require_booking_plan: bool = False,
@@ -625,6 +667,13 @@ class EventRequestService:
                 # stored transaction. Even an unexpected sender bug cannot undo it.
                 logger.warning(
                     "Failed to notify organiser of approved change %s",
+                    change.id, exc_info=True,
+                )
+            try:
+                self._notify_attendees_of_date_change(change)
+            except Exception:
+                logger.warning(
+                    "Failed to notify attendees of approved change %s",
                     change.id, exc_info=True,
                 )
         elif (

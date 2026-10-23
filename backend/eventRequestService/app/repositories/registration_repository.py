@@ -36,6 +36,10 @@ class RegistrationRepository(Protocol):
 
     def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]: ...
 
+    def get_organiser_id(self, event_id: str) -> str | None: ...
+
+    def latest_coordinator_id(self, event_id: str) -> str | None: ...
+
     def list_confirmed_events(self) -> list[dict[str, Any]]: ...
 
     def count_active(self, event_id: str) -> int: ...
@@ -81,6 +85,26 @@ class SupabaseRegistrationRepository:
             "/event_requests", {"select": EVENT_COLUMNS, "id": f"eq.{event_id}"}
         )
         return rows[0] if rows else None
+
+    def get_organiser_id(self, event_id: str) -> str | None:
+        """Who to tell about the event (SCRUM-38); fetched alone, never publicly."""
+        rows = self._get(
+            "/event_requests", {"select": "organiser_id", "id": f"eq.{event_id}"}
+        )
+        return rows[0]["organiser_id"] if rows else None
+
+    def latest_coordinator_id(self, event_id: str) -> str | None:
+        """The newest assignment row names the current Coordinator (as SCRUM-60)."""
+        rows = self._get(
+            "/event_coordinator_assignments",
+            {
+                "event_request_id": f"eq.{event_id}",
+                "order": "id.desc",
+                "limit": "1",
+                "select": "coordinator_id",
+            },
+        )
+        return rows[0]["coordinator_id"] if rows else None
 
     def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]:
         if not event_ids:

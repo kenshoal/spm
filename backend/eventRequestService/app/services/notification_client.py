@@ -201,6 +201,156 @@ class NotificationClient:
             payload={"event_request_id": event_request_id},
         )
 
+    def notify_registration_confirmed(
+        self,
+        *,
+        event_request_id: str,
+        attendee_id: str,
+        event_name: str | None,
+        registration_id: str,
+    ) -> None:
+        """Tell an Attendee their registration is saved (SCRUM-38 AC1)."""
+        self._notify_of_registration(
+            "registration_confirmed",
+            recipient_id=attendee_id,
+            registration_id=registration_id,
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "registration_id": registration_id,
+                "status": "Registered",
+            },
+        )
+
+    def notify_registration_full(
+        self,
+        *,
+        event_request_id: str,
+        recipient_id: str,
+        event_name: str | None,
+        registration_id: str,
+        capacity: int,
+    ) -> None:
+        """Tell an Organiser or Coordinator the last place was taken (SCRUM-38 AC2)."""
+        self._notify_of_registration(
+            "registration_full",
+            recipient_id=recipient_id,
+            registration_id=registration_id,
+            per_recipient_key=True,
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "registration_id": registration_id,
+                "capacity": capacity,
+            },
+        )
+
+    def notify_event_cancelled(
+        self, *, event_request_id: str, event_name: str | None, attendee_ids: list[str]
+    ) -> None:
+        """Tell each registered Attendee the event is cancelled (SCRUM-38 AC4)."""
+        for attendee_id in attendee_ids:
+            self._post_notice(
+                "event_cancelled",
+                recipient_id=attendee_id,
+                key=f"event-cancelled:{event_request_id}:{attendee_id}",
+                payload={"event_request_id": event_request_id, "event_name": event_name},
+            )
+
+    def notify_event_changed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        change_request_id: str,
+        proposed_date_times: list[str],
+        attendee_ids: list[str],
+    ) -> None:
+        """Tell each registered Attendee the event's dates changed (SCRUM-38 AC4)."""
+        for attendee_id in attendee_ids:
+            self._post_notice(
+                "event_changed",
+                recipient_id=attendee_id,
+                key=f"event-changed:{change_request_id}:{attendee_id}",
+                payload={
+                    "event_request_id": event_request_id,
+                    "event_name": event_name,
+                    "change_request_id": change_request_id,
+                    "proposed_date_times": proposed_date_times,
+                },
+            )
+
+    def _post_notice(
+        self, event_type: str, *, recipient_id: str, key: str, payload: dict[str, Any]
+    ) -> None:
+        """One best-effort notice with a stable key; a failure is logged, never raised."""
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": event_type,
+                    "recipient_id": recipient_id,
+                    "event_id": str(uuid5(NAMESPACE_URL, key)),
+                    "payload": payload,
+                },
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify %s of %s (%s)",
+                recipient_id,
+                event_type,
+                payload.get("event_request_id"),
+                exc_info=True,
+            )
+
+    def _notify_of_registration(
+        self,
+        event_type: str,
+        *,
+        recipient_id: str,
+        registration_id: str,
+        payload: dict[str, Any],
+        per_recipient_key: bool = False,
+    ) -> None:
+        """Best-effort registration notice, sent once after the registration saved.
+
+        The key is per registration and type (and per recipient when one
+        registration notifies several people), so a repeat is stored once while a
+        place freed and filled again notifies again.
+        """
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": event_type,
+                    "recipient_id": recipient_id,
+                    "event_id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"{event_type.replace('_', '-')}:{registration_id}"
+                            + (f":{recipient_id}" if per_recipient_key else ""),
+                        )
+                    ),
+                    "payload": payload,
+                },
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify %s of %s for registration %s",
+                recipient_id,
+                event_type,
+                registration_id,
+                exc_info=True,
+            )
+
     def _notify_organiser_of_outcome(
         self,
         event_type: str,
