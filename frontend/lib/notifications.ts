@@ -74,6 +74,20 @@ export function describeNotification(notification: AppNotification, roles: reado
         ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
       };
     }
+    case "event_request_approved":
+    case "event_request_rejected": {
+      // SCRUM-36 AC1: the Organiser's outcome; a rejection carries the reason.
+      const reason = notification.payload.reason;
+      const approved = notification.event_type === "event_request_approved";
+      return {
+        message: `Your event request was ${approved ? "approved" : "rejected"}.`,
+        href: id && `/event-requests/${id}/edit`,
+        ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
+      };
+    }
+    case "event_confirmed":
+      // SCRUM-36 AC3: sent to the Organiser when the Safety Officer approves.
+      return { message: "Your event is confirmed.", href: id && `/event-requests/${id}/edit` };
     case "event_request_submitted":
       return { message: "Your event request was submitted.", href: id && `/event-requests/${id}/edit` };
     case "coordinator_assigned":
@@ -114,12 +128,21 @@ export function describeNotification(notification: AppNotification, roles: reado
       }
       const reason = text("decision_reason");
       const alternative = text("suggested_alternative");
-      const detail = [reason && `Reason: ${reason}`, alternative && `Suggested alternative: ${alternative}`]
+      // SCRUM-36 AC2: the Organiser gets the same notice. They cannot open the
+      // Coordinator's view, so they see which venue was refused and their own page.
+      const forOrganiser = roles.includes("event_organiser") && !roles.includes("event_coordinator");
+      const detail = [
+        forOrganiser ? text("venue_name") : null,
+        reason && `Reason: ${reason}`,
+        alternative && `Suggested alternative: ${alternative}`,
+      ]
         .filter(Boolean)
         .join(". ");
       return {
-        message: `Your venue booking request${event ? ` for ${event}` : ""} was rejected.`,
-        href,
+        message: forOrganiser
+          ? `A venue for your event${event ? ` ${event}` : ""} was rejected.`
+          : `Your venue booking request${event ? ` for ${event}` : ""} was rejected.`,
+        href: forOrganiser ? id && `/event-requests/${id}/edit` : href,
         ...(detail ? { detail } : {}),
       };
     }
