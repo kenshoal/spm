@@ -9,6 +9,7 @@ than re-running the rules module they sit above.
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 
@@ -18,6 +19,7 @@ from app.main import create_app
 from app.repositories.registration_repository import RegistrationRpcError
 
 NOW = datetime(2030, 1, 15, 12, 0, tzinfo=UTC)
+SINGAPORE = ZoneInfo("Asia/Singapore")
 OPENS = NOW - timedelta(days=5)
 CLOSES = NOW + timedelta(days=5)
 
@@ -60,6 +62,37 @@ class FakeRegistrationRepository:
         self.attendee_accounts: dict[str, str] = {}
         self.assignments: FakeCoordinatorAssignments | None = None
         self.manual_calls: list[tuple[str, str, str]] = []
+        self.check_in_calls: list[tuple[str, str, str, datetime]] = []
+
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """Mirrors check_in_attendee (0061): Asia/Singapore event days."""
+        self.check_in_calls.append((event_id, registration_id, coordinator_id, now))
+        event = self.events.get(event_id)
+        latest = (
+            self.assignments.latest_for_event_request(event_id)
+            if self.assignments else None
+        )
+        if (event is None or event["status"] != "Confirmed" or latest is None
+                or latest["coordinator_id"] != coordinator_id):
+            raise RegistrationRpcError("event not found", "P0002", "event not found")
+        today = now.astimezone(SINGAPORE).date()
+        if not any(d.astimezone(SINGAPORE).date() == today
+                   for d in event.get("proposed_date_times") or []):
+            raise RegistrationRpcError("not event day", "P0004", "not event day")
+        row = next((r for r in self.registrations if r["id"] == registration_id
+                    and r["event_request_id"] == event_id
+                    and r["status"] == "Registered"), None)
+        if row is None:
+            raise RegistrationRpcError(
+                "registration not found", "P0002", "registration not found"
+            )
+        if row.get("attended_at") is not None:
+            raise RegistrationRpcError("already checked in", "P0004", "already checked in")
+        row["attended_at"] = now
+        row["checked_in_by"] = coordinator_id
+        return dict(row)
 
     def coordinator_register(
         self, event_id: str, coordinator_id: str, attendee_email: str

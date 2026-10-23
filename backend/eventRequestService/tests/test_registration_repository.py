@@ -204,7 +204,9 @@ def test_list_for_event_pages_past_the_row_cap() -> None:
     assert len(rows) == 1001
     assert [r.url.params["offset"] for r in seen] == ["0", "1000"]
     assert seen[0].url.params["event_request_id"] == "eq.e1"
-    assert seen[0].url.params["select"] == "id,attendee_id,status,created_at,registered_by"
+    assert seen[0].url.params["select"] == (
+        "id,attendee_id,status,created_at,registered_by,attended_at,checked_in_by"
+    )
 
 
 # AC1-H1 (happy): coordinator_register calls the SCRUM-41 function with event, coordinator and email
@@ -235,3 +237,22 @@ def test_coordinator_register_refusal_carries_reason() -> None:
         make_repository(handler).coordinator_register("e1", "c1", "x@test.local")
 
     assert (raised.value.errcode, raised.value.reason) == ("P0002", "attendee not found")
+
+
+# AC1-H1 (happy): check_in calls the SCRUM-25 function with the event, registration, coordinator and clock
+def test_check_in_calls_the_database_function() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"id": "r1", "checked_in_by": "c1"})
+
+    make_repository(handler).check_in("e1", "r1", "c1", NOW)
+
+    assert seen[0].url.path == "/rest/v1/rpc/check_in_attendee"
+    assert json.loads(seen[0].content) == {
+        "p_event_request_id": "e1",
+        "p_registration_id": "r1",
+        "p_coordinator_id": "c1",
+        "p_now": NOW.isoformat(),
+    }

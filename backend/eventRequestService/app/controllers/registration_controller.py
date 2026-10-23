@@ -12,6 +12,7 @@ from app.controllers.event_request_controller import (
     get_authenticated_caller,
 )
 from app.models.registration import (
+    CheckInResponse,
     ManualRegistrationCreate,
     ManualRegistrationResponse,
     PublicEventResponse,
@@ -136,4 +137,22 @@ def register_attendee(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     return service.register_attendee(
         str(event_request_id), caller.id, payload.attendee_email
+    )
+
+
+@management_router.post(
+    "/{event_request_id}/registrations/{registration_id}/check-in",
+    response_model=CheckInResponse,
+)
+def check_in_attendee(
+    event_request_id: UUID,
+    registration_id: UUID,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+    now: NowDependency,
+) -> dict:
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return service.check_in(
+        str(event_request_id), str(registration_id), caller.id, now
     )

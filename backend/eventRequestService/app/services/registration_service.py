@@ -41,6 +41,18 @@ class CapacityNotSetError(Exception):
     """The event has no registration capacity, so no place can be given."""
 
 
+class NotEventDayError(Exception):
+    """SCRUM-25: check-in is only open on the event's Asia/Singapore dates."""
+
+
+class RegistrationNotFoundError(Exception):
+    """No Registered registration with that id on this event."""
+
+
+class AlreadyCheckedInError(Exception):
+    """The registration already has a check-in."""
+
+
 class RegistrationService:
     """Attendee view of Confirmed events and registration for them (SCRUM-21).
 
@@ -71,12 +83,17 @@ class RegistrationService:
             raise EventNotVisibleError
         rows = self.repository.list_for_event(event_id)
         registered = sum(1 for r in rows if r["status"] == "Registered")
+        attended = sum(
+            1 for r in rows if r["status"] == "Registered" and r.get("attended_at")
+        )
         return {
             "event_request_id": event_id,
             "registration_capacity": event.get("registration_capacity"),
             "registered": registered,
             "withdrawn": sum(1 for r in rows if r["status"] == "Withdrawn"),
             "places_available": places_remaining(event, registered),
+            "attended": attended,
+            "absent": registered - attended,
             "registrations": rows,
         }
 
@@ -96,6 +113,23 @@ class RegistrationService:
                 raise AttendeeAlreadyRegisteredError from error
             if error.reason == "capacity not set":
                 raise CapacityNotSetError from error
+            raise self._map_refusal(error) from error
+
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """SCRUM-25: the database function checks assignment, status, event day
+        and the registration under lock, so there is no early check."""
+        try:
+            return self.repository.check_in(event_id, registration_id, coordinator_id, now)
+        except RegistrationRpcError as error:
+            refusal = {
+                "not event day": NotEventDayError,
+                "registration not found": RegistrationNotFoundError,
+                "already checked in": AlreadyCheckedInError,
+            }.get(error.reason or "")
+            if refusal is not None:
+                raise refusal from error
             raise self._map_refusal(error) from error
 
     def _manages(
