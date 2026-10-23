@@ -22,6 +22,13 @@ class SpyNotificationClient:
     def notify_clarification_requested(self, **kwargs: Any) -> None:
         self.clarifications.append(kwargs)
 
+    # Approved and Rejected notices are SCRUM-36's; they are ignored here.
+    def notify_event_request_approved(self, **kwargs: Any) -> None:
+        pass
+
+    def notify_event_request_rejected(self, **kwargs: Any) -> None:
+        pass
+
 
 def notify_through(client: TestClient, notifications: Any) -> None:
     """Rebuild the app's transition service around the given notification client."""
