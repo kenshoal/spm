@@ -333,15 +333,20 @@ images are not a remote application publication; local/shared evidence stays dis
 
 ## Automatic completion and final end (SCRUM-40; local preparation)
 
-Apply reviewed migration `0063_event_auto_completion.sql` before deploying this
-API/UI or enabling the worker. This increment has **not** been deployed to shared
+Apply unchanged merged `0062_withdraw_registration.sql` then reviewed
+`0063_event_auto_completion.sql` atomically before deploying this API/UI or
+enabling the worker. The merged registration reader selects `withdrawn_at`, so
+0062 is a matching-runtime prerequisite, not additional SCRUM-40 scope. This increment has **not** been deployed to shared
 Supabase. See the [deployment plan](../../docs/deployment/scrum_40_auto_completion_rollout.md)
 and [fresh native verification](../../database/README.md#automatic-completion-scrum-40).
 
 `POST /event-requests/{id}/final-end` accepts required aware `final_event_end_at`.
 Only the current assigned coordinator can record it while Approved or Planning;
 the native setter locks the event and rechecks the latest assignment. No organiser
-draft/amendment field is added. The coordinator form uses explicit Singapore
+draft/amendment field is added. A narrow INVOKER database trigger also refuses
+direct `anon`/`authenticated` nonnull-end INSERT or distinct-end UPDATE with
+`42501`, preserving existing owner Draft policies and ordinary field edits.
+The coordinator form uses explicit Singapore
 time; normal details show the stored instant read-only. A same-instant save is a
 true no-op including the event version. Missing/reassigned/state refusal maps to
 404/403/409 (`final_end_unavailable`); invalid input is 422 and storage failure
@@ -405,8 +410,9 @@ and shutdown waits rather than pretending a cancelled thread stopped its write.
 Injected `create_app` test apps start no timer unless one is supplied.
 
 The independent CI job `scrum40-database-verify` uses PostgreSQL 16, genuine
-prerequisites, atomic 0063 application, two native rollback oracles, four retained
-amendment verifiers and both manual/automatic race orders. Local native and
+prerequisites, atomic 0062→0063 application, three native rollback oracles, the
+existing withdrawal compatibility verifier, four retained amendment verifiers and
+both manual/automatic race orders. Local native and
 mock-browser results are separate from actual PR CI, shared deployment and
 normal-auth shared verification. See [SCRUM-40 evidence](../../docs/testcases/scrum_40_testcases.md).
 
