@@ -22,6 +22,7 @@ class RegistrationResponse(BaseModel):
     id: str
     event_request_id: str
     attendee_id: str
-    status: Literal["Registered"]
+    status: Literal["Registered", "Withdrawn"]
     created_at: datetime
+    withdrawn_at: datetime | None = None
     event: PublicEventResponse
