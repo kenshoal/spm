@@ -267,12 +267,19 @@ class EventChangeDecision(BaseModel):
         return self
 
 
+class EventFinalEndUpdate(BaseModel):
+    """Only the assigned coordinator records the authoritative final end."""
+
+    final_event_end_at: AwareDatetime
+
+
 class EventRequestResponse(EventRequestFields):
     id: str
     organiser_id: str
     status: EventRequestStatus
     created_at: datetime
     updated_at: datetime
+    final_event_end_at: AwareDatetime | None = None
 
 
 class AttendeeEventResponse(BaseModel):

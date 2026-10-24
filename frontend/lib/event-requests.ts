@@ -101,6 +101,7 @@ export interface EventRequest {
   registration_needs: string | null;
   created_at: string;
   updated_at: string;
+  final_event_end_at?: string | null;
 }
 
 export interface CoordinatorAssignment {
