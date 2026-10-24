@@ -60,9 +60,12 @@ from app.services.notification_client import NotificationClient
 from app.services.outbox_relay import OutboxRelay, build_outbox_relay
 from app.services.periodic_task_runner import PeriodicTaskRunner
 from app.services.registration_rules import (
+    AlreadyWithdrawnError,
     EventFullError,
     EventNotVisibleError,
+    RegistrationNotFoundError,
     RegistrationNotOpenError,
+    WithdrawalNotPermittedError,
 )
 from app.services.registration_service import (
     AlreadyRegisteredError,
@@ -339,6 +342,42 @@ def create_app(
             content={
                 "detail": "You are already registered for this event",
                 "code": "already_registered",
+            },
+        )
+
+    @application.exception_handler(RegistrationNotFoundError)
+    async def registration_not_found(
+        request: Request, error: RegistrationNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "detail": "Registration not found",
+                "code": "registration_not_found",
+            },
+        )
+
+    @application.exception_handler(AlreadyWithdrawnError)
+    async def already_withdrawn(
+        request: Request, error: AlreadyWithdrawnError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This registration is already withdrawn",
+                "code": "already_withdrawn",
+            },
+        )
+
+    @application.exception_handler(WithdrawalNotPermittedError)
+    async def withdrawal_not_permitted(
+        request: Request, error: WithdrawalNotPermittedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This registration can no longer be withdrawn",
+                "code": "withdrawal_not_permitted",
             },
         )
 
