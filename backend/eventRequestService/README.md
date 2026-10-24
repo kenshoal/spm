@@ -336,8 +336,15 @@ images are not a remote application publication; local/shared evidence stays dis
 Apply unchanged merged `0062_withdraw_registration.sql` then reviewed
 `0063_event_auto_completion.sql` atomically before deploying this API/UI or
 enabling the worker. The merged registration reader selects `withdrawn_at`, so
-0062 is a matching-runtime prerequisite, not additional SCRUM-40 scope. This increment has **not** been deployed to shared
-Supabase. See the [deployment plan](../../docs/deployment/scrum_40_auto_completion_rollout.md)
+0062 is a matching-runtime prerequisite, not additional SCRUM-40 scope. The exact
+0062→0063 schema bundle was applied to shared Supabase on 24 October 2026 as
+`20261024085549`. The matching API/UI is running locally, and the real worker
+completed one labelled Confirmed target with a single system history entry after
+normal authenticated setup/confirmation. Planning and repeat controls preserved
+related data. Coordinator and organiser views passed after normal sign-in/reload,
+including automatic system history and the organiser's read-only final end.
+The worker is enabled at a 60-second interval; human review and merge remain
+pending. See the [deployment plan](../../docs/deployment/scrum_40_auto_completion_rollout.md)
 and [fresh native verification](../../database/README.md#automatic-completion-scrum-40).
 
 `POST /event-requests/{id}/final-end` accepts required aware `final_event_end_at`.
