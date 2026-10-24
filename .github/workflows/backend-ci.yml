@@ -194,7 +194,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -I database/tests/bootstrap_event_change_approval.py --disposable --dsn "$SCRUM40_TEST_DSN"
-          psql -X -v ON_ERROR_STOP=1 -1 -d "$SCRUM40_TEST_DSN" -f database/migrations/0063_event_auto_completion.sql
+          psql -X -v ON_ERROR_STOP=1 -1 -d "$SCRUM40_TEST_DSN" \
+            -f database/migrations/0062_withdraw_registration.sql \
+            -f database/migrations/0063_event_auto_completion.sql
       - name: Verify completion and retained amendment workflows
         shell: bash
         run: |
@@ -202,6 +204,8 @@ jobs:
           for verifier in \
             verify_event_auto_completion.sql \
             verify_event_final_end.sql \
+            verify_event_final_end_browser_boundary.sql \
+            verify_registration_withdrawal.sql \
             verify_event_change_rejection.sql \
             verify_event_change_approval.sql \
             verify_event_registration_reviews.sql \

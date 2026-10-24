@@ -51,13 +51,29 @@ REVOKE ALL ON FUNCTION public.complete_overdue_event_request(uuid, timestamptz)
 GRANT EXECUTE ON FUNCTION public.complete_overdue_event_request(uuid, timestamptz)
     TO service_role;
 
--- End/date protection also covers trusted server UPDATE paths. Actual reschedules
--- invalidate the old end; a replacement must be explicitly recorded afterwards.
+-- Existing owner-Draft RLS permits ordinary browser writes, not this authoritative
+-- field. Keep those policies intact and require the coordinator service boundary.
+-- Trusted reschedules invalidate the end; confirmed/terminal ends stay protected.
 CREATE OR REPLACE FUNCTION private.protect_event_final_end()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY INVOKER SET search_path = ''
 AS $$
 BEGIN
+    IF CURRENT_USER IN ('anon', 'authenticated') THEN
+        IF TG_OP = 'INSERT' THEN
+            IF NEW.final_event_end_at IS NOT NULL THEN
+                RAISE EXCEPTION 'Record the final event end through the coordinator workflow'
+                    USING ERRCODE = '42501';
+            END IF;
+        ELSIF NEW.final_event_end_at IS DISTINCT FROM OLD.final_event_end_at THEN
+            RAISE EXCEPTION 'Record the final event end through the coordinator workflow'
+                USING ERRCODE = '42501';
+        END IF;
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        RETURN NEW;
+    END IF;
+
     IF OLD.status IN ('Confirmed', 'Completed', 'Cancelled', 'Rejected') THEN
         IF NEW.final_event_end_at IS DISTINCT FROM OLD.final_event_end_at
            OR (OLD.final_event_end_at IS NOT NULL
@@ -77,7 +93,7 @@ $$;
 REVOKE ALL ON FUNCTION private.protect_event_final_end()
     FROM PUBLIC, anon, authenticated, service_role;
 CREATE TRIGGER protect_event_final_end
-    BEFORE UPDATE OF final_event_end_at, proposed_date_times
+    BEFORE INSERT OR UPDATE OF final_event_end_at, proposed_date_times
     ON public.event_requests
     FOR EACH ROW EXECUTE FUNCTION private.protect_event_final_end();
 
