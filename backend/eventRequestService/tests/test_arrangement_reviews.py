@@ -266,3 +266,24 @@ def test_review_repository_failure_is_not_an_empty_success():
     assert response.status_code == 502
     assert response.json() == {"detail": "Arrangement reviews unavailable"}
     assert snapshot(repository) == before
+
+
+# AC3-X2 (cross-cutting): a flag raised by a venue block is returned with its cause, not rejected as unknown.
+def test_current_coordinator_reads_a_venue_block_review():
+    repository, assignments = fixture()
+    blocked = review(
+        5,
+        trigger_type="venue_block",
+        changed_fields=[],
+        reason="Venue blocked on 2030-03-10, 10:00 to 11:00",
+    )
+    repository.arrangement_review_rows.append(blocked)
+    before = snapshot(repository)
+    with client_for(
+        repository, COORDINATOR, ("event_coordinator",), assignments
+    ) as client:
+        response = client.get(f"/event-requests/{EVENT}/arrangement-reviews")
+    assert response.status_code == 200
+    returned = [row for row in response.json() if row["trigger_type"] == "venue_block"]
+    assert normalized(returned) == normalized([blocked])
+    assert snapshot(repository) == before
