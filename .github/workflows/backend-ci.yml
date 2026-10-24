@@ -154,7 +154,8 @@ jobs:
             verify_event_registration_reviews.sql \
             verify_event_change_date_approval.sql \
             verify_arrangement_review_flags.sql \
-            verify_venue_timing_change_reviews.sql
+            verify_venue_timing_change_reviews.sql \
+            verify_venue_block_booking_reviews.sql
           do
             psql -X -v ON_ERROR_STOP=1 -d "$SCRUM35_TEST_DSN" -f "database/$verifier"
           done
