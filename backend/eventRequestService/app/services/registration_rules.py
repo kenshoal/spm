@@ -35,6 +35,18 @@ class EventFullError(Exception):
     """Every place is taken."""
 
 
+class WithdrawalNotPermittedError(Exception):
+    """The event is not Confirmed, has started, or has no start date (SCRUM-22 D1)."""
+
+
+class AlreadyWithdrawnError(Exception):
+    """The registration was already withdrawn."""
+
+
+class RegistrationNotFoundError(Exception):
+    """The registration is unknown or belongs to someone else."""
+
+
 def _as_datetime(value: datetime | str | None) -> datetime | None:
     if value is None or isinstance(value, datetime):
         return value
@@ -78,3 +90,30 @@ def to_public_event(event: dict[str, Any], registered_count: int) -> dict[str, A
     }
     public["places_remaining"] = places_remaining(event, registered_count)
     return public
+
+
+def event_start(event: dict[str, Any]) -> datetime | None:
+    """The earliest proposed date, or None when the event has no dates."""
+    starts = [
+        parsed
+        for value in event.get("proposed_date_times") or []
+        if (parsed := _as_datetime(value)) is not None
+    ]
+    return min(starts) if starts else None
+
+
+def check_withdrawal(
+    event: dict[str, Any], registration: dict[str, Any], now: datetime
+) -> None:
+    """Raise unless the attendee may withdraw `registration` at `now` (SCRUM-22 D1).
+
+    Same order as `withdraw_registration`: already withdrawn first, then the
+    event must be Confirmed and not yet started (`now` strictly before the
+    earliest date). The registration window plays no part: a place can be
+    released after sign-ups close.
+    """
+    if registration.get("status") == "Withdrawn":
+        raise AlreadyWithdrawnError
+    start = event_start(event)
+    if event.get("status") != CONFIRMED or start is None or now >= start:
+        raise WithdrawalNotPermittedError

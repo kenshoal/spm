@@ -108,6 +108,19 @@ def list_my_registrations(
     return service.list_registrations(attendee_id)
 
 
+@router.post(
+    "/registrations/{registration_id}/withdrawal",
+    response_model=RegistrationResponse,
+)
+def withdraw_registration(
+    registration_id: UUID,
+    attendee_id: AttendeeDependency,
+    service: ServiceDependency,
+    now: NowDependency,
+) -> dict:
+    return service.withdraw(str(registration_id), attendee_id, now)
+
+
 @management_router.get(
     "/{event_request_id}/registrations", response_model=RegistrationInfoResponse
 )

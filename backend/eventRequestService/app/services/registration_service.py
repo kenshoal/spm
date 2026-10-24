@@ -9,10 +9,14 @@ from app.repositories.registration_repository import (
     RegistrationRpcError,
 )
 from app.services.registration_rules import (
+    AlreadyWithdrawnError,
     EventFullError,
     EventNotVisibleError,
+    RegistrationNotFoundError,
     RegistrationNotOpenError,
+    WithdrawalNotPermittedError,
     check_registration,
+    check_withdrawal,
     is_window_open,
     places_remaining,
     to_public_event,
@@ -139,6 +143,32 @@ class RegistrationService:
             "event": to_public_event(event, self.repository.count_active(event_id)),
         }
 
+    def withdraw(
+        self, registration_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """Withdraw the attendee's own registration (SCRUM-22).
+
+        Someone else's or an unknown registration is the same "not found", so
+        ids cannot be probed. The pure check refuses early; the
+        `withdraw_registration` function re-checks under the event row lock and
+        its refusals (state changed since the read) map to the same errors.
+        """
+        registration = self.repository.get_registration(registration_id)
+        if registration is None or registration["attendee_id"] != attendee_id:
+            raise RegistrationNotFoundError
+        event = self.repository.get_event(registration["event_request_id"])
+        if event is None:
+            raise RegistrationNotFoundError
+        check_withdrawal(event, registration, now)
+        try:
+            withdrawn = self.repository.withdraw(registration_id, attendee_id, now)
+        except RegistrationRpcError as error:
+            raise self._map_withdrawal_refusal(error) from error
+        return {
+            **withdrawn,
+            "event": to_public_event(event, self.repository.count_active(event["id"])),
+        }
+
     def list_registrations(self, attendee_id: str) -> list[dict[str, Any]]:
         registrations = self.repository.list_for_attendee(attendee_id)
         event_ids = sorted({r["event_request_id"] for r in registrations})
@@ -173,4 +203,15 @@ class RegistrationService:
                 return EventFullError()
             if error.reason == "registration not open":
                 return RegistrationNotOpenError()
+        return error
+
+    @staticmethod
+    def _map_withdrawal_refusal(error: RegistrationRpcError) -> Exception:
+        if error.errcode == NOT_FOUND_ERRCODE:
+            return RegistrationNotFoundError()
+        if error.errcode == REFUSED_ERRCODE:
+            if error.reason == "already withdrawn":
+                return AlreadyWithdrawnError()
+            if error.reason == "withdrawal not permitted":
+                return WithdrawalNotPermittedError()
         return error
