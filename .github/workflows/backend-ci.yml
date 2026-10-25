@@ -115,6 +115,46 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -d scrum48_ci
           -f database/verify_technical_support_assignments.sql
 
+  scrum41-database-verify:
+    name: Verify SCRUM-41 coordinator-entered registrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCRUM41_TEST_DSN: postgresql://postgres@127.0.0.1:5432/scrum48_ci41
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create the empty disposable database
+        run: >-
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres
+          -c 'CREATE DATABASE scrum48_ci41'
+      - name: Apply migrations through 0052, then 0060
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I database/tests/bootstrap_safety_review.py --disposable \
+            --dsn "$SCRUM41_TEST_DSN" --through 0052_technical_support_assignments.sql
+          # Local Auth test double; genuine Supabase Auth already has email.
+          psql -X -v ON_ERROR_STOP=1 -d "$SCRUM41_TEST_DSN" -c 'ALTER TABLE auth.users ADD COLUMN email text'
+          psql -X -v ON_ERROR_STOP=1 -d "$SCRUM41_TEST_DSN" -f database/migrations/0060_manual_event_registrations.sql
+      - name: Run the SCRUM-21 and SCRUM-41 verifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -d "$SCRUM41_TEST_DSN" -f database/verify_event_registrations.sql
+          psql -X -v ON_ERROR_STOP=1 -d "$SCRUM41_TEST_DSN" -f database/verify_manual_event_registrations.sql
+
   scrum35-database-verify:
     name: Verify SCRUM-35 native amendments and lock protocol
     runs-on: ubuntu-latest
@@ -165,3 +205,56 @@ jobs:
           set -euo pipefail
           python3 database/tests/test_event_change_approval_concurrency.py --dsn "$SCRUM35_TEST_DSN" --disposable
           python3 database/tests/test_date_change_concurrency.py --dsn "$SCRUM35_TEST_DSN" --disposable
+
+  scrum40-database-verify:
+    name: Verify SCRUM-40 completion, final end and manual race
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCRUM40_TEST_DSN: postgresql://postgres@127.0.0.1:5432/scrum48_ci40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create the empty disposable completion database
+        run: >-
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres
+          -c 'CREATE DATABASE scrum48_ci40'
+      - name: Bootstrap genuine prerequisites and apply completion atomically
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I database/tests/bootstrap_event_change_approval.py --disposable --dsn "$SCRUM40_TEST_DSN"
+          psql -X -v ON_ERROR_STOP=1 -1 -d "$SCRUM40_TEST_DSN" \
+            -f database/migrations/0062_withdraw_registration.sql \
+            -f database/migrations/0063_event_auto_completion.sql
+      - name: Verify completion and retained amendment workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          for verifier in \
+            verify_event_auto_completion.sql \
+            verify_event_final_end.sql \
+            verify_event_final_end_browser_boundary.sql \
+            verify_registration_withdrawal.sql \
+            verify_event_change_rejection.sql \
+            verify_event_change_approval.sql \
+            verify_event_registration_reviews.sql \
+            verify_event_change_date_approval.sql
+          do
+            psql -X -v ON_ERROR_STOP=1 -d "$SCRUM40_TEST_DSN" -f "database/$verifier"
+          done
+      - name: Verify both real manual and automatic lock orders
+        run: >-
+          python3 database/tests/test_event_auto_completion_concurrency.py
+          --dsn "$SCRUM40_TEST_DSN" --disposable

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.config import get_notification_settings
+from app.config import get_notification_settings, get_periodic_task_settings
 from app.controllers.arrangement_review_controller import (
     router as arrangement_review_router,
 )
@@ -15,6 +15,9 @@ from app.controllers.coordinator_assignment_controller import (
 from app.controllers.event_request_controller import router as event_request_router
 from app.controllers.event_transition_controller import (
     router as event_transition_router,
+)
+from app.controllers.registration_controller import (
+    management_router as registration_info_router,
 )
 from app.controllers.registration_controller import router as registration_router
 from app.controllers.technical_support_controller import (
@@ -31,6 +34,7 @@ from app.services.arrangement_review_notification_relay import (
     ArrangementReviewNotificationRelay,
     build_arrangement_review_notification_relay,
 )
+from app.services.auto_completion import build_auto_completion_service
 from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentNotAllowedError,
     CoordinatorAssignmentNotFoundError,
@@ -57,6 +61,7 @@ from app.services.event_transition_service import (
 )
 from app.services.notification_client import NotificationClient
 from app.services.outbox_relay import OutboxRelay, build_outbox_relay
+from app.services.periodic_task_runner import PeriodicTaskRunner
 from app.services.registration_rules import (
     AlreadyWithdrawnError,
     EventFullError,
@@ -67,12 +72,30 @@ from app.services.registration_rules import (
 )
 from app.services.registration_service import (
     AlreadyRegisteredError,
+    AttendeeAlreadyRegisteredError,
+    AttendeeNotFoundError,
+    CapacityNotSetError,
     RegistrationService,
 )
 from app.services.technical_support_service import (
     TechnicalSupportError,
     TechnicalSupportService,
 )
+
+
+def build_periodic_task_runner() -> PeriodicTaskRunner | None:
+    settings = get_periodic_task_settings()
+    handlers = {}
+    # Each story controls only its own registration. SCRUM-38 can add a separate
+    # configured handler here even when automatic completion is disabled.
+    if settings.auto_completion_enabled:
+        completion = build_auto_completion_service()
+        handlers["auto_completion"] = completion.run_once
+    if not handlers:
+        return None
+    return PeriodicTaskRunner(
+        handlers, interval_seconds=settings.periodic_task_interval_seconds
+    )
 
 
 def create_app(
@@ -83,12 +106,13 @@ def create_app(
     registration_repository: RegistrationRepository | None = None,
     technical_support_repository: TechnicalSupportRepository | None = None,
     technical_support_notification_client: NotificationClient | None = None,
+    periodic_task_runner: PeriodicTaskRunner | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         relay_tasks = [
             asyncio.create_task(relay.run_forever())
-            for relay in (outbox_relay, arrangement_review_relay)
+            for relay in (outbox_relay, arrangement_review_relay, periodic_task_runner)
             if relay is not None
         ]
         try:
@@ -119,7 +143,7 @@ def create_app(
     application.state.event_request_service = event_request_service
     application.state.coordinator_assignment_service = coordinator_assignment_service
     application.state.registration_service = (
-        RegistrationService(registration_repository)
+        RegistrationService(registration_repository, coordinator_repository)
         if registration_repository is not None
         else None
     )
@@ -151,6 +175,7 @@ def create_app(
     application.include_router(event_request_router)
     application.include_router(arrangement_review_router)
     application.include_router(registration_router)
+    application.include_router(registration_info_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(
@@ -327,6 +352,42 @@ def create_app(
             },
         )
 
+    @application.exception_handler(AttendeeAlreadyRegisteredError)
+    async def attendee_already_registered(
+        request: Request, error: AttendeeAlreadyRegisteredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This attendee is already registered for this event",
+                "code": "already_registered",
+            },
+        )
+
+    @application.exception_handler(AttendeeNotFoundError)
+    async def attendee_not_found(
+        request: Request, error: AttendeeNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "detail": "No attendee account has that email",
+                "code": "attendee_not_found",
+            },
+        )
+
+    @application.exception_handler(CapacityNotSetError)
+    async def capacity_not_set(
+        request: Request, error: CapacityNotSetError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This event has no registration capacity set",
+                "code": "capacity_not_set",
+            },
+        )
+
     @application.exception_handler(RegistrationNotFoundError)
     async def registration_not_found(
         request: Request, error: RegistrationNotFoundError
@@ -397,4 +458,5 @@ def create_app(
 app = create_app(
     outbox_relay=build_outbox_relay(),
     arrangement_review_relay=build_arrangement_review_notification_relay(),
+    periodic_task_runner=build_periodic_task_runner(),
 )

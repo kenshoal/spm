@@ -34,6 +34,7 @@ export function RequestDetails({
           <div><dt className="text-xs font-bold uppercase tracking-wide text-[#718078]">Purpose</dt><dd className="mt-1 text-sm leading-6 text-[#273832]">{request.purpose}</dd></div>
           <div><dt className="text-xs font-bold uppercase tracking-wide text-[#718078]">Expected attendance</dt><dd className="mt-1 text-sm leading-6 text-[#273832]">{request.expected_attendance}</dd></div>
           <div className="sm:col-span-2"><dt className="text-xs font-bold uppercase tracking-wide text-[#718078]">Description</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#273832]">{request.description}</dd></div>
+          <div><dt className="text-xs font-bold uppercase tracking-wide text-[#718078]">Final event end</dt><dd className="mt-1 text-sm leading-6 text-[#273832]">{request.final_event_end_at ? <time dateTime={request.final_event_end_at}>{formatDateTime(request.final_event_end_at)} (Singapore)</time> : request.status === "Confirmed" ? "Not recorded. Automatic completion will be skipped." : "Not recorded"}</dd></div>
           <div className="sm:col-span-2"><dt className="text-xs font-bold uppercase tracking-wide text-[#718078]">Proposed dates</dt><dd className="mt-1 text-sm leading-6 text-[#273832]">{request.proposed_date_times.map(formatDateTime).join(", ")}</dd></div>
         </dl>
       </section>

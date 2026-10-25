@@ -13,6 +13,7 @@ import { ArrowIcon } from "../../../components/icons";
 import { RequestDetails } from "../../../components/request-details";
 import { ArrangementReviewPanel, ArrangementReviewLoading } from "../../../components/arrangement-review-panel";
 import { RegistrationReviews, RegistrationReviewsLoading } from "../../../components/registration-reviews";
+import { RegistrationInfoLoading, RegistrationInfoPanel } from "../../../components/registration-info";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { SafetyReviewsPanel } from "../../../components/safety-reviews-panel";
 import { listSafetyReviews } from "@/lib/safety";
@@ -21,6 +22,7 @@ import { listVenues } from "@/lib/venues";
 import { SUPPORT_STATUSES } from "@/lib/technical-support";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
+import { FinalEventEndForm } from "./final-event-end-form";
 import { ChangeRequestPanel } from "./change-request-panel";
 import { VenueBookingsLoading, VenueBookingsPanel } from "./venue-bookings-panel";
 import { TechnicalSupportLoading, TechnicalSupportPanel } from "./technical-support-panel";
@@ -94,9 +96,13 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
     <div className="mx-auto max-w-4xl">
       <Link href="/coordination/requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to assigned requests</Link>
       <RequestDetails request={request} coordinatorAssigned />
+      {request.status === "Approved" || request.status === "Planning" ? (
+        <FinalEventEndForm key={request.final_event_end_at ?? "unrecorded"} eventRequestId={request.id} finalEventEndAt={request.final_event_end_at} />
+      ) : null}
       <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
       <Suspense fallback={<ArrangementReviewLoading />}><ArrangementReviewPanel eventId={id} /></Suspense>
       <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} canAcknowledge /></Suspense>
+      <Suspense fallback={<RegistrationInfoLoading />}><RegistrationInfoPanel eventRequestId={id} canAddAttendee={request.status === "Confirmed"} /></Suspense>
       <div className="mt-5">
         <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
       </div>

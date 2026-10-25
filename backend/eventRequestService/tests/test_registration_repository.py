@@ -188,3 +188,50 @@ def test_has_active_queries_event_and_attendee() -> None:
     assert seen[0].url.params["attendee_id"] == "eq.a1"
     assert seen[0].url.params["status"] == "eq.Registered"
     assert seen[0].url.params["limit"] == "1"
+
+
+# AC3-X1 (cross-cutting): every registration is read, past the Data API's 1,000-row cap
+def test_list_for_event_pages_past_the_row_cap() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        size = 1000 if request.url.params["offset"] == "0" else 1
+        return httpx.Response(200, json=[{"id": str(i)} for i in range(size)])
+
+    rows = make_repository(handler).list_for_event("e1")
+
+    assert len(rows) == 1001
+    assert [r.url.params["offset"] for r in seen] == ["0", "1000"]
+    assert seen[0].url.params["event_request_id"] == "eq.e1"
+    assert seen[0].url.params["select"] == "id,attendee_id,status,created_at,registered_by"
+
+
+# AC1-H1 (happy): coordinator_register calls the SCRUM-41 function with event, coordinator and email
+def test_coordinator_register_calls_the_database_function() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"id": "r1", "registered_by": "c1"})
+
+    row = make_repository(handler).coordinator_register("e1", "c1", "vip@test.local")
+
+    assert row == {"id": "r1", "registered_by": "c1"}
+    assert seen[0].url.path == "/rest/v1/rpc/coordinator_register_attendee"
+    assert json.loads(seen[0].content) == {
+        "p_event_request_id": "e1",
+        "p_coordinator_id": "c1",
+        "p_attendee_email": "vip@test.local",
+    }
+
+
+# AC1-N1 (negative): a refusal carries the function's errcode and reason
+def test_coordinator_register_refusal_carries_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"code": "P0002", "message": "attendee not found"})
+
+    with pytest.raises(RegistrationRpcError) as raised:
+        make_repository(handler).coordinator_register("e1", "c1", "x@test.local")
+
+    assert (raised.value.errcode, raised.value.reason) == ("P0002", "attendee not found")

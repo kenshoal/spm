@@ -17,6 +17,7 @@ from app.models.event_request import (
     EventChangeRequestResponse,
     EventChangeRequestStatus,
     EventClarificationResponse,
+    EventFinalEndUpdate,
     EventRequestCreate,
     EventRequestResponse,
     EventRequestStatus,
@@ -26,7 +27,11 @@ from app.models.event_request import (
     EventStatusHistoryResponse,
 )
 from app.models.registration_review import RegistrationReviewResponse
-from app.repositories import SupabaseEventRequestRepository, SupabaseRepositoryError
+from app.repositories import (
+    EventRequestRpcError,
+    SupabaseEventRequestRepository,
+    SupabaseRepositoryError,
+)
 from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentNotFoundError,
 )
@@ -611,3 +616,35 @@ def delete_event_request(
 ) -> Response:
     service.delete(str(event_request_id), organiser_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{event_request_id}/final-end", response_model=EventRequestResponse)
+def set_event_final_end(
+    event_request_id: UUID,
+    payload: EventFinalEndUpdate,
+    coordinator_id: CoordinatorDependency,
+    service: ServiceDependency,
+    request: Request,
+) -> EventRequestResponse:
+    """Record only an explicit coordinator end; never infer it from bookings."""
+    request_id = str(event_request_id)
+    try:
+        assignment = _coordinator_assignment_service(request).get_current(request_id)
+        if assignment.coordinator_id != coordinator_id:
+            raise HTTPException(403, "Only the assigned coordinator can record the final end")
+        return service.set_final_end(request_id, coordinator_id, payload)
+    except CoordinatorAssignmentNotFoundError as error:
+        raise HTTPException(404, "Event request not found") from error
+    except EventRequestRpcError as error:
+        if error.errcode == "P0002":
+            raise HTTPException(404, "Event request not found") from error
+        if error.errcode == "P0003":
+            raise HTTPException(403, "Only the assigned coordinator can record the final end") from error
+        if error.errcode == "P0004":
+            raise HTTPException(409, {
+                "code": "final_end_unavailable",
+                "message": "The final event end can only be recorded while Approved or Planning.",
+            }) from error
+        raise HTTPException(502, "Final event end unavailable") from error
+    except (SupabaseRepositoryError, ValidationError) as error:
+        raise HTTPException(502, "Final event end unavailable") from error
