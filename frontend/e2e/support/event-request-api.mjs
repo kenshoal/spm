@@ -6,6 +6,8 @@ const assignments = [];
 const reviewDecisions = [];
 const changeRequests = [];
 const statusHistory = [];
+// SCRUM40 AC5-X1: prepared end-save and completion projections only; native tests own clock/transaction rules.
+const finalEndResponses = new Map();
 // SCRUM-19 UI fixtures only; the real rules live in eventRequestService's own tests.
 const technicalSupportRequirements = new Map();
 const technicalSupportAssignments = new Map();
@@ -148,13 +150,24 @@ createServer(async (request, response) => {
     send(response, 201, { prepared: true }); return;
   }
 
+  // SCRUM40 AC5-X1: install declared server projections without simulating rescheduling, eligibility or completion transactions.
+  if (url.pathname === "/__prepare_event_projection" && request.method === "POST") {
+    const prepared = await readJson(request);
+    const record = records.get(prepared.event_request_id);
+    if (!record) { send(response, 404, { detail: "Unknown prepared event" }); return; }
+    Object.assign(record, structuredClone(prepared.event));
+    if (prepared.history) statusHistory.push({ ...structuredClone(prepared.history), id: nextHistoryId++, event_request_id: record.id });
+    send(response, 201, { prepared: true }); return;
+  }
+
   // Test-only seed for statuses no implemented story writes yet (e.g.
   // Confirmed, which the venue/ops stories own on other branches).
   if (url.pathname === "/__seed" && request.method === "POST") {
     const body = await readJson(request);
-    const { coordinator_id, review_decision, arrangement_reviews, date_plan_bookings, registration_reviews, registration_acknowledgements, ...recordOverrides } = body;
+    const { coordinator_id, review_decision, arrangement_reviews, date_plan_bookings, registration_reviews, registration_acknowledgements, final_end_response, ...recordOverrides } = body;
     const record = recordFields({ ...recordOverrides, status: body.status ?? "Submitted" });
     records.set(record.id, record);
+    if (final_end_response) finalEndResponses.set(record.id, structuredClone(final_end_response));
     if (date_plan_bookings) datePlanBookings.set(record.id, structuredClone(date_plan_bookings));
     for (const row of registration_reviews ?? []) registrationReviews.set(row.id, { ...row, event_request_id: record.id });
     for (const row of registration_acknowledgements ?? []) registrationAcknowledgements.set(row.id, { ...row, event_request_id: record.id });
@@ -467,6 +480,7 @@ createServer(async (request, response) => {
     send(response, 405, { detail: "Method not allowed" });
     return;
   }
+  const finalEndMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/final-end$/);
   const historyMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/status-history$/);
   const coordinatorMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/coordinator$/);
   const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|resume-review|cancellation|completion)$/);
@@ -480,7 +494,7 @@ createServer(async (request, response) => {
   const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
   const match = url.pathname.match(/^\/event-requests\/([^/]+)$/);
   const id = decodeURIComponent(
-    historyMatch?.[1] ?? coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? decisionMatch?.[1]
+    finalEndMatch?.[1] ?? historyMatch?.[1] ?? coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? decisionMatch?.[1]
       ?? decisionsMatch?.[1] ?? clarificationMatch?.[1] ?? bookingPlanMatch?.[1] ?? datePlanMatch?.[1] ?? changeDecisionMatch?.[1]
       ?? changeRequestsMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
   );
@@ -551,6 +565,18 @@ createServer(async (request, response) => {
   if (!id || !record) {
     send(response, 404, { detail: "Event request not found" });
     return;
+  }
+
+  // SCRUM40 AC1-H3: exact prepared setter response; no lifecycle/authority/clock algorithm is duplicated here.
+  if (finalEndMatch && request.method === "POST") {
+    const body = await readJson(request);
+    const prepared = finalEndResponses.get(id);
+    if (!prepared || Object.keys(body).length !== 1
+        || new Date(body.final_event_end_at).getTime() !== new Date(prepared.final_event_end_at).getTime()) {
+      send(response, 400, { detail: "Prepared final-end request did not match" }); return;
+    }
+    Object.assign(record, structuredClone(prepared));
+    send(response, 200, record); return;
   }
 
   if (historyMatch) {
