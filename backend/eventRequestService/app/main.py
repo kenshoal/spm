@@ -16,6 +16,9 @@ from app.controllers.event_request_controller import router as event_request_rou
 from app.controllers.event_transition_controller import (
     router as event_transition_router,
 )
+from app.controllers.registration_controller import (
+    management_router as registration_info_router,
+)
 from app.controllers.registration_controller import router as registration_router
 from app.controllers.technical_support_controller import (
     router as technical_support_router,
@@ -69,6 +72,9 @@ from app.services.registration_rules import (
 )
 from app.services.registration_service import (
     AlreadyRegisteredError,
+    AttendeeAlreadyRegisteredError,
+    AttendeeNotFoundError,
+    CapacityNotSetError,
     RegistrationService,
 )
 from app.services.technical_support_service import (
@@ -137,7 +143,7 @@ def create_app(
     application.state.event_request_service = event_request_service
     application.state.coordinator_assignment_service = coordinator_assignment_service
     application.state.registration_service = (
-        RegistrationService(registration_repository)
+        RegistrationService(registration_repository, coordinator_repository)
         if registration_repository is not None
         else None
     )
@@ -169,6 +175,7 @@ def create_app(
     application.include_router(event_request_router)
     application.include_router(arrangement_review_router)
     application.include_router(registration_router)
+    application.include_router(registration_info_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(
@@ -342,6 +349,42 @@ def create_app(
             content={
                 "detail": "You are already registered for this event",
                 "code": "already_registered",
+            },
+        )
+
+    @application.exception_handler(AttendeeAlreadyRegisteredError)
+    async def attendee_already_registered(
+        request: Request, error: AttendeeAlreadyRegisteredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This attendee is already registered for this event",
+                "code": "already_registered",
+            },
+        )
+
+    @application.exception_handler(AttendeeNotFoundError)
+    async def attendee_not_found(
+        request: Request, error: AttendeeNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "detail": "No attendee account has that email",
+                "code": "attendee_not_found",
+            },
+        )
+
+    @application.exception_handler(CapacityNotSetError)
+    async def capacity_not_set(
+        request: Request, error: CapacityNotSetError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This event has no registration capacity set",
+                "code": "capacity_not_set",
             },
         )
 

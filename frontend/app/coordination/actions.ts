@@ -331,6 +331,49 @@ export async function loadEventChangeBookingPlan(
   }
 }
 
+export interface ManualRegistrationState {
+  message?: string;
+  registered?: boolean;
+}
+
+export async function registerAttendee(
+  eventRequestId: string,
+  previousState: ManualRegistrationState,
+  formData: FormData,
+): Promise<ManualRegistrationState> {
+  void previousState;
+  const email = String(formData.get("attendee_email") ?? "").trim();
+  if (!email) return { message: "Enter the attendee's email." };
+  await requireRole("event_coordinator");
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/registrations`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ attendee_email: email }),
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    return { message: "Registrations unavailable. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    const code = await response.json().then((body) => body?.code).catch(() => undefined);
+    return { message: MANUAL_REGISTRATION_MESSAGES[code] ?? "Registrations unavailable. Please try again." };
+  }
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  return { registered: true };
+}
+
+const MANUAL_REGISTRATION_MESSAGES: Record<string, string> = {
+  attendee_not_found: "No attendee account has that email. Ask the organiser to check it.",
+  event_not_found: "You are no longer assigned to this event, or it is no longer confirmed. Refresh the page.",
+  already_registered: "This attendee is already registered for this event.",
+  event_full: "This event is full.",
+  capacity_not_set: "This event has no registration capacity set yet.",
+};
 
 export interface FinalEndState {
   message?: string;

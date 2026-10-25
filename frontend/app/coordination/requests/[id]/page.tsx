@@ -13,6 +13,7 @@ import { ArrowIcon } from "../../../components/icons";
 import { RequestDetails } from "../../../components/request-details";
 import { ArrangementReviewPanel, ArrangementReviewLoading } from "../../../components/arrangement-review-panel";
 import { RegistrationReviews, RegistrationReviewsLoading } from "../../../components/registration-reviews";
+import { RegistrationInfoLoading, RegistrationInfoPanel } from "../../../components/registration-info";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { SafetyReviewsPanel } from "../../../components/safety-reviews-panel";
 import { listSafetyReviews } from "@/lib/safety";
@@ -101,6 +102,7 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
       <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
       <Suspense fallback={<ArrangementReviewLoading />}><ArrangementReviewPanel eventId={id} /></Suspense>
       <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} canAcknowledge /></Suspense>
+      <Suspense fallback={<RegistrationInfoLoading />}><RegistrationInfoPanel eventRequestId={id} canAddAttendee={request.status === "Confirmed"} /></Suspense>
       <div className="mt-5">
         <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
       </div>
