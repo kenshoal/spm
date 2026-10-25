@@ -16,6 +16,7 @@ import { ReviewDecisionHistory } from "../../../components/review-decision-histo
 import { ClarificationResponseForm } from "../clarification-response-form";
 import { ChangeRequestHistory } from "../../../components/change-request-history";
 import { RegistrationReviews, RegistrationReviewsLoading } from "../../../components/registration-reviews";
+import { RegistrationInfoLoading, RegistrationInfoPanel } from "../../../components/registration-info";
 import { ChangeRequestDialog } from "../change-request-dialog";
 
 import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
@@ -101,6 +102,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
         />
         <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
         {!shared ? <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} /></Suspense> : null}
+        {!shared ? <Suspense fallback={<RegistrationInfoLoading />}><RegistrationInfoPanel eventRequestId={id} /></Suspense> : null}
         <div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div>
         <div>
           {changeResult.failed ? (

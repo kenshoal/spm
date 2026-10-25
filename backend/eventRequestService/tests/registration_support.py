@@ -59,6 +59,11 @@ class FakeRegistrationRepository:
         # SCRUM-38: the assigned Coordinator per event, and a switch to fail the lookup.
         self.coordinators: dict[str, str] = {}
         self.coordinator_lookup_fails = False
+        # SCRUM-41: attendee accounts by lower-cased email, and the assignments
+        # coordinator_register_attendee rechecks.
+        self.attendee_accounts: dict[str, str] = {}
+        self.assignments: FakeCoordinatorAssignments | None = None
+        self.manual_calls: list[tuple[str, str, str]] = []
 
     def get_organiser_id(self, event_id: str) -> str | None:
         event = self.events.get(event_id)
@@ -68,6 +73,41 @@ class FakeRegistrationRepository:
         if self.coordinator_lookup_fails:
             raise SupabaseRepositoryError("assignments unavailable")
         return self.coordinators.get(event_id)
+
+
+    def coordinator_register(
+        self, event_id: str, coordinator_id: str, attendee_email: str
+    ) -> dict[str, Any]:
+        """Mirrors coordinator_register_attendee (0060): no window check."""
+        self.manual_calls.append((event_id, coordinator_id, attendee_email))
+        event = self.events.get(event_id)
+        latest = (
+            self.assignments.latest_for_event_request(event_id)
+            if self.assignments else None
+        )
+        if (event is None or event["status"] != "Confirmed" or latest is None
+                or latest["coordinator_id"] != coordinator_id):
+            raise RegistrationRpcError("event not found", "P0002", "event not found")
+        attendee_id = self.attendee_accounts.get(attendee_email.strip().lower())
+        if attendee_id is None:
+            raise RegistrationRpcError("attendee not found", "P0002", "attendee not found")
+        if self.has_active(event_id, attendee_id):
+            raise RegistrationRpcError("already registered", "P0004", "already registered")
+        if event.get("registration_capacity") is None:
+            raise RegistrationRpcError("capacity not set", "P0004", "capacity not set")
+        if self._stored_count(event_id) >= event["registration_capacity"]:
+            raise RegistrationRpcError("event full", "P0004", "event full")
+        self._clock += 1
+        row = {
+            "id": str(uuid4()),
+            "event_request_id": event_id,
+            "attendee_id": attendee_id,
+            "status": "Registered",
+            "created_at": NOW + timedelta(seconds=self._clock),
+            "registered_by": coordinator_id,
+        }
+        self.registrations.append(row)
+        return dict(row)
 
     # -- reads used by the service -------------------------------------
     def get_event(self, event_id: str) -> dict[str, Any] | None:
@@ -101,6 +141,16 @@ class FakeRegistrationRepository:
             and r["status"] == "Registered"
             for r in self.registrations
         )
+
+    def get_event_access(self, event_id: str) -> dict[str, Any] | None:
+        row = self.events.get(event_id)
+        if row is None:
+            return None
+        return {k: row.get(k) for k in ("id", "organiser_id", "registration_capacity")}
+
+    def list_for_event(self, event_id: str) -> list[dict[str, Any]]:
+        rows = [r for r in self.registrations if r["event_request_id"] == event_id]
+        return [dict(r) for r in sorted(rows, key=lambda r: (r["created_at"], r["id"]))]
 
     def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]:
         mine = [r for r in self.registrations if r["attendee_id"] == attendee_id]
@@ -141,9 +191,69 @@ class FakeRegistrationRepository:
             "attendee_id": attendee_id,
             "status": "Registered",
             "created_at": NOW + timedelta(seconds=self._clock),
+            "registered_by": None,
         }
         self.registrations.append(row)
         return dict(row)
+
+    # -- SCRUM-22: withdrawal ----------------------------------------------
+    def get_registration(self, registration_id: str) -> dict[str, Any] | None:
+        for r in self.registrations:
+            if r["id"] == registration_id:
+                return dict(r)
+        return None
+
+    def withdraw(
+        self, registration_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """Mirrors `withdraw_registration`: owner, already withdrawn, event state."""
+        row = next(
+            (
+                r
+                for r in self.registrations
+                if r["id"] == registration_id and r["attendee_id"] == attendee_id
+            ),
+            None,
+        )
+        if row is None:
+            raise RegistrationRpcError(
+                "registration not found", "P0002", "registration not found"
+            )
+        if row["status"] == "Withdrawn":
+            raise RegistrationRpcError(
+                "already withdrawn", "P0004", "already withdrawn"
+            )
+        event = self.events[row["event_request_id"]]
+        dates = event.get("proposed_date_times") or []
+        if event["status"] != "Confirmed" or not dates or now >= min(dates):
+            raise RegistrationRpcError(
+                "withdrawal not permitted", "P0004", "withdrawal not permitted"
+            )
+        row["status"] = "Withdrawn"
+        row["withdrawn_at"] = now
+        return dict(row)
+
+
+def add_registration(
+    repository: FakeRegistrationRepository,
+    event_id: str,
+    attendee_id: str,
+    **overrides: Any,
+) -> str:
+    """Store one registration directly and return its id."""
+    registration_id = str(uuid4())
+    repository.registrations.append(
+        {
+            "id": registration_id,
+            "event_request_id": event_id,
+            "attendee_id": attendee_id,
+            "status": "Registered",
+            "created_at": NOW - timedelta(days=1),
+            "withdrawn_at": None,
+            **overrides,
+        }
+    )
+    return registration_id
 
 
 def add_event(
@@ -187,13 +297,26 @@ def fill(
         )
 
 
+class FakeCoordinatorAssignments:
+    """Only what SCRUM-34 reads: assignment rows, latest last."""
+
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+        self.rows = rows or []
+
+    def latest_for_event_request(self, event_request_id: str) -> dict[str, Any] | None:
+        rows = [r for r in self.rows if r["event_request_id"] == event_request_id]
+        return dict(rows[-1]) if rows else None
+
+
 def make_client(
     repository: FakeRegistrationRepository | None = None,
     caller_id: str = ATTENDEE_A,
     roles: tuple[str, ...] = ("attendee",),
+    coordinators: FakeCoordinatorAssignments | None = None,
 ) -> TestClient:
     application = create_app(
-        registration_repository=repository or FakeRegistrationRepository()
+        registration_repository=repository or FakeRegistrationRepository(),
+        coordinator_repository=coordinators or FakeCoordinatorAssignments(),
     )
     application.dependency_overrides[
         event_request_controller.get_authenticated_caller

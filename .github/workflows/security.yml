@@ -26,7 +26,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm audit --audit-level=high
+      # Production dependencies only: dev tooling (lint, test) never ships. Policy: Confluence security rulebook.
+      - run: npm audit --omit=dev --audit-level=high
 
   python-audit:
     name: Audit Python dependencies (${{ matrix.service }})

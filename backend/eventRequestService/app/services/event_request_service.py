@@ -18,6 +18,7 @@ from app.models.event_request import (
     EventChangeRequestResponse,
     EventChangeRequestStatus,
     EventClarificationResponse,
+    EventFinalEndUpdate,
     EventRequestCreate,
     EventRequestResponse,
     EventRequestStatus,
@@ -324,6 +325,16 @@ class EventRequestService:
             raise EventRequestTransitionConflictError(
                 event_request_id, from_status.value, to_status.value
             )
+        return self._row_to_response(row)
+
+    def set_final_end(
+        self, event_request_id: str, coordinator_id: str, payload: EventFinalEndUpdate
+    ) -> EventRequestResponse:
+        """The native setter rechecks state and assignment under the event lock."""
+        row = self.repository.set_final_end(
+            event_request_id, coordinator_id,
+            payload.final_event_end_at.astimezone(UTC),
+        )
         return self._row_to_response(row)
 
     def advance_by_coordinator(

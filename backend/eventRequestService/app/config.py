@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import AnyHttpUrl, SecretStr
+from pydantic import AnyHttpUrl, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,21 @@ class NotificationSettings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+
+class PeriodicTaskSettings(BaseSettings):
+    """Timer configuration is independent of optional notification delivery."""
+
+    auto_completion_enabled: bool = False
+    periodic_task_interval_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore",
+    )
+
+
+def get_periodic_task_settings() -> PeriodicTaskSettings:
+    return PeriodicTaskSettings()
 
 
 class Settings(NotificationSettings):

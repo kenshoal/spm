@@ -41,7 +41,7 @@ class SpyNotificationClient:
 
 def spy_client(repo: FakeRegistrationRepository, spy: Any):
     client = make_client(repo)
-    client.app.state.registration_service = RegistrationService(repo, spy)
+    client.app.state.registration_service = RegistrationService(repo, notification_client=spy)
     return client
 
 
