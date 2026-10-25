@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.config import get_notification_settings
+from app.config import get_notification_settings, get_periodic_task_settings
 from app.controllers.arrangement_review_controller import (
     router as arrangement_review_router,
 )
@@ -34,6 +34,7 @@ from app.services.arrangement_review_notification_relay import (
     ArrangementReviewNotificationRelay,
     build_arrangement_review_notification_relay,
 )
+from app.services.auto_completion import build_auto_completion_service
 from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentNotAllowedError,
     CoordinatorAssignmentNotFoundError,
@@ -60,10 +61,14 @@ from app.services.event_transition_service import (
 )
 from app.services.notification_client import NotificationClient
 from app.services.outbox_relay import OutboxRelay, build_outbox_relay
+from app.services.periodic_task_runner import PeriodicTaskRunner
 from app.services.registration_rules import (
+    AlreadyWithdrawnError,
     EventFullError,
     EventNotVisibleError,
+    RegistrationNotFoundError,
     RegistrationNotOpenError,
+    WithdrawalNotPermittedError,
 )
 from app.services.registration_service import (
     AlreadyCheckedInError,
@@ -72,13 +77,27 @@ from app.services.registration_service import (
     AttendeeNotFoundError,
     CapacityNotSetError,
     NotEventDayError,
-    RegistrationNotFoundError,
     RegistrationService,
 )
 from app.services.technical_support_service import (
     TechnicalSupportError,
     TechnicalSupportService,
 )
+
+
+def build_periodic_task_runner() -> PeriodicTaskRunner | None:
+    settings = get_periodic_task_settings()
+    handlers = {}
+    # Each story controls only its own registration. SCRUM-38 can add a separate
+    # configured handler here even when automatic completion is disabled.
+    if settings.auto_completion_enabled:
+        completion = build_auto_completion_service()
+        handlers["auto_completion"] = completion.run_once
+    if not handlers:
+        return None
+    return PeriodicTaskRunner(
+        handlers, interval_seconds=settings.periodic_task_interval_seconds
+    )
 
 
 def create_app(
@@ -89,12 +108,13 @@ def create_app(
     registration_repository: RegistrationRepository | None = None,
     technical_support_repository: TechnicalSupportRepository | None = None,
     technical_support_notification_client: NotificationClient | None = None,
+    periodic_task_runner: PeriodicTaskRunner | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         relay_tasks = [
             asyncio.create_task(relay.run_forever())
-            for relay in (outbox_relay, arrangement_review_relay)
+            for relay in (outbox_relay, arrangement_review_relay, periodic_task_runner)
             if relay is not None
         ]
         try:
@@ -387,7 +407,7 @@ def create_app(
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={
-                "detail": "Registration not found for this event",
+                "detail": "Registration not found",
                 "code": "registration_not_found",
             },
         )
@@ -401,6 +421,30 @@ def create_app(
             content={
                 "detail": "This attendee is already checked in",
                 "code": "already_checked_in",
+            },
+        )
+
+    @application.exception_handler(AlreadyWithdrawnError)
+    async def already_withdrawn(
+        request: Request, error: AlreadyWithdrawnError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This registration is already withdrawn",
+                "code": "already_withdrawn",
+            },
+        )
+
+    @application.exception_handler(WithdrawalNotPermittedError)
+    async def withdrawal_not_permitted(
+        request: Request, error: WithdrawalNotPermittedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This registration can no longer be withdrawn",
+                "code": "withdrawal_not_permitted",
             },
         )
 
@@ -438,4 +482,5 @@ def create_app(
 app = create_app(
     outbox_relay=build_outbox_relay(),
     arrangement_review_relay=build_arrangement_review_notification_relay(),
+    periodic_task_runner=build_periodic_task_runner(),
 )

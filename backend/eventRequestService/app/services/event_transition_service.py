@@ -220,11 +220,21 @@ class EventTransitionService:
             raise
 
         # Only after the locked write succeeded, so a refused decision tells nobody
-        # to clarify something that was never recorded. Approved and Rejected
-        # notices belong to SCRUM-36. A reason is guaranteed here: the check above
-        # refuses a Changes Requested decision without one.
+        # an outcome that was never recorded. A reason is guaranteed for Changes
+        # Requested and Rejected: the check above refuses them without one.
         if payload.decision == EventRequestStatus.CHANGES_REQUESTED:
             self.notification_client.notify_clarification_requested(
+                event_request_id=event_request_id,
+                organiser_id=event_request.organiser_id,
+                reason=payload.reason,
+            )
+        elif payload.decision == EventRequestStatus.APPROVED:
+            self.notification_client.notify_event_request_approved(
+                event_request_id=event_request_id,
+                organiser_id=event_request.organiser_id,
+            )
+        elif payload.decision == EventRequestStatus.REJECTED:
+            self.notification_client.notify_event_request_rejected(
                 event_request_id=event_request_id,
                 organiser_id=event_request.organiser_id,
                 reason=payload.reason,
@@ -258,8 +268,13 @@ class EventTransitionService:
             raise
 
         # After the decision is committed, as in SCRUM-17: a refused decision
-        # tells nobody anything. The organiser's "confirmed" notice is SCRUM-36.
-        if payload.decision == "changes_requested":
+        # tells nobody anything.
+        if payload.decision == "approved":
+            self.notification_client.notify_event_confirmed(
+                event_request_id=event_request_id,
+                organiser_id=event_request.organiser_id,
+            )
+        elif payload.decision == "changes_requested":
             # The decision is saved: a failed lookup must not turn it into a 502,
             # which the officer would retry into a 409. The reason stays readable
             # on the request.

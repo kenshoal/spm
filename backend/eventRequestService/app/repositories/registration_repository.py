@@ -16,13 +16,16 @@ EVENT_COLUMNS = (
 # The Data API's default max-rows; list_for_event pages past it.
 PAGE_SIZE = 1000
 
+REGISTRATION_COLUMNS = "id,event_request_id,attendee_id,status,created_at,withdrawn_at"
+
 
 class RegistrationRpcError(SupabaseRepositoryError):
-    """`register_for_event` refused the call.
+    """`register_for_event` or `withdraw_registration` refused the call.
 
     errcode is the Postgres ERRCODE (P0002 event not found, P0004 refused) and
     reason the function's message ('registration not open', 'already registered',
-    'event full'), so callers never parse prose written for people.
+    'event full', and for `withdraw_registration` 'registration not found',
+    'already withdrawn', 'withdrawal not permitted'), so callers never parse prose written for people.
     """
 
     def __init__(
@@ -58,6 +61,12 @@ class RegistrationRepository(Protocol):
 
     def coordinator_register(
         self, event_id: str, coordinator_id: str, attendee_email: str
+    ) -> dict[str, Any]: ...
+
+    def get_registration(self, registration_id: str) -> dict[str, Any] | None: ...
+
+    def withdraw(
+        self, registration_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]: ...
 
     def check_in(
@@ -162,7 +171,7 @@ class SupabaseRegistrationRepository:
         return self._get(
             "/event_registrations",
             {
-                "select": "id,event_request_id,attendee_id,status,created_at",
+                "select": REGISTRATION_COLUMNS,
                 "attendee_id": f"eq.{attendee_id}",
                 "order": "created_at.desc",
             },
@@ -206,6 +215,27 @@ class SupabaseRegistrationRepository:
                 "p_attendee_id": attendee_id,
                 "p_now": now.isoformat(),
             },
+            action="registration",
+        )
+
+    def get_registration(self, registration_id: str) -> dict[str, Any] | None:
+        rows = self._get(
+            "/event_registrations",
+            {"select": REGISTRATION_COLUMNS, "id": f"eq.{registration_id}"},
+        )
+        return rows[0] if rows else None
+
+    def withdraw(
+        self, registration_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        return self._rpc(
+            "withdraw_registration",
+            {
+                "p_registration_id": registration_id,
+                "p_attendee_id": attendee_id,
+                "p_now": now.isoformat(),
+            },
+            action="withdrawal",
         )
 
     def coordinator_register(
@@ -219,6 +249,7 @@ class SupabaseRegistrationRepository:
                 "p_coordinator_id": coordinator_id,
                 "p_attendee_email": attendee_email,
             },
+            action="registration",
         )
 
     def check_in(
@@ -233,9 +264,12 @@ class SupabaseRegistrationRepository:
                 "p_coordinator_id": coordinator_id,
                 "p_now": now.isoformat(),
             },
+            action="check-in",
         )
 
-    def _rpc(self, function: str, payload: dict[str, str]) -> dict[str, Any]:
+    def _rpc(
+        self, function: str, payload: dict[str, str], action: str
+    ) -> dict[str, Any]:
         try:
             response = self._client.post(
                 f"/rpc/{function}",
@@ -244,17 +278,17 @@ class SupabaseRegistrationRepository:
             )
         except httpx.HTTPError as error:
             raise SupabaseRepositoryError(
-                "Supabase could not complete the registration"
+                f"Supabase could not complete the {action}"
             ) from error
         if response.status_code >= 500:
-            raise SupabaseRepositoryError("Supabase could not complete the registration")
+            raise SupabaseRepositoryError(f"Supabase could not complete the {action}")
         if response.is_error:
             try:
                 body = response.json()
             except ValueError:
                 body = {}
             raise RegistrationRpcError(
-                "Supabase rejected the registration",
+                f"Supabase rejected the {action}",
                 errcode=body.get("code"),
                 reason=body.get("message"),
             )

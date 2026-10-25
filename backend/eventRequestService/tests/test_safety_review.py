@@ -52,6 +52,10 @@ class SpyNotificationClient:
     def notify_safety_changes_requested(self, **kwargs: Any) -> None:
         self.safety_changes.append(kwargs)
 
+    # The Organiser's "confirmed" notice is SCRUM-36's; ignored here.
+    def notify_event_confirmed(self, **kwargs: Any) -> None:
+        pass
+
 
 def safety_fixture(
     status: str = "Safety Review",
@@ -104,7 +108,7 @@ def test_safety_officer_approves_event() -> None:
     [review] = events.safety_review_rows
     assert (review["decision"], review["decided_by"]) == ("approved", OFFICER)
     # AC4b-P1 (partition): approval tells the coordinator nothing; the organiser's
-    # "confirmed" notice belongs to SCRUM-36.
+    # "confirmed" notice is SCRUM-36's (test_event_confirmed_notification.py).
     assert spy.safety_changes == []
 
 

@@ -13,7 +13,11 @@ class ArrangementReviewResponse(BaseModel):
     arrangement_id: UUID
     trigger_id: UUID
     trigger_type: Literal[
-        "event_change", "equipment_unavailable", "safety_recheck", "venue_timing_change"
+        "event_change",
+        "equipment_unavailable",
+        "safety_recheck",
+        "venue_timing_change",
+        "venue_block",
     ]
     changed_fields: list[str]
     reason: str

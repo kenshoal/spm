@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAccessToken, requireRole } from "@/lib/auth";
+import { parseFinalEndInput } from "@/lib/event-final-end";
 import { getEventChangeBookingPlan, getEventChangeDatePlan, type EventChangeBookingConflict, type EventChangeBookingPlan, type EventChangeDatePlan } from "@/lib/event-requests";
 
 export interface TransitionState {
@@ -414,3 +415,43 @@ const CHECK_IN_MESSAGES: Record<string, string> = {
   registration_not_found: "This attendee is no longer registered for this event. Refresh the page.",
   event_not_found: "You are no longer assigned to this event, or it is no longer confirmed. Refresh the page.",
 };
+
+export interface FinalEndState {
+  message?: string;
+  saved?: true;
+}
+
+export async function setEventFinalEnd(
+  eventRequestId: string,
+  previousState: FinalEndState,
+  formData: FormData,
+): Promise<FinalEndState> {
+  void previousState;
+  await requireRole("event_coordinator");
+  const token = await requireAccessToken();
+  const finalEnd = parseFinalEndInput(formData.get("final_event_end_at"));
+  if (!finalEnd) return { message: "Enter a valid final event end in Singapore time." };
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/final-end`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ final_event_end_at: finalEnd }),
+    });
+  } catch {
+    return { message: "The final event end could not be saved. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) return {
+    message: response.status === 403
+      ? "Only the currently assigned coordinator can record the final event end."
+      : response.status === 409
+        ? "The final event end can only be saved while Approved or Planning. Refresh to check the event."
+        : "The final event end could not be saved. Please try again.",
+  };
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  revalidatePath("/coordination/requests");
+  revalidatePath("/event-requests");
+  return { saved: true };
+}

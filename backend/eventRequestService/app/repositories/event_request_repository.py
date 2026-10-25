@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Protocol
 
 import httpx
@@ -6,6 +7,18 @@ from app.config import Settings
 
 
 class EventRequestRepository(Protocol):
+    def list_confirmed_for_auto_completion(
+        self, *, after_id: str | None, limit: int
+    ) -> list[dict[str, Any]]: ...
+
+    def complete_overdue_event_request(
+        self, event_request_id: str, as_of: datetime
+    ) -> bool: ...
+
+    def set_final_end(
+        self, event_request_id: str, coordinator_id: str, final_event_end_at: datetime
+    ) -> dict[str, Any]: ...
+
     def list_registration_reviews(self, event_request_id: str) -> list[dict[str, Any]]: ...
 
     def acknowledge_registration_review(
@@ -791,6 +804,49 @@ class SupabaseEventRequestRepository:
                 "Supabase could not complete the event request operation"
             ) from error
         return response.json()
+
+    def set_final_end(
+        self, event_request_id: str, coordinator_id: str, final_event_end_at: datetime
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "set_event_request_final_end",
+            {
+                "p_event_request_id": event_request_id,
+                "p_coordinator_id": coordinator_id,
+                "p_final_event_end_at": final_event_end_at.isoformat(),
+            },
+        )
+
+    def list_confirmed_for_auto_completion(
+        self, *, after_id: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        params = {
+            "select": "id,final_event_end_at",
+            "status": "eq.Confirmed",
+            "order": "id.asc",
+            "limit": str(limit),
+        }
+        if after_id is not None:
+            params["id"] = f"gt.{after_id}"
+        return self._request("GET", params=params)
+
+    def complete_overdue_event_request(
+        self, event_request_id: str, as_of: datetime
+    ) -> bool:
+        try:
+            response = self._client.post(
+                "/rpc/complete_overdue_event_request",
+                json={"p_event_request_id": event_request_id, "p_as_of": as_of.isoformat()},
+            )
+            response.raise_for_status()
+            changed = response.json()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except (httpx.HTTPError, ValueError) as error:
+            raise SupabaseRepositoryError("Automatic completion unavailable") from error
+        if not isinstance(changed, bool):
+            raise SupabaseRepositoryError("Automatic completion returned an invalid result")
+        return changed
 
     def close(self) -> None:
         self._client.close()

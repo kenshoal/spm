@@ -168,6 +168,80 @@ class NotificationClient:
                 exc_info=True,
             )
 
+    def notify_event_request_approved(
+        self, *, event_request_id: str, organiser_id: str
+    ) -> None:
+        """Tell the Organiser their request was approved (SCRUM-36 AC1)."""
+        self._notify_organiser_of_outcome(
+            "event_request_approved",
+            event_request_id=event_request_id,
+            organiser_id=organiser_id,
+            payload={"event_request_id": event_request_id},
+        )
+
+    def notify_event_request_rejected(
+        self, *, event_request_id: str, organiser_id: str, reason: str
+    ) -> None:
+        """Tell the Organiser their request was rejected, and why (SCRUM-36 AC1)."""
+        self._notify_organiser_of_outcome(
+            "event_request_rejected",
+            event_request_id=event_request_id,
+            organiser_id=organiser_id,
+            payload={"event_request_id": event_request_id, "reason": reason},
+        )
+
+    def notify_event_confirmed(
+        self, *, event_request_id: str, organiser_id: str
+    ) -> None:
+        """Tell the Organiser their event is confirmed (SCRUM-36 AC3)."""
+        self._notify_organiser_of_outcome(
+            "event_confirmed",
+            event_request_id=event_request_id,
+            organiser_id=organiser_id,
+            payload={"event_request_id": event_request_id},
+        )
+
+    def _notify_organiser_of_outcome(
+        self,
+        event_type: str,
+        *,
+        event_request_id: str,
+        organiser_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        """Best-effort outcome notice, sent once after the decision has committed.
+
+        The key is stable per request and type, so an accidental repeat is stored
+        once. A failure is logged and never raised: the saved decision stands.
+        """
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": event_type,
+                    "recipient_id": organiser_id,
+                    "event_id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"{event_type.replace('_', '-')}:{event_request_id}",
+                        )
+                    ),
+                    "payload": payload,
+                },
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify organiser %s of %s on event request %s",
+                organiser_id,
+                event_type,
+                event_request_id,
+                exc_info=True,
+            )
+
     def notify_event_change_rejected(
         self, *, event_request_id: str, change_request_id: str,
         organiser_id: str, reason: str,
