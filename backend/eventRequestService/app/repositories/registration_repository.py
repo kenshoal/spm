@@ -1,6 +1,6 @@
 """Registration persistence through Supabase's Data API (SCRUM-21)."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import httpx
@@ -104,6 +104,32 @@ class SupabaseRegistrationRepository:
             "/event_requests", {"select": EVENT_COLUMNS, "id": f"eq.{event_id}"}
         )
         return rows[0] if rows else None
+
+    def list_window_boundaries(
+        self, *, since: datetime, until: datetime, after_id: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        """Confirmed events whose opening or closing time falls in [since, until].
+
+        One page, oldest id first. Only what the notice needs is selected
+        (SCRUM-38 AC3), never the internal planning columns.
+        """
+        def stamp(moment: datetime) -> str:
+            return moment.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+        low, high = stamp(since), stamp(until)
+        params = {
+            "select": "id,event_name,organiser_id,registration_opens_at,registration_closes_at",
+            "status": "eq.Confirmed",
+            "or": (
+                f"(and(registration_opens_at.gte.{low},registration_opens_at.lte.{high}),"
+                f"and(registration_closes_at.gte.{low},registration_closes_at.lte.{high}))"
+            ),
+            "order": "id.asc",
+            "limit": str(limit),
+        }
+        if after_id is not None:
+            params["id"] = f"gt.{after_id}"
+        return self._get("/event_requests", params)
 
     def get_organiser_id(self, event_id: str) -> str | None:
         """Who to tell about the event (SCRUM-38); fetched alone, never publicly."""

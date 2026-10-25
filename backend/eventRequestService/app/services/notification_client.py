@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
@@ -279,6 +280,32 @@ class NotificationClient:
                     "proposed_date_times": proposed_date_times,
                 },
             )
+
+    def notify_registration_window(
+        self,
+        *,
+        kind: str,
+        event_request_id: str,
+        event_name: str | None,
+        boundary_at: datetime,
+        recipient_id: str,
+    ) -> None:
+        """Tell an Organiser or Coordinator registration opened or closed (SCRUM-38 AC3).
+
+        The key holds the boundary time, so repeating a pass sends the same key
+        (stored once) and a moved window sends a new one.
+        """
+        moment = boundary_at.astimezone(UTC).isoformat()
+        self._post_notice(
+            f"registration_{kind}",
+            recipient_id=recipient_id,
+            key=f"registration-{kind}:{event_request_id}:{moment}:{recipient_id}",
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "boundary_at": moment,
+            },
+        )
 
     def _post_notice(
         self, event_type: str, *, recipient_id: str, key: str, payload: dict[str, Any]

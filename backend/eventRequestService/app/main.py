@@ -77,6 +77,9 @@ from app.services.registration_service import (
     CapacityNotSetError,
     RegistrationService,
 )
+from app.services.registration_window_notifier import (
+    build_registration_window_notifier,
+)
 from app.services.technical_support_service import (
     TechnicalSupportError,
     TechnicalSupportService,
@@ -91,6 +94,11 @@ def build_periodic_task_runner() -> PeriodicTaskRunner | None:
     if settings.auto_completion_enabled:
         completion = build_auto_completion_service()
         handlers["auto_completion"] = completion.run_once
+    # SCRUM-38 AC3: its own switch, so it runs with or without completion.
+    if settings.registration_window_notices_enabled:
+        handlers["registration_window_notices"] = (
+            build_registration_window_notifier().run_once
+        )
     if not handlers:
         return None
     return PeriodicTaskRunner(
