@@ -76,3 +76,34 @@ test("shows no detail line when the new dates are missing", () => {
   expect(summary.message).toBe("The dates of Community Dinner have changed.");
   expect(summary.detail).toBeUndefined();
 });
+
+// AC3-H4 (happy): the Organiser is told registration opened or closed, with the time, and
+// opens their own request page.
+test.each([
+  ["registration_opened", "Registration for Community Dinner has opened."],
+  ["registration_closed", "Registration for Community Dinner has closed."],
+])("describes %s for the organiser with their link", (type, message) => {
+  const summary = describeNotification(
+    notice(type, { boundary_at: "2030-01-15T08:00:00+00:00" }),
+    ["event_organiser"],
+  );
+  expect(summary.message).toBe(message);
+  expect(summary.detail).toBe(formatDateTime("2030-01-15T08:00:00+00:00"));
+  expect(summary.href).toBe(`/event-requests/${EVENT}/edit`);
+});
+
+// AC3-H5 (happy): the Coordinator gets the same notice linking to the coordination page.
+test("describes registration opening for the coordinator with the coordination link", () => {
+  const summary = describeNotification(notice("registration_opened"), ["event_coordinator"]);
+  expect(summary.href).toBe(`/coordination/requests/${EVENT}`);
+});
+
+// AC3-N6 (negative): a notice without a name or time still reads well and has no empty detail line.
+test("describes a window notice without a name or boundary time", () => {
+  const summary = describeNotification(
+    notice("registration_closed", { event_name: null }),
+    ["event_organiser"],
+  );
+  expect(summary.message).toBe("Registration for your event has closed.");
+  expect(summary.detail).toBeUndefined();
+});

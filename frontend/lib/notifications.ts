@@ -104,6 +104,18 @@ export function describeNotification(notification: AppNotification, roles: reado
         ...(typeof capacity === "number" ? { detail: `All ${capacity} places are taken.` } : {}),
       };
     }
+    case "registration_opened":
+    case "registration_closed": {
+      // SCRUM-38 AC3: to the Organiser and the Coordinator, each linked to the page they can open.
+      const name = notification.payload.event_name;
+      const at = notification.payload.boundary_at;
+      const verb = notification.event_type === "registration_opened" ? "opened" : "closed";
+      return {
+        message: typeof name === "string" && name.trim() ? `Registration for ${name.trim()} has ${verb}.` : `Registration for your event has ${verb}.`,
+        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : `/event-requests/${id}/edit`),
+        ...(typeof at === "string" && at ? { detail: formatDateTime(at) } : {}),
+      };
+    }
     case "event_cancelled": {
       // SCRUM-38 AC4: to registered Attendees. No Attendee event page yet, so no link.
       const name = notification.payload.event_name;
