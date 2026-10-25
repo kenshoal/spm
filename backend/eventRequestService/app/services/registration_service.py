@@ -98,7 +98,7 @@ class RegistrationService:
         """SCRUM-41: the database function checks assignment, status, attendee,
         duplicate and capacity under the event lock, so there is no early check."""
         try:
-            return self.repository.coordinator_register(
+            registration = self.repository.coordinator_register(
                 event_id, coordinator_id, attendee_email
             )
         except RegistrationRpcError as error:
@@ -109,6 +109,18 @@ class RegistrationService:
             if error.reason == "capacity not set":
                 raise CapacityNotSetError from error
             raise self._map_refusal(error) from error
+        # The registration is saved: nothing below may fail it (SCRUM-38).
+        try:
+            event = self.repository.get_event(event_id)
+            if event is not None:
+                self._notify_registration_saved(event, registration)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not read event request %s to notify of a manual registration",
+                event_id,
+                exc_info=True,
+            )
+        return registration
 
     def _manages(
         self, event: dict[str, Any], caller_id: str, caller_roles: tuple[str, ...]
@@ -146,18 +158,28 @@ class RegistrationService:
             registration = self.repository.register(event_id, attendee_id, now)
         except RegistrationRpcError as error:
             raise self._map_refusal(error) from error
-        # Only after the write succeeded: a refused registration tells nobody
-        # (SCRUM-38 AC1). Best-effort, so a notice failure never undoes it.
+        registered = self._notify_registration_saved(event, registration)
+        return {**registration, "event": to_public_event(event, registered)}
+
+    def _notify_registration_saved(
+        self, event: dict[str, Any], registration: dict[str, Any]
+    ) -> int:
+        """SCRUM-38 AC1 and AC2, after any registration is saved, however it was made.
+
+        A refused registration never reaches here, so it tells nobody. Best-effort:
+        a notice failure never undoes the registration. Returns the active count.
+        """
         self.notification_client.notify_registration_confirmed(
-            event_request_id=event_id,
-            attendee_id=attendee_id,
+            event_request_id=event["id"],
+            attendee_id=registration["attendee_id"],
             event_name=event.get("event_name"),
             registration_id=registration["id"],
         )
-        registered = self.repository.count_active(event_id)
-        if registered >= event["registration_capacity"]:
+        registered = self.repository.count_active(event["id"])
+        capacity = event.get("registration_capacity")
+        if capacity is not None and registered >= capacity:
             self._notify_registration_full(event, registration["id"])
-        return {**registration, "event": to_public_event(event, registered)}
+        return registered
 
     def _notify_registration_full(
         self, event: dict[str, Any], registration_id: str

@@ -307,3 +307,108 @@ def test_full_notice_posts_the_agreed_shape(monkeypatch: pytest.MonkeyPatch) -> 
             "capacity": 10,
         },
     }
+
+
+def manual_setup(**event: Any):
+    from test_manual_registration_api import (
+        COORDINATOR_1,
+        VIP,
+        VIP_EMAIL,
+        setup,
+    )
+
+    repo, event_id = setup(**event)
+    repo.coordinators[event_id] = COORDINATOR_1
+    spy = SpyNotificationClient()
+    client = make_client(
+        repo, caller_id=COORDINATOR_1, roles=("event_coordinator",),
+        coordinators=repo.assignments,
+    )
+    client.app.state.registration_service = RegistrationService(
+        repo, repo.assignments, notification_client=spy
+    )
+    return client, repo, event_id, spy, VIP, VIP_EMAIL
+
+
+# AC1-H4 (happy): A Coordinator registering an Attendee also tells that Attendee, once
+# the registration is saved.
+def test_manual_registration_notifies_the_attendee() -> None:
+    client, repo, event_id, spy, vip, email = manual_setup()
+
+    with client:
+        response = client.post(
+            f"/event-requests/{event_id}/registrations", json={"attendee_email": email}
+        )
+
+    assert response.status_code == 201
+    [registration] = repo.registrations
+    assert spy.confirmed == [{
+        "event_request_id": event_id,
+        "attendee_id": vip,
+        "event_name": "Community Dinner",
+        "registration_id": registration["id"],
+    }]
+
+
+# AC1-N3 (negative): A refused manual registration (unknown email, already registered,
+# full) tells nobody.
+@pytest.mark.parametrize("case", ["unknown", "duplicate", "full"],
+                         ids=["AC1-N3a", "AC1-N3b", "AC1-N3c"])
+def test_refused_manual_registration_notifies_nobody(case: str) -> None:
+    client, repo, event_id, spy, vip, email = manual_setup(registration_capacity=2)
+    body = {"attendee_email": "nobody@test.local" if case == "unknown" else email}
+    if case == "duplicate":
+        repo.registrations.append({
+            "id": "existing", "event_request_id": event_id, "attendee_id": vip,
+            "status": "Registered", "created_at": None,
+        })
+    if case == "full":
+        fill(repo, event_id, 2)
+
+    with client:
+        response = client.post(f"/event-requests/{event_id}/registrations", json=body)
+
+    assert response.status_code in (404, 409)
+    assert spy.confirmed == []
+    assert spy.full == []
+
+
+# AC2-H5 (happy): A manual registration that takes the last place tells the Organiser
+# and the Coordinator, just as a self-registration does.
+def test_manual_registration_of_the_last_place_notifies_organiser_and_coordinator() -> None:
+    from test_manual_registration_api import COORDINATOR_1
+
+    client, repo, event_id, spy, _, email = manual_setup(registration_capacity=3)
+    fill(repo, event_id, 2)
+
+    with client:
+        response = client.post(
+            f"/event-requests/{event_id}/registrations", json={"attendee_email": email}
+        )
+
+    assert response.status_code == 201
+    assert recipients(spy) == sorted(["organiser-1", COORDINATOR_1])
+
+
+# AC1-N4 (negative): If the event cannot be re-read after a manual registration was saved,
+# the registration still stands and the Coordinator still gets 201.
+def test_manual_registration_survives_a_failed_event_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.repositories import SupabaseRepositoryError
+
+    client, repo, event_id, spy, _, email = manual_setup()
+
+    def unavailable(event_id: str) -> None:
+        raise SupabaseRepositoryError("event store down")
+
+    monkeypatch.setattr(repo, "get_event", unavailable)
+
+    with client:
+        response = client.post(
+            f"/event-requests/{event_id}/registrations", json={"attendee_email": email}
+        )
+
+    assert response.status_code == 201
+    assert len(repo.registrations) == 1
+    assert spy.confirmed == []
