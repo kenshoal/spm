@@ -47,6 +47,9 @@ function StatusHistoryView({ entries, unavailable = false }: StatusHistoryProps)
                   : entry.entry_kind === 'created' ? `Created as ${entry.new_status}`
                     : `${entry.previous_status} → ${entry.new_status}`}
               </p>
+              {entry.source === 'event_request.auto_completed' ? (
+                <p className="mt-1 text-sm font-medium text-[#145c40]">Completed automatically</p>
+              ) : null}
               <p className="mt-1 break-words text-sm text-[#526159]">
                 {entry.actor_role === 'system' ? 'System'
                   : entry.actor_role === 'event_organiser' ? 'Event Organiser'

@@ -79,7 +79,8 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0056_event_venue_booking_creation.sql` | SCRUM-35 date-approval prerequisite: service-only `create_event_venue_booking_request(jsonb, timestamptz)` locks venue then event, rechecks the latest coordinator and expected version, and creates only a Pending booking with stored event metadata. Revokes direct service INSERT/DELETE; existing booking venue/event links become immutable (same-value updates allowed). Narrow SECURITY DEFINER/empty search path, no browser execution. Public creation body/states, decisions and cancellation retained; no date approval or event/review/notification write. **Applied to shared development on 22 October 2026, version `20261022114717`**, with the matching rebuilt venueService during the coordinated cutover; no REST fallback. Verify only on an owned disposable target with `verify_versioned_venue_booking_creation.sql`. |
 | `migrations/0058_event_registration_reviews.sql` | SCRUM-35: separate `event_registration_reviews` retains one actual significant event-version cause for date, attendance or registration-requirements changes on nonterminal submitted-or-later events. Private trigger inserts atomically; no backfill or auto-clear. Service-only exact-ID acknowledgement locks event then review and rechecks the current coordinator; service table access stays SELECT-only, browsers denied. Appends outstanding registration facts to the existing shared readiness helper without changing ordinary venue/equipment predicates or either gate caller. Replaces the narrow non-date approval function to also accept registration requirements text, preserving the equipment branch. No attendee, capacity, window, lifecycle or new notification-domain change. **Applied to shared development on 22 October 2026, version `20261022114717`.** Run the fault-injection verifier only on an owned disposable target with `verify_event_registration_reviews.sql`. |
 | `migrations/0059_event_change_date_approval.sql` | SCRUM-35 atomic date/mixed approval: locks sorted venues → event → proposal → the complete pending/approved booking batch, rechecks membership/assignment/version and validates automatic or explicit ranges through the existing conflict guard, active blocks and candidate-pair checks. Stores nullable accepted booking-plan evidence, applies event changes and required review work atomically. Date changes also flag linked past equipment reservations; non-date selection is unchanged. Depends on 0056 and 0058; 0057 is unused. **Applied to shared development on 22 October 2026, version `20261022114717`.** See the current setup and deployment record below. |
-| `migrations/0062_withdraw_registration.sql` | SCRUM-22: widens `event_registrations.status` to `Registered` / `Withdrawn`, adds `withdrawn_at` (CHECK keeps the two in step) and `withdraw_registration(registration, attendee, now)`, which locks the event row (the lock `register_for_event` takes) then the registration row, and allows a withdrawal only for the owner while the event is Confirmed and `now` is before its earliest `proposed_date_times`. Errcodes `P0002` not found / not owner; `P0004` `already withdrawn` or `withdrawal not permitted`. `service_role` only. 0060 and 0061 are reserved by the unmerged SCRUM-41 and SCRUM-25 branches. Verify with `verify_registration_withdrawal.sql` and, for the two-session races, `verify_registration_withdrawal_race.sh` (disposable database only; it leaves two Cancelled events behind). **Not applied to shared development yet.** Run on a disposable local PostgreSQL 16 built by `database/tests/bootstrap_event_status_history.py` + `0026` + `0048` + `0062` |
+| `migrations/0062_withdraw_registration.sql` | SCRUM-22: widens `event_registrations.status` to `Registered` / `Withdrawn`, adds `withdrawn_at` (CHECK keeps the two in step) and `withdraw_registration(registration, attendee, now)`, which locks the event row (the lock `register_for_event` takes) then the registration row, and allows a withdrawal only for the owner while the event is Confirmed and `now` is before its earliest `proposed_date_times`. Errcodes `P0002` not found / not owner; `P0004` `already withdrawn` or `withdrawal not permitted`. `service_role` only. 0060 and 0061 are reserved by the unmerged SCRUM-41 and SCRUM-25 branches. Verify with `verify_registration_withdrawal.sql` and, for the two-session races, `verify_registration_withdrawal_race.sh` (disposable database only; it leaves two Cancelled events behind). **Applied to shared development on 24 October 2026, version `20261024085549`**, before 0063 as the unchanged merged-reader prerequisite; no rows were withdrawn during installation. Run on a disposable local PostgreSQL 16 built by `database/tests/bootstrap_event_status_history.py` + `0026` + `0048` + `0062` |
+| `migrations/0063_event_auto_completion.sql` | SCRUM-40: nullable finite final end, coordinator-only Approved/Planning setter, immutable Confirmed/terminal end and actual-reschedule invalidation, plus strictly-after-168-hours Confirmed-only system completion through existing atomic history. Service-only INVOKER RPCs and direct-browser end-field protection preserving ordinary Draft RLS; no backfill, new end requirement for confirmation or related-domain writes. **Applied to shared development on 24 October 2026, version `20261024085549`**, after 0062; matching local API/UI and the real worker flow are verified on one labelled Confirmed target, worker enabled at a 60-second interval; real coordinator and organiser read-only browser views passed; human review and merge remain pending. The opt-in shared timer and manual pass are in eventRequestService. |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
@@ -260,6 +261,71 @@ SCRUM-35 event amendments are verified by
 requests, atomic approval, rejection without event mutation, stale approval,
 reassignment and server-only table/function access. It requires one Supabase
 Auth user and rolls back all verification data.
+
+## Automatic completion (SCRUM-40)
+
+`0063_event_auto_completion.sql` adds the authoritative coordinator-recorded
+end and native completion boundary. A narrow INVOKER trigger also denies browser
+INSERT of a nonnull end or a distinct end UPDATE, while retaining existing owner
+Draft RLS and ordinary edits. Number 0063 was allocated after published
+0060–0062 reservations. The matching merged API selects registration `withdrawn_at`,
+so unchanged merged 0062 must precede 0063 in this runtime-compatible setup;
+0060/0061 remain unrelated allocations. This prerequisite is not SCRUM-40 ownership
+of withdrawal behaviour. The exact 0062→0063 bundle was applied to shared SPMG9T4
+on 24 October as `20261024085549`
+(`scrum40_guarded_completion_with_merged_withdrawal_prerequisite`). All 15 original
+business-table counts/fingerprints were preserved; pre-existing final ends stayed
+NULL and withdrawal count stayed zero at installation. The matching local API/UI
+and actual worker subsequently completed one authorised labelled Confirmed event
+with one system history entry; Planning and repeat controls plus 25 protected-state
+groups passed. Worker configuration is true/60; coordinator and organiser views
+passed after real sign-in/reload, including automatic system history and owner
+read-only end display. Human review and merge remain pending. Do not reapply
+the bundle on that shared target. See the
+[API/runtime contract](../backend/eventRequestService/README.md#automatic-completion-and-final-end-scrum-40-local-preparation)
+and [reviewable rollout plan](../docs/deployment/scrum_40_auto_completion_rollout.md).
+
+From the repository root, with PostgreSQL running and a newly created empty
+database in an owned disposable loopback cluster:
+
+```sh
+(
+  set -eu
+  : "${SCRUM40_TEST_DSN:?Supply the empty owned loopback scrum48_* database URL}"
+  python3 -I database/tests/bootstrap_event_change_approval.py \
+    --dsn "$SCRUM40_TEST_DSN" --disposable
+  psql -X -v ON_ERROR_STOP=1 -1 -d "$SCRUM40_TEST_DSN" \
+    -f database/migrations/0062_withdraw_registration.sql \
+    -f database/migrations/0063_event_auto_completion.sql
+  for verifier in \
+    verify_event_auto_completion.sql \
+    verify_event_final_end.sql \
+    verify_event_final_end_browser_boundary.sql \
+    verify_registration_withdrawal.sql \
+    verify_event_change_rejection.sql \
+    verify_event_change_approval.sql \
+    verify_event_registration_reviews.sql \
+    verify_event_change_date_approval.sql
+  do
+    psql -X -v ON_ERROR_STOP=1 -d "$SCRUM40_TEST_DSN" -f "database/$verifier"
+  done
+  python3 database/tests/test_event_auto_completion_concurrency.py \
+    --dsn "$SCRUM40_TEST_DSN" --disposable
+)
+```
+
+This is the independent `scrum40-database-verify` CI recipe, including the existing
+withdrawal verifier for the merged reader/schema prerequisite. The reused guarded
+bootstrap applies genuine prerequisites through 0059 with labelled Auth doubles
+and the existing narrow local platform-ACL fixture. It never changes shared
+grants. The browser-field verifier supplies transactional local Auth claim doubles
+to exercise genuine owner Draft policies; it is not real JWT verification and
+restores those doubles on rollback. The SQL oracles roll back and include local
+fault injection. The race
+harness commits labelled fixtures and witnesses actual blocking in both winner
+orders; run it only on an owned disposable target and remove that cluster after
+verification. Never run this setup, fault triggers or committed race fixtures on
+shared Supabase. A local pass is not remote CI or live-auth delivery evidence.
 
 ## Change-request rejection (SCRUM-35)
 

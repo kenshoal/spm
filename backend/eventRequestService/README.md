@@ -149,11 +149,11 @@ agreed status vocabulary. This service writes only the following transitions:
 | `Safety Review` → `Confirmed` or `Planning` | Safety Officer (role re-checked in the database) | `POST /{id}/safety-decision` |
 | `Confirmed` → `Completed` | Assigned Coordinator | `POST /{id}/completion` |
 
-Owned by other stories and **not** implemented here: Planning and Confirmed
-(venue/operations stories), downstream venue/equipment/registration conflict
-revalidation after an approved change, notification delivery (SCRUM-36), and
-automatic completion of Confirmed events more than seven days overdue
-(SCRUM-40). `Completed`, `Cancelled` and `Rejected` are terminal.
+Planning, safety handover and confirmation retain their respective workflow
+story ownership; those merged paths are available in this service. Arrangement
+revalidation and notification delivery also retain their separate story contracts.
+The separately prepared SCRUM-40 automatic-completion path is documented below.
+`Completed`, `Cancelled` and `Rejected` are terminal.
 
 The three coordinator commands run through the database function
 `advance_event_request_by_coordinator` (migration
@@ -330,6 +330,98 @@ The independent native CI job uses PostgreSQL 16, seven rollback scripts and
 duplicate-approval/date races. Source `7095a79` is published in [PR #91](https://github.com/jarenlimhaan/spm/pull/91)
 into `dev`; exact-head CI, human review and merge remain pending. Running local
 images are not a remote application publication; local/shared evidence stays distinct.
+
+## Automatic completion and final end (SCRUM-40; local preparation)
+
+Apply unchanged merged `0062_withdraw_registration.sql` then reviewed
+`0063_event_auto_completion.sql` atomically before deploying this API/UI or
+enabling the worker. The merged registration reader selects `withdrawn_at`, so
+0062 is a matching-runtime prerequisite, not additional SCRUM-40 scope. The exact
+0062→0063 schema bundle was applied to shared Supabase on 24 October 2026 as
+`20261024085549`. The matching API/UI is running locally, and the real worker
+completed one labelled Confirmed target with a single system history entry after
+normal authenticated setup/confirmation. Planning and repeat controls preserved
+related data. Coordinator and organiser views passed after normal sign-in/reload,
+including automatic system history and the organiser's read-only final end.
+The worker is enabled at a 60-second interval; human review and merge remain
+pending. See the [deployment plan](../../docs/deployment/scrum_40_auto_completion_rollout.md)
+and [fresh native verification](../../database/README.md#automatic-completion-scrum-40).
+
+`POST /event-requests/{id}/final-end` accepts required aware `final_event_end_at`.
+Only the current assigned coordinator can record it while Approved or Planning;
+the native setter locks the event and rechecks the latest assignment. No organiser
+draft/amendment field is added. A narrow INVOKER database trigger also refuses
+direct `anon`/`authenticated` nonnull-end INSERT or distinct-end UPDATE with
+`42501`, preserving existing owner Draft policies and ordinary field edits.
+The coordinator form uses explicit Singapore
+time; normal details show the stored instant read-only. A same-instant save is a
+true no-op including the event version. Missing/reassigned/state refusal maps to
+404/403/409 (`final_end_unavailable`); invalid input is 422 and storage failure
+is safe 502 `Final event end unavailable`.
+
+Actual pre-confirmation proposed-date changes clear the recorded end; equal
+instants retain it. The coordinator must record a replacement explicitly. Once
+Confirmed or terminal, end edits are refused; actual date changes with a nonnull
+recorded end are also refused. No confirmation-required-end gate is added and
+the existing manual completion workflow remains available. Legacy Confirmed rows
+with no end are skipped with an explicit warning/report count, never guessed
+from event starts, bookings or reservations. There is no automatic backfill.
+
+The service-only `complete_overdue_event_request(uuid,timestamptz)` locks and
+rechecks each event: only Confirmed with an end and **strictly more than 168
+elapsed hours** after it transitions. Equality and all other states do nothing.
+It uses the existing immutable history boundary with null actor ID, role `system`,
+source `event_request.auto_completed` and actual execution time. History failure
+rolls back status/version. Normal history labels this source **Completed
+automatically**. No resources, registrations, reviews, delivery work or notices
+are created/changed by completion. Repeated or losing concurrent calls are no-ops.
+
+### Runtime configuration and one pass
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AUTO_COMPLETION_ENABLED` | `false` | Register only the SCRUM-40 handler at application startup |
+| `PERIODIC_TASK_INTERVAL_SECONDS` | `60` | Finite positive delay after each shared timer sweep |
+
+These settings are independent of `NOTIFICATION_SERVICE_URL`. Compose forwards
+them to eventRequestService; `.env.example` documents them without changing any
+actual `.env`. Opt in only after schema/application review. Changes require a
+service restart/recreate. The first pass runs at startup, then after each delay;
+completion happens on a successful pass after the strict boundary, not at an
+exact wall-clock instant. Downtime delays work and the next successful sweep
+catches up. Every Confirmed ID-keyset page is read until empty even below the
+server cap. One UTC clock is captured per sweep; individual failures are reported
+and do not starve later events. NULL ends have a separate skipped count.
+
+For one explicitly authorised pass against the configured target, from this
+service directory (this **performs writes**, not a dry run):
+
+```sh
+.venv/bin/python -m app.services.auto_completion --once
+```
+
+The CLI always uses real aware UTC, prints counts as JSON, exits 1 on a failed
+pass/event and closes its owned client. It does not accept a client-supplied
+clock. The opt-in flag controls background registration, not this explicit
+command; there is no HTTP run endpoint. Do not execute it against shared data
+without deployment/operational authorisation.
+
+`PeriodicTaskRunner` only runs named synchronous callbacks. The composition
+factory gates `auto_completion` alone: a future independently configured SCRUM-38
+handler can register while this flag is false. No SCRUM-38 domain handler, broker,
+cron extension or generic job platform is implemented here. Failures are isolated
+by callback; database calls run off the event loop. Cancellation waits for the
+active callback before stopping, then runs no later callback. The app repository
+client follows existing process lifetime; native HTTP calls have bounded timeouts
+and shutdown waits rather than pretending a cancelled thread stopped its write.
+Injected `create_app` test apps start no timer unless one is supplied.
+
+The independent CI job `scrum40-database-verify` uses PostgreSQL 16, genuine
+prerequisites, atomic 0062→0063 application, three native rollback oracles, the
+existing withdrawal compatibility verifier, four retained amendment verifiers and
+both manual/automatic race orders. Local native and
+mock-browser results are separate from actual PR CI, shared deployment and
+normal-auth shared verification. See [SCRUM-40 evidence](../../docs/testcases/scrum_40_testcases.md).
 
 ## Status history (SCRUM-48)
 
