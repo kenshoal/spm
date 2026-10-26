@@ -94,6 +94,14 @@ export function describeNotification(notification: AppNotification, roles: reado
         href: null,
       };
     }
+    case "registration_withdrawn": {
+      // SCRUM-22 AC5: to the Attendee. There is no Attendee event page yet, so no link.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `You've withdrawn from ${name.trim()}.` : "Your registration has been withdrawn.",
+        href: null,
+      };
+    }
     case "registration_full": {
       // SCRUM-38 AC2: to the Organiser and the Coordinator, each linked to the page they can open.
       const name = notification.payload.event_name;
