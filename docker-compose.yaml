@@ -11,6 +11,8 @@ services:
       AUTH_SERVICE_URL: http://auth-service:8000
       AUTO_COMPLETION_ENABLED: ${AUTO_COMPLETION_ENABLED:-false}
       PERIODIC_TASK_INTERVAL_SECONDS: ${PERIODIC_TASK_INTERVAL_SECONDS:-60}
+      REGISTRATION_WINDOW_NOTICES_ENABLED: ${REGISTRATION_WINDOW_NOTICES_ENABLED:-false}
+      REGISTRATION_WINDOW_LOOKBACK_HOURS: ${REGISTRATION_WINDOW_LOOKBACK_HOURS:-72}
       # No depends_on: a notification failure must never block assignment.
       NOTIFICATION_SERVICE_URL: http://notification-service:8000/notifications/events
       SUPABASE_URL: ${SUPABASE_URL:-}

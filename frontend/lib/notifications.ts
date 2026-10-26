@@ -1,4 +1,5 @@
 import { getJson } from "./api";
+import { formatDateTime } from "./event-requests";
 import { timeRangeLabel } from "./venue-options";
 import { reasonLabel, type BlockReason } from "./venue-block-options";
 import { skillLabel } from "./technical-support-options";
@@ -83,6 +84,57 @@ export function describeNotification(notification: AppNotification, roles: reado
         message: `Your event request was ${approved ? "approved" : "rejected"}.`,
         href: id && `/event-requests/${id}/edit`,
         ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
+      };
+    }
+    case "registration_confirmed": {
+      // SCRUM-38 AC1: to the Attendee. There is no Attendee event page yet, so no link.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `You're registered for ${name.trim()}.` : "Your registration is confirmed.",
+        href: null,
+      };
+    }
+    case "registration_full": {
+      // SCRUM-38 AC2: to the Organiser and the Coordinator, each linked to the page they can open.
+      const name = notification.payload.event_name;
+      const capacity = notification.payload.capacity;
+      return {
+        message: typeof name === "string" && name.trim() ? `Registration for ${name.trim()} is full.` : "Registration for your event is full.",
+        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : `/event-requests/${id}/edit`),
+        ...(typeof capacity === "number" ? { detail: `All ${capacity} places are taken.` } : {}),
+      };
+    }
+    case "registration_opened":
+    case "registration_closed": {
+      // SCRUM-38 AC3: to the Organiser and the Coordinator, each linked to the page they can open.
+      const name = notification.payload.event_name;
+      const at = notification.payload.boundary_at;
+      const verb = notification.event_type === "registration_opened" ? "opened" : "closed";
+      return {
+        message: typeof name === "string" && name.trim() ? `Registration for ${name.trim()} has ${verb}.` : `Registration for your event has ${verb}.`,
+        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : `/event-requests/${id}/edit`),
+        ...(typeof at === "string" && at ? { detail: formatDateTime(at) } : {}),
+      };
+    }
+    case "event_cancelled": {
+      // SCRUM-38 AC4: to registered Attendees. No Attendee event page yet, so no link.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `${name.trim()} has been cancelled.` : "An event you registered for has been cancelled.",
+        href: null,
+      };
+    }
+    case "event_changed": {
+      // SCRUM-38 AC4: the dates of an event the Attendee registered for changed.
+      const name = notification.payload.event_name;
+      const dates = notification.payload.proposed_date_times;
+      const shown = Array.isArray(dates)
+        ? dates.filter((value): value is string => typeof value === "string").map(formatDateTime)
+        : [];
+      return {
+        message: typeof name === "string" && name.trim() ? `The dates of ${name.trim()} have changed.` : "The dates of an event you registered for have changed.",
+        href: null,
+        ...(shown.length ? { detail: `New dates: ${shown.join("; ")}` } : {}),
       };
     }
     case "event_confirmed":
