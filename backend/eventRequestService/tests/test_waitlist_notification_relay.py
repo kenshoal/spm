@@ -43,18 +43,15 @@ def outbox_row(event_type: str) -> dict:
 def test_the_client_posts_the_agreed_shape_for_every_type() -> None:
     sent: list[dict] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        sent.append(request.read_json())
+    def handler(body: dict) -> httpx.Response:
+        sent.append(body)
         return httpx.Response(202)
 
     client = NotificationClient("http://notifications.test/events")
-    client._client = None  # not used by the durable poster
     import app.services.notification_client as module
 
     original_post = module.httpx.post
-    module.httpx.post = lambda url, **kwargs: handler(
-        httpx.Request("POST", url, json=kwargs["json"])
-    )
+    module.httpx.post = lambda url, **kwargs: handler(kwargs["json"])
     try:
         for event_type in NOTICE_TYPES:
             accepted = client.notify_waitlist_notice(
@@ -79,17 +76,15 @@ def test_the_client_derives_the_event_id_from_the_idempotency_key() -> None:
 
     captured: dict = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.update(request.read_json())
+    def handler(body: dict) -> httpx.Response:
+        captured.update(body)
         return httpx.Response(202)
 
     client = NotificationClient("http://notifications.test/events")
     import app.services.notification_client as module
 
     original_post = module.httpx.post
-    module.httpx.post = lambda url, **kwargs: handler(
-        httpx.Request("POST", url, json=kwargs["json"])
-    )
+    module.httpx.post = lambda url, **kwargs: handler(kwargs["json"])
     try:
         client.notify_waitlist_notice(
             event_type="waitlist_offered",
