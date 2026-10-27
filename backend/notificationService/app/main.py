@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
+from app.adapters import build_delivery
 from app.auth import get_current_user_id
 from app.config import get_settings
 from app.delivery import Delivery
@@ -40,7 +41,8 @@ def get_repository(request: Request) -> NotificationRepository:
         return repository
 
     try:
-        repository = SupabaseNotificationRepository.from_settings(get_settings())
+        settings = get_settings()
+        repository = SupabaseNotificationRepository.from_settings(settings)
     except ValidationError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -48,6 +50,10 @@ def get_repository(request: Request) -> NotificationRepository:
         ) from error
 
     request.app.state.notification_repository = repository
+    # Email goes out only on the running service; an injected repository (as in
+    # tests) keeps whatever delivery the caller gave create_app, usually none.
+    if request.app.state.delivery is None:
+        request.app.state.delivery = build_delivery(settings)
     return repository
 
 
