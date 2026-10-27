@@ -420,10 +420,11 @@ BEGIN
         'AC12-H1: not exactly one cancellation notice per entry';
 
     -- AC12-N1 (negative): a cancelled event never offers its places, and the
-    -- timer leaves the Closed entries alone. The withdrawal half of the matrix
-    -- row cannot go through 0062: withdraw_registration refuses a non-Confirmed
-    -- event with 'withdrawal not permitted' (SCRUM-22 D1) -- flagged to the
-    -- story owner; asserted here as the refusal it is today.
+    -- timer leaves the Closed entries alone. The row (corrected 27 Oct, owner
+    -- approved) expects the withdrawal attempt itself to be refused: 0062
+    -- refuses any non-Confirmed event with 'withdrawal not permitted'
+    -- (SCRUM-22 D1). The place count still holds: the cancellation released
+    -- the offered place's hold, so exactly one of two places remains taken.
     BEGIN
         PERFORM public.withdraw_registration(v_reg2.id, v_h[8], c_t0 + interval '1 hour');
         RAISE EXCEPTION 'AC12-N1: withdrawal on a Cancelled event succeeded';

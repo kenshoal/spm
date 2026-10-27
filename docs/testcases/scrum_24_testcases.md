@@ -194,7 +194,7 @@ Layers: U = unit (`tests/test_waitlist_rules.py`), A = API (`tests/test_waitlist
 | AC11-H1 | AC11 | A place freed after the cut-off opens to registration | Happy | After AC10-H1; `E` still full | `R1` withdraws, then `D` registers (SCRUM-21) | — | No offer issued; `places_remaining` 1 after the withdrawal, then `D` 201 `Registered` | No `Closed` entry becomes `Offered` | A + D |
 | AC11-N1 | AC11 | A Closed entry cannot be offered or accepted | Negative | After AC10-H1 | `K` chooses `A`; `A` posts acceptance | — | 409 `not_waiting`; 404 | Nothing changes | A |
 | AC12-H1 | AC12 | Cancelling the event closes every entry and tells each once | Happy | `A` `Waiting`, `B` `Offered` | `E` → `Cancelled` (status update) | — | Both entries `Closed`; one `waitlist_event_cancelled` each | No offer, accept or requeue afterwards | D + A |
-| AC12-N1 | AC12 | A cancelled event never offers its places | Negative | After AC12-H1; `R1` still `Registered` | `R1` withdraws; run the timer | — | No offer; entries stay `Closed`; `places_remaining` 1 | No waiting-list notices | D |
+| AC12-N1 | AC12 | A cancelled event never offers its places | Negative | After AC12-H1; `R1` still `Registered` | `R1` tries to withdraw, then the timer runs | — | 409 `withdrawal not permitted` (SCRUM-22 D1); no offer; entries stay `Closed`; `places_remaining` 1 | No waiting-list notices | D |
 | AC12-X1 | AC12 | The outbox tells only the story's own people | Cross-cutting | `R1` `Registered`, `A` `Waiting`, `K` assigned | `E` → `Cancelled` | — | Outbox notices to `A` only; `R1` (SCRUM-38) and `K` (SCRUM-57) are those stories' duty, named not claimed | No duplicate notice to `R1` from the waitlist outbox | A |
 
 ## Latest execution record
