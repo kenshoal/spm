@@ -79,27 +79,44 @@ AC1 is not designed yet; its cases are written once Q1 is answered.
 | AC3-N4 | AC3 | Mail settings missing does not break the service or the action | Negative | SMTP host not set; setting `email` | Start the app; POST an event | as above | App starts; `202`; inbox row stored; zero emails; reason logged | Start-up failure; `5xx` | API |
 | AC3-P1 | AC3 | The same `event_id` for two recipients emails each once | Partition | Setting `both` | POST `ev-1` for two recipients | two addresses | Two emails, one per recipient; two rows | One email to both; one skipped | API |
 | AC3-P2 | AC3 | A type with no known wording still gets a generic email | Partition | Setting `email`; type not in any wording list | POST an event | `event_type=future_type` | One email with generic wording and the inbox link | No email; blank body | Unit |
+| AC3-P3 | AC3 | A server needing no login and no encryption is used as given | Partition | Fake SMTP; `smtp_starttls=false`, no user | Send one message | `smtp_host=localhost` | No login, no encryption step; message sent | Login attempted with empty credentials | Unit |
+| AC3-P4 | AC3 | A configured host selects the SMTP mailer, and none selects the stand-in | Partition | Settings with and without `smtp_host` | Build the mailer | as stated | `SmtpMailer` with a host; stand-in without | Silent no-op when no host | Unit |
+| AC3-N5 | AC3 | An address lookup outage skips the email and keeps the action | Negative | Supabase Auth answers `500` | Look up an address | a user id | Lookup error raised, so Delivery logs it and sends nothing | `5xx` to the caller; an email to a wrong address | Unit |
 | AC3-X1 | AC3 | A real mail server accepts and delivers the message | Cross-cutting | Gmail test account or Mailtrap sandbox configured in `.env`; shared database | Send one event with setting `both` | team test address | Email arrives in the real or sandbox inbox | Secrets in the email or the logs | Manual |
 
 ## Latest execution record
 
-Nothing has been run. No test exists yet.
+Local results below are **not** CI, shared-database or real-mail results; keep them separate.
+Command (27 Oct 2026, on commit 78b9cd4): `cd backend/notificationService && .venv/bin/python -m pytest -q` (82 passed) and `ruff check .` (clean). Dependencies faked: Supabase, the Auth lookup and SMTP. AC2-P3 and the migration: 0065 was applied to the shared dev database on 27 Oct 2026 and its catalog checks passed (`database/verify_notification_channel_settings.sql`); the other cases were not run against it. Not yet run: CI, the live Auth admin lookup, a real SMTP server (AC3-X1), and a refused insert (AC2-N1).
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | AC2-H1 | Planned | | Not executed | | | |
 | AC2-P1 | Planned | | Not executed | | | |
 | AC2-P2 | Planned | | Not executed | | | |
-| AC2-P3 | Planned | | Not executed | | | Depends on A2 |
+| AC2-P3 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_an_email_only_type_is_not_shown_in_the_inbox; test_repository.py. Column `in_inbox` exists on the shared DB (catalog check); inbox behaviour not run against it (Depends on A2) |
 | AC2-P4 | Planned | | Not executed | | | |
 | AC2-X1 | Planned | | Not executed | | | |
-| AC2-N1 | Planned | | Not executed | | | Needs migration 0065 |
-| AC2-N2 | Planned | | Not executed | | | Depends on A5 |
+| AC2-N1 | Not automated | See remarks | Not executed | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | Shared DB: `database/verify_notification_channel_settings.sql` passed, but it reads the constraint definition only. A refused insert was NOT run (Needs migration 0065) |
+| AC2-N2 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_an_unreadable_setting_falls_back_to_in_app; test_adapters.py::test_a_settings_failure_is_raised (Depends on A5) |
 | AC3-H1 | Planned | | Not executed | | | |
 | AC3-N1 | Planned | | Not executed | | | |
 | AC3-N2 | Planned | | Not executed | | | |
-| AC3-N3 | Planned | | Not executed | | | Depends on A4 |
+| AC3-N3 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py; test_adapters.py::test_no_address_found (4 partitions) (Depends on A4) |
 | AC3-N4 | Planned | | Not executed | | | |
 | AC3-P1 | Planned | | Not executed | | | |
-| AC3-P2 | Planned | | Not executed | | | Depends on A3 |
-| AC3-X1 | Planned | | Not executed | | | Blocked until mail credentials exist |
+| AC3-P2 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_an_unknown_type_gets_a_generic_email (Depends on A3) |
+| AC3-X1 | Planned | | Blocked | | | Needs mail credentials from the story owner, and the live Auth admin lookup is unverified |
+| AC2-H1 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_an_email_type_is_sent_to_the_recipient_only; test_adapters.py::test_reads_the_channel_for_a_type |
+| AC2-P1 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py (parametrized AC2-P1/P2/P4) |
+| AC2-P2 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | as AC2-P1 |
+| AC2-P4 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | as AC2-P1; test_adapters.py::test_a_type_with_no_setting_is_in_app |
+| AC2-X1 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_a_setting_applies_to_its_own_type_only |
+| AC3-H1 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py, test_adapters.py (SMTP message, address lookup, service wiring). Not run against live Auth or SMTP |
+| AC3-N1 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_a_mail_failure_keeps_the_notification_and_still_accepts |
+| AC3-N2 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_a_retried_event_sends_no_second_email |
+| AC3-N4 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_missing_mail_settings_do_not_break_the_action; test_the_unconfigured_mailer_refuses_to_send |
+| AC3-P1 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_the_same_event_id_emails_each_recipient_once |
+| AC3-P3 | Green | As expected | Pass (local, fake SMTP) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_smtp_mailer_skips_login_and_tls_when_not_configured |
+| AC3-P4 | Green | As expected | Pass (local) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_a_configured_host_selects_the_smtp_mailer |
+| AC3-N5 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_an_address_lookup_failure_is_raised |
