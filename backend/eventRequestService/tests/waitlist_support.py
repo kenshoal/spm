@@ -23,6 +23,7 @@ from app.controllers import event_request_controller
 from app.main import create_app
 from app.repositories.event_request_repository import SupabaseRepositoryError
 from app.repositories.registration_repository import RegistrationRpcError
+from app.services.waitlist_rules import may_issue_offer
 
 ATTENDEE_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 
@@ -30,8 +31,16 @@ WAITING = "Waiting"
 OFFERED = "Offered"
 ACCEPTED = "Accepted"
 WITHDRAWN = "Withdrawn"
+CLOSED = "Closed"
+
+WARNING_OFFSET = timedelta(hours=48)  # D2
 
 OFFER_WINDOW = timedelta(hours=72)  # D1
+
+
+def _epoch(moment: Any) -> int:
+    """The DB keys use extract(epoch from ...); the fake mirrors the instants."""
+    return int(moment.timestamp())
 
 
 class FakeWaitlistRepository(FakeRegistrationRepository):
@@ -41,6 +50,12 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
         self._entry_clock = 0
         # AC4-N5: when set, the next write RPC fails like an unreachable Supabase.
         self.rpc_fails = False
+        # The notification outbox: notices written in the same "transaction"
+        # as the change they belong to, delivered later by the relay.
+        self.outbox: list[dict[str, Any]] = []
+        # D7's per-place memory, as far as this fake needs it: attendees who
+        # let a place lapse are never re-offered that place.
+        self.place_lapsed: dict[str, set[str]] = {}
 
     def active_entry(
         self, event_id: str, attendee_id: str
@@ -101,6 +116,7 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
             "queued_at": now,
             "offered_at": None,
             "expires_at": None,
+            "warned_at": None,
             "place_id": None,
         }
         self.entries.append(row)
@@ -158,9 +174,10 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
         if entry["status"] == ACCEPTED:
             raise RegistrationRpcError("not offered", "P0004", "not offered")
         was_offered = entry["status"] == OFFERED
+        place = entry["place_id"]
         entry.update(status=WITHDRAWN, withdrawn_at=now)
         if was_offered:
-            self._promote(entry["event_request_id"], now)
+            self._promote(entry["event_request_id"], now, place_id=place)
         return dict(entry)
 
     def _own_entry(self, entry_id: str, attendee_id: str) -> dict[str, Any]:
@@ -176,24 +193,193 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
             raise RegistrationRpcError("entry not found", "P0002", "entry not found")
         return entry
 
-    def _promote(self, event_id: str, now: Any) -> None:
-        """Offer the freed place to the earliest Waiting attendee (AC2)."""
+    def _promote(self, event_id: str, now: Any, place_id: str | None = None) -> None:
+        """Offer the freed place to the earliest eligible Waiting attendee (AC2, D7).
+
+        An attendee who let this place lapse is skipped; if nobody is eligible
+        the place simply stays free. The offer and its notice are written
+        together, like the database's single transaction.
+        """
+        lapsed = self.place_lapsed.get(place_id or "", set())
         waiting = sorted(
             (
                 e
                 for e in self.entries
-                if e["event_request_id"] == event_id and e["status"] == WAITING
+                if e["event_request_id"] == event_id
+                and e["status"] == WAITING
+                and e["attendee_id"] not in lapsed
             ),
             key=lambda e: (e["queued_at"], e["seq"]),
         )
         if not waiting:
             return
-        waiting[0].update(
+        chosen = waiting[0]
+        place = place_id or str(uuid4())
+        chosen.update(
             status=OFFERED,
             offered_at=now,
             expires_at=now + OFFER_WINDOW,
-            place_id=str(uuid4()),
+            place_id=place,
         )
+
+        self._write_notice(
+            chosen,
+            "waitlist_offered",
+            f"waitlist-offered:{chosen['id']}:{_epoch(now)}",
+            {"event_request_id": event_id, "expires_at": chosen["expires_at"]},
+            now,
+        )
+
+    def _write_notice(
+        self,
+        entry: dict[str, Any],
+        event_type: str,
+        key: str,
+        payload: dict[str, Any],
+        now: Any,
+    ) -> None:
+        self.outbox.append(
+            {
+                "id": str(uuid4()),
+                "entry_id": entry["id"],
+                "recipient_id": entry["attendee_id"],
+                "event_type": event_type,
+                "idempotency_key": key,
+                "payload": dict(payload),
+                "occurred_at": now,
+                "published_at": None,
+            }
+        )
+
+    def process_waitlist_timers(self, now: Any) -> int:
+        """Mirrors `process_waitlist_timers` (SCRUM-24 D1-D3, D11, D12, D2).
+
+        One pass per event with active entries: expiries strictly after
+        expires_at with the hand-over in the same call (AC9-H1), the cut-off
+        close, then the one 48h warning. Repeating a pass changes nothing.
+        """
+        if self.rpc_fails:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the timer pass"
+            )
+        touched = 0
+        event_ids = sorted(
+            {
+                e["event_request_id"]
+                for e in self.entries
+                if e["status"] in (WAITING, OFFERED)
+            }
+        )
+        for event_id in event_ids:
+            event = self.events.get(event_id)
+            if event is None or event["status"] != "Confirmed":
+                continue
+            dates = event.get("proposed_date_times") or []
+            start = min(dates) if dates else None
+
+            offered = sorted(
+                (
+                    e
+                    for e in self.entries
+                    if e["event_request_id"] == event_id
+                    and e["status"] == OFFERED
+                ),
+                key=lambda e: (e["queued_at"], e["seq"]),
+            )
+            for entry in offered:
+                if entry["expires_at"] is None or now <= entry["expires_at"]:
+                    continue
+                # D1: strictly after expires_at. D7: this place lapses for them.
+                place = entry["place_id"]
+                self.place_lapsed.setdefault(place, set()).add(entry["attendee_id"])
+                self._write_notice(
+                    entry,
+                    "waitlist_offer_expired",
+                    f"waitlist-expired:{entry['id']}:{_epoch(entry['offered_at'])}",
+                    {"event_request_id": event_id},
+                    now,
+                )
+                if start is not None and may_issue_offer(now, start):
+                    # D3: to the back; the place passes on in this same pass (AC9-H1)
+                    entry.update(
+                        status=WAITING,
+                        queued_at=now,
+                        offered_at=None,
+                        expires_at=None,
+                        warned_at=None,
+                        place_id=None,
+                    )
+                    self._promote(event_id, now, place_id=place)
+                else:
+                    # D11/D12: Closed instead of requeued; the place opens to
+                    # normal registration
+                    entry.update(
+                        status=CLOSED,
+                        closed_at=now,
+                        offered_at=None,
+                        expires_at=None,
+                        warned_at=None,
+                        place_id=None,
+                    )
+                    self._write_notice(
+                        entry,
+                        "waitlist_closed",
+                        f"waitlist-closed:{entry['id']}:{_epoch(now)}",
+                        {"event_request_id": event_id},
+                        now,
+                    )
+                touched += 1
+
+            if start is not None and now >= start - OFFER_WINDOW:
+                for entry in [
+                    e
+                    for e in self.entries
+                    if e["event_request_id"] == event_id
+                    and e["status"] == WAITING
+                ]:
+                    entry.update(status=CLOSED, closed_at=now)
+                    self._write_notice(
+                        entry,
+                        "waitlist_closed",
+                        f"waitlist-closed:{entry['id']}:{_epoch(now)}",
+                        {"event_request_id": event_id},
+                        now,
+                    )
+                    touched += 1
+
+            for entry in [
+                e
+                for e in self.entries
+                if e["event_request_id"] == event_id
+                and e["status"] == OFFERED
+                and e["warned_at"] is None
+                and e["offered_at"] is not None
+                and now >= e["offered_at"] + WARNING_OFFSET
+            ]:
+                self._write_notice(
+                    entry,
+                    "waitlist_offer_expiring",
+                    f"waitlist-expiring:{entry['id']}:{_epoch(entry['offered_at'])}",
+                    {
+                        "event_request_id": event_id,
+                        "expires_at": entry["expires_at"],
+                    },
+                    now,
+                )
+                entry["warned_at"] = now
+                touched += 1
+        return touched
+
+    def pending_outbox(self) -> list[dict[str, Any]]:
+        return [dict(row) for row in self.outbox if row["published_at"] is None]
+
+    def mark_published(self, ids: list[str], now: Any = None) -> int:
+        marked = 0
+        for row in self.outbox:
+            if row["id"] in ids and row["published_at"] is None:
+                row["published_at"] = now or NOW
+                marked += 1
+        return marked
 
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
         """The caller's active entries, oldest first, with their positions.
@@ -242,6 +428,7 @@ def add_waitlist_entry(
             "queued_at": NOW,
             "offered_at": None,
             "expires_at": None,
+            "warned_at": None,
             "place_id": None,
             **overrides,
         }
