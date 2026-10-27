@@ -25,7 +25,7 @@ EVENTS=$(for i in 1 2 3 4; do new_event "VERIFY SCRUM-24 race $i"; done)
 E1=$(echo "$EVENTS" | sed -n 1p); E2=$(echo "$EVENTS" | sed -n 2p)
 E3=$(echo "$EVENTS" | sed -n 3p); E4=$(echo "$EVENTS" | sed -n 4p)
 OWNER=$("${PSQL[@]}" -c "SELECT id FROM auth.users ORDER BY created_at LIMIT 1;" | head -1)
-K=$(gen_random_uuid)  # the assigned Coordinator, varchar(64) like 0011
+K=$(gen_random_uuid 2>/dev/null || uuidgen | tr 'A-Z' 'a-z')  # assigned Coordinator, varchar(64) like 0011
 A=$(new_user); B=$(new_user); F=$(new_user)
 "${PSQL[@]}" -c "UPDATE public.event_requests SET status = 'Confirmed'
     WHERE id IN ('$E1', '$E2', '$E3', '$E4');
@@ -38,8 +38,8 @@ cleanup() {
       WHERE o.entry_id = e.id AND e.event_request_id IN ('$E1', '$E2', '$E3', '$E4');
     DELETE FROM public.event_waitlist_place_offers p USING public.event_waitlist_places w
       WHERE p.place_id = w.id AND w.event_request_id IN ('$E1', '$E2', '$E3', '$E4');
-    DELETE FROM public.event_waitlist_places WHERE event_request_id IN ('$E1', '$E2', '$E3', '$E4');
     DELETE FROM public.event_waitlist_entries WHERE event_request_id IN ('$E1', '$E2', '$E3', '$E4');
+    DELETE FROM public.event_waitlist_places WHERE event_request_id IN ('$E1', '$E2', '$E3', '$E4');
     DELETE FROM public.event_registrations WHERE event_request_id IN ('$E1', '$E2', '$E3', '$E4');
     UPDATE public.event_requests SET status = 'Cancelled',
         event_name = event_name || ' (left behind)' WHERE id IN ('$E1', '$E2', '$E3', '$E4');
@@ -93,7 +93,7 @@ REG=$(full_with_one_waiting "$E2" "$A")
 "${PSQL[@]}" -c "SELECT public.join_waitlist('$E2', '$B', now() + interval '1 second') IS NOT NULL;" >/dev/null
 ENTRY_A=$("${PSQL[@]}" -c "SELECT id FROM public.event_waitlist_entries
   WHERE event_request_id = '$E2' AND attendee_id = '$A';")
-offer_first_waiter "$E2" "$OWNER"
+offer_first_waiter "$REG" "$OWNER"  # REG is OWNER's registration on E2
 "${PSQL[@]}" -c "BEGIN;
   SELECT public.accept_waitlist_offer('$ENTRY_A', '$A', now() + interval '1 hour');
   SELECT pg_sleep(3);
@@ -124,7 +124,7 @@ REG=$(full_with_one_waiting "$E3" "$A")
 "${PSQL[@]}" -c "SELECT public.join_waitlist('$E3', '$B', now() + interval '1 second') IS NOT NULL;" >/dev/null
 ENTRY_A=$("${PSQL[@]}" -c "SELECT id FROM public.event_waitlist_entries
   WHERE event_request_id = '$E3' AND attendee_id = '$A';")
-offer_first_waiter "$E3" "$OWNER"
+offer_first_waiter "$REG" "$OWNER"  # REG is OWNER's registration on E3
 "${PSQL[@]}" -c "BEGIN;
   SELECT public.withdraw_from_waitlist('$ENTRY_A', '$A', now() + interval '10 hours');
   SELECT pg_sleep(3);
@@ -153,7 +153,7 @@ fi
 # refused: there is no moment when the place is free while B is eligible.
 REG=$(full_with_one_waiting "$E4" "$A")
 "${PSQL[@]}" -c "SELECT public.join_waitlist('$E4', '$B', now() + interval '1 second') IS NOT NULL;" >/dev/null
-offer_first_waiter "$E4" "$OWNER"
+offer_first_waiter "$REG" "$OWNER"  # REG is OWNER's registration on E4
 "${PSQL[@]}" -c "BEGIN;
   SELECT public.process_waitlist_timers(now() + interval '73 hours');
   SELECT pg_sleep(3);
@@ -162,7 +162,7 @@ PID1=$!
 sleep 1
 START=$(date +%s)
 set +e
-"${PSQL[@]}" -c "SELECT public.register_for_event('$E4', '$F', now() + interval '73 hours');" >"$OUT/x9_2.out" 2>&1
+"${PSQL[@]}" -c "SELECT public.register_for_event('$E4', '$F', now());" >"$OUT/x9_2.out" 2>&1
 STATUS2=$?
 set -e
 ELAPSED=$(( $(date +%s) - START ))
