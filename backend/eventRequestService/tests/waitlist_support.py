@@ -102,7 +102,12 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
         return dict(row)
 
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
-        """The caller's active entries, oldest first, with their positions."""
+        """The caller's active entries, oldest first, with their positions.
+
+        A position is the attendee's place in their event's whole queue
+        (AC1-H3: the second joiner sees position 2), counted across every
+        active entry of the event, not among the caller's own entries.
+        """
         mine = [
             e
             for e in self.entries
@@ -110,13 +115,17 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
             and e["status"] in (WAITING, OFFERED)
         ]
         mine.sort(key=lambda e: (e["queued_at"], e["seq"]))
-        positions: dict[str, int] = {}
-        for entry in mine:
-            previous = positions.get(entry["event_request_id"], 0)
-            positions[entry["event_request_id"]] = previous + 1
-            entry = dict(entry)
-            entry["position"] = positions[entry["event_request_id"]]
-        return mine
+        ranks: dict[str, int] = {}
+        per_event: dict[str, int] = {}
+        for entry in sorted(
+            (e for e in self.entries if e["status"] in (WAITING, OFFERED)),
+            key=lambda e: (e["queued_at"], e["seq"]),
+        ):
+            per_event[entry["event_request_id"]] = (
+                per_event.get(entry["event_request_id"], 0) + 1
+            )
+            ranks[entry["id"]] = per_event[entry["event_request_id"]]
+        return [dict(entry, position=ranks[entry["id"]]) for entry in mine]
 
 
 def add_waitlist_entry(
