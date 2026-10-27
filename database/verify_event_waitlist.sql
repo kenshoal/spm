@@ -13,7 +13,7 @@ DECLARE
     c_cutoff constant timestamptz := '2030-02-07 10:00:00+00';  -- start - 72h (D8/D11)
     c_opens constant timestamptz := '2030-01-01 00:00:00+00';
     c_closes constant timestamptz := '2030-01-31 00:00:00+00';
-    c_late_start constant timestamptz := '2030-03-01 10:00:00+00';
+    c_late_closes constant timestamptz := '2030-02-20 00:00:00+00';  -- past the cut-off
     v_owner uuid;
     v_h uuid[] := ARRAY[]::uuid[];       -- registration holders H1..H8
     v_a uuid; v_b uuid; v_c uuid; v_d uuid;  -- waitlisted attendees
@@ -77,7 +77,7 @@ BEGIN
     RETURNING id INTO v_empty;
     INSERT INTO public.event_requests (organiser_id, event_name, status, proposed_date_times,
         registration_opens_at, registration_closes_at, registration_capacity)
-    VALUES (v_owner, 'VERIFY SCRUM-24 cut-off', 'Draft', ARRAY[c_late_start], c_opens, c_closes, 1)
+    VALUES (v_owner, 'VERIFY SCRUM-24 cut-off', 'Draft', ARRAY[c_start], c_opens, c_late_closes, 1)
     RETURNING id INTO v_cutoff;
     INSERT INTO public.event_requests (organiser_id, event_name, status, proposed_date_times,
         registration_opens_at, registration_closes_at, registration_capacity)
