@@ -17,6 +17,7 @@ from registration_support import (
     NOW,
     FakeRegistrationRepository,
 )
+from app.repositories.event_request_repository import SupabaseRepositoryError
 
 from app.clock import get_now
 from app.controllers import event_request_controller
@@ -27,6 +28,8 @@ ATTENDEE_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 
 WAITING = "Waiting"
 OFFERED = "Offered"
+ACCEPTED = "Accepted"
+WITHDRAWN = "Withdrawn"
 
 OFFER_WINDOW = timedelta(hours=72)  # D1
 
@@ -36,6 +39,8 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
         super().__init__()
         self.entries: list[dict[str, Any]] = []
         self._entry_clock = 0
+        # AC4-N5: when set, the next write RPC fails like an unreachable Supabase.
+        self.rpc_fails = False
 
     def active_entry(
         self, event_id: str, attendee_id: str
@@ -100,6 +105,95 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
         }
         self.entries.append(row)
         return dict(row)
+
+    def withdraw(
+        self, registration_id: str, attendee_id: str, now: Any
+    ) -> dict[str, Any]:
+        """SCRUM-22's withdrawal, then the same-transaction promotion (AC2-H1)."""
+        row = super().withdraw(registration_id, attendee_id, now)
+        self._promote(row["event_request_id"], now)
+        return row
+
+    def accept_waitlist_offer(
+        self, entry_id: str, attendee_id: str, now: Any
+    ) -> dict[str, Any]:
+        """Mirrors `accept_waitlist_offer`: owner, Offered, D1 window."""
+        if self.rpc_fails:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the acceptance"
+            )
+        entry = self._own_entry(entry_id, attendee_id)
+        event = self.events.get(entry["event_request_id"])
+        if event is None or event["status"] != "Confirmed":
+            raise RegistrationRpcError("entry not found", "P0002", "entry not found")
+        if entry["status"] != OFFERED:
+            raise RegistrationRpcError("not offered", "P0004", "not offered")
+        if now > entry["expires_at"]:
+            raise RegistrationRpcError("offer expired", "P0004", "offer expired")
+        self._clock += 1
+        self.registrations.append(
+            {
+                "id": str(uuid4()),
+                "event_request_id": entry["event_request_id"],
+                "attendee_id": attendee_id,
+                "status": "Registered",
+                "created_at": now,
+                "withdrawn_at": None,
+            }
+        )
+        entry.update(
+            status=ACCEPTED, offered_at=None, expires_at=None, place_id=None
+        )
+        return dict(entry)
+
+    def withdraw_from_waitlist(
+        self, entry_id: str, attendee_id: str, now: Any
+    ) -> dict[str, Any]:
+        """Mirrors `withdraw_from_waitlist`; an offer passes on (AC7)."""
+        entry = self._own_entry(entry_id, attendee_id)
+        if entry["status"] == WITHDRAWN:
+            raise RegistrationRpcError(
+                "already withdrawn", "P0004", "already withdrawn"
+            )
+        if entry["status"] == ACCEPTED:
+            raise RegistrationRpcError("not offered", "P0004", "not offered")
+        was_offered = entry["status"] == OFFERED
+        entry.update(status=WITHDRAWN, withdrawn_at=now)
+        if was_offered:
+            self._promote(entry["event_request_id"], now)
+        return dict(entry)
+
+    def _own_entry(self, entry_id: str, attendee_id: str) -> dict[str, Any]:
+        entry = next(
+            (
+                e
+                for e in self.entries
+                if e["id"] == entry_id and e["attendee_id"] == attendee_id
+            ),
+            None,
+        )
+        if entry is None:
+            raise RegistrationRpcError("entry not found", "P0002", "entry not found")
+        return entry
+
+    def _promote(self, event_id: str, now: Any) -> None:
+        """Offer the freed place to the earliest Waiting attendee (AC2)."""
+        waiting = sorted(
+            (
+                e
+                for e in self.entries
+                if e["event_request_id"] == event_id and e["status"] == WAITING
+            ),
+            key=lambda e: (e["queued_at"], e["seq"]),
+        )
+        if not waiting:
+            return
+        waiting[0].update(
+            status=OFFERED,
+            offered_at=now,
+            expires_at=now + OFFER_WINDOW,
+            place_id=str(uuid4()),
+        )
 
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
         """The caller's active entries, oldest first, with their positions.
