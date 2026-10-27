@@ -1,6 +1,6 @@
 # SCRUM-24 Implementation Plan: Join an Event Waiting List
 
-Drafted 27 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status: not started.** The contract, decisions D1–D10 and the full test catalogue are in `docs/testcases/scrum_24_testcases.md`; this plan only says *how* to build it and in what order.
+Drafted 27 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status: executed 27 October 2026 — commits 1–16 done, all local on `feat/scrum-24-waiting-list`; push held for the owner's review of commit 7 and the GitHub credential needs renewing. G6 teammate review and the shared-database application remain outstanding, so this is not a Done claim.** The contract, decisions D1–D10 and the full test catalogue are in `docs/testcases/scrum_24_testcases.md`; this plan only says *how* to build it and in what order.
 
 **Goal:** When a Confirmed event is full, an Attendee can join its waiting list. Each place that opens is held for the next eligible Attendee for 3 days. They are told when they are offered a place, warned before the offer expires, and told when it expires. They can accept, withdraw, or let the offer pass on. An assigned Coordinator can choose the recipient instead.
 

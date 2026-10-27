@@ -99,6 +99,34 @@ registration_capacity, places_remaining`. The write runs `register_for_event`
 (migration `0029`), which locks the event row, so two attendees racing for the
 last place cannot both succeed. Refusals carry a `code` beside `detail`.
 
+## Event waiting list (SCRUM-24)
+
+When a Confirmed event is full, an Attendee joins its waiting list; each place
+that opens is held for the next eligible Attendee for 72 hours. Migration
+`0065` holds the tables, the functions and the notification outbox; the
+pending offer counts against capacity everywhere (D6), so `places_remaining`
+in the SCRUM-21 views includes offers.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/attendee/events/{id}/waitlist` | Join a full event's list (201, the entry with its position). 409 `places_available`, `registration_not_open`, `already_registered` or `already_waitlisted`; 404 `event_not_found` |
+| `GET` | `/attendee/waitlist` | The caller's own entries, oldest first, each with its position in its event's Waiting queue (an offered entry shows none) |
+| `POST` | `/attendee/waitlist/{entry}/acceptance` | Accept an offer at or before `offered_at + 72h` (D1); 200 with the entry and the written registration. 409 `offer_expired` or `not_offered`; 404 `entry_not_found` |
+| `POST` | `/attendee/waitlist/{entry}/withdrawal` | Withdraw a Waiting entry (the queue closes the gap) or an Offered one (the place passes on). 409 `already_withdrawn` or `not_offered`; 404 `entry_not_found` |
+| `POST` | `/event-requests/{id}/waitlist/{entry}/offer` | The event's assigned Coordinator picks who receives the open place (D9); the automatic offer is revoked. 403 `not_assigned`; 409 `not_waiting` or `no_open_place`; 404 |
+
+Refusals carry a `code` beside `detail`. Notices are written to
+`waitlist_notification_outbox` in the same transaction as the change and
+delivered after the fact by the relay (202-accepted, keyed by uuid5 of the
+stored idempotency key, retried until accepted). The timer — expiries after
+72h with the hand-over, the one 48h warning, the cut-off close at
+`start − 72h` (D8/D11) and the post-cut-off release to registration (D12) —
+runs as one `PeriodicTaskRunner` handler behind `WAITLIST_TIMERS_ENABLED`
+(default off), like SCRUM-40's auto-completion. Cancelling an event closes
+every entry with one notice each (D13, a database trigger). The database
+contract is proven by `database/verify_event_waitlist.sql` and
+`database/verify_event_waitlist_race.sh`.
+
 ## Technical support (SCRUM-19)
 
 Recording, listing candidates and assigning require the event's
