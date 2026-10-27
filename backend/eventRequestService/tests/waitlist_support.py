@@ -17,11 +17,11 @@ from registration_support import (
     NOW,
     FakeRegistrationRepository,
 )
-from app.repositories.event_request_repository import SupabaseRepositoryError
 
 from app.clock import get_now
 from app.controllers import event_request_controller
 from app.main import create_app
+from app.repositories.event_request_repository import SupabaseRepositoryError
 from app.repositories.registration_repository import RegistrationRpcError
 
 ATTENDEE_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
@@ -198,9 +198,10 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
         """The caller's active entries, oldest first, with their positions.
 
-        A position is the attendee's place in their event's whole queue
-        (AC1-H3: the second joiner sees position 2), counted across every
-        active entry of the event, not among the caller's own entries.
+        A position is the attendee's place in their event's Waiting queue
+        (AC1-H3: the second joiner sees position 2; AC2-H1: once the first
+        attendee is Offered, the next Waiting attendee is position 1). The
+        offered holder is out of the queue and shows no position.
         """
         mine = [
             e
@@ -212,14 +213,14 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
         ranks: dict[str, int] = {}
         per_event: dict[str, int] = {}
         for entry in sorted(
-            (e for e in self.entries if e["status"] in (WAITING, OFFERED)),
+            (e for e in self.entries if e["status"] == WAITING),
             key=lambda e: (e["queued_at"], e["seq"]),
         ):
             per_event[entry["event_request_id"]] = (
                 per_event.get(entry["event_request_id"], 0) + 1
             )
             ranks[entry["id"]] = per_event[entry["event_request_id"]]
-        return [dict(entry, position=ranks[entry["id"]]) for entry in mine]
+        return [dict(entry, position=ranks.get(entry["id"])) for entry in mine]
 
 
 def add_waitlist_entry(

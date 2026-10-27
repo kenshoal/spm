@@ -25,6 +25,8 @@ from waitlist_support import (
 
 from app.clock import get_now
 
+ATTENDEE_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+
 OFFER_WINDOW = timedelta(hours=72)  # D1
 
 
@@ -59,18 +61,23 @@ def test_a_withdrawal_offers_the_place_to_the_earliest_attendee() -> None:
 
     with make_waitlist_client(repo, caller_id=holder["attendee_id"]) as client:
         withdrawn = client.post(f"/attendee/registrations/{holder['id']}/withdrawal")
-        offered = client.get("/attendee/waitlist")
 
     assert withdrawn.status_code == 200
-    body = offered.json()
-    mine = next(item for item in body if item["id"] == entries[ATTENDEE_A])
-    assert mine["status"] == "Offered"
-    assert mine["offered_at"] == NOW.isoformat()
-    assert mine["expires_at"] == (NOW + OFFER_WINDOW).isoformat()
-    assert mine["position"] == 1
-    # Forbidden side effects: the place is held, so nothing looks free, and the
-    # queue behind keeps its order
-    assert client.get(f"/attendee/events/{event_id}").json()["places_remaining"] == 0
+    # Each attendee sees only their own entry (AC1-H3), with their position
+    with make_waitlist_client(repo, caller_id=ATTENDEE_A) as client:
+        mine = client.get("/attendee/waitlist").json()
+    assert [item["id"] for item in mine] == [entries[ATTENDEE_A]]
+    assert mine[0]["status"] == "Offered"
+    assert mine[0]["offered_at"] == NOW.isoformat()
+    assert mine[0]["expires_at"] == (NOW + OFFER_WINDOW).isoformat()
+    assert mine[0]["position"] is None  # the holder is out of the queue
+    with make_waitlist_client(repo, caller_id=ATTENDEE_B) as client:
+        assert client.get("/attendee/waitlist").json()[0]["position"] == 1
+    with make_waitlist_client(repo, caller_id=ATTENDEE_C) as client:
+        assert client.get("/attendee/waitlist").json()[0]["position"] == 2
+    # Forbidden side effects: the place is held (D6), so nothing looks free
+    with make_waitlist_client(repo) as client:
+        assert client.get(f"/attendee/events/{event_id}").json()["places_remaining"] == 0
 
 
 # AC4-H1 (happy): accepting within the window registers the attendee
@@ -218,23 +225,27 @@ def test_an_outage_on_accept_is_a_502_and_writes_nothing() -> None:
 def test_a_waiting_attendee_withdraws_and_the_queue_closes_the_gap() -> None:
     repo = FakeWaitlistRepository()
     _event_id, entries = full_event_with_queue(
-        repo, ATTENDEE_A, ATTENDEE_B, ATTENDEE_C, "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        repo, ATTENDEE_A, ATTENDEE_B, ATTENDEE_C, ATTENDEE_D
     )
     b_entry = entries[ATTENDEE_B]
 
     with make_waitlist_client(repo, caller_id=ATTENDEE_B) as client:
         response = client.post(withdrawal_path(b_entry))
-        listing = client.get("/attendee/waitlist")
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "Withdrawn"
     assert body["withdrawn_at"] == NOW.isoformat()
-    assert [item["position"] for item in listing.json()] == [2]
-    with make_waitlist_client(repo, caller_id=ATTENDEE_C) as behind:
-        c_entry = behind.get("/attendee/waitlist").json()[0]
+    # Everyone behind moves up one position; A is untouched (each attendee
+    # reads their own listing, AC1-H3)
+    with make_waitlist_client(repo, caller_id=ATTENDEE_A) as client:
+        assert client.get("/attendee/waitlist").json()[0]["position"] == 1
+    with make_waitlist_client(repo, caller_id=ATTENDEE_C) as client:
+        c_entry = client.get("/attendee/waitlist").json()[0]
         assert c_entry["id"] == entries[ATTENDEE_C]
         assert c_entry["position"] == 2
+    with make_waitlist_client(repo, caller_id=ATTENDEE_D) as client:
+        assert client.get("/attendee/waitlist").json()[0]["position"] == 3
 
 
 # AC6-N1 (negative): withdrawing twice is refused
@@ -269,8 +280,9 @@ def test_withdrawing_someone_elses_or_unknown_entry_is_not_found() -> None:
 # AC7-H1 (happy): withdrawing with an offer passes it on with a fresh window
 def test_withdrawing_with_an_offer_passes_it_on() -> None:
     repo = FakeWaitlistRepository()
-    event_id, entries = full_event_with_queue(repo, ATTENDEE_A, ATTENDEE_B, ATTENDEE_C)
-    a_entry = add_offer(repo, event_id, ATTENDEE_A, queued_at=NOW)
+    # One active entry per attendee: B and C wait; A holds the offer only
+    event_id, entries = full_event_with_queue(repo, ATTENDEE_B, ATTENDEE_C)
+    a_entry = add_offer(repo, event_id, ATTENDEE_A)
 
     with make_waitlist_client(repo) as client:
         client.app.dependency_overrides[get_now] = lambda: NOW + timedelta(hours=10)
