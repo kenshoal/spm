@@ -180,6 +180,73 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
             self._promote(entry["event_request_id"], now, place_id=place)
         return dict(entry)
 
+    def choose_waitlist_recipient(
+        self, event_id: str, entry_id: str, coordinator_id: str, now: Any
+    ) -> dict[str, Any]:
+        """Mirrors `choose_waitlist_recipient` (D9): assignment, Waiting entry,
+        one open place; the in-flight offer is revoked and the chosen attendee
+        gets a fresh window on that place."""
+        latest = self.coordinators.get(event_id)
+        if (
+            self.coordinator_lookup_fails
+            or latest is None
+            or latest != coordinator_id
+        ):
+            raise RegistrationRpcError("event not found", "P0002", "event not found")
+        entry = next(
+            (
+                e
+                for e in self.entries
+                if e["id"] == entry_id and e["event_request_id"] == event_id
+            ),
+            None,
+        )
+        if entry is None:
+            raise RegistrationRpcError("entry not found", "P0002", "entry not found")
+        if entry["status"] != WAITING:
+            raise RegistrationRpcError("not waiting", "P0004", "not waiting")
+        holder = next(
+            (
+                e
+                for e in self.entries
+                if e["event_request_id"] == event_id and e["status"] == OFFERED
+            ),
+            None,
+        )
+        if holder is None:
+            raise RegistrationRpcError("no open place", "P0004", "no open place")
+        place = holder["place_id"]
+        holder_offered_at = holder["offered_at"]
+        holder.update(
+            status=WAITING,
+            offered_at=None,
+            expires_at=None,
+            warned_at=None,
+            place_id=None,
+        )
+        self._write_notice(
+            holder,
+            "waitlist_offer_revoked",
+            f"waitlist-revoked:{holder['id']}:{_epoch(holder_offered_at)}",
+            {"event_request_id": event_id},
+            now,
+        )
+        entry.update(
+            status=OFFERED,
+            offered_at=now,
+            expires_at=now + OFFER_WINDOW,
+            warned_at=None,
+            place_id=place,
+        )
+        self._write_notice(
+            entry,
+            "waitlist_offered",
+            f"waitlist-offered:{entry['id']}:{_epoch(now)}",
+            {"event_request_id": event_id, "expires_at": entry["expires_at"]},
+            now,
+        )
+        return dict(entry)
+
     def _own_entry(self, entry_id: str, attendee_id: str) -> dict[str, Any]:
         entry = next(
             (
