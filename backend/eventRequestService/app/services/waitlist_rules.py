@@ -13,6 +13,13 @@ offer history, D8 offer cut-off and D11 closing at the cut-off.
 from datetime import datetime, timedelta
 from typing import Any
 
+from app.services.registration_rules import (
+    CONFIRMED,
+    EventNotVisibleError,
+    RegistrationNotOpenError,
+    is_window_open,
+)
+
 OFFER_WINDOW = timedelta(hours=72)  # D1: accept at or before offered_at + 72h
 WARNING_OFFSET = timedelta(hours=48)  # D2: warning 24h before expiry
 
@@ -70,29 +77,51 @@ def check_join(
 
     `places_taken` counts Registered registrations plus Offered entries (D6):
     a pending offer holds its place, so a full event is joinable (AC1-B1) and
-    an event with a free place is not (AC1-N1).
+    an event with a free place is not (AC1-N1). A non-Confirmed event is not
+    visible at all (D8), like SCRUM-21.
     """
-    raise NotImplementedError
+    if event.get("status") != CONFIRMED:
+        raise EventNotVisibleError
+    if not is_window_open(event, now):
+        raise RegistrationNotOpenError
+    if is_registered:
+        raise AlreadyRegisteredError
+    if active_entry is not None:
+        raise AlreadyWaitlistedError
+    if places_taken < event["registration_capacity"]:
+        raise PlacesAvailableError
 
 
 def check_accept(entry: dict[str, Any] | None, now: datetime) -> None:
     """D1: accepting at or before `expires_at` succeeds; after it, refuse."""
-    raise NotImplementedError
+    if entry is None or entry.get("status") != OFFERED:
+        raise NotOfferedError
+    expires = _as_datetime(entry.get("expires_at"))
+    if expires is None or now > expires:
+        raise OfferExpiredError
 
 
 def offer_deadline(offered_at: datetime | str) -> datetime:
     """D1: the acceptance window ends exactly 72h after the offer."""
-    raise NotImplementedError
+    offered = _as_datetime(offered_at)
+    assert offered is not None
+    return offered + OFFER_WINDOW
 
 
 def expiry_due(entry: dict[str, Any], now: datetime) -> bool:
     """Strictly after `expires_at` (D1): accepting exactly at it still wins."""
-    raise NotImplementedError
+    if entry.get("status") != OFFERED:
+        return False
+    expires = _as_datetime(entry.get("expires_at"))
+    return expires is not None and now > expires
 
 
 def warning_due(entry: dict[str, Any], now: datetime) -> bool:
     """D2: one `waitlist_offer_expiring` at offered_at + 48h, never repeated."""
-    raise NotImplementedError
+    if entry.get("status") != OFFERED or entry.get("warned_at") is not None:
+        return False
+    offered = _as_datetime(entry.get("offered_at"))
+    return offered is not None and now >= offered + WARNING_OFFSET
 
 
 def may_issue_offer(now: datetime, event_start: datetime | str) -> bool:
@@ -102,17 +131,36 @@ def may_issue_offer(now: datetime, event_start: datetime | str) -> bool:
     instant and is not issued; the place opens to registration instead (D12)
     and the list closes (D11).
     """
-    raise NotImplementedError
+    start = _as_datetime(event_start)
+    return start is not None and now + OFFER_WINDOW < start
 
 
 def requeue(entry: dict[str, Any], now: datetime) -> dict[str, Any]:
     """D3: an expired offeree goes to the back with a fresh `queued_at`."""
-    raise NotImplementedError
+    requeued = dict(entry)
+    requeued.update(
+        {
+            "status": WAITING,
+            "queued_at": now,
+            "offered_at": None,
+            "expires_at": None,
+            "warned_at": None,
+            "place_id": None,
+        }
+    )
+    return requeued
 
 
 def waiting_order(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The Waiting entries in queue order: `queued_at`, then `seq`."""
-    raise NotImplementedError
+    waiting = [entry for entry in entries if entry.get("status") == WAITING]
+    return sorted(
+        waiting,
+        key=lambda entry: (
+            _as_datetime(entry.get("queued_at")),
+            entry.get("seq") or 0,
+        ),
+    )
 
 
 def next_recipient(
@@ -127,4 +175,12 @@ def next_recipient(
     nobody is eligible, so the caller releases the place to registration
     (D7/D12).
     """
-    raise NotImplementedError
+    lapsed = {
+        offer["attendee_id"]
+        for offer in place_offers
+        if offer.get("place_id") == place_id and offer.get("outcome") == LAPSED
+    }
+    for entry in waiting_order(entries):
+        if entry["attendee_id"] not in lapsed:
+            return entry
+    return None
