@@ -87,6 +87,7 @@ from app.services.technical_support_service import (
 )
 from app.services.waitlist_rules import WaitlistRuleError
 from app.services.waitlist_service import WaitlistService
+from app.services.waitlist_timer import build_waitlist_timer
 
 
 def build_periodic_task_runner() -> PeriodicTaskRunner | None:
@@ -102,6 +103,9 @@ def build_periodic_task_runner() -> PeriodicTaskRunner | None:
         handlers["registration_window_notices"] = (
             build_registration_window_notifier().run_once
         )
+    # SCRUM-24: the waiting-list timer and its outbox relay, on their own switch.
+    if settings.waitlist_timers_enabled:
+        handlers["waitlist_timers"] = build_waitlist_timer().run_once
     if not handlers:
         return None
     return PeriodicTaskRunner(

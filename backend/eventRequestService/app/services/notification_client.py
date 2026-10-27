@@ -556,6 +556,51 @@ class NotificationClient:
             return False
         return True
 
+    def notify_waitlist_notice(
+        self,
+        *,
+        event_type: str,
+        recipient_id: str,
+        idempotency_key: str,
+        payload: dict[str, Any],
+    ) -> bool:
+        """Deliver one durable waiting-list notice (SCRUM-24 AC5).
+
+        The database already stored the notice with its idempotency key, so a
+        retry repeats the key and notificationService stores it once. Only a
+        202 counts as delivered, so the relay keeps the notice pending
+        otherwise and nothing is lost.
+        """
+        if self._url is None:
+            return False
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": event_type,
+                    "recipient_id": recipient_id,
+                    "event_id": str(uuid5(NAMESPACE_URL, idempotency_key)),
+                    "payload": payload,
+                },
+                timeout=5,
+            )
+            if response.status_code != 202:
+                logger.warning(
+                    "Waiting-list notice %s was not accepted for %s",
+                    idempotency_key,
+                    recipient_id,
+                )
+                return False
+        except httpx.HTTPError:
+            logger.warning(
+                "Waiting-list notice %s could not reach recipient %s",
+                idempotency_key,
+                recipient_id,
+                exc_info=True,
+            )
+            return False
+        return True
+
     def notify_arrangement_needs_review(
         self, *, event_id: str, recipient_id: str, payload: dict[str, Any]
     ) -> bool:
