@@ -27,6 +27,7 @@ class FakeNotificationRepository:
         recipient_id: str,
         payload: dict[str, Any],
         event_id: str | None,
+        in_inbox: bool = True,
     ) -> bool:
         self._maybe_fail()
         if event_id is not None and any(
@@ -41,6 +42,7 @@ class FakeNotificationRepository:
                 "event_type": event_type,
                 "payload": payload,
                 "event_id": event_id,
+                "in_inbox": in_inbox,
                 "read_at": None,
                 # Strictly increasing, so "newest first" is deterministic.
                 "created_at": (START + timedelta(minutes=len(self.rows))).isoformat(),
@@ -56,6 +58,7 @@ class FakeNotificationRepository:
             row
             for row in self.rows
             if row["recipient_id"] == recipient_id
+            and row["in_inbox"]
             and not (unread_only and row["read_at"])
         ]
         return sorted(rows, key=lambda row: row["created_at"], reverse=True)[:limit]

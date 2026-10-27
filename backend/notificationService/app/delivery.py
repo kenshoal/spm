@@ -1,7 +1,7 @@
 """Delivery of a stored notification over the channels chosen for its type (SCRUM-57)."""
 
 import logging
-from typing import Any, Protocol
+from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +32,25 @@ class Delivery:
         self._mailer = mailer
         self._inbox_url = inbox_url
 
-    def deliver(
-        self, *, event_type: str, recipient_id: str, payload: dict[str, Any]
-    ) -> None:
+    def channel_for(self, event_type: str) -> str:
+        """The channel chosen for a type; one that cannot be read counts as in_app."""
+        try:
+            return self._channels.channel_for(event_type)
+        except Exception:
+            logger.exception(
+                "Could not read the channel setting for %s; using in_app", event_type
+            )
+            return "in_app"
+
+    def send_email(self, *, channel: str, event_type: str, recipient_id: str) -> None:
         """Send the email half of a newly stored notification.
 
         Nothing here may break the caller: the notification is already stored,
-        so a failure is logged and the notification stays in-app only. A
-        setting that cannot be read counts as "in_app".
+        so a failure is logged and the notification stays as it was.
         """
+        if channel not in ("email", "both"):
+            return
         try:
-            if self._channels.channel_for(event_type) not in ("email", "both"):
-                return
             address = self._addresses.email_for(recipient_id)
             if address is None:
                 logger.warning(

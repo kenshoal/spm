@@ -18,6 +18,7 @@ class NotificationRepository(Protocol):
         recipient_id: str,
         payload: dict[str, Any],
         event_id: str | None,
+        in_inbox: bool = True,
     ) -> bool: ...
 
     def list_for_recipient(
@@ -68,6 +69,7 @@ class SupabaseNotificationRepository:
         recipient_id: str,
         payload: dict[str, Any],
         event_id: str | None,
+        in_inbox: bool = True,
     ) -> bool:
         rows = self._request(
             "POST",
@@ -78,6 +80,7 @@ class SupabaseNotificationRepository:
                 "recipient_id": recipient_id,
                 "payload": payload,
                 "event_id": event_id,
+                "in_inbox": in_inbox,
             },
         )
         # An ignored duplicate comes back as an empty list.
@@ -88,6 +91,9 @@ class SupabaseNotificationRepository:
     ) -> list[dict[str, Any]]:
         params = {
             "recipient_id": f"eq.{recipient_id}",
+            # An email-only notification is stored, to guard against repeats,
+            # but is not part of the inbox.
+            "in_inbox": "eq.true",
             "order": "created_at.desc,id.desc",
             "limit": str(limit),
             "select": "*",

@@ -7,6 +7,7 @@ from fakes import (
     FakeMailer,
     FakeNotificationRepository,
     make_client,
+    signed_in_as,
 )
 
 from app.delivery import Delivery
@@ -76,6 +77,25 @@ def test_the_channel_decides_whether_an_email_is_sent(
     assert response.status_code == 202
     assert len(mailer.sent) == emails
     assert len(repository.rows) == 1
+
+
+# AC2-P3 (partition): an email-only type is emailed and stored once, but is not shown in
+# the inbox; "both" is shown there
+def test_an_email_only_type_is_not_shown_in_the_inbox() -> None:
+    repository, mailer, delivery = build(
+        {"clarification_requested": "email", "coordinator_assigned": "both"},
+        {ORGANISER: ORGANISER_EMAIL},
+    )
+    with make_client(repository, delivery) as client:
+        client.post(ENDPOINT, json=event(event_id="ev-a"))
+        client.post(
+            ENDPOINT, json=event(event_id="ev-b", event_type="coordinator_assigned")
+        )
+        inbox = client.get("/notifications", headers=signed_in_as(ORGANISER)).json()
+
+    assert len(repository.rows) == 2
+    assert len(mailer.sent) == 2
+    assert [item["event_type"] for item in inbox] == ["coordinator_assigned"]
 
 
 # AC2-X1 (cross-cutting): a setting for one type does not change another type

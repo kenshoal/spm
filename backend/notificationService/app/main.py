@@ -97,11 +97,14 @@ def create_app(
         event: NotificationEvent, repository: RepositoryDependency, request: Request
     ) -> EventAccepted:
         # Internal, service-to-service only: not yet authenticated (see README).
+        delivery = request.app.state.delivery
+        channel = delivery.channel_for(event.event_type) if delivery else "in_app"
         created = repository.save(
             event_type=event.event_type,
             recipient_id=event.recipient_id,
             payload=event.payload,
             event_id=event.event_id,
+            in_inbox=channel != "email",
         )
         logger.info(
             "Received %s event for recipient %s%s",
@@ -109,12 +112,11 @@ def create_app(
             event.recipient_id,
             "" if created else " (duplicate event_id, ignored)",
         )
-        delivery = request.app.state.delivery
         if created and delivery is not None:
-            delivery.deliver(
+            delivery.send_email(
+                channel=channel,
                 event_type=event.event_type,
                 recipient_id=event.recipient_id,
-                payload=event.payload,
             )
         return EventAccepted(status="accepted")
 
