@@ -1,19 +1,28 @@
 import { getJson } from "./api";
-import type { Slot } from "./venue-options";
 import { venueApiUrl } from "./venues";
 
-// One month of slot states for a venue (SCRUM-31). The API returns states only:
-// never block reasons, event names or ids.
-export type CalendarState = "open" | "booked" | "blocked" | "unavailable" | "not_offered";
+// One month of times for a venue (SCRUM-31, on times by SCRUM-69). Each date is a
+// partition of 07:00-24:00 into booked, blocked and free ranges, in minutes after
+// midnight. The API returns times only: never block reasons, event names or ids.
+export type CalendarEntryState = "booked" | "blocked";
 
-export interface CalendarSlot {
-  slot: Slot;
-  state: CalendarState;
+export interface CalendarEntry {
+  state: CalendarEntryState;
+  start_minute: number;
+  end_minute: number;
+}
+
+export interface CalendarRange {
+  start_minute: number;
+  end_minute: number;
 }
 
 export interface CalendarDay {
   date: string;
-  slots: CalendarSlot[];
+  // The venue is blocked as a whole in the catalogue.
+  unavailable: boolean;
+  entries: CalendarEntry[];
+  free: CalendarRange[];
 }
 
 export interface VenueCalendar {
@@ -23,12 +32,9 @@ export interface VenueCalendar {
 }
 
 // Written out, so a state never depends on colour alone.
-export const STATE_LABELS: Record<CalendarState, string> = {
-  open: "Available",
+export const ENTRY_LABELS: Record<CalendarEntryState, string> = {
   booked: "Booked",
   blocked: "Blocked",
-  unavailable: "Unavailable",
-  not_offered: "Not offered",
 };
 
 export function monthLabel(month: string): string {

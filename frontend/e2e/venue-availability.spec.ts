@@ -7,16 +7,16 @@ function sessionCookie(value: string) {
 }
 
 // AC1-E1 (happy): SCRUM-31 end to end in a browser — a coordinator finds a venue, opens
-// its availability from the search result, sees a booked and a blocked slot in words, and
+// its availability from the search result, sees a booked and a blocked time in words, and
 // moves to the next month. The mock venue API mirrors the real rules, so this proves the
 // screen and its wiring, not the real service.
-test("coordinator opens a venue's availability from search and sees booked and blocked slots", async ({ page, request }) => {
+test("coordinator opens a venue's availability from search and sees booked and blocked times", async ({ page, request }) => {
   const stamp = Date.now();
   const name = `Availability Hall ${stamp}`;
   const wing = `Availability Wing ${stamp}`;
   const venue = await (await request.post(`${VENUE_API}/__seed`, { data: { name, location: wing, max_capacity: 150 } })).json();
   const booking = await request.post(`${VENUE_API}/__seed_booking`, {
-    data: { venue_id: venue.id, requested_by: "playwright-coordinator", start_date: "2030-03-04", end_date: "2030-03-05", slots: ["AM"], status: "approved", decided_by: "venue-staff", decided_at: new Date().toISOString() },
+    data: { venue_id: venue.id, requested_by: "playwright-coordinator", start_date: "2030-03-04", end_date: "2030-03-05", start_minute: 540, end_minute: 720, status: "approved", decided_by: "venue-staff", decided_at: new Date().toISOString() },
   });
   expect(booking.ok()).toBeTruthy();
   const block = await request.post(`${VENUE_API}/venues/${venue.id}/blocks`, {
@@ -33,8 +33,13 @@ test("coordinator opens a venue's availability from search and sees booked and b
   await page.goto(`/venues/availability?venue=${venue.id}&month=2030-03`);
   const table = page.getByRole("table", { name: `${name} availability, March 2030` });
   await expect(table.getByRole("row")).toHaveCount(32);
-  await expect(table.getByRole("row").filter({ hasText: /\b4 Mar/ }).getByRole("cell")).toHaveText(["Booked", "Available", "Available"]);
-  await expect(table.getByRole("row").filter({ hasText: /\b6 Mar/ }).getByRole("cell")).toHaveText(["Available", "Available", "Blocked"]);
+  const fourth = table.getByRole("row").filter({ hasText: /\b4 Mar/ });
+  await expect(fourth.getByRole("listitem")).toHaveText(["Booked 09:00–12:00"]);
+  await expect(fourth.getByText("Available 07:00–09:00, 12:00–24:00")).toBeVisible();
+  const sixth = table.getByRole("row").filter({ hasText: /\b6 Mar/ });
+  await expect(sixth.getByRole("listitem")).toHaveText(["Blocked 18:00–24:00"]);
+  await expect(sixth.getByText("Available 07:00–18:00")).toBeVisible();
+  await expect(table.getByRole("row").filter({ hasText: /\b8 Mar/ }).getByText("Available all day")).toBeVisible();
   await expect(page.getByText("Private roof repair")).toHaveCount(0);
 
   await page.getByRole("link", { name: "Next month" }).click();
