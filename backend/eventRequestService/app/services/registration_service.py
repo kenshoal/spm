@@ -138,12 +138,14 @@ class RegistrationService:
             for event in self.repository.list_confirmed_events()
             if is_window_open(event, now)
         ]
-        counts = self.repository.count_active_for_events([e["id"] for e in events])
+        # D6 (SCRUM-24): a pending offer holds its place against capacity, so
+        # the public view counts registrations plus offers, never fewer.
+        counts = {e["id"]: self.repository.places_taken(e["id"]) for e in events}
         return [to_public_event(e, counts.get(e["id"], 0)) for e in events]
 
     def get_event(self, event_id: str) -> dict[str, Any]:
         event = self._visible_event(event_id)
-        return to_public_event(event, self.repository.count_active(event_id))
+        return to_public_event(event, self.repository.places_taken(event_id))
 
     def register(
         self, event_id: str, attendee_id: str, now: datetime

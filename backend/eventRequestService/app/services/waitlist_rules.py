@@ -36,28 +36,34 @@ class WaitlistRuleError(Exception):
     """A refusal the service maps to 409 with this `code` (D10)."""
 
     code = "waitlist_refused"
+    detail = "This waiting-list action was refused"
 
 
 class PlacesAvailableError(WaitlistRuleError):
     """The event still has free places, so joining the list is refused."""
 
     code = "places_available"
+    detail = "This event still has places available"
 
 
 class AlreadyRegisteredError(WaitlistRuleError):
     code = "already_registered"
+    detail = "You are already registered for this event"
 
 
 class AlreadyWaitlistedError(WaitlistRuleError):
     code = "already_waitlisted"
+    detail = "You are already on the waiting list for this event"
 
 
 class NotOfferedError(WaitlistRuleError):
     code = "not_offered"
+    detail = "This entry holds no offer"
 
 
 class OfferExpiredError(WaitlistRuleError):
     code = "offer_expired"
+    detail = "This offer has expired"
 
 
 def _as_datetime(value: datetime | str | None) -> datetime | None:
