@@ -121,6 +121,7 @@ fi
 # accepts the same offer and must be refused. Never both A registered and the
 # place passed on.
 REG=$(full_with_one_waiting "$E3" "$A")
+"${PSQL[@]}" -c "SELECT public.join_waitlist('$E3', '$B', now() + interval '1 second') IS NOT NULL;" >/dev/null
 ENTRY_A=$("${PSQL[@]}" -c "SELECT id FROM public.event_waitlist_entries
   WHERE event_request_id = '$E3' AND attendee_id = '$A';")
 offer_first_waiter "$E3" "$OWNER"
