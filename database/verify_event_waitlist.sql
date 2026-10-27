@@ -178,11 +178,14 @@ BEGIN
     SELECT outcome INTO v_text FROM public.event_waitlist_place_offers
         WHERE place_id = v_place AND attendee_id = v_c;
     ASSERT v_text = 'Lapsed', 'AC4-B5: history must say Lapsed (D7)';
-    SELECT * INTO v_entry_b FROM public.event_waitlist_entries
-        WHERE event_request_id = v_event AND attendee_id = v_b;
-    ASSERT v_entry_b.status = 'Offered' AND v_entry_b.place_id = v_place
-        AND v_entry_b.expires_at = v_expired + interval '1 second' + interval '72 hours',
-        'AC4-B5: B not offered with a fresh window';
+    -- FIFO (AC3-H1 keeps A at queued_at = T0, position 1) with D7 (only a
+    -- lapsed place bars a re-offer) hands the place to A, the revoked holder:
+    -- this is AC3-H2's database evidence.
+    SELECT * INTO v_entry FROM public.event_waitlist_entries
+        WHERE event_request_id = v_event AND attendee_id = v_a;
+    ASSERT v_entry.status = 'Offered' AND v_entry.place_id = v_place
+        AND v_entry.expires_at = v_expired + interval '1 second' + interval '72 hours',
+        'AC4-B5/AC3-H2: A (the revoked holder) not re-offered the place';
     ASSERT (SELECT count(*) FROM public.waitlist_notification_outbox
         WHERE event_type = 'waitlist_offer_expired' AND recipient_id = v_c) = 1,
         'AC4-B5: no single expired notice for C';
@@ -192,33 +195,37 @@ BEGIN
     PERFORM public.process_waitlist_timers(v_expired + interval '2 seconds');
     ASSERT (SELECT status FROM public.event_waitlist_entries WHERE id = v_entry_c.id)
         = 'Waiting', 'AC4-X1: requeued entry expired again';
-    ASSERT (SELECT status FROM public.event_waitlist_entries WHERE id = v_entry_b.id)
+    ASSERT (SELECT status FROM public.event_waitlist_entries WHERE id = v_entry.id)
         = 'Offered', 'AC4-X1: offered entry re-offered';
     ASSERT (SELECT count(*) FROM public.waitlist_notification_outbox
         WHERE event_type = 'waitlist_offer_expired' AND recipient_id = v_c) = 1,
         'AC4-X1: duplicate expired notice';
 
-    -- AC7-H1 (happy, database side): withdrawing with an offer passes it on.
-    -- A was revoked on this place, not lapsed, so the place may come back (AC3-H2).
-    PERFORM public.withdraw_from_waitlist(v_entry_b.id, v_b, c_t0 + interval '10 hours');
-    ASSERT (SELECT status FROM public.event_waitlist_entries WHERE id = v_entry_b.id)
-        = 'Withdrawn', 'AC7-H1: B not withdrawn';
-    ASSERT (SELECT withdrawn_at FROM public.event_waitlist_entries WHERE id = v_entry_b.id)
+    -- AC7-H1 (happy, database side, verbatim the frozen row): withdrawing with
+    -- an offer passes it on. A holds place 1 again after the revoke (AC3-H2);
+    -- their withdrawal hands it to B, who has never been offered this place.
+    PERFORM public.withdraw_from_waitlist(v_entry.id, v_a, c_t0 + interval '80 hours');
+    ASSERT (SELECT status FROM public.event_waitlist_entries WHERE id = v_entry.id)
+        = 'Withdrawn', 'AC7-H1: A not withdrawn';
+    ASSERT (SELECT withdrawn_at FROM public.event_waitlist_entries WHERE id = v_entry.id)
         IS NOT NULL, 'AC7-H1: withdrawn_at not set';
-    SELECT * INTO v_entry FROM public.event_waitlist_entries
-        WHERE event_request_id = v_event AND attendee_id = v_a;
-    ASSERT v_entry.status = 'Offered' AND v_entry.place_id = v_place,
+    SELECT * INTO v_entry_b FROM public.event_waitlist_entries
+        WHERE event_request_id = v_event AND attendee_id = v_b;
+    ASSERT v_entry_b.status = 'Offered' AND v_entry_b.place_id = v_place
+        AND v_entry_b.expires_at = c_t0 + interval '80 hours' + interval '72 hours',
         'AC7-H1: place not handed to the next eligible attendee';
     SELECT outcome INTO v_text FROM public.event_waitlist_place_offers
-        WHERE place_id = v_place AND attendee_id = v_a;
-    ASSERT v_text = 'Offered', 'AC7-H1: revoked holder not re-offered (D7)';
+        WHERE place_id = v_place AND attendee_id = v_b;
+    ASSERT v_text = 'Offered', 'AC7-H1: B missing from the place history';
     ASSERT private.places_taken(v_event) = 2, 'AC7-H1: hand-over left the place unheld';
 
     -- AC4-H1 (happy, database side): accepting inside the window registers.
-    v_entry := public.accept_waitlist_offer(v_entry.id, v_a, c_t0 + interval '34 hours');
-    ASSERT v_entry.status = 'Accepted', 'AC4-H1: entry not Accepted';
+    -- The acceptor is B: A withdrew above (AC7-H1), and the composition of the
+    -- frozen rows leaves B as the holder with a live offer.
+    v_entry_b := public.accept_waitlist_offer(v_entry_b.id, v_b, c_t0 + interval '90 hours');
+    ASSERT v_entry_b.status = 'Accepted', 'AC4-H1: entry not Accepted';
     ASSERT (SELECT count(*) FROM public.event_registrations
-        WHERE event_request_id = v_event AND attendee_id = v_a
+        WHERE event_request_id = v_event AND attendee_id = v_b
           AND status = 'Registered') = 1, 'AC4-H1: no Registered row';
     ASSERT (SELECT outcome FROM public.event_waitlist_places WHERE id = v_place)
         = 'Accepted' AND (SELECT closed_at FROM public.event_waitlist_places
