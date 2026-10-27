@@ -8,11 +8,19 @@ from pydantic import ValidationError
 
 from app.clock import get_now
 from app.config import get_settings
+from app.controllers.event_request_controller import (
+    AuthenticatedCaller,
+    get_authenticated_caller,
+)
 from app.controllers.registration_controller import AttendeeDependency
 from app.repositories.waitlist_repository import SupabaseWaitlistRepository
+from app.services.registration_service import EVENT_COORDINATOR_ROLE
 from app.services.waitlist_service import WaitlistService
 
 router = APIRouter(prefix="/attendee", tags=["attendee waiting list"])
+coordination_router = APIRouter(
+    prefix="/event-requests", tags=["waiting list coordination"]
+)
 
 
 def get_waitlist_service(request: Request) -> WaitlistService:
@@ -76,3 +84,20 @@ def withdraw_waitlist_entry(
     now: NowDependency,
 ) -> dict:
     return jsonable_encoder(service.withdraw(str(entry_id), attendee_id, now))
+
+
+@coordination_router.post("/{event_request_id}/waitlist/{entry_id}/offer")
+def choose_waitlist_recipient(
+    event_request_id: UUID,
+    entry_id: UUID,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+    now: NowDependency,
+) -> dict:
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return jsonable_encoder(
+        service.choose_recipient(
+            str(event_request_id), str(entry_id), caller.id, caller.roles, now
+        )
+    )

@@ -23,6 +23,9 @@ from app.controllers.registration_controller import router as registration_route
 from app.controllers.technical_support_controller import (
     router as technical_support_router,
 )
+from app.controllers.waitlist_controller import (
+    coordination_router as waitlist_coordination_router,
+)
 from app.controllers.waitlist_controller import router as waitlist_router
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
@@ -201,6 +204,7 @@ def create_app(
     application.include_router(registration_router)
     application.include_router(registration_info_router)
     application.include_router(waitlist_router)
+    application.include_router(waitlist_coordination_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(

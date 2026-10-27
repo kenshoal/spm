@@ -39,6 +39,14 @@ class WaitlistRuleError(Exception):
     detail = "This waiting-list action was refused"
     status = 409
 
+class CoordinatorNotAssignedError(WaitlistRuleError):
+    """Only the event's assigned Coordinator may choose a recipient (D9)."""
+
+    status = 403
+    code = "not_assigned"
+    detail = "Only the event's assigned Coordinator can choose a recipient"
+
+
 class WaitlistEntryNotFoundError(WaitlistRuleError):
     """Someone else's entry, an unknown id or a Closed entry (404, D10)."""
 
@@ -77,6 +85,16 @@ class OfferExpiredError(WaitlistRuleError):
 class AlreadyWithdrawnError(WaitlistRuleError):
     code = "already_withdrawn"
     detail = "This entry is already withdrawn"
+
+
+class NotWaitingError(WaitlistRuleError):
+    code = "not_waiting"
+    detail = "That entry is not waiting"
+
+
+class NoOpenPlaceError(WaitlistRuleError):
+    code = "no_open_place"
+    detail = "This event has no open place to assign"
 
 
 def _as_datetime(value: datetime | str | None) -> datetime | None:

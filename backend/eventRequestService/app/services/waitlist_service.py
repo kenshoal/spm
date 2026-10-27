@@ -20,7 +20,10 @@ from app.services.waitlist_rules import (
     AlreadyRegisteredError,
     AlreadyWaitlistedError,
     AlreadyWithdrawnError,
+    CoordinatorNotAssignedError,
+    NoOpenPlaceError,
     NotOfferedError,
+    NotWaitingError,
     OfferExpiredError,
     PlacesAvailableError,
     WaitlistEntryNotFoundError,
@@ -29,6 +32,7 @@ from app.services.waitlist_rules import (
 
 NOT_FOUND_ERRCODE = "P0002"
 REFUSED_ERRCODE = "P0004"
+EVENT_COORDINATOR_ROLE = "event_coordinator"
 
 
 class WaitlistService:
@@ -93,6 +97,32 @@ class WaitlistService:
         except RegistrationRpcError as error:
             raise self._map_withdrawal_refusal(error) from error
 
+    def choose_recipient(
+        self,
+        event_id: str,
+        entry_id: str,
+        caller_id: str,
+        caller_roles: tuple[str, ...],
+        now: datetime,
+    ) -> dict[str, Any]:
+        """D9 (AC3): the assigned Coordinator picks who receives an open place.
+
+        The assignment is checked here (403 for anyone else) and again inside
+        the database function under the event row lock, so a reassignment
+        between check and write is refused there.
+        """
+        if EVENT_COORDINATOR_ROLE not in caller_roles:
+            raise CoordinatorNotAssignedError
+        latest = self.repository.latest_coordinator_id(event_id)
+        if latest is None or latest != caller_id:
+            raise CoordinatorNotAssignedError
+        try:
+            return self.repository.choose_waitlist_recipient(
+                event_id, entry_id, caller_id, now
+            )
+        except RegistrationRpcError as error:
+            raise self._map_choice_refusal(error) from error
+
     def _with_position(
         self, entry: dict[str, Any], attendee_id: str
     ) -> dict[str, Any]:
@@ -125,6 +155,17 @@ class WaitlistService:
                 return NotOfferedError()
             if error.reason == "offer expired":
                 return OfferExpiredError()
+        return error
+
+    @staticmethod
+    def _map_choice_refusal(error: RegistrationRpcError) -> Exception:
+        if error.errcode == NOT_FOUND_ERRCODE:
+            return EventNotVisibleError()
+        if error.errcode == REFUSED_ERRCODE:
+            if error.reason == "not waiting":
+                return NotWaitingError()
+            if error.reason == "no open place":
+                return NoOpenPlaceError()
         return error
 
     @staticmethod

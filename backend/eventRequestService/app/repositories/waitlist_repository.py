@@ -39,6 +39,10 @@ class WaitlistRepository(Protocol):
         self, entry_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]: ...
 
+    def choose_waitlist_recipient(
+        self, event_id: str, entry_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]: ...
 
 
@@ -96,6 +100,20 @@ class SupabaseWaitlistRepository(SupabaseRegistrationRepository):
                 "p_now": now.isoformat(),
             },
             action="withdrawal",
+        )
+
+    def choose_waitlist_recipient(
+        self, event_id: str, entry_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]:
+        return self._rpc(
+            "choose_waitlist_recipient",
+            {
+                "p_event_request_id": event_id,
+                "p_entry_id": entry_id,
+                "p_coordinator_id": coordinator_id,
+                "p_now": now.isoformat(),
+            },
+            action="recipient choice",
         )
 
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
