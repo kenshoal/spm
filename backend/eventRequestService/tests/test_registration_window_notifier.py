@@ -203,7 +203,7 @@ def test_naive_clock_is_refused() -> None:
     repo, spy = FakeWindowRepository(), SpyNotificationClient()
 
     with pytest.raises(ValueError, match="timezone-aware"):
-        make(repo, spy).run_once(datetime(2030, 1, 15, 12, 0))  # noqa: DTZ001 - naive on purpose
+        make(repo, spy).run_once(datetime(2030, 1, 15, 12, 0))  # naive on purpose
 
 
 # AC3-B2 (boundary): Paging covers every event, not just the first page.
