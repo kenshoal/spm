@@ -19,7 +19,11 @@ from app.services.registration_rules import (
 from app.services.waitlist_rules import (
     AlreadyRegisteredError,
     AlreadyWaitlistedError,
+    AlreadyWithdrawnError,
+    NotOfferedError,
+    OfferExpiredError,
     PlacesAvailableError,
+    WaitlistEntryNotFoundError,
     check_join,
 )
 
@@ -53,6 +57,42 @@ class WaitlistService:
     def list_entries(self, attendee_id: str) -> list[dict[str, Any]]:
         return self.repository.list_entries_for(attendee_id)
 
+    def accept(
+        self, entry_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """Register through the offer (SCRUM-24 AC4).
+
+        The database function re-checks the entry's owner, its Offered status
+        and the inclusive D1 window under the event row lock, so a race with
+        the timer or a withdrawal is refused there and mapped to the same
+        errors the rules raise.
+        """
+        try:
+            entry = self.repository.accept_waitlist_offer(entry_id, attendee_id, now)
+        except RegistrationRpcError as error:
+            raise self._map_accept_refusal(error) from error
+        # The registration was written by the function; read it back for the
+        # response. Nothing below may fail the acceptance.
+        registration = next(
+            (
+                r
+                for r in self.repository.list_for_attendee(attendee_id)
+                if r["event_request_id"] == entry["event_request_id"]
+                and r["status"] == "Registered"
+            ),
+            None,
+        )
+        return {"entry": entry, "registration": registration}
+
+    def withdraw(
+        self, entry_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """Withdraw the attendee's own entry (AC6); an offer passes on (AC7)."""
+        try:
+            return self.repository.withdraw_from_waitlist(entry_id, attendee_id, now)
+        except RegistrationRpcError as error:
+            raise self._map_withdrawal_refusal(error) from error
+
     def _with_position(
         self, entry: dict[str, Any], attendee_id: str
     ) -> dict[str, Any]:
@@ -74,4 +114,26 @@ class WaitlistService:
                 return RegistrationNotOpenError()
             if error.reason == "places available":
                 return PlacesAvailableError()
+        return error
+
+    @staticmethod
+    def _map_accept_refusal(error: RegistrationRpcError) -> Exception:
+        if error.errcode == NOT_FOUND_ERRCODE:
+            return WaitlistEntryNotFoundError()
+        if error.errcode == REFUSED_ERRCODE:
+            if error.reason == "not offered":
+                return NotOfferedError()
+            if error.reason == "offer expired":
+                return OfferExpiredError()
+        return error
+
+    @staticmethod
+    def _map_withdrawal_refusal(error: RegistrationRpcError) -> Exception:
+        if error.errcode == NOT_FOUND_ERRCODE:
+            return WaitlistEntryNotFoundError()
+        if error.errcode == REFUSED_ERRCODE:
+            if error.reason == "already withdrawn":
+                return AlreadyWithdrawnError()
+            if error.reason == "not offered":
+                return NotOfferedError()
         return error

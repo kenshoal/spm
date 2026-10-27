@@ -465,7 +465,7 @@ def create_app(
         request: Request, error: WaitlistRuleError
     ) -> JSONResponse:
         return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=error.status,
             content={"detail": error.detail, "code": error.code},
         )
 

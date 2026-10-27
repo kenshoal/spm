@@ -31,6 +31,14 @@ class WaitlistRepository(Protocol):
         self, event_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]: ...
 
+    def accept_waitlist_offer(
+        self, entry_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
+    def withdraw_from_waitlist(
+        self, entry_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]: ...
 
 
@@ -64,12 +72,39 @@ class SupabaseWaitlistRepository(SupabaseRegistrationRepository):
             action="waitlist join",
         )
 
+    def accept_waitlist_offer(
+        self, entry_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        return self._rpc(
+            "accept_waitlist_offer",
+            {
+                "p_entry_id": entry_id,
+                "p_attendee_id": attendee_id,
+                "p_now": now.isoformat(),
+            },
+            action="acceptance",
+        )
+
+    def withdraw_from_waitlist(
+        self, entry_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]:
+        return self._rpc(
+            "withdraw_from_waitlist",
+            {
+                "p_entry_id": entry_id,
+                "p_attendee_id": attendee_id,
+                "p_now": now.isoformat(),
+            },
+            action="withdrawal",
+        )
+
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
         """The caller's active entries, oldest first, with their positions.
 
-        A position is the attendee's place in their event's whole queue
-        (AC1-H3), so every active entry of the event is read and ranked; the
-        database could do it with a window function, but the Data API cannot.
+        A position is the attendee's place in their event's Waiting queue
+        (AC1-H3); the offered holder is out of the queue and shows none.
+        The database could rank with a window function, but the Data API
+        cannot, so the Waiting entries of the caller's events are read.
         """
         mine = self._get(
             "/event_waitlist_entries",
@@ -88,7 +123,7 @@ class SupabaseWaitlistRepository(SupabaseRegistrationRepository):
             {
                 "select": "id,event_request_id",
                 "event_request_id": f"in.({','.join(event_ids)})",
-                "status": "in.(Waiting,Offered)",
+                "status": "eq.Waiting",
                 "order": "queued_at.asc,seq.asc",
             },
         )

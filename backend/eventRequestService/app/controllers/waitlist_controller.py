@@ -56,3 +56,23 @@ def list_my_waitlist_entries(
     service: ServiceDependency,
 ) -> list[dict]:
     return jsonable_encoder(service.list_entries(attendee_id))
+
+
+@router.post("/waitlist/{entry_id}/acceptance")
+def accept_waitlist_offer(
+    entry_id: UUID,
+    attendee_id: AttendeeDependency,
+    service: ServiceDependency,
+    now: NowDependency,
+) -> dict:
+    return jsonable_encoder(service.accept(str(entry_id), attendee_id, now))
+
+
+@router.post("/waitlist/{entry_id}/withdrawal")
+def withdraw_waitlist_entry(
+    entry_id: UUID,
+    attendee_id: AttendeeDependency,
+    service: ServiceDependency,
+    now: NowDependency,
+) -> dict:
+    return jsonable_encoder(service.withdraw(str(entry_id), attendee_id, now))

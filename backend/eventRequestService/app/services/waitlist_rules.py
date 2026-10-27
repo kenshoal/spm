@@ -33,10 +33,18 @@ REVOKED = "Revoked"
 
 
 class WaitlistRuleError(Exception):
-    """A refusal the service maps to 409 with this `code` (D10)."""
+    """A refusal the service maps to a JSON error with this `code` (D10)."""
 
     code = "waitlist_refused"
     detail = "This waiting-list action was refused"
+    status = 409
+
+class WaitlistEntryNotFoundError(WaitlistRuleError):
+    """Someone else's entry, an unknown id or a Closed entry (404, D10)."""
+
+    status = 404
+    code = "entry_not_found"
+    detail = "Entry not found"
 
 
 class PlacesAvailableError(WaitlistRuleError):
@@ -64,6 +72,11 @@ class NotOfferedError(WaitlistRuleError):
 class OfferExpiredError(WaitlistRuleError):
     code = "offer_expired"
     detail = "This offer has expired"
+
+
+class AlreadyWithdrawnError(WaitlistRuleError):
+    code = "already_withdrawn"
+    detail = "This entry is already withdrawn"
 
 
 def _as_datetime(value: datetime | str | None) -> datetime | None:
