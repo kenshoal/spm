@@ -34,7 +34,8 @@ class BlockConflict(Period):
 
 
 class BookingOverlap(Period):
-    """The part of an approved booking (SCRUM-15) that a requested period shares."""
+    """The part of an approved booking (SCRUM-15) that a requested period shares,
+    setup and turnaround included (SCRUM-66)."""
 
     booking_id: str
 
@@ -42,6 +43,14 @@ class BookingOverlap(Period):
 class AvailabilityResult(BaseModel):
     venue_id: str
     available: bool
-    reasons: list[Literal["venue_unavailable", "active_block", "booking_conflict"]]
+    reasons: list[
+        Literal[
+            "venue_unavailable",
+            "active_block",
+            "setup_outside_window",
+            "turnaround_outside_window",
+            "booking_conflict",
+        ]
+    ]
     conflicts: list[BlockConflict]
     booking_conflicts: list[BookingOverlap] = []

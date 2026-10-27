@@ -12,6 +12,7 @@ from app.block_models import BlockStatus, VenueBlock
 from app.booking_models import BookingRequest, BookingRequestStatus
 from app.models import Venue, VenueStatus
 from app.slots import times_overlap
+from app.time_conflicts import CLOSE_MINUTE, OPEN_MINUTE, padded_range, window_refusals
 
 
 def _overlaps(requested: Period, item: VenueBlock | BookingRequest) -> bool:
@@ -32,17 +33,36 @@ def _shared(requested: Period, item: VenueBlock | BookingRequest) -> dict:
     }
 
 
+def _padded_shared(
+    requested: Period, padded: tuple[int, int], booking: BookingRequest, venue: Venue
+) -> dict:
+    """The dates and padded minutes both periods occupy, kept inside 07:00-24:00
+    so the overlap is a valid period even when the request's padding is not."""
+    start, end = padded_range(
+        booking.start_minute, booking.end_minute, venue.setup_minutes, venue.turnaround_minutes
+    )
+    return {
+        "start_date": max(requested.start_date, booking.start_date),
+        "end_date": min(requested.end_date, booking.end_date),
+        "start_minute": max(padded[0], start, OPEN_MINUTE),
+        "end_minute": min(padded[1], end, CLOSE_MINUTE),
+    }
+
+
 def check_availability(
     venue: Venue,
     requested: Period,
     blocks: Iterable[VenueBlock],
     bookings: Iterable[BookingRequest] = (),
 ) -> AvailabilityResult:
-    """Check venue status, active blocks and approved bookings by time.
+    """Check venue status, active blocks, the request's setup and turnaround, and
+    approved bookings by time.
 
     Only approved requests are bookings (0018); pending and rejected ones
     reserve nothing. Callers that check bookings themselves pass none. Every
     venue operates 07:00-24:00 (SCRUM-65), which Period already enforces.
+    Bookings are compared with setup and turnaround on both sides and blocks
+    without, as booking approval does (0054, SCRUM-66).
     """
     conflicts = [
         BlockConflict(block_id=block.id, **_shared(requested, block))
@@ -51,18 +71,29 @@ def check_availability(
         and block.status == BlockStatus.ACTIVE
         and _overlaps(requested, block)
     ]
+    setup, turnaround = venue.setup_minutes, venue.turnaround_minutes
+    padded = padded_range(requested.start_minute, requested.end_minute, setup, turnaround)
     booking_conflicts = [
-        BookingOverlap(booking_id=booking.id, **_shared(requested, booking))
+        BookingOverlap(
+            booking_id=booking.id, **_padded_shared(requested, padded, booking, venue)
+        )
         for booking in bookings
         if booking.venue_id == venue.id
         and booking.status is BookingRequestStatus.APPROVED
-        and _overlaps(requested, booking)
+        and times_overlap(
+            requested.start_date, requested.end_date, *padded,
+            booking.start_date, booking.end_date,
+            *padded_range(booking.start_minute, booking.end_minute, setup, turnaround),
+        )
     ]
     reasons = []
     if venue.status != VenueStatus.AVAILABLE:
         reasons.append("venue_unavailable")
     if conflicts:
         reasons.append("active_block")
+    reasons.extend(
+        window_refusals(requested.start_minute, requested.end_minute, setup, turnaround)
+    )
     if booking_conflicts:
         reasons.append("booking_conflict")
     return AvailabilityResult(

@@ -75,6 +75,36 @@ def check_booking_time(start: int, end: int, setup: int = 0, turnaround: int = 0
         )
 
 
+def window_refusals(start: int, end: int, setup: int, turnaround: int) -> list[str]:
+    """The padding codes for a booking time, in approval's order (0054): empty
+    when its setup and turnaround fit 07:00-24:00."""
+    padded_start, padded_end = padded_range(start, end, setup, turnaround)
+    codes = []
+    if padded_start < OPEN_MINUTE:
+        codes.append("setup_outside_window")
+    if padded_end > CLOSE_MINUTE:
+        codes.append("turnaround_outside_window")
+    return codes
+
+
+def padded_booked_ranges(
+    venue: Venue, bookings: Iterable[object]
+) -> list[tuple[date, date, int, int]]:
+    """Approved bookings at the venue as the dates and minutes each occupies,
+    setup and turnaround included (SCRUM-66). Search, availability and the
+    calendar treat these as taken, as booking approval does (0054)."""
+    setup, turnaround = venue.setup_minutes, venue.turnaround_minutes
+    return [
+        (
+            booking.start_date,
+            booking.end_date,
+            *padded_range(booking.start_minute, booking.end_minute, setup, turnaround),
+        )
+        for booking in bookings
+        if booking.status == APPROVED and booking.venue_id == venue.id
+    ]
+
+
 def _overlaps(a: tuple[int, int], b: tuple[int, int]) -> bool:
     return a[0] < b[1] and b[0] < a[1]
 
