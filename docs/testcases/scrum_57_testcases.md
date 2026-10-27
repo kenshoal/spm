@@ -87,7 +87,7 @@ AC1 is not designed yet; its cases are written once Q1 is answered.
 ## Latest execution record
 
 Local results below are **not** CI, shared-database or real-mail results; keep them separate.
-Command (27 Oct 2026, on commit 78b9cd4): `cd backend/notificationService && .venv/bin/python -m pytest -q` (82 passed) and `ruff check .` (clean). Dependencies faked: Supabase, the Auth lookup and SMTP. AC2-P3 and the migration: 0065 was applied to the shared dev database on 27 Oct 2026 and its catalog checks passed (`database/verify_notification_channel_settings.sql`); the other cases were not run against it. Not yet run: CI, the live Auth admin lookup, a real SMTP server (AC3-X1), and a refused insert (AC2-N1).
+Command (27 Oct 2026, on commit 78b9cd4): `cd backend/notificationService && .venv/bin/python -m pytest -q` (82 passed) and `ruff check .` (clean). Dependencies faked: Supabase, the Auth lookup and SMTP. AC2-P3 and the migration: 0065 was applied to the shared dev database on 27 Oct 2026 and its catalog checks passed (`database/verify_notification_channel_settings.sql`); the other cases were not run against it. Run on 27 Oct 2026 after the above: the live Auth lookup (read-only) and one real SMTP send to a Mailtrap sandbox (AC3-X1, sandbox only). Still not run: CI, delivery to a real inbox, the channel setting read in the same live run, and a refused insert (AC2-N1).
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -106,7 +106,7 @@ Command (27 Oct 2026, on commit 78b9cd4): `cd backend/notificationService && .ve
 | AC3-N4 | Planned | | Not executed | | | |
 | AC3-P1 | Planned | | Not executed | | | |
 | AC3-P2 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_an_unknown_type_gets_a_generic_email (Depends on A3) |
-| AC3-X1 | Planned | | Blocked | | | Needs mail credentials from the story owner, and the live Auth admin lookup is unverified |
+| AC3-X1 | Manual | One email sent through Delivery with the live Auth lookup and real SMTP; no failure logged; the story owner confirmed one message in the Mailtrap sandbox inbox | Pass (sandbox only) | code 78b9cd4, run from f8fb91b; shared dev Supabase, Mailtrap sandbox | Claude (AI) for Tate Lim, 27 Oct 2026 | Recipient: seeded `event_organiser@example.com` (sandbox catches it; nothing left Mailtrap). Sender `ConnectSphere <no-reply@connectsphere.test>`. LIMITS: the channel setting was stubbed to `email` so the shared DB was not written; the story owner confirmed the message arrived but did not report its To, Subject or body, so those were not checked; no real inbox received mail (Gmail not tried). Live Auth admin lookup also checked read-only: seeded user found, unknown id and non-UUID id gave no address, settings table readable (`in_app` for no row) |
 | AC2-H1 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py::test_an_email_type_is_sent_to_the_recipient_only; test_adapters.py::test_reads_the_channel_for_a_type |
 | AC2-P1 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_email_delivery.py (parametrized AC2-P1/P2/P4) |
 | AC2-P2 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | as AC2-P1 |
