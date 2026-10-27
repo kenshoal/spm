@@ -8,6 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.auth import get_current_user_id
 from app.config import get_settings
+from app.delivery import Delivery
 from app.models import EventAccepted, NotificationEvent, NotificationResponse
 from app.repository import (
     NotificationRepository,
@@ -54,13 +55,17 @@ RepositoryDependency = Annotated[NotificationRepository, Depends(get_repository)
 UserIdDependency = Annotated[str, Depends(get_current_user_id)]
 
 
-def create_app(repository: NotificationRepository | None = None) -> FastAPI:
+def create_app(
+    repository: NotificationRepository | None = None,
+    delivery: Delivery | None = None,
+) -> FastAPI:
     application = FastAPI(
         title="notificationService",
         description="Notification microservice for SPM.",
         version="0.2.0",
     )
     application.state.notification_repository = repository
+    application.state.delivery = delivery
 
     @application.exception_handler(NotificationStoreError)
     async def store_unavailable(
@@ -89,7 +94,7 @@ def create_app(repository: NotificationRepository | None = None) -> FastAPI:
         tags=["notifications"],
     )
     def receive_event(
-        event: NotificationEvent, repository: RepositoryDependency
+        event: NotificationEvent, repository: RepositoryDependency, request: Request
     ) -> EventAccepted:
         # Internal, service-to-service only: not yet authenticated (see README).
         created = repository.save(
@@ -104,6 +109,13 @@ def create_app(repository: NotificationRepository | None = None) -> FastAPI:
             event.recipient_id,
             "" if created else " (duplicate event_id, ignored)",
         )
+        delivery = request.app.state.delivery
+        if created and delivery is not None:
+            delivery.deliver(
+                event_type=event.event_type,
+                recipient_id=event.recipient_id,
+                payload=event.payload,
+            )
         return EventAccepted(status="accepted")
 
     @application.get(

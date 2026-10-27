@@ -6,6 +6,7 @@ from fastapi import Header
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user_id
+from app.delivery import Delivery
 from app.main import create_app
 from app.repository import NotificationStoreError
 
@@ -74,9 +75,43 @@ class FakeNotificationRepository:
             raise NotificationStoreError("Supabase is down")
 
 
-def make_client(repository: FakeNotificationRepository) -> TestClient:
+class FakeChannelSettings:
+    """Channel per event type; a type with no entry is in-app only."""
+
+    def __init__(self, channels: dict[str, str] | None = None) -> None:
+        self.channels = channels or {}
+        self.fail = False
+
+    def channel_for(self, event_type: str) -> str:
+        if self.fail:
+            raise RuntimeError("settings store is down")
+        return self.channels.get(event_type, "in_app")
+
+
+class FakeAddressBook:
+    def __init__(self, addresses: dict[str, str] | None = None) -> None:
+        self.addresses = addresses or {}
+
+    def email_for(self, recipient_id: str) -> str | None:
+        return self.addresses.get(recipient_id)
+
+
+class FakeMailer:
+    def __init__(self) -> None:
+        self.sent: list[dict[str, str]] = []
+        self.fail = False
+
+    def send(self, *, to: str, subject: str, body: str) -> None:
+        if self.fail:
+            raise ConnectionRefusedError("mail server is down")
+        self.sent.append({"to": to, "subject": subject, "body": body})
+
+
+def make_client(
+    repository: FakeNotificationRepository, delivery: Delivery | None = None
+) -> TestClient:
     """A client whose bearer token is taken as the caller's user id."""
-    app = create_app(repository)
+    app = create_app(repository, delivery)
 
     def fake_user_id(authorization: str = Header()) -> str:
         return authorization.removeprefix("Bearer ")
