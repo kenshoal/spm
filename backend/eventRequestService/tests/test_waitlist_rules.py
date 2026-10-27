@@ -399,14 +399,16 @@ def test_the_list_closes_exactly_at_the_cut_off(
 
 # AC10-P1 (partition): an in-flight offer runs its own course past the cut-off
 def test_an_in_flight_offer_runs_its_own_course() -> None:
-    offered = make_entry(ATTENDEE_A, status=OFFERED)  # expires at TE, after CUTOFF
+    # Offered 10s before the cut-off, so it expires 72h - 10s after it.
+    offered_at = CUTOFF - ONE_SECOND * 10
+    offered = make_entry(ATTENDEE_A, status=OFFERED, offered_at=offered_at)
 
     # The cut-off pass leaves the in-flight offer untouched...
     assert expiry_due(offered, CUTOFF) is False
     # ...and its own expiry closes it instead of requeueing it: past the
     # cut-off a new offer could never be issued, so back of the queue is moot.
-    assert expiry_due(offered, TE + ONE_SECOND) is True
-    assert may_issue_offer(TE + ONE_SECOND, START) is False
+    assert expiry_due(offered, offer_deadline(offered_at) + ONE_SECOND) is True
+    assert may_issue_offer(offer_deadline(offered_at) + ONE_SECOND, START) is False
 
 
 # AC10-N1 (negative): a Closed entry is inert
