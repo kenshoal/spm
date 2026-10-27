@@ -129,7 +129,7 @@ def test_no_address_found(recipient: str, response: httpx2.Response | None) -> N
     assert (calls == []) == (response is None)
 
 
-# AC3-N1 (negative): an auth outage is raised, so Delivery logs it and skips the email
+# AC3-N5 (negative): an auth outage is raised, so Delivery logs it and skips the email
 def test_an_address_lookup_failure_is_raised() -> None:
     book = address_book(lambda request: httpx2.Response(500, json={}))
 
