@@ -302,9 +302,11 @@ createServer(async (request, response) => {
     return send(response, 200, booking);
   }
 
-  // Mirrors venueService's SCRUM-31 GET /venues/{id}/calendar so the availability page can
-  // be driven in a browser. An active block wins over an approved booking, then a slot the
-  // venue does not operate, then a venue blocked in the catalogue; it returns states only.
+  // Mirrors venueService's GET /venues/{id}/calendar (SCRUM-31, on times by SCRUM-69) so the
+  // availability page can be driven in a browser. Each date is a partition of 07:00-24:00 into
+  // blocked, booked and free ranges: an active block wins over an approved booking (which is split
+  // around it), touching ranges of one state merge, and a venue blocked in the catalogue marks the
+  // date unavailable with no free time. It returns times only.
   const calendarPath = url.pathname.match(/^\/venues\/([^/]+)\/calendar$/);
   if (calendarPath && request.method === "GET") {
     if (!["event_coordinator", "venue_staff", "safety_officer"].includes(role)) return send(response, 403, { detail: "Insufficient permissions" });
@@ -314,18 +316,38 @@ createServer(async (request, response) => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return send(response, 422, { detail: "Invalid month" });
     const [year, number] = month.split("-").map(Number);
     const count = new Date(Date.UTC(year, number, 0)).getUTCDate();
-    const covers = (item, date, slot) => item.start_date <= date && date <= item.end_date && item.slots.includes(slot);
+    const merge = (ranges) => {
+      const out = [];
+      for (const [start, end] of [...ranges].sort((a, b) => a[0] - b[0])) {
+        if (out.length && start <= out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], end);
+        else out.push([start, end]);
+      }
+      return out;
+    };
+    const subtract = (ranges, cuts) => {
+      const out = [];
+      for (const [start, end] of ranges) {
+        let cursor = start;
+        for (const [cutStart, cutEnd] of cuts) {
+          if (cutEnd <= cursor || cutStart >= end) continue;
+          if (cutStart > cursor) out.push([cursor, cutStart]);
+          cursor = Math.max(cursor, cutEnd);
+        }
+        if (cursor < end) out.push([cursor, end]);
+      }
+      return out;
+    };
+    const clip = (item) => [Math.max(item.start_minute, 420), Math.min(item.end_minute, 1440)];
     const days = Array.from({ length: count }, (_, index) => {
       const date = `${month}-${String(index + 1).padStart(2, "0")}`;
-      const slots = ["AM", "PM", "NIGHT"].map((slot) => {
-        let state = "open";
-        if ([...blocks.values()].some((b) => b.venue_id === target.id && b.status === "active" && covers(b, date, slot))) state = "blocked";
-        else if ([...bookings.values()].some((b) => b.venue_id === target.id && b.status === "approved" && covers(b, date, slot))) state = "booked";
-        else if (!target.operating_slots.includes(slot)) state = "not_offered";
-        else if (target.status !== "available") state = "unavailable";
-        return { slot, state };
-      });
-      return { date, slots };
+      const on = (item) => item.start_date <= date && date <= item.end_date;
+      const blocked = merge([...blocks.values()].filter((b) => b.venue_id === target.id && b.status === "active" && on(b)).map(clip).filter(([a, b]) => a < b));
+      const booked = subtract(merge([...bookings.values()].filter((b) => b.venue_id === target.id && b.status === "approved" && on(b)).map(clip).filter(([a, b]) => a < b)), blocked);
+      const unavailable = target.status !== "available";
+      const entries = [...blocked.map(([a, b]) => ({ state: "blocked", start_minute: a, end_minute: b })), ...booked.map(([a, b]) => ({ state: "booked", start_minute: a, end_minute: b }))]
+        .sort((x, y) => x.start_minute - y.start_minute);
+      const free = unavailable ? [] : subtract([[420, 1440]], merge([...blocked, ...booked])).map(([a, b]) => ({ start_minute: a, end_minute: b }));
+      return { date, unavailable, entries, free };
     });
     return send(response, 200, { venue_id: target.id, month, days });
   }
