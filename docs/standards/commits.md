@@ -20,7 +20,7 @@ git config core.hooksPath .githooks
 - **Scope** is optional and may contain only letters, digits, `_`, `.` and `-`. No spaces, slashes or commas.
 - **`!`** before the colon marks a breaking change, e.g. `feat(event-request)!: remove the legacy status endpoint`. Explain the break in the body.
 - **Exactly one space** after the colon, then a non-empty description.
-- **Only exemption:** GitHub's own `Merge pull request #<n> from <branch>`. Git's default local message (`Merge branch 'dev' into …`) is rejected, so write local merges as `chore: merge dev into <branch>`.
+- **Exemptions:** GitHub's own `Merge pull request #<n> from <branch>` and git's default `Merge branch '<branch>' into <branch>`. Prefer `chore: merge dev into <branch>` for local merges.
 
 ### Team practice
 
