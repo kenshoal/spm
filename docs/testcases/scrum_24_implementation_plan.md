@@ -1,6 +1,6 @@
 # SCRUM-24 Implementation Plan: Join an Event Waiting List
 
-Drafted 27 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status: executed 27 October 2026 — commits 1–16 done, all local on `feat/scrum-24-waiting-list`; push held for the owner's review of commit 7 and the GitHub credential needs renewing. G6 teammate review and the shared-database application remain outstanding, so this is not a Done claim.** The contract, decisions D1–D10 and the full test catalogue are in `docs/testcases/scrum_24_testcases.md`; this plan only says *how* to build it and in what order.
+Drafted 27 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status: executed 27 October 2026 — commits 1–16 done, plus the AC6-H3/AC9-H2/AC10-H1/AC11-N1 gap pair (28 Oct), all local on `feat/scrum-24-waiting-list`; push held for the owner's review of commit 7 and the GitHub credential needs renewing. G6 teammate review and the shared-database application remain outstanding, so this is not a Done claim.** The contract, decisions D1–D10 and the full test catalogue are in `docs/testcases/scrum_24_testcases.md`; this plan only says *how* to build it and in what order.
 
 **Goal:** When a Confirmed event is full, an Attendee can join its waiting list. Each place that opens is held for the next eligible Attendee for 3 days. They are told when they are offered a place, warned before the offer expires, and told when it expires. They can accept, withdraw, or let the offer pass on. An assigned Coordinator can choose the recipient instead.
 
@@ -16,9 +16,9 @@ Drafted 27 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 | --- | --- | --- | --- |
 | G1 | D1–D5 decided | Yang | **Done** (26–27 Oct) |
 | G2 | D6 (offers hold capacity): SCRUM-21 side | Yang (SCRUM-21 owner) | **Done** (27 Oct) |
-| G3 | D6: SCRUM-41's `coordinator_register_attendee` also counts holds; and should a Coordinator-registered attendee's waiting entry close (open question 3) | Jaren (SCRUM-41) | Message drafted 27 Oct; waiting |
-| G4 | D7 per-place memory, D8 #116 offer cut-off (and its strict boundary, open question 5), D9 Coordinator chooses the recipient | PO | Waiting |
-| G5 | Who may override (ledger §D) | PO | Waiting; tests assume the assigned Coordinator |
+| G3 | D6: SCRUM-41's `coordinator_register_attendee` also counts holds; and should a Coordinator-registered attendee's waiting entry close (open question 3) | Jaren (SCRUM-41) | **Answered 27 Oct** (see the test doc's execution record) |
+| G4 | D7 per-place memory, D8 #116 offer cut-off (and its strict boundary, open question 5), D9 Coordinator chooses the recipient | PO | **Answered 27 Oct** (D7–D9 as recorded in the test doc) |
+| G5 | Who may override (ledger §D) | PO | **Resolved 27 Oct**: the assigned Coordinator |
 | G6 | Teammate review of the AI-drafted test cases (`testing.md` §10) | any teammate | Waiting |
 | G7 | D11 list closes at the cut-off, D12 post-cut-off places go to registration, D13 SCRUM-24 owns waiting-list cancellation notices | PO | **Approved 27 Oct.** Test rows AC10–AC12 folded into commits 4, 6, 10 and 11 (below), not a separate pair |
 | G8 | D14: SCRUM-57's per-type channel settings include the waiting-list types (email) | Tate (SCRUM-57) | Waiting; doesn't block SCRUM-24's in-app Done |
