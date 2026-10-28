@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from app.block_models import BlockStatus, VenueBlock
 from app.booking_models import BookingRequest, BookingRequestStatus
 from app.models import Venue, VenueStatus
-from app.time_conflicts import CLOSE_MINUTE, OPEN_MINUTE
+from app.time_conflicts import CLOSE_MINUTE, OPEN_MINUTE, padded_range
 
 Minutes = tuple[int, int]
 
@@ -72,12 +72,14 @@ def month_bounds(month: str) -> tuple[dt.date, dt.date]:
 def occupied_minutes(venue: Venue, booking: BookingRequest) -> Minutes:
     """The minutes a booking holds its venue on each of its dates.
 
-    The booked time only. Setup and turnaround padding (SCRUM-66) widens the
-    range here, in this one place; ``time_conflicts.padded_range`` is the rule.
+    The booked time widened by the venue's setup and turnaround (SCRUM-66), the
+    same rule booking approval (0054) and search use. The caller clips the
+    result to 07:00-24:00.
     """
 
-    del venue
-    return booking.start_minute, booking.end_minute
+    return padded_range(
+        booking.start_minute, booking.end_minute, venue.setup_minutes, venue.turnaround_minutes
+    )
 
 
 def _clip(start: int, end: int) -> Minutes | None:

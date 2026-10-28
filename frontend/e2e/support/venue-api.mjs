@@ -63,21 +63,18 @@ function overlaps(a, b) {
     && a.start_minute < b.end_minute && b.start_minute < a.end_minute;
 }
 
-// Whether some of 07:00-24:00 on a day is outside the taken items.
-function hasFreeTime(day, taken) {
-  let covered = 420;
-  for (const t of taken.filter((x) => x.start_date <= day && day <= x.end_date).sort((x, y) => x.start_minute - y.start_minute)) {
-    if (t.start_minute > covered) return true;
-    covered = Math.max(covered, t.end_minute);
-  }
-  return covered < 1440;
-}
-
-function takenFor(venueId) {
-  return [
-    ...[...blocks.values()].filter((b) => b.venue_id === venueId && b.status === "active"),
-    ...[...bookings.values()].filter((b) => b.venue_id === venueId && b.status === "approved"),
-  ];
+// SCRUM-66: like venueService, a time is free when its own setup and turnaround fit 07:00-24:00,
+// no active block overlaps it and no approved booking overlaps it once both are padded with the
+// venue's setup and turnaround. Blocks are not padded.
+function freeAt(venue, day, start, end) {
+  const setup = venue.setup_minutes ?? 0;
+  const turnaround = venue.turnaround_minutes ?? 0;
+  if (start - setup < 420 || end + turnaround > 1440) return false;
+  const wanted = { start_date: day, end_date: day, start_minute: start, end_minute: end };
+  const padded = { ...wanted, start_minute: start - setup, end_minute: end + turnaround };
+  return ![...blocks.values()].some((b) => b.venue_id === venue.id && b.status === "active" && overlaps(b, wanted))
+    && ![...bookings.values()].some((b) => b.venue_id === venue.id && b.status === "approved"
+      && overlaps({ ...b, start_minute: b.start_minute - setup, end_minute: b.end_minute + turnaround }, padded));
 }
 
 function makeVenue(body) {
@@ -139,10 +136,11 @@ createServer(async (request, response) => {
     if ((startParam !== null || endParam !== null) && (!day || !wanted || !validTimes(wanted.start_minute, wanted.end_minute))) {
       return send(response, 422, { detail: [{ type: "invalid_times" }] });
     }
+    // With only a date, the day counts when some 15-minute booking would be accepted (SCRUM-66).
     const freeOn = (v) => {
       if (!day) return true;
-      const taken = takenFor(v.id);
-      return wanted ? !taken.some((t) => overlaps(t, wanted)) : hasFreeTime(day, taken);
+      if (wanted) return freeAt(v, day, wanted.start_minute, wanted.end_minute);
+      return Array.from({ length: 68 }, (_, i) => 420 + i * 15).some((start) => freeAt(v, day, start, start + 15));
     };
     return send(response, 200, [...venues.values()].filter((v) =>
       v.status === "available"
@@ -342,7 +340,9 @@ createServer(async (request, response) => {
       const date = `${month}-${String(index + 1).padStart(2, "0")}`;
       const on = (item) => item.start_date <= date && date <= item.end_date;
       const blocked = merge([...blocks.values()].filter((b) => b.venue_id === target.id && b.status === "active" && on(b)).map(clip).filter(([a, b]) => a < b));
-      const booked = subtract(merge([...bookings.values()].filter((b) => b.venue_id === target.id && b.status === "approved" && on(b)).map(clip).filter(([a, b]) => a < b)), blocked);
+      // SCRUM-66: a booking occupies the venue's setup before it and turnaround after it.
+      const padded = (b) => ({ start_minute: b.start_minute - (target.setup_minutes ?? 0), end_minute: b.end_minute + (target.turnaround_minutes ?? 0) });
+      const booked = subtract(merge([...bookings.values()].filter((b) => b.venue_id === target.id && b.status === "approved" && on(b)).map((b) => clip(padded(b))).filter(([a, b]) => a < b)), blocked);
       const unavailable = target.status !== "available";
       const entries = [...blocked.map(([a, b]) => ({ state: "blocked", start_minute: a, end_minute: b })), ...booked.map(([a, b]) => ({ state: "booked", start_minute: a, end_minute: b }))]
         .sort((x, y) => x.start_minute - y.start_minute);

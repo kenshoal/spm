@@ -47,8 +47,19 @@ the decision.
 Approved requests make their venue, dates and slots unavailable: dated
 `GET /venues/search` excludes them like active blocks, and
 `POST /venues/{id}/availability` reports them as `booking_conflict` with
-`booking_conflicts`. Pending and rejected requests reserve nothing. Setup and
-turnaround gaps belong to M5-1.
+`booking_conflicts`. Pending and rejected requests reserve nothing.
+
+Search, the availability check and the calendar count each venue's setup and
+turnaround (SCRUM-66): an approved booking occupies its venue from start minus
+setup to end plus turnaround, the same rule booking approval uses (0054). A
+time is offered only if its own setup and turnaround fit 07:00–24:00 and its
+padded range misses every padded booking; a gap exactly equal to setup plus
+turnaround is free. With only a date, search offers a day when some 15-minute
+booking would be accepted. The availability check also reports
+`setup_outside_window` / `turnaround_outside_window`. Blocks are compared
+without padding, as approval does. The shared helpers are in
+`app/time_conflicts.py` (`padded_range`, `padded_booked_ranges`,
+`window_refusals`).
 
 ### SCRUM-59 setup and turnaround time
 
@@ -57,8 +68,9 @@ increments from 0 to 1020 (the 07:00–24:00 window; Week 7 Change #1, discussio
 #131). Both default to 0, meaning none. Venue Staff set them on `POST /venues`
 and change either on `PATCH /venues/{id}`; any other value, a non-number or
 `null` returns 422. They are returned wherever a venue is read. Changing them
-does not touch booking requests or blocks; applying them to conflict checks is
-SCRUM-20. Schema: `database/migrations/0043_venue_setup_turnaround.sql`.
+never changes a booking or block; with the Supabase store, a change goes through
+`update_venue_timing` (0055, SCRUM-20 AC6), which flags approved bookings that
+newly clash for review. Schema: `database/migrations/0043_venue_setup_turnaround.sql`.
 
 ### Existing endpoints
 
@@ -279,12 +291,12 @@ cancelling an approved request frees its slots at once. Rejected and cancelled
 requests cannot be cancelled again (409). "Changing" a booking is cancelling it
 and requesting again. The `cancelled` status needs migrations 0041 and 0042.
 
-`GET /venues/{id}/calendar?month=YYYY-MM` (SCRUM-31) returns one month of slot
-states for a venue: for each date, AM, PM and NIGHT are `open`, `booked`
-(an approved booking request), `blocked` (an active block), `unavailable` (the
-venue is blocked in the catalogue) or `not_offered` (a slot the venue does not
-operate). An active block wins over a booking, so the calendar agrees with the
-Venue Staff calendar and with venue search. Event Coordinators, Venue Staff and
+`GET /venues/{id}/calendar?month=YYYY-MM` (SCRUM-31, on times by SCRUM-69)
+returns one month for a venue: for each date, `unavailable` (the venue is
+blocked in the catalogue), `entries` (`booked` and `blocked` time ranges) and
+`free` ranges, which together cover 07:00–24:00. A booked range includes the
+venue's setup and turnaround (SCRUM-66), cut at the window. An active block wins
+over a booking, so the calendar agrees with venue search and booking approval. Event Coordinators, Venue Staff and
 Safety Officers may read it; other roles get 403. It is read-only and never
 returns block reasons, event names or ids. Tentative holds are not shown until
 SCRUM-18 exists.
