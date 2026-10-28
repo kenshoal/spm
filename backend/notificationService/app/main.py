@@ -6,8 +6,10 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
+from app.adapters import build_delivery
 from app.auth import get_current_user_id
 from app.config import get_settings
+from app.delivery import Delivery
 from app.models import EventAccepted, NotificationEvent, NotificationResponse
 from app.repository import (
     NotificationRepository,
@@ -39,7 +41,8 @@ def get_repository(request: Request) -> NotificationRepository:
         return repository
 
     try:
-        repository = SupabaseNotificationRepository.from_settings(get_settings())
+        settings = get_settings()
+        repository = SupabaseNotificationRepository.from_settings(settings)
     except ValidationError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -47,6 +50,10 @@ def get_repository(request: Request) -> NotificationRepository:
         ) from error
 
     request.app.state.notification_repository = repository
+    # Email goes out only on the running service; an injected repository (as in
+    # tests) keeps whatever delivery the caller gave create_app, usually none.
+    if request.app.state.delivery is None:
+        request.app.state.delivery = build_delivery(settings)
     return repository
 
 
@@ -54,13 +61,17 @@ RepositoryDependency = Annotated[NotificationRepository, Depends(get_repository)
 UserIdDependency = Annotated[str, Depends(get_current_user_id)]
 
 
-def create_app(repository: NotificationRepository | None = None) -> FastAPI:
+def create_app(
+    repository: NotificationRepository | None = None,
+    delivery: Delivery | None = None,
+) -> FastAPI:
     application = FastAPI(
         title="notificationService",
         description="Notification microservice for SPM.",
         version="0.2.0",
     )
     application.state.notification_repository = repository
+    application.state.delivery = delivery
 
     @application.exception_handler(NotificationStoreError)
     async def store_unavailable(
@@ -89,14 +100,17 @@ def create_app(repository: NotificationRepository | None = None) -> FastAPI:
         tags=["notifications"],
     )
     def receive_event(
-        event: NotificationEvent, repository: RepositoryDependency
+        event: NotificationEvent, repository: RepositoryDependency, request: Request
     ) -> EventAccepted:
         # Internal, service-to-service only: not yet authenticated (see README).
+        delivery = request.app.state.delivery
+        channel = delivery.channel_for(event.event_type) if delivery else "in_app"
         created = repository.save(
             event_type=event.event_type,
             recipient_id=event.recipient_id,
             payload=event.payload,
             event_id=event.event_id,
+            in_inbox=channel != "email",
         )
         logger.info(
             "Received %s event for recipient %s%s",
@@ -104,6 +118,12 @@ def create_app(repository: NotificationRepository | None = None) -> FastAPI:
             event.recipient_id,
             "" if created else " (duplicate event_id, ignored)",
         )
+        if created and delivery is not None:
+            delivery.send_email(
+                channel=channel,
+                event_type=event.event_type,
+                recipient_id=event.recipient_id,
+            )
         return EventAccepted(status="accepted")
 
     @application.get(

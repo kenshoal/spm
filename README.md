@@ -48,7 +48,7 @@ Submission coverage for SCRUM-11 is documented in
 | `equipmentService` | FastAPI + Supabase | `8002` | Equipment catalogue, quantities and status |
 | `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event-request drafts, submission, status and coordinator assignment |
 | `venueService` | FastAPI | `8004` | Venue catalogue and search |
-| `notificationService` | FastAPI + Supabase | `8005` | Stores workflow events from other services as in-app notifications and serves each user's inbox (SCRUM-37; email and channel settings in progress) |
+| `notificationService` | FastAPI + Supabase | `8005` | Stores workflow events from other services as in-app notifications and serves each user's inbox (SCRUM-37), with optional email per notification type (SCRUM-57) |
 
 ### Run the project from the repository root
 
