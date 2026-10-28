@@ -35,7 +35,7 @@ Read the file even when the task looks small. If a detail file conflicts with th
 
 - Subject format: `<type>(<scope>): <description>`. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`. The `.githooks/commit-msg` hook and CI reject anything else.
 - Enable the hook once per clone: `git config core.hooksPath .githooks`.
-- Merge `dev` into a branch with the message `chore: merge dev into <branch>`. Git's default merge message fails CI.
+- Merge `dev` into a branch with the message `chore: merge dev into <branch>` (git's default merge message is also accepted).
 - Branch from `dev` and open pull requests into `dev`.
 
 ## Iteration sequence
