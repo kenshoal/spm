@@ -139,6 +139,8 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
                 "Supabase could not complete the acceptance"
             )
         entry = self._own_entry(entry_id, attendee_id)
+        if entry["status"] == CLOSED:  # like the function: Closed is not found
+            raise RegistrationRpcError("entry not found", "P0002", "entry not found")
         event = self.events.get(entry["event_request_id"])
         if event is None or event["status"] != "Confirmed":
             raise RegistrationRpcError("entry not found", "P0002", "entry not found")
@@ -167,6 +169,8 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
     ) -> dict[str, Any]:
         """Mirrors `withdraw_from_waitlist`; an offer passes on (AC7)."""
         entry = self._own_entry(entry_id, attendee_id)
+        if entry["status"] == CLOSED:  # like the function: Closed is not found
+            raise RegistrationRpcError("entry not found", "P0002", "entry not found")
         if entry["status"] == WITHDRAWN:
             raise RegistrationRpcError(
                 "already withdrawn", "P0004", "already withdrawn"
@@ -449,7 +453,7 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
         return marked
 
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
-        """The caller's active entries, oldest first, with their positions.
+        """The caller's current entries, oldest first, with their positions.
 
         A position is the attendee's place in their event's Waiting queue
         (AC1-H3: the second joiner sees position 2; AC2-H1: once the first
@@ -460,7 +464,7 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
             e
             for e in self.entries
             if e["attendee_id"] == attendee_id
-            and e["status"] in (WAITING, OFFERED)
+            and e["status"] in (WAITING, OFFERED, CLOSED)
         ]
         mine.sort(key=lambda e: (e["queued_at"], e["seq"]))
         ranks: dict[str, int] = {}

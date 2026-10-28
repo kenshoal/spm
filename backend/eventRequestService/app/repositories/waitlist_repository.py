@@ -117,10 +117,12 @@ class SupabaseWaitlistRepository(SupabaseRegistrationRepository):
         )
 
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
-        """The caller's active entries, oldest first, with their positions.
+        """The caller's current entries, oldest first, with their positions.
 
         A position is the attendee's place in their event's Waiting queue
-        (AC1-H3); the offered holder is out of the queue and shows none.
+        (AC1-H3); the offered holder is out of the queue and shows none, and
+        so does an entry the cut-off closed (AC10-H1), which stays listed so
+        the attendee can see the list closed.
         The database could rank with a window function, but the Data API
         cannot, so the Waiting entries of the caller's events are read.
         """
@@ -129,7 +131,7 @@ class SupabaseWaitlistRepository(SupabaseRegistrationRepository):
             {
                 "select": WAITLIST_ENTRY_COLUMNS,
                 "attendee_id": f"eq.{attendee_id}",
-                "status": "in.(Waiting,Offered)",
+                "status": "in.(Waiting,Offered,Closed)",
                 "order": "queued_at.asc,seq.asc",
             },
         )
