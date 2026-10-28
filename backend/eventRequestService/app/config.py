@@ -22,6 +22,12 @@ class PeriodicTaskSettings(BaseSettings):
     """Timer configuration is independent of optional notification delivery."""
 
     auto_completion_enabled: bool = False
+    # SCRUM-38 AC3: opening/closing notices, switched on separately from completion.
+    registration_window_notices_enabled: bool = False
+    # How far back a missed boundary is still announced; older ones are dropped.
+    registration_window_lookback_hours: float = Field(
+        default=72, gt=0, allow_inf_nan=False
+    )
     periodic_task_interval_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
 
     model_config = SettingsConfigDict(

@@ -382,6 +382,8 @@ are created/changed by completion. Repeated or losing concurrent calls are no-op
 | --- | --- | --- |
 | `AUTO_COMPLETION_ENABLED` | `false` | Register only the SCRUM-40 handler at application startup |
 | `PERIODIC_TASK_INTERVAL_SECONDS` | `60` | Finite positive delay after each shared timer sweep |
+| `REGISTRATION_WINDOW_NOTICES_ENABLED` | `false` | Register the SCRUM-38 handler that tells the Organiser and Coordinator when registration opens or closes. Needs `NOTIFICATION_SERVICE_URL` |
+| `REGISTRATION_WINDOW_LOOKBACK_HOURS` | `72` | How far back a missed opening or closing is still announced; older ones are dropped |
 
 These settings are independent of `NOTIFICATION_SERVICE_URL`. Compose forwards
 them to eventRequestService; `.env.example` documents them without changing any

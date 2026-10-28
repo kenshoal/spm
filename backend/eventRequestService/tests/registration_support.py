@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from app.clock import get_now
 from app.controllers import event_request_controller
 from app.main import create_app
+from app.repositories.event_request_repository import SupabaseRepositoryError
 from app.repositories.registration_repository import RegistrationRpcError
 
 NOW = datetime(2030, 1, 15, 12, 0, tzinfo=UTC)
@@ -57,6 +58,9 @@ class FakeRegistrationRepository:
         self.events: dict[str, dict[str, Any]] = {}
         self.registrations: list[dict[str, Any]] = []
         self._clock = 0
+        # SCRUM-38: the assigned Coordinator per event, and a switch to fail the lookup.
+        self.coordinators: dict[str, str] = {}
+        self.coordinator_lookup_fails = False
         # SCRUM-41: attendee accounts by lower-cased email, and the assignments
         # coordinator_register_attendee rechecks.
         self.attendee_accounts: dict[str, str] = {}
@@ -93,6 +97,16 @@ class FakeRegistrationRepository:
         row["attended_at"] = now
         row["checked_in_by"] = coordinator_id
         return dict(row)
+
+    def get_organiser_id(self, event_id: str) -> str | None:
+        event = self.events.get(event_id)
+        return event["organiser_id"] if event else None
+
+    def latest_coordinator_id(self, event_id: str) -> str | None:
+        if self.coordinator_lookup_fails:
+            raise SupabaseRepositoryError("assignments unavailable")
+        return self.coordinators.get(event_id)
+
 
     def coordinator_register(
         self, event_id: str, coordinator_id: str, attendee_email: str
