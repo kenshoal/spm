@@ -328,3 +328,29 @@ def test_withdrawing_an_accepted_entry_is_refused() -> None:
     assert response.status_code == 409
     assert response.json()["code"] == "not_offered"
     assert repo.has_active(event_id, ATTENDEE_A)
+
+
+# AC6-H3 (happy): rejoining after withdrawing goes to the back with a new
+# entry; the old entry stays Withdrawn
+def test_rejoining_after_withdrawing_goes_to_the_back() -> None:
+    repo = FakeWaitlistRepository()
+    event_id, entries = full_event_with_queue(
+        repo, ATTENDEE_A, ATTENDEE_B, ATTENDEE_C, ATTENDEE_D
+    )
+    old_entry = entries[ATTENDEE_B]
+    with make_waitlist_client(repo, caller_id=ATTENDEE_B) as client:
+        assert client.post(withdrawal_path(old_entry)).status_code == 200
+        later = NOW + timedelta(hours=1)  # B comes back after everyone joined
+        client.app.dependency_overrides[get_now] = lambda: later
+
+        rejoined = client.post(f"/attendee/events/{event_id}/waitlist")
+
+    assert rejoined.status_code == 201
+    body = rejoined.json()
+    assert body["id"] != old_entry
+    assert body["status"] == WAITING
+    assert body["position"] == 4  # behind A, C and D
+    # Forbidden side effect: the old entry is not revived
+    assert next(e for e in repo.entries if e["id"] == old_entry)[
+        "status"
+    ] == "Withdrawn"
