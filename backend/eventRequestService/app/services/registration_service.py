@@ -237,6 +237,14 @@ class RegistrationService:
             withdrawn = self.repository.withdraw(registration_id, attendee_id, now)
         except RegistrationRpcError as error:
             raise self._map_withdrawal_refusal(error) from error
+        # The withdrawal is saved: the notice is best-effort and never undoes it
+        # (SCRUM-22 AC5). A refused withdrawal raised above and tells nobody.
+        self.notification_client.notify_registration_withdrawn(
+            event_request_id=event["id"],
+            attendee_id=withdrawn["attendee_id"],
+            event_name=event.get("event_name"),
+            registration_id=withdrawn["id"],
+        )
         return {
             **withdrawn,
             "event": to_public_event(event, self.repository.count_active(event["id"])),
