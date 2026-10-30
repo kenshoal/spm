@@ -392,7 +392,7 @@ def test_create_replacement_needs_a_timezone_aware_event_version() -> None:
     api = FakeDataAPI()
 
     with pytest.raises(SupabaseRepositoryError):
-        api.repo().create_replacement(OLD_ID, _booking(), expected_event_updated_at=datetime(2026, 10, 22))  # noqa: DTZ001 - naive on purpose
+        api.repo().create_replacement(OLD_ID, _booking(), expected_event_updated_at=datetime.fromisoformat("2026-10-22T00:00:00"))  # naive on purpose
     assert api.requests == []
 
 
