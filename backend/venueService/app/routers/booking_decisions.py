@@ -75,6 +75,7 @@ def decide_booking_request(
                 "refusal_codes": outcome.refusal_codes,
                 "conflicting_block_ids": outcome.conflicting_block_ids,
                 "conflicting_booking_ids": outcome.conflicting_booking_ids,
+                "conflicting_hold_ids": outcome.conflicting_hold_ids,
             },
         )
     venue = venues.get(outcome.booking.venue_id)

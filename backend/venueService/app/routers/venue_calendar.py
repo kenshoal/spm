@@ -13,7 +13,13 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.calendar_view import VenueCalendar, build_calendar, month_bounds
-from app.routers.venues import BlockRepoDep, BookingRepoDep, RepoDep, VenueViewerDep
+from app.routers.venues import (
+    BlockRepoDep,
+    BookingRepoDep,
+    HoldStoreDep,
+    RepoDep,
+    VenueViewerDep,
+)
 
 router = APIRouter(prefix="/venues", tags=["venue calendar"])
 
@@ -28,6 +34,7 @@ def venue_calendar(
     repo: RepoDep,
     blocks: BlockRepoDep,
     bookings: BookingRepoDep,
+    holds: HoldStoreDep,
 ) -> VenueCalendar:
     del principal
     try:
@@ -45,4 +52,5 @@ def venue_calendar(
         month,
         blocks.list_for_venue(venue.id),
         bookings.list_approved_for_venue(venue.id, first, last),
+        holds.list_for_venue(venue.id, first, last),
     )

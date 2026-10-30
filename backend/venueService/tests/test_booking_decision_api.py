@@ -210,6 +210,7 @@ def test_an_active_block_refuses_approval_and_is_recorded():
         "refusal_codes": ["active_block"],
         "conflicting_block_ids": [block],
         "conflicting_booking_ids": [],
+        "conflicting_hold_ids": [],
     }
     assert status_of(request) == "pending"
     [refusal] = refusals(request)

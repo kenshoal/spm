@@ -44,6 +44,7 @@ class FakeEventService:
         event_name: str | None = "Annual Gala",
         expected_attendance: int | None = 120,
         venue_requirements: str | None = "Stage and projector",
+        status: str = "Planning",
     ) -> None:
         self.events[event_id] = {
             "coordinator_id": coordinator_id,
@@ -51,6 +52,7 @@ class FakeEventService:
             "expected_attendance": expected_attendance,
             "venue_requirements": venue_requirements,
             "updated_at": "2026-10-22T00:00:00+00:00",
+            "status": status,
         }
 
     def handler(self, request: httpx.Request) -> httpx.Response:

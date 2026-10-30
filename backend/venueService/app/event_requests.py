@@ -24,6 +24,7 @@ class EventSnapshot:
     expected_attendance: int | None
     venue_requirements: str | None
     updated_at: datetime
+    status: str | None = None
 
 
 class EventRequestClient:
@@ -88,6 +89,7 @@ class EventRequestClient:
             expected_attendance=event.get("expected_attendance"),
             venue_requirements=event.get("venue_requirements"),
             updated_at=updated_at,
+            status=event.get("status"),
         )
 
 

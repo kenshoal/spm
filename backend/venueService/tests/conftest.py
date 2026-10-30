@@ -4,6 +4,7 @@ from app.block_repository import block_repository
 from app.booking_repository import booking_repository
 from app.config import get_settings
 from app.dependencies import Principal, require_authenticated, require_venue_staff
+from app.hold_store import memory_hold_store
 from app.main import app
 from app.repository import _supabase_repository, repository
 
@@ -23,8 +24,10 @@ def _clear_repository(monkeypatch: pytest.MonkeyPatch) -> None:
     repository.clear()
     block_repository.clear()
     booking_repository.clear()
+    memory_hold_store.clear()
     yield
     repository.clear()
     block_repository.clear()
     booking_repository.clear()
+    memory_hold_store.clear()
     app.dependency_overrides.clear()
