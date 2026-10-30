@@ -1,4 +1,5 @@
 import { getJson } from "./api";
+import type { ArrangementReview } from "./arrangement-reviews";
 import type { Slot } from "./venue-options";
 import { venueApiUrl } from "./venues";
 
@@ -18,6 +19,8 @@ export interface EventBooking {
   status: EventBookingStatus;
   created_at: string;
   cancelled_at: string | null;
+  // SCRUM-63: the flagged booking this request replaces.
+  replaces_booking_id: string | null;
 }
 
 export const BOOKING_STATUS_LABELS: Record<EventBookingStatus, string> = {
@@ -26,6 +29,19 @@ export const BOOKING_STATUS_LABELS: Record<EventBookingStatus, string> = {
   rejected: "Rejected",
   cancelled: "Cancelled",
 };
+
+// The bookings a venue block flagged as needing a new venue (SCRUM-63), with the
+// reason, from the event's arrangement reviews. A cleared flag, another cause and
+// an equipment reservation do not count.
+export function needsNewVenue(reviews: readonly ArrangementReview[]): Map<string, string> {
+  const flagged = new Map<string, string>();
+  for (const review of reviews) {
+    if (review.arrangement === "venue_booking" && review.trigger_type === "venue_block" && review.cleared_at === null) {
+      flagged.set(review.arrangement_id, review.reason);
+    }
+  }
+  return flagged;
+}
 
 // Only a pending or an approved booking can be cancelled; the others are final.
 export function canCancelBooking(status: EventBookingStatus): boolean {

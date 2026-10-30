@@ -42,3 +42,53 @@ export async function cancelVenueBooking(
   revalidatePath(`/coordination/requests/${eventRequestId}`);
   return {};
 }
+
+export interface ReplacementState {
+  message?: string;
+}
+
+const replacementRetry = "The replacement could not be requested. Please try again.";
+const replacementMessages: Record<number, string> = {
+  403: "Only the event's coordinator can request a replacement.",
+  404: "This booking could not be found, or the event is no longer assigned to you.",
+  422: "Choose a different venue from the one that is blocked.",
+};
+const replacementConflicts: [RegExp, string][] = [
+  [/not flagged/i, "This booking no longer needs a new venue."],
+  [/not approved/i, "Only an approved booking can be replaced."],
+  [/already been requested/i, "A replacement has already been requested for this booking."],
+  [/event request changed/i, "The event changed. Refresh the page and try again."],
+];
+
+// Asks for another venue for a booking that a venue block flagged. One POST with
+// the chosen venue; the API keeps the event, dates and times, links the new request
+// to the old booking and rechecks that the caller is the event's current coordinator.
+export async function requestReplacementVenue(
+  previousState: ReplacementState,
+  formData: FormData,
+): Promise<ReplacementState> {
+  void previousState;
+  const bookingId = String(formData.get("booking_id") ?? "").trim();
+  const eventRequestId = String(formData.get("event_request_id") ?? "").trim();
+  const venueId = String(formData.get("venue_id") ?? "").trim();
+  if (!bookingId || !eventRequestId) return { message: replacementRetry };
+  if (!venueId) return { message: "Choose a venue for the replacement." };
+
+  await requireRole("event_coordinator");
+  let response: Response;
+  try {
+    response = await sendJson(venueApiUrl, `/booking-requests/${encodeURIComponent(bookingId)}/replacement`, "POST", { venue_id: venueId });
+  } catch {
+    return { message: replacementRetry };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    if (response.status === 409) {
+      const detail = await response.json().then((body) => String(body?.detail ?? ""), () => "");
+      return { message: replacementConflicts.find(([pattern]) => pattern.test(detail))?.[1] ?? replacementRetry };
+    }
+    return { message: replacementMessages[response.status] ?? replacementRetry };
+  }
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  return {};
+}
