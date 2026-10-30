@@ -72,6 +72,26 @@ never changes a booking or block; with the Supabase store, a change goes through
 `update_venue_timing` (0055, SCRUM-20 AC6), which flags approved bookings that
 newly clash for review. Schema: `database/migrations/0043_venue_setup_turnaround.sql`.
 
+### SCRUM-18 tentative venue holds
+
+The event's current Event Coordinator can hold a venue while the event is
+Approved, Planning or in Safety Review, with an expiry at most 7 days ahead
+(`POST /venues/{venue_id}/holds`). A hold protects its time, padded with the
+venue's setup and turnaround, only while it is active, unexpired and its event
+is not Cancelled or Rejected: it refuses overlapping holds and other events'
+booking approvals and reschedules (`hold_conflict`), search returns a venue
+that is free except for holds with `tentatively_held: true` (booked or blocked
+venues stay excluded; with only a date, when holds take all its free time), the
+availability check reports it and the calendar shows it as `held` (below blocks
+and bookings). The event's current coordinator can release it or convert it into a
+pending booking request (`POST /venue-holds/{id}/convert`); the hold keeps the
+time until Venue Staff decide (approval ends it as `converted`, rejection as
+`released`) or it expires. With Supabase storage a background sweep
+(`app/hold_expiry.py`, every `VENUE_HOLD_SWEEP_SECONDS`, default 60, 0 = off)
+expires holds and sends `venue_hold_expiring` (24 hours before) and
+`venue_hold_expired` notices to the current coordinator, each once (`event_id`
+`hold-<kind>:<hold id>`). Schema: `database/migrations/0066_venue_holds.sql`.
+
 ### Existing endpoints
 
 | Capability | Endpoints |
@@ -85,6 +105,7 @@ newly clash for review. Schema: `database/migrations/0043_venue_setup_turnaround
 | Venue booking requests | `POST /booking-requests`, `GET /booking-requests`, `GET /booking-requests/mine`, `GET /booking-requests/{id}`, `GET /booking-requests/event/{event_request_id}`, `POST /booking-requests/{id}/cancel` |
 | View venue availability | `GET /venues/{id}/calendar?month=YYYY-MM` |
 | Decide a booking request | `POST /booking-requests/{id}/decision`, `GET /booking-requests/{id}/refusals` |
+| Tentative venue holds (SCRUM-18) | `POST /venues/{venue_id}/holds`, `GET /venue-holds?event_request_id=`, `POST /venue-holds/{id}/release`, `POST /venue-holds/{id}/convert` |
 
 Venues are stored in the Supabase `public.venues` table
 (`database/migrations/0016_venues.sql`) and venue blocks in `public.venue_blocks`
@@ -112,8 +133,9 @@ match. It is advisory only — a `suitable: false` result never books, holds,
 or changes the venue.
 
 `GET /venues/search` checks active venue blocks and approved bookings when a
-`date` is supplied. Whole-venue status and the existing catalogue filters still
-apply.
+`date` is supplied, and marks venues free except for tentative holds with
+`tentatively_held` (SCRUM-18). Whole-venue status and the existing catalogue
+filters still apply.
 
 ## Create a venue block (Day 3)
 
@@ -298,8 +320,8 @@ blocked in the catalogue), `entries` (`booked` and `blocked` time ranges) and
 venue's setup and turnaround (SCRUM-66), cut at the window. An active block wins
 over a booking, so the calendar agrees with venue search and booking approval. Event Coordinators, Venue Staff and
 Safety Officers may read it; other roles get 403. It is read-only and never
-returns block reasons, event names or ids. Tentative holds are not shown until
-SCRUM-18 exists.
+returns block reasons, event names or ids. Protecting tentative holds (SCRUM-18)
+show as `held`, padded like bookings.
 
 ## Run locally
 
