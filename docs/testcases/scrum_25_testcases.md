@@ -60,7 +60,7 @@ Layers: A = API (`backend/eventRequestService/tests/test_attendance_api.py`), D 
 | AC4-N1 | AC4 | Registration from another event | Negative | Row on event B | Check it in on event A | — | 404 `registration_not_found` | Row unchanged | A + D |
 | AC4-N2 | AC4 | Unknown registration id | Negative | — | POST random id | — | 404 `registration_not_found` | — | A |
 | AC4-N3 | AC4 | Already checked in | Negative | Row checked in | POST again | — | 409 `already_checked_in` | `attended_at` and `checked_in_by` unchanged | A + D |
-| AC4-N4 | AC4 | Withdrawn registration | Negative | Row with status `Withdrawn` (direct fixture; SCRUM-22 not built) | Call function | — | `P0002 registration not found` | Row unchanged | D |
+| AC4-N4 | AC4 | Withdrawn registration | Negative | Row withdrawn as SCRUM-22 does it (`status` Withdrawn, `withdrawn_at` set), with 0062 applied before 0061 | Call function | — | `P0002 registration not found` | Row unchanged | D |
 | AC4-X1 | AC4 | Two sessions check the same row in | Cross-cutting | One Registered row | Concurrent calls (row lock) | — | One succeeds, the other `already checked in` | Never two updates | D (sequential under lock) |
 | AC1-N4 | AC1 | Coordinator reassigned away | Negative | C1 then C2 | Call as C1 | — | `P0002 event not found` / 404 | Row unchanged | A + D |
 | AC1-N5 | AC1 | No session | Negative | — | POST without header | — | 401 | — | A |
@@ -77,6 +77,7 @@ Layers: A = API (`backend/eventRequestService/tests/test_attendance_api.py`), D 
 | D-layer cases (AC1-H1, P1, B1–B3, X1, N1, N3, N4, X4; AC2-H1; AC4-N1, N3, N4, X1) | Green | `ALL EVENT ATTENDANCE VERIFICATIONS PASSED`; SCRUM-21 and SCRUM-41 verifiers also pass after 0061 | Pass | `ea52ccb`, disposable `postgres:16` in local Docker, bootstrap through 0052, then 0060 and 0061 | Claude for Jaren, 23 Oct 2026 | Red first: before 0061 it failed because `check_in_attendee` does not exist. A check-in also succeeded when run as `service_role`. AC4-X1 is proven sequentially under the row lock, not by two live sessions |
 | A-layer cases (11 incl. parametrized) and 1 repository test | Green | As expected | Pass | `ea52ccb`, local Windows, faked repositories | Claude for Jaren, 23 Oct 2026 | Red first: 404, no route. Full suite `pytest`: 801 passed, 1 skipped; `ruff check .` clean |
 | C-layer cases (AC1-B1–B3, N3, X2, X3; AC3-H1; 11 tests) | Green | As expected | Pass | Frontend commit on this branch, local, `fetch` stubbed | Claude for Jaren, 23 Oct 2026 | Red first against stubs (7 failed; the 3 "false" boundary cases passed against the stub). `npm test`: 514 passed; lint, typecheck, build clean |
+| D-layer rerun in dev order (review fix) | Green | All three verifiers pass with 0062 applied before 0061; the previous verifier failed on `event_registrations_withdrawn_at_check` | Pass | Branch after the review fix, disposable `postgres:16` in local Docker: bootstrap through 0052, then 0060, 0062, 0061 | Claude for Jaren, 30 Oct 2026 | AC4-N4 now withdraws as SCRUM-22 does (`status` and `withdrawn_at`) instead of dropping the status CHECK. CI job `scrum41-database-verify` applies the same order |
 | Browser journey | Planned | — | Blocked | — | — | No local Supabase credentials; needs the shared database after 0060 and 0061 are applied |
 
 Test design was AI-drafted; a team member still needs to review it (`testing.md` §10).
