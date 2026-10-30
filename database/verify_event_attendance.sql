@@ -1,5 +1,5 @@
 -- SCRUM-25: real Postgres evidence for coordinator check-in; every fixture rolls back.
--- Run after 0061. Prints ALL EVENT ATTENDANCE VERIFICATIONS PASSED.
+-- Run after 0062 (withdrawal) and 0061, the order on dev and shared. Prints ALL EVENT ATTENDANCE VERIFICATIONS PASSED.
 BEGIN;
 DO $$
 DECLARE
@@ -165,10 +165,8 @@ BEGIN
         ASSERT SQLERRM = 'event full', 'AC2-H1: wrong message ' || SQLERRM;
     END;
 
-    -- AC4-N4 (negative): a non-Registered row can't be checked in. Withdrawn needs SCRUM-22's
-    -- wider CHECK, so this transaction drops it; ROLLBACK restores it.
-    ALTER TABLE public.event_registrations DROP CONSTRAINT event_registrations_status_check;
-    UPDATE public.event_registrations SET status = 'Withdrawn'
+    -- AC4-N4 (negative): a withdrawn registration (SCRUM-22, 0062) can't be checked in.
+    UPDATE public.event_registrations SET status = 'Withdrawn', withdrawn_at = now()
     WHERE event_request_id = v_event AND attendee_id = v_att[10];
     BEGIN
         PERFORM public.check_in_attendee(v_event,
