@@ -73,6 +73,10 @@ class RegistrationRepository(Protocol):
         self, registration_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]: ...
 
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
 
 class SupabaseRegistrationRepository:
     def __init__(
@@ -237,7 +241,10 @@ class SupabaseRegistrationRepository:
             page = self._get(
                 "/event_registrations",
                 {
-                    "select": "id,attendee_id,status,created_at,registered_by",
+                    "select": (
+                        "id,attendee_id,status,created_at,registered_by,"
+                        "attended_at,checked_in_by"
+                    ),
                     "event_request_id": f"eq.{event_id}",
                     "order": "created_at.asc,id.asc",
                     "limit": str(PAGE_SIZE),
@@ -293,6 +300,21 @@ class SupabaseRegistrationRepository:
                 "p_attendee_email": attendee_email,
             },
             action="registration",
+        )
+
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """SCRUM-25: `check_in_attendee` rechecks everything under a lock."""
+        return self._rpc(
+            "check_in_attendee",
+            {
+                "p_event_request_id": event_id,
+                "p_registration_id": registration_id,
+                "p_coordinator_id": coordinator_id,
+                "p_now": now.isoformat(),
+            },
+            action="check-in",
         )
 
     def _rpc(

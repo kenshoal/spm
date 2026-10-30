@@ -26,6 +26,8 @@ class EventRegistrationRow(BaseModel):
     status: str
     created_at: datetime
     registered_by: str | None = None  # SCRUM-41: the coordinator, null if self-registered
+    attended_at: datetime | None = None  # SCRUM-25: null until checked in
+    checked_in_by: str | None = None
 
 
 class RegistrationInfoResponse(BaseModel):
@@ -36,6 +38,8 @@ class RegistrationInfoResponse(BaseModel):
     registered: int
     withdrawn: int
     places_available: int | None
+    attended: int  # SCRUM-25: Registered and checked in
+    absent: int  # SCRUM-25: Registered, not checked in
     registrations: list[EventRegistrationRow]
 
 
@@ -54,6 +58,15 @@ class ManualRegistrationResponse(BaseModel):
     status: Literal["Registered"]
     created_at: datetime
     registered_by: str
+
+
+class CheckInResponse(BaseModel):
+    id: str
+    event_request_id: str
+    attendee_id: str
+    status: Literal["Registered"]
+    attended_at: datetime
+    checked_in_by: str
 
 
 class RegistrationResponse(BaseModel):

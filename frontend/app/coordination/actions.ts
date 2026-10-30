@@ -375,6 +375,47 @@ const MANUAL_REGISTRATION_MESSAGES: Record<string, string> = {
   capacity_not_set: "This event has no registration capacity set yet.",
 };
 
+export interface CheckInState {
+  message?: string;
+  checkedIn?: boolean;
+}
+
+export async function checkInAttendee(
+  eventRequestId: string,
+  registrationId: string,
+  previousState: CheckInState,
+  formData: FormData,
+): Promise<CheckInState> {
+  void previousState;
+  void formData;
+  await requireRole("event_coordinator");
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/registrations/${encodeURIComponent(registrationId)}/check-in`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    return { message: "Check-in unavailable. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    const code = await response.json().then((body) => body?.code).catch(() => undefined);
+    return { message: CHECK_IN_MESSAGES[code] ?? "Check-in unavailable. Please try again." };
+  }
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  return { checkedIn: true };
+}
+
+const CHECK_IN_MESSAGES: Record<string, string> = {
+  not_event_day: "Check-in is only open on the event's days.",
+  already_checked_in: "This attendee is already checked in. Refresh the page.",
+  registration_not_found: "This attendee is no longer registered for this event. Refresh the page.",
+  event_not_found: "You are no longer assigned to this event, or it is no longer confirmed. Refresh the page.",
+};
+
 export interface FinalEndState {
   message?: string;
   saved?: true;
