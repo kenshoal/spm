@@ -139,7 +139,7 @@ jobs:
         run: >-
           psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres
           -c 'CREATE DATABASE scrum48_ci41'
-      - name: Apply migrations through 0052, then 0060, 0062 and 0061 (the order on dev and shared)
+      - name: Apply migrations through 0052, then 0060, 0062, 0061 and 0067 (the order on dev and shared)
         shell: bash
         run: |
           set -euo pipefail
@@ -150,6 +150,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -d "$SCRUM41_TEST_DSN" -f database/migrations/0060_manual_event_registrations.sql
           psql -X -v ON_ERROR_STOP=1 -d "$SCRUM41_TEST_DSN" -f database/migrations/0062_withdraw_registration.sql
           psql -X -v ON_ERROR_STOP=1 -d "$SCRUM41_TEST_DSN" -f database/migrations/0061_event_attendance.sql
+          psql -X -v ON_ERROR_STOP=1 -d "$SCRUM41_TEST_DSN" -f database/migrations/0067_withdraw_after_check_in.sql
       - name: Run the SCRUM-21, SCRUM-41 and SCRUM-25 verifiers
         shell: bash
         run: |

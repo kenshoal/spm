@@ -81,6 +81,17 @@ BEGIN
     ASSERT (SELECT attended_at = c_noon FROM public.event_registrations WHERE id = v_reg[1]),
         'AC4-N3: refused check-in changed attended_at';
 
+    -- AC3-N1 (negative): a checked-in attendee can't withdraw (0067), even before the start time.
+    BEGIN
+        PERFORM public.withdraw_registration(v_reg[1], v_att[1], c_noon + interval '1 hour');
+        RAISE EXCEPTION 'AC3-N1: withdrew a checked-in registration';
+    EXCEPTION WHEN SQLSTATE 'P0004' THEN
+        ASSERT SQLERRM = 'already checked in', 'AC3-N1: wrong message ' || SQLERRM;
+    END;
+    ASSERT (SELECT status = 'Registered' AND withdrawn_at IS NULL AND attended_at = c_noon
+            FROM public.event_registrations WHERE id = v_reg[1]),
+        'AC3-N1: refused withdrawal changed the registration';
+
     -- AC1-B1 (boundary): 23:59:59 SGT the day before is refused.
     BEGIN
         PERFORM public.check_in_attendee(v_event, v_reg[2], v_c1, '2030-01-31 23:59:59+08');

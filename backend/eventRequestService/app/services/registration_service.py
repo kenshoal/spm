@@ -315,6 +315,8 @@ class RegistrationService:
         if error.errcode == REFUSED_ERRCODE:
             if error.reason == "already withdrawn":
                 return AlreadyWithdrawnError()
+            if error.reason == "already checked in":
+                return AlreadyCheckedInError()
             if error.reason == "withdrawal not permitted":
                 return WithdrawalNotPermittedError()
         return error

@@ -239,7 +239,8 @@ class FakeRegistrationRepository:
     def withdraw(
         self, registration_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]:
-        """Mirrors `withdraw_registration`: owner, already withdrawn, event state."""
+        """Mirrors `withdraw_registration` (0067): owner, already withdrawn,
+        already checked in, event state."""
         row = next(
             (
                 r
@@ -255,6 +256,10 @@ class FakeRegistrationRepository:
         if row["status"] == "Withdrawn":
             raise RegistrationRpcError(
                 "already withdrawn", "P0004", "already withdrawn"
+            )
+        if row.get("attended_at") is not None:
+            raise RegistrationRpcError(
+                "already checked in", "P0004", "already checked in"
             )
         event = self.events[row["event_request_id"]]
         dates = event.get("proposed_date_times") or []

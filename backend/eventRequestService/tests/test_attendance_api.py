@@ -10,10 +10,12 @@ from uuid import uuid4
 
 import pytest
 from registration_support import (
+    ATTENDEE_A,
     NOW,
     FakeCoordinatorAssignments,
     FakeRegistrationRepository,
     add_event,
+    add_registration,
     fill,
     make_client,
     make_unauthenticated_client,
@@ -165,3 +167,27 @@ def test_other_roles_are_forbidden(role: str) -> None:
 
     assert response.status_code == 403
     assert repo.check_in_calls == []
+
+
+# AC3-N2 (negative): a checked-in attendee can't withdraw; 409 and the row is unchanged
+def test_checked_in_attendee_cannot_withdraw() -> None:
+    repo = FakeRegistrationRepository()
+    event_id = add_event(repo)
+    registration_id = add_registration(
+        repo, event_id, ATTENDEE_A, attended_at=NOW, checked_in_by=COORDINATOR_1
+    )
+
+    with make_client(repo) as client:
+        response = client.post(f"/attendee/registrations/{registration_id}/withdrawal")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "This attendee is already checked in",
+        "code": "already_checked_in",
+    }
+    row = repo.registrations[0]
+    assert (row["status"], row["withdrawn_at"], row["attended_at"]) == (
+        "Registered",
+        None,
+        NOW,
+    )
