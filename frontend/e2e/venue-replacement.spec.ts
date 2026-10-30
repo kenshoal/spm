@@ -34,7 +34,7 @@ test("coordinator replaces a flagged venue booking and staff approval cancels th
     },
   })).json();
   const blocked = await (await request.post(`${VENUE_API}/__seed`, { data: { name: `Blocked Hall ${stamp}`, location: `Wing A ${stamp}`, max_capacity: 120 } })).json();
-  const second = await (await request.post(`${VENUE_API}/__seed`, { data: { name: `Second Hall ${stamp}`, location: `Wing B ${stamp}`, max_capacity: 120 } })).json();
+  await request.post(`${VENUE_API}/__seed`, { data: { name: `Second Hall ${stamp}`, location: `Wing B ${stamp}`, max_capacity: 120 } });
   const seeded = await request.post(`${VENUE_API}/__seed_booking`, {
     data: {
       id: bookingId, venue_id: blocked.id, event_request_id: event.id, requested_by: "playwright-coordinator", status: "approved",
@@ -85,4 +85,45 @@ test("organisers do not see the replacement form", async ({ page, request }) => 
   await page.goto(`/coordination/requests/${event.id}`);
 
   await expect(page.getByRole("button", { name: /Request replacement/ })).toHaveCount(0);
+});
+
+
+// AC1-E1 (happy, SCRUM-67): the replacement is stored even when it overlaps an approved booking at the new
+// venue; the page names the clash, in words, with dates and times only.
+test("a replacement that clashes is submitted and the page names the clash", async ({ page, request }) => {
+  const stamp = Date.now();
+  const bookingId = randomUUID();
+  const event = await (await request.post(`${EVENT_API}/__seed`, {
+    data: {
+      status: "Under Review", organiser_id: "playwright-user", coordinator_id: "playwright-coordinator",
+      event_name: `Clash Summit ${stamp}`, purpose: "Move to a busy room", description: "x",
+      proposed_date_times: ["2030-03-10T02:00:00Z"], expected_attendance: 60,
+      arrangement_reviews: [{
+        id: randomUUID(), arrangement: "venue_booking", arrangement_id: bookingId, trigger_id: randomUUID(),
+        trigger_type: "venue_block", changed_fields: [], reason: "Venue is blocked; this booking needs a new venue.", raised_at: new Date().toISOString(),
+      }],
+    },
+  })).json();
+  const blocked = await (await request.post(`${VENUE_API}/__seed`, { data: { name: `Blocked Hall ${stamp}`, location: `Wing A ${stamp}`, max_capacity: 120 } })).json();
+  const busy = await (await request.post(`${VENUE_API}/__seed`, { data: { name: `Busy Hall ${stamp}`, location: `Wing B ${stamp}`, max_capacity: 120 } })).json();
+  await request.post(`${VENUE_API}/__seed_booking`, {
+    data: { id: bookingId, venue_id: blocked.id, event_request_id: event.id, requested_by: "playwright-coordinator", status: "approved", decided_by: "venue-staff", decided_at: new Date().toISOString(), start_date: "2030-03-10", end_date: "2030-03-10", start_minute: 540, end_minute: 720 },
+  });
+  await request.post(`${VENUE_API}/__seed_booking`, {
+    data: { venue_id: busy.id, event_request_id: randomUUID(), event_name: "Secret Other Gala", requested_by: "someone-else", status: "approved", decided_by: "venue-staff", decided_at: new Date().toISOString(), start_date: "2030-03-10", end_date: "2030-03-10", start_minute: 600, end_minute: 660 },
+  });
+
+  await page.context().addCookies(sessionCookie("coordinator-session"));
+  await page.goto(`/coordination/requests/${event.id}`);
+  const panel = page.getByRole("region", { name: "Venue bookings" });
+  const original = panel.getByRole("listitem").filter({ has: page.getByText(`Blocked Hall ${stamp}`, { exact: true }) });
+  await original.getByRole("combobox", { name: "Replacement venue" }).selectOption({ label: `Busy Hall ${stamp}` });
+  await original.getByRole("button", { name: `Request replacement for Blocked Hall ${stamp}` }).click();
+
+  await expect(original).toContainText(`Replacement requested at Busy Hall ${stamp} (Pending)`);
+  const warning = original.getByRole("status");
+  await expect(warning).toContainText(`Busy Hall ${stamp} already has an approved booking that overlaps this request`);
+  await expect(warning).toContainText("10 Mar 2030, 10:00–11:00");
+  await expect(warning).toContainText("still been submitted");
+  await expect(page.getByText("Secret Other Gala")).toHaveCount(0);
 });

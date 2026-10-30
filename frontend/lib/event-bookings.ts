@@ -1,5 +1,6 @@
 import { getJson } from "./api";
 import type { ArrangementReview } from "./arrangement-reviews";
+import { formatBookingDates } from "./booking-dates";
 import type { Slot } from "./venue-options";
 import { venueApiUrl } from "./venues";
 
@@ -43,20 +44,12 @@ export function needsNewVenue(reviews: readonly ArrangementReview[]): Map<string
   return flagged;
 }
 
+// Re-exported so the screens keep one import for booking formatting.
+export { formatBookingDates };
+
 // Only a pending or an approved booking can be cancelled; the others are final.
 export function canCancelBooking(status: EventBookingStatus): boolean {
   return status === "pending" || status === "approved";
-}
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function formatDate(value: string): string {
-  const [year, month, day] = value.split("-");
-  return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
-}
-
-export function formatBookingDates(start: string, end: string): string {
-  return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
 }
 
 // Every booking of one event, oldest first. A missing or refused event (the API

@@ -43,8 +43,28 @@ export async function cancelVenueBooking(
   return {};
 }
 
+export interface ReplacementConflict {
+  start_date: string;
+  end_date: string;
+  start_minute: number;
+  end_minute: number;
+}
+
 export interface ReplacementState {
   message?: string;
+  // SCRUM-67: approved bookings the new request overlaps; a warning, not a refusal.
+  conflicts?: ReplacementConflict[];
+}
+
+function readConflicts(body: unknown): ReplacementConflict[] {
+  const list = (body as { conflicts?: unknown } | null)?.conflicts;
+  if (!Array.isArray(list)) return [];
+  return list.filter(
+    (item): item is ReplacementConflict =>
+      typeof item === "object" && item !== null &&
+      typeof item.start_date === "string" && typeof item.end_date === "string" &&
+      typeof item.start_minute === "number" && typeof item.end_minute === "number",
+  );
 }
 
 const replacementRetry = "The replacement could not be requested. Please try again.";
@@ -89,6 +109,7 @@ export async function requestReplacementVenue(
     }
     return { message: replacementMessages[response.status] ?? replacementRetry };
   }
+  const conflicts = readConflicts(await response.json().catch(() => null));
   revalidatePath(`/coordination/requests/${eventRequestId}`);
-  return {};
+  return conflicts.length > 0 ? { conflicts } : {};
 }

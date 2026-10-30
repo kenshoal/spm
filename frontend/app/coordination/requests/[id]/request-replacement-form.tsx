@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { ConflictWarning } from "./conflict-warning";
 import { requestReplacementVenue, type ReplacementState } from "./venue-booking-actions";
 
 const initialState: ReplacementState = {};
@@ -12,14 +13,26 @@ export function RequestReplacementForm({
   eventRequestId,
   venueName,
   venues,
+  active,
 }: {
   bookingId: string;
   eventRequestId: string;
   venueName: string;
   venues: { id: string; name: string }[];
+  // A pending or approved replacement. It stands in for the form but keeps this component
+  // mounted, so the clash warning from the request that just made it survives the refresh.
+  active?: { venueName: string; statusLabel: string };
 }) {
   const [state, formAction, isPending] = useActionState(requestReplacementVenue, initialState);
   const selectId = `replacement-venue-${bookingId}`;
+  if (active) {
+    return (
+      <div className="mt-2">
+        <p className="text-sm font-semibold text-[#33456b]">Replacement requested at {active.venueName} ({active.statusLabel})</p>
+        <ConflictWarning venueName={active.venueName} conflicts={state.conflicts ?? []} />
+      </div>
+    );
+  }
   return (
     <form action={formAction} className="mt-3 flex flex-wrap items-end gap-3">
       <input type="hidden" name="booking_id" value={bookingId} />
