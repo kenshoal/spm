@@ -12,7 +12,10 @@ import pytest
 
 from app.booking_models import BookingRequest, BookingRequestStatus
 from app.booking_repository import (
+    BookingEventChangedError,
+    BookingEventNotFoundError,
     BookingNotCancellableError,
+    BookingReplacementRefusedError,
     BookingRequestNotFoundError,
     _supabase_booking_repository,
     get_booking_repository,
@@ -321,4 +324,82 @@ def test_list_approved_for_venue_with_a_malformed_id_returns_nothing_without_que
     api = FakeDataAPI()
 
     assert api.repo().list_approved_for_venue("not-a-uuid", date(2026, 10, 1), date(2026, 10, 31)) == []
+    assert api.requests == []
+
+
+REPLACE_PATH = "/rest/v1/rpc/create_replacement_venue_booking_request"
+OLD_ID = "5b5b5b5b-5b5b-45b5-85b5-5b5b5b5b5b5b"
+
+
+# AC4-H1 (happy): a replacement goes through the database function with only the new id, venue and requester
+def test_create_replacement_calls_the_function_and_returns_the_linked_row() -> None:
+    api = FakeDataAPI(200, _row(replaces_booking_id=OLD_ID))
+
+    booking = api.repo().create_replacement(OLD_ID, _booking(), expected_event_updated_at=EVENT_VERSION)
+
+    request = api.requests[0]
+    assert request.method == "POST"
+    assert request.url.path == REPLACE_PATH
+    assert json.loads(request.content) == {
+        "p_replaces_booking_id": OLD_ID,
+        "p_new_id": BOOKING_ID,
+        "p_venue_id": VENUE_ID,
+        "p_requested_by": USER_ID,
+        "p_expected_event_updated_at": EVENT_VERSION.isoformat(),
+    }
+    assert booking.replaces_booking_id == OLD_ID
+
+
+# AC4-N1, AC4-N2, AC4-N3, AC4-N4, AC4-N5, AC4-N6, AC4-N7 (negative): the function's errors map to the store's errors
+@pytest.mark.parametrize(
+    ("status_code", "code", "message", "expected"),
+    [
+        (409, "P0004", "booking is not approved", ("refused", "not_approved")),
+        (409, "P0004", "booking is not flagged as needing a new venue", ("refused", "not_flagged")),
+        (422, "22023", "a replacement must be at a different venue", ("refused", "same_venue")),
+        (409, "23505", "duplicate key value", ("refused", "replacement_exists")),
+        (409, "P0004", "Event request changed; refresh before booking", BookingEventChangedError),
+        (404, "P0003", "Caller is not the assigned coordinator", BookingEventNotFoundError),
+        (404, "P0002", "Venue not found", BookingEventNotFoundError),
+        (404, "P0002", "booking request not found", BookingRequestNotFoundError),
+        (500, "XX000", "boom", SupabaseRepositoryError),
+    ],
+    ids=["AC4-N2", "AC4-N1", "AC4-N3", "AC4-N5", "AC4-N6", "AC4-N7", "AC4-N4", "AC4-N9", "failure"],
+)
+def test_create_replacement_maps_function_errors(status_code: int, code: str, message: str, expected: object) -> None:
+    api = FakeDataAPI(status_code, {"code": code, "message": message})
+
+    if isinstance(expected, tuple):
+        with pytest.raises(BookingReplacementRefusedError) as raised:
+            api.repo().create_replacement(OLD_ID, _booking(), expected_event_updated_at=EVENT_VERSION)
+        assert raised.value.reason == expected[1]
+    else:
+        with pytest.raises(expected):
+            api.repo().create_replacement(OLD_ID, _booking(), expected_event_updated_at=EVENT_VERSION)
+
+
+# AC4-N9 (negative): a malformed booking id is not found without calling Supabase
+def test_create_replacement_with_a_malformed_id_does_not_query() -> None:
+    api = FakeDataAPI()
+
+    with pytest.raises(BookingRequestNotFoundError):
+        api.repo().create_replacement("not-a-uuid", _booking(), expected_event_updated_at=EVENT_VERSION)
+    assert api.requests == []
+
+
+# AC4-N6 (negative): an event version without a time zone is not sent
+def test_create_replacement_needs_a_timezone_aware_event_version() -> None:
+    api = FakeDataAPI()
+
+    with pytest.raises(SupabaseRepositoryError):
+        api.repo().create_replacement(OLD_ID, _booking(), expected_event_updated_at=datetime(2026, 10, 22))  # noqa: DTZ001 - naive on purpose
+    assert api.requests == []
+
+
+# AC1-X2 (cross-cutting): the Supabase store has nothing to do for a block's flag, because the database flags in create_venue_block
+def test_marking_a_booking_needs_no_request_in_supabase_mode() -> None:
+    api = FakeDataAPI()
+
+    api.repo().mark_needs_new_venue(BOOKING_ID)
+
     assert api.requests == []

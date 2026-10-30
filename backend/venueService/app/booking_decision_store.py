@@ -155,6 +155,15 @@ class MemoryBookingDecisionStore:
             booking.suggested_alternative = assessment.suggested_alternative
             booking.decided_by = decided_by
             booking.decided_at = _now()
+            if booking.status is BookingRequestStatus.APPROVED and booking.replaces_booking_id:
+                # SCRUM-63 AC5: an approved replacement cancels the booking it replaces
+                # (if that is still approved) and clears its flag, as 0068 does.
+                replaced = booking_repository.get(booking.replaces_booking_id)
+                if replaced is not None and replaced.status is BookingRequestStatus.APPROVED:
+                    replaced.status = BookingRequestStatus.CANCELLED
+                    replaced.cancelled_by = decided_by
+                    replaced.cancelled_at = _now()
+                booking_repository.clear_flag(booking.replaces_booking_id)
             return DecisionOutcome(booking=booking.model_copy())
 
     def list_refusals(self, booking_id: str) -> list[BookingRefusal]:
