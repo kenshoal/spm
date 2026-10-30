@@ -13,9 +13,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.booking_models import (
+    BookingConflict,
     BookingReplacementCreate,
     BookingRequest,
     BookingRequestCreate,
+    BookingRequestCreated,
     BookingRequestStatus,
 )
 from app.booking_repository import (
@@ -36,7 +38,10 @@ from app.dependencies import (
     require_venue_staff,
 )
 from app.event_requests import EventRequestClient, get_event_client
+from app.models import Venue
 from app.routers.venues import RepoDep
+from app.supabase_repository import SupabaseRepositoryError
+from app.time_conflicts import TimedBooking, find_conflicts
 
 router = APIRouter(prefix="/booking-requests", tags=["booking requests"])
 
@@ -49,7 +54,55 @@ ReaderDep = Annotated[Principal, Depends(require_booking_reader)]
 EventReaderDep = Annotated[Principal, Depends(require_event_booking_reader)]
 
 
-@router.post("", response_model=BookingRequest, status_code=status.HTTP_201_CREATED)
+def _with_conflicts(
+    venue: Venue, created: BookingRequest, bookings: BookingRequestStore
+) -> BookingRequestCreated:
+    """The stored request plus the approved bookings it overlaps (SCRUM-67).
+
+    A warning only, so a failed lookup returns none and never fails the request:
+    approval still refuses a clash."""
+
+    try:
+        approved = bookings.list_approved_for_venue(
+            venue.id, created.start_date, created.end_date
+        )
+    except SupabaseRepositoryError:
+        approved = []
+    clashes = find_conflicts(
+        venue,
+        created.start_date,
+        created.end_date,
+        created.start_minute,
+        created.end_minute,
+        [
+            TimedBooking(
+                id=item.id,
+                venue_id=item.venue_id,
+                start_date=item.start_date,
+                end_date=item.end_date,
+                start_minute=item.start_minute,
+                end_minute=item.end_minute,
+                status=item.status.value,
+            )
+            for item in approved
+        ],
+        exclude_id=created.id,
+    )
+    return BookingRequestCreated(
+        **created.model_dump(),
+        conflicts=[
+            BookingConflict(
+                start_date=clash.start_date,
+                end_date=clash.end_date,
+                start_minute=clash.start_minute,
+                end_minute=clash.end_minute,
+            )
+            for clash in clashes
+        ],
+    )
+
+
+@router.post("", response_model=BookingRequestCreated, status_code=status.HTTP_201_CREATED)
 def submit_booking_request(
     payload: BookingRequestCreate,
     principal: CoordinatorDep,
@@ -57,7 +110,7 @@ def submit_booking_request(
     venues: RepoDep,
     bookings: BookingRepoDep,
     events: EventClientDep,
-) -> BookingRequest:
+) -> BookingRequestCreated:
     venue = venues.get(payload.venue_id)
     if venue is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue not found")
@@ -67,7 +120,7 @@ def submit_booking_request(
         event_request_id, token, principal.user_id
     )
     try:
-        return bookings.create(
+        created = bookings.create(
             BookingRequest(
                 venue_id=venue.id,
                 requested_by=principal.user_id,
@@ -88,6 +141,7 @@ def submit_booking_request(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Event request changed; refresh before booking",
         ) from error
+    return _with_conflicts(venue, created, bookings)
 
 
 @router.get("", response_model=list[BookingRequest])
@@ -190,7 +244,7 @@ REPLACEMENT_REFUSALS = {
 
 @router.post(
     "/{booking_id}/replacement",
-    response_model=BookingRequest,
+    response_model=BookingRequestCreated,
     status_code=status.HTTP_201_CREATED,
 )
 def request_replacement_venue(
@@ -201,7 +255,7 @@ def request_replacement_venue(
     venues: RepoDep,
     bookings: BookingRepoDep,
     events: EventClientDep,
-) -> BookingRequest:
+) -> BookingRequestCreated:
     """Ask for another venue for a booking that a venue block flagged (SCRUM-63).
 
     Only the event's current Coordinator can ask, checked again here. The new
@@ -220,7 +274,7 @@ def request_replacement_venue(
     if venue is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue not found")
     try:
-        return bookings.create_replacement(
+        created = bookings.create_replacement(
             original.id,
             BookingRequest(
                 venue_id=venue.id,
@@ -247,3 +301,4 @@ def request_replacement_venue(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Event request changed; refresh before booking",
         ) from error
+    return _with_conflicts(venue, created, bookings)

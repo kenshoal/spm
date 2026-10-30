@@ -344,3 +344,27 @@ def test_an_ordinary_approval_cancels_nothing(events: FakeEventService) -> None:
 
     assert booking_repository.get(pending.id).status is BookingRequestStatus.APPROVED
     assert booking_repository.get(other_booking.id).status is BookingRequestStatus.APPROVED
+
+
+# AC1-H2 (happy, SCRUM-67): a replacement that overlaps an approved booking at the new venue is stored and lists the clash
+def test_a_clashing_replacement_names_the_clash(flagged) -> None:
+    _blocked, other, booking = flagged
+    approved(other.id, 600, 660, event_request_id="cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+
+    response = replace(booking.id, other.id)
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "pending"
+    assert response.json()["conflicts"] == [
+        {"start_date": DAY.isoformat(), "end_date": DAY.isoformat(), "start_minute": 600, "end_minute": 660}
+    ]
+
+
+# AC1-P5 (partition, SCRUM-67): the original booking at the blocked venue is not a clash of its own replacement
+def test_a_free_replacement_lists_no_clash(flagged) -> None:
+    _blocked, other, booking = flagged
+
+    response = replace(booking.id, other.id)
+
+    assert response.status_code == 201
+    assert response.json()["conflicts"] == []
