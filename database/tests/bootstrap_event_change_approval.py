@@ -24,6 +24,7 @@ SUPPLEMENTAL_MIGRATIONS = (
     "0058_event_registration_reviews.sql",
     "0059_event_change_date_approval.sql",
     "0064_venue_block_booking_reviews.sql",
+    "0068_venue_replacement_requests.sql",
 )
 
 # Vanilla PostgreSQL lacks the platform baseline ACLs independently observed
