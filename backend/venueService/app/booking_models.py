@@ -60,6 +60,16 @@ class BookingRequestCreate(BaseModel):
         return self
 
 
+class BookingReplacementCreate(BaseModel):
+    """What a Coordinator sends to replace a flagged booking: only the new venue.
+
+    The event, dates and times are the replaced booking's own (SCRUM-63 A3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    venue_id: str = Field(min_length=1)
+
+
 class BookingRequest(BaseModel):
     """A stored booking request."""
 
@@ -84,6 +94,8 @@ class BookingRequest(BaseModel):
     decided_at: datetime | None = None
     cancelled_by: str | None = None
     cancelled_at: datetime | None = None
+    # SCRUM-63: the flagged booking this request replaces (0068).
+    replaces_booking_id: str | None = None
     created_at: datetime = Field(default_factory=_now)
 
     @model_validator(mode="after")

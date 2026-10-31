@@ -13,6 +13,10 @@ vi.mock("@/lib/venues", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/venues")>()),
   listVenues: data.venues,
 }));
+vi.mock("@/lib/arrangement-reviews", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/arrangement-reviews")>()),
+  listEventArrangementReviews: async () => [],
+}));
 vi.mock("@/lib/auth", () => ({
   requireAccessToken: async () => "valid-token",
   requireRole: async () => ({ id: "coord-1", email: "c@example.com", role: "event_coordinator", roles: ["event_coordinator"] }),
@@ -37,7 +41,7 @@ const names = new Map([["v-a", "Hall A"], ["v-b", "Hall B"]]);
 function booking(overrides: Partial<EventBooking>): EventBooking {
   return {
     id: "b1", venue_id: "v-a", start_date: "2030-01-10", end_date: "2030-01-10",
-    start_minute: 420, end_minute: 720, slots: ["AM"], status: "pending", created_at: "2030-01-01T00:00:00Z", cancelled_at: null, ...overrides,
+    start_minute: 420, end_minute: 720, slots: ["AM"], status: "pending", created_at: "2030-01-01T00:00:00Z", cancelled_at: null, replaces_booking_id: null, ...overrides,
   };
 }
 

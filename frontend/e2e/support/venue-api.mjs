@@ -109,7 +109,7 @@ createServer(async (request, response) => {
     const booking = withTimes({
       id: randomUUID(), event_request_id: randomUUID(), event_name: null, expected_attendance: null,
       requirements_note: null, status: "pending", decision_reason: null, suggested_alternative: null,
-      decided_by: null, decided_at: null, created_at: new Date().toISOString(), ...body,
+      decided_by: null, decided_at: null, cancelled_at: null, replaces_booking_id: null, created_at: new Date().toISOString(), ...body,
     });
     bookings.set(booking.id, booking);
     return send(response, 201, booking);
@@ -261,6 +261,37 @@ createServer(async (request, response) => {
     return send(response, 200, booking);
   }
 
+  // Mirrors venueService's SCRUM-63 POST /booking-requests/{id}/replacement: a pending request at
+  // another venue, for the same event, dates and times, linked to the replaced booking. Like the
+  // cancel above, the mock checks neither the event's assignment nor the venue-block flag; the real
+  // service and the database verifier cover those.
+  const replacementPath = url.pathname.match(/^\/booking-requests\/([^/]+)\/replacement$/);
+  if (replacementPath && request.method === "POST") {
+    if (role !== "event_coordinator") return send(response, 403, { detail: "Insufficient permissions" });
+    const original = bookings.get(decodeURIComponent(replacementPath[1]));
+    if (!original) return send(response, 404, { detail: "Booking request not found" });
+    const body = await readJson(request);
+    if (typeof body.venue_id !== "string" || !body.venue_id || Object.keys(body).some((key) => key !== "venue_id")) {
+      return send(response, 422, { detail: "Invalid replacement" });
+    }
+    const target = venues.get(body.venue_id);
+    if (!target) return send(response, 404, { detail: "Venue not found" });
+    if (original.status !== "approved") return send(response, 409, { detail: "Booking is not approved" });
+    if (target.id === original.venue_id) return send(response, 422, { detail: "A replacement must be at a different venue" });
+    if ([...bookings.values()].some((b) => b.replaces_booking_id === original.id && ["pending", "approved"].includes(b.status))) {
+      return send(response, 409, { detail: "A replacement has already been requested" });
+    }
+    const replacement = withTimes({
+      id: randomUUID(), venue_id: target.id, requested_by: "playwright-coordinator", event_request_id: original.event_request_id,
+      event_name: original.event_name, expected_attendance: original.expected_attendance, requirements_note: original.requirements_note,
+      start_date: original.start_date, end_date: original.end_date, start_minute: original.start_minute, end_minute: original.end_minute,
+      status: "pending", decision_reason: null, suggested_alternative: null, decided_by: null, decided_at: null,
+      cancelled_by: null, cancelled_at: null, replaces_booking_id: original.id, created_at: new Date().toISOString(),
+    });
+    bookings.set(replacement.id, replacement);
+    return send(response, 201, replacement);
+  }
+
   const decisionPath = url.pathname.match(/^\/booking-requests\/([^/]+)\/decision$/);
   if (decisionPath && request.method === "POST") {
     if (role !== "venue_staff") return send(response, 403, { detail: "Insufficient permissions" });
@@ -294,6 +325,13 @@ createServer(async (request, response) => {
       suggested_alternative: body.decision === "rejected" && alternative ? alternative : null,
       decided_by: "playwright-venue", decided_at: new Date().toISOString(),
     });
+    // SCRUM-63 AC5: an approved replacement cancels the booking it replaces if that is still approved.
+    if (booking.status === "approved" && booking.replaces_booking_id) {
+      const replaced = bookings.get(booking.replaces_booking_id);
+      if (replaced?.status === "approved") {
+        Object.assign(replaced, { status: "cancelled", cancelled_by: "playwright-venue", cancelled_at: new Date().toISOString() });
+      }
+    }
     // Like venueService, hand the saved decision to notificationService; never fail on it.
     await fetch(NOTIFICATION_SEED, {
       method: "POST", headers: { "Content-Type": "application/json" },

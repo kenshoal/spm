@@ -76,6 +76,10 @@ CREATE INDEX venue_holds_booking_idx
 ALTER TABLE public.venue_holds ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.venue_holds FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.venue_holds TO service_role;
+-- decide_venue_booking_request runs as its caller (service_role from venueService) and
+-- closes a converted hold, so it needs these columns; Postgres checks the privilege
+-- even when no hold matches, so without it every booking decision is refused.
+GRANT UPDATE (status, closed_at, closed_by) ON public.venue_holds TO service_role;
 
 ALTER TABLE public.venue_booking_refusals
     ADD COLUMN conflicting_hold_ids uuid[] NOT NULL DEFAULT '{}',

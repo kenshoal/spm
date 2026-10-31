@@ -199,7 +199,8 @@ jobs:
             verify_event_change_date_approval.sql \
             verify_arrangement_review_flags.sql \
             verify_venue_timing_change_reviews.sql \
-            verify_venue_block_booking_reviews.sql
+            verify_venue_block_booking_reviews.sql \
+            verify_venue_replacement_requests.sql
           do
             psql -X -v ON_ERROR_STOP=1 -d "$SCRUM35_TEST_DSN" -f "database/$verifier"
           done
@@ -209,6 +210,7 @@ jobs:
           set -euo pipefail
           python3 database/tests/test_event_change_approval_concurrency.py --dsn "$SCRUM35_TEST_DSN" --disposable
           python3 database/tests/test_date_change_concurrency.py --dsn "$SCRUM35_TEST_DSN" --disposable
+          python3 database/tests/test_venue_replacement_concurrency.py --dsn "$SCRUM35_TEST_DSN" --disposable
 
   scrum40-database-verify:
     name: Verify SCRUM-40 completion, final end and manual race
@@ -287,12 +289,11 @@ jobs:
         run: >-
           psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres
           -c 'CREATE DATABASE scrum48_ci18'
-      - name: Bootstrap the venue and booking schema, then apply 0066
+      - name: Bootstrap the venue and booking schema (includes 0066, then 0068)
         shell: bash
         run: |
           set -euo pipefail
           python3 -I database/tests/bootstrap_event_change_approval.py --disposable --dsn "$SCRUM18_TEST_DSN"
-          psql -X -v ON_ERROR_STOP=1 -d "$SCRUM18_TEST_DSN" -f database/migrations/0066_venue_holds.sql
       - name: Verify holds and the approval and reschedule paths that share the guard
         shell: bash
         run: |

@@ -13,6 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.booking_models import (
+    BookingReplacementCreate,
     BookingRequest,
     BookingRequestCreate,
     BookingRequestStatus,
@@ -21,6 +22,7 @@ from app.booking_repository import (
     BookingEventChangedError,
     BookingEventNotFoundError,
     BookingNotCancellableError,
+    BookingReplacementRefusedError,
     BookingRequestNotFoundError,
     BookingRequestStore,
     get_booking_repository,
@@ -176,3 +178,72 @@ def cancel_booking_request(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "Booking request cannot be cancelled"
         ) from None
+
+
+REPLACEMENT_REFUSALS = {
+    "not_approved": (status.HTTP_409_CONFLICT, "Booking is not approved"),
+    "not_flagged": (status.HTTP_409_CONFLICT, "Booking is not flagged as needing a new venue"),
+    "same_venue": (status.HTTP_422_UNPROCESSABLE_CONTENT, "A replacement must be at a different venue"),
+    "replacement_exists": (status.HTTP_409_CONFLICT, "A replacement has already been requested"),
+}
+
+
+@router.post(
+    "/{booking_id}/replacement",
+    response_model=BookingRequest,
+    status_code=status.HTTP_201_CREATED,
+)
+def request_replacement_venue(
+    booking_id: str,
+    payload: BookingReplacementCreate,
+    principal: CoordinatorDep,
+    token: TokenDep,
+    venues: RepoDep,
+    bookings: BookingRepoDep,
+    events: EventClientDep,
+) -> BookingRequest:
+    """Ask for another venue for a booking that a venue block flagged (SCRUM-63).
+
+    Only the event's current Coordinator can ask, checked again here. The new
+    request is pending, for the same event, dates and times, and linked to the
+    flagged booking; Venue Staff decide it as usual, and approving it cancels the
+    old booking.
+    """
+
+    original = bookings.get(booking_id)
+    if original is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking request not found")
+    snapshot = events.snapshot_for_coordinator(
+        original.event_request_id, token, principal.user_id
+    )
+    venue = venues.get(payload.venue_id)
+    if venue is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Venue not found")
+    try:
+        return bookings.create_replacement(
+            original.id,
+            BookingRequest(
+                venue_id=venue.id,
+                requested_by=principal.user_id,
+                event_request_id=original.event_request_id,
+                event_name=snapshot.event_name,
+                expected_attendance=snapshot.expected_attendance,
+                requirements_note=snapshot.venue_requirements,
+                start_date=original.start_date,
+                end_date=original.end_date,
+                start_minute=original.start_minute,
+                end_minute=original.end_minute,
+            ),
+            expected_event_updated_at=snapshot.updated_at,
+        )
+    except BookingReplacementRefusedError as error:
+        code, detail = REPLACEMENT_REFUSALS[error.reason]
+        raise HTTPException(code, detail) from error
+    except BookingRequestNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Booking request not found") from error
+    except BookingEventNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Event request not found") from error
+    except BookingEventChangedError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Event request changed; refresh before booking",
+        ) from error

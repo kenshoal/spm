@@ -33,6 +33,14 @@ class BookingEventChangedError(Exception):
     """The event changed after the HTTP snapshot was read."""
 
 
+class BookingReplacementRefusedError(Exception):
+    """A booking cannot be replaced; ``reason`` names the rule (SCRUM-63 AC4)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 class BookingRequestStore(Protocol):
     def create(
         self, booking: BookingRequest, *, expected_event_updated_at: datetime,
@@ -47,6 +55,14 @@ class BookingRequestStore(Protocol):
     def list_approved_for_venue(
         self, venue_id: str, start_date: date, end_date: date
     ) -> list[BookingRequest]: ...
+    def create_replacement(
+        self,
+        replaces_booking_id: str,
+        booking: BookingRequest,
+        *,
+        expected_event_updated_at: datetime,
+    ) -> BookingRequest: ...
+    def mark_needs_new_venue(self, booking_id: str) -> None: ...
 
 
 class BookingRequestRepository:
@@ -54,6 +70,9 @@ class BookingRequestRepository:
 
     def __init__(self) -> None:
         self._items: list[BookingRequest] = []
+        # Bookings a venue block flagged as needing a new venue. In production the
+        # database flags them in create_venue_block (0064); this mirrors it.
+        self._flagged: set[str] = set()
 
     def create(
         self, booking: BookingRequest, *, expected_event_updated_at: datetime | None = None,
@@ -124,8 +143,51 @@ class BookingRequestRepository:
         ]
         return matching
 
+    def mark_needs_new_venue(self, booking_id: str) -> None:
+        self._flagged.add(booking_id)
+
+    def flagged_ids(self) -> set[str]:
+        return set(self._flagged)
+
+    def clear_flag(self, booking_id: str) -> None:
+        self._flagged.discard(booking_id)
+
+    def create_replacement(
+        self,
+        replaces_booking_id: str,
+        booking: BookingRequest,
+        *,
+        expected_event_updated_at: datetime | None = None,
+    ) -> BookingRequest:
+        """Store a pending request that replaces a flagged, approved booking.
+
+        The same rules as ``create_replacement_venue_booking_request`` (0068); the
+        event version belongs to the Supabase transaction, not here."""
+
+        with venue_write_lock:
+            original = self.get(replaces_booking_id)
+            if original is None:
+                raise BookingRequestNotFoundError
+            if original.status is not BookingRequestStatus.APPROVED:
+                raise BookingReplacementRefusedError("not_approved")
+            if original.venue_id == booking.venue_id:
+                raise BookingReplacementRefusedError("same_venue")
+            if replaces_booking_id not in self._flagged:
+                raise BookingReplacementRefusedError("not_flagged")
+            if any(
+                item.replaces_booking_id == replaces_booking_id
+                and item.status
+                in (BookingRequestStatus.PENDING, BookingRequestStatus.APPROVED)
+                for item in self._items
+            ):
+                raise BookingReplacementRefusedError("replacement_exists")
+            booking.replaces_booking_id = replaces_booking_id
+            self._items.append(booking)
+            return booking.model_copy()
+
     def clear(self) -> None:
         self._items.clear()
+        self._flagged.clear()
 
 
 # Module-level singleton used when VENUE_STORAGE_BACKEND=memory.

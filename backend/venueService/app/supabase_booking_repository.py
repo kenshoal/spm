@@ -18,6 +18,7 @@ from app.booking_repository import (
     BookingEventChangedError,
     BookingEventNotFoundError,
     BookingNotCancellableError,
+    BookingReplacementRefusedError,
     BookingRequestNotFoundError,
 )
 from app.supabase_repository import SupabaseRepositoryError, _is_uuid
@@ -188,3 +189,68 @@ class SupabaseBookingRepository:
             },
         )
         return [BookingRequest.model_validate(row) for row in rows]
+
+    def create_replacement(
+        self,
+        replaces_booking_id: str,
+        booking: BookingRequest,
+        *,
+        expected_event_updated_at: datetime,
+    ) -> BookingRequest:
+        """Create a replacement through ``create_replacement_venue_booking_request`` (0068).
+
+        The function takes the dates, times and event from the replaced booking and
+        the event metadata from the locked event row; only the new id, venue and
+        requester come from here."""
+
+        if not _is_uuid(replaces_booking_id):
+            raise BookingRequestNotFoundError
+        if (
+            not isinstance(expected_event_updated_at, datetime)
+            or expected_event_updated_at.utcoffset() is None
+        ):
+            raise SupabaseRepositoryError("Venue store unavailable")
+        try:
+            response = self._client.post(
+                "/rpc/create_replacement_venue_booking_request",
+                json={
+                    "p_replaces_booking_id": replaces_booking_id,
+                    "p_new_id": booking.id,
+                    "p_venue_id": booking.venue_id,
+                    "p_requested_by": booking.requested_by,
+                    "p_expected_event_updated_at": expected_event_updated_at.isoformat(),
+                },
+                headers={"Accept": "application/vnd.pgrst.object+json"},
+            )
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError("Venue store unavailable") from error
+        try:
+            body = response.json()
+        except ValueError as error:
+            raise SupabaseRepositoryError("Venue store returned an unexpected response") from error
+        if not response.is_success:
+            code = body.get("code") if isinstance(body, dict) else None
+            message = str(body.get("message", "")) if isinstance(body, dict) else ""
+            if code == "P0002":
+                if "Venue" in message:
+                    raise BookingEventNotFoundError
+                raise BookingRequestNotFoundError
+            if code == "P0003":
+                raise BookingEventNotFoundError
+            if code == "P0004":
+                if "not approved" in message:
+                    raise BookingReplacementRefusedError("not_approved")
+                if "not flagged" in message:
+                    raise BookingReplacementRefusedError("not_flagged")
+                raise BookingEventChangedError
+            if code == "22023":
+                raise BookingReplacementRefusedError("same_venue")
+            if code == "23505":
+                raise BookingReplacementRefusedError("replacement_exists")
+            raise SupabaseRepositoryError("Venue store unavailable")
+        if not isinstance(body, dict):
+            raise SupabaseRepositoryError("Venue store returned an unexpected response")
+        return BookingRequest.model_validate(body)
+
+    def mark_needs_new_venue(self, booking_id: str) -> None:
+        """Nothing to do: ``create_venue_block`` flags affected bookings (0064)."""

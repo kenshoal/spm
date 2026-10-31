@@ -123,6 +123,7 @@ def create_venue_block(
             )
         ):
             notifier.send(block_affects_booking_event(block, booking, venue.name))
+            bookings.mark_needs_new_venue(booking.id)
     return block
 
 
