@@ -289,7 +289,16 @@ createServer(async (request, response) => {
       cancelled_by: null, cancelled_at: null, replaces_booking_id: original.id, created_at: new Date().toISOString(),
     });
     bookings.set(replacement.id, replacement);
-    return send(response, 201, replacement);
+    // SCRUM-67: the approved bookings it overlaps at the new venue, setup and turnaround included.
+    // Dates and times only, as the real service returns; a warning, never a refusal.
+    const hold = (b) => [b.start_minute - (target.setup_minutes ?? 0), b.end_minute + (target.turnaround_minutes ?? 0)];
+    const [wantedStart, wantedEnd] = hold(replacement);
+    const conflicts = [...bookings.values()]
+      .filter((b) => b.venue_id === target.id && b.status === "approved" && b.id !== replacement.id
+        && b.start_date <= replacement.end_date && replacement.start_date <= b.end_date
+        && wantedStart < hold(b)[1] && hold(b)[0] < wantedEnd)
+      .map((b) => ({ start_date: b.start_date, end_date: b.end_date, start_minute: b.start_minute, end_minute: b.end_minute }));
+    return send(response, 201, { ...replacement, conflicts });
   }
 
   const decisionPath = url.pathname.match(/^\/booking-requests\/([^/]+)\/decision$/);

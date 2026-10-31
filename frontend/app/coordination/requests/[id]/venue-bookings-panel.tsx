@@ -58,18 +58,13 @@ export function VenueBookingsList({
                 <div className="mt-2 rounded-lg border border-[#eccdbe] bg-[#fff8f3] px-3 py-2">
                   <p className="text-sm font-bold text-[#793f27]">Needs a new venue</p>
                   <p className="mt-1 text-xs text-[#793f27]">{reason}</p>
-                  {active ? (
-                    <p className="mt-2 text-sm font-semibold text-[#33456b]">
-                      Replacement requested at {venueNames.get(active.venue_id) ?? "Unknown venue"} ({BOOKING_STATUS_LABELS[active.status]})
-                    </p>
-                  ) : (
-                    <RequestReplacementForm
-                      bookingId={booking.id}
-                      eventRequestId={eventRequestId}
-                      venueName={venueName}
-                      venues={replacementVenues.filter((venue) => venue.id !== booking.venue_id && (venue.status ?? "available") === "available")}
-                    />
-                  )}
+                  <RequestReplacementForm
+                    bookingId={booking.id}
+                    eventRequestId={eventRequestId}
+                    venueName={venueName}
+                    venues={replacementVenues.filter((venue) => venue.id !== booking.venue_id && (venue.status ?? "available") === "available")}
+                    active={active ? { venueName: venueNames.get(active.venue_id) ?? "Unknown venue", statusLabel: BOOKING_STATUS_LABELS[active.status] } : undefined}
+                  />
                 </div>
               ) : null}
             </div>

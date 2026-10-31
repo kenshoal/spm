@@ -22,6 +22,7 @@ vi.mock("@/lib/auth", () => ({
   requireRole: async () => ({ id: "coord-1", email: "c@example.com", role: "event_coordinator", roles: ["event_coordinator"] }),
 }));
 
+import { ConflictWarning } from "@/app/coordination/requests/[id]/conflict-warning";
 import { requestReplacementVenue } from "@/app/coordination/requests/[id]/venue-booking-actions";
 import { VenueBookingsList, VenueBookingsPanel } from "@/app/coordination/requests/[id]/venue-bookings-panel";
 import type { ArrangementReview } from "@/lib/arrangement-reviews";
@@ -249,4 +250,52 @@ test.each([
 
   expect(state.message).toMatch(message);
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+
+const clash = { start_date: "2030-03-10", end_date: "2030-03-10", start_minute: 540, end_minute: 720 };
+
+// AC1-U1 (happy, SCRUM-67): the warning names each clash by date and time, says the request was still submitted, and uses words
+test("the warning names the clash and says the request was submitted", () => {
+  render(<ConflictWarning venueName="Second Hall" conflicts={[clash, { ...clash, start_date: "2030-03-11", end_date: "2030-03-12", start_minute: 840, end_minute: 900 }]} />);
+
+  const warning = screen.getByRole("status");
+  expect(warning.textContent).toContain("Second Hall already has an approved booking that overlaps this request");
+  expect(within(warning).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+    "10 Mar 2030, 09:00–12:00",
+    "11 Mar 2030 – 12 Mar 2030, 14:00–15:00",
+  ]);
+  expect(warning.textContent).toMatch(/setup and turnaround/i);
+  expect(warning.textContent).toMatch(/still been submitted/i);
+});
+
+// AC1-U3 (partition, SCRUM-67): no clash shows no warning
+test("no clash shows no warning", () => {
+  const { container } = render(<ConflictWarning venueName="Second Hall" conflicts={[]} />);
+
+  expect(container.textContent).toBe("");
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+// AC1-U2 (happy, SCRUM-67): the action hands the clashes from the response to the form
+test("returns the clashes listed in the response", async () => {
+  respond(201, { id: "new", conflicts: [clash] });
+
+  const state = await requestReplacementVenue({}, form({ booking_id: "b1", event_request_id: EVENT_ID, venue_id: "v-b" }));
+
+  expect(state).toEqual({ conflicts: [clash] });
+  expect(navigation.revalidatePath).toHaveBeenCalledWith(`/coordination/requests/${EVENT_ID}`);
+});
+
+// AC1-U4 (partition, SCRUM-67): a response with no clash list, or a malformed one, gives none
+test.each([
+  ["absent", { id: "new" }],
+  ["empty", { id: "new", conflicts: [] }],
+  ["malformed", { id: "new", conflicts: [{ start_date: 5 }, "x", null] }],
+])("a %s clash list gives no warning", async (_name, body) => {
+  respond(201, body);
+
+  const state = await requestReplacementVenue({}, form({ booking_id: "b1", event_request_id: EVENT_ID, venue_id: "v-b" }));
+
+  expect(state).toEqual({});
 });

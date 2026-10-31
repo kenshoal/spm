@@ -104,3 +104,21 @@ class BookingRequest(BaseModel):
             self.start_minute, self.end_minute = slots_to_range(self.slots)
         self.slots = touched_slots(self.start_minute, self.end_minute)
         return self
+
+
+class BookingConflict(BaseModel):
+    """An approved booking a new request overlaps, as dates and times only (SCRUM-67).
+
+    Never the other event's name, ids or users."""
+
+    start_date: date
+    end_date: date
+    start_minute: int
+    end_minute: int
+
+
+class BookingRequestCreated(BookingRequest):
+    """A stored request plus the approved bookings it clashes with, setup and
+    turnaround included. A warning only: approval is the hard check (SCRUM-20)."""
+
+    conflicts: list[BookingConflict] = Field(default_factory=list)
