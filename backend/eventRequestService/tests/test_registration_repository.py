@@ -92,6 +92,32 @@ def test_register_server_error_is_a_repository_error(status_code: int) -> None:
     assert not isinstance(caught.value, RegistrationRpcError)
 
 
+@pytest.mark.parametrize(
+    ("call", "code", "message"),
+    [
+        (lambda repo: repo.register("e1", "a1", NOW), "P0004", "event full"),
+        (lambda repo: repo.coordinator_register("e1", "c1", "x@test.local"),
+         "P0004", "already registered"),
+        (lambda repo: repo.check_in("e1", "r1", "c1", NOW), "P0004", "not event day"),
+        (lambda repo: repo.withdraw("r1", "a1", NOW), "P0004", "already checked in"),
+        (lambda repo: repo.coordinator_register("e1", "c1", "x@test.local"),
+         "P0002", "attendee not found"),
+    ],
+)
+# AC4-N2 (negative): real PostgREST answers a RAISE with SQLSTATE P0002/P0004 as HTTP 500;
+# it is still the function's refusal, not an outage (found in the SCRUM-41 live check)
+def test_postgrest_500_for_a_function_refusal_is_a_refusal(call, code, message) -> None:  # type: ignore[no-untyped-def]
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            500, json={"code": code, "details": None, "hint": None, "message": message}
+        )
+
+    with pytest.raises(RegistrationRpcError) as raised:
+        call(make_repository(handler))
+
+    assert (raised.value.errcode, raised.value.reason) == (code, message)
+
+
 # AC5-N3 (negative): a network failure is a repository error
 def test_register_network_failure_is_a_repository_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:

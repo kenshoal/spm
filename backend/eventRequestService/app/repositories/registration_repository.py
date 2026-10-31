@@ -330,13 +330,17 @@ class SupabaseRegistrationRepository:
             raise SupabaseRepositoryError(
                 f"Supabase could not complete the {action}"
             ) from error
-        if response.status_code >= 500:
-            raise SupabaseRepositoryError(f"Supabase could not complete the {action}")
         if response.is_error:
             try:
                 body = response.json()
             except ValueError:
                 body = {}
+            if not isinstance(body, dict):
+                body = {}
+            # PostgREST answers a RAISE with our P0002/P0004 SQLSTATEs as HTTP 500,
+            # so a P0 code means the function refused, not that Supabase is down.
+            if response.status_code >= 500 and not str(body.get("code", "")).startswith("P0"):
+                raise SupabaseRepositoryError(f"Supabase could not complete the {action}")
             raise RegistrationRpcError(
                 f"Supabase rejected the {action}",
                 errcode=body.get("code"),
