@@ -6,11 +6,11 @@ Source: [Jira SCRUM-25](https://is212g9t4.atlassian.net/browse/SCRUM-25). Branch
 
 As ConnectSphere event staff, I want to check registered attendees in at the event, so that actual attendance is recorded separately from registration.
 
-Jaren (story owner) approved on 23 October 2026: "the event's coordinator checks people in. Manual lookup only, QR becomes its own story, check-in only on the event day." The rewording is recorded here, not written back to Jira.
+Jaren (story owner) approved on 23 October 2026: "the event's coordinator checks people in. Manual lookup only, QR becomes its own story, check-in only on the event day." On 31 October 2026 Jaren withdrew the separate QR story (SCRUM-68): QR scanning is not built in this release and is recorded only here. The rewording is recorded here, not written back to Jira.
 
 | Jira AC | Outcome | Approved wording |
 | --- | --- | --- |
-| Staff can check in a registered attendee at the counter by scanning a QR code or by manual lookup. | **Split** | **AC1:** Given a Confirmed event on one of its event days, when its latest coordinator picks a registration from the registrations list and checks it in, then the check-in is recorded. QR scanning moves to a new story. |
+| Staff can check in a registered attendee at the counter by scanning a QR code or by manual lookup. | **Split** | **AC1:** Given a Confirmed event on one of its event days, when its latest coordinator picks a registration from the registrations list and checks it in, then the check-in is recorded. QR scanning is not built in this release (see the note above). |
 | Given a check-in, when recorded, then the attendee is marked **attended**, distinct from merely registered. | **Keep, clarified** | **AC2:** Given a check-in, then the registration stores `attended_at` (the check-in time) and `checked_in_by` (the coordinator) and keeps status `Registered`, so capacity counts are unchanged. |
 | Attendance records distinguish registered-and-attended from registered-and-absent. | **Merge with AC2** | **AC3:** Given an event's registrations, then SCRUM-34's view shows `attended` (Registered with `attended_at`) and `absent` (Registered without it) counts, and each row's `attended_at`. Absent is worked out, not stored; the panel labels it "Not checked in". |
 | Only registered attendees can be checked in. | **Keep, clarified** | **AC4:** Given a registration that isn't on this event or isn't `Registered`, or one already checked in, when the coordinator checks it in, then it is refused (404 `registration_not_found` or 409 `already_checked_in`) and nothing changes. |
@@ -30,7 +30,7 @@ Cross-cutting: only the latest-assigned `event_coordinator` (others 403, no sess
 ## Scope
 
 - **Included:** AC1 to AC4; the endpoint; a "Check in" button on each not-yet-checked-in row of the coordinator's Registrations panel (Confirmed events, event day); attended and not-checked-in counts.
-- **Excluded:** QR scanning (new story), undoing a check-in, organisers or other staff checking in, withdrawal (SCRUM-22), notifications.
+- **Excluded:** QR scanning (not built in this release; no separate story), undoing a check-in, organisers or other staff checking in, withdrawal (SCRUM-22), notifications.
 
 ## Persistence and atomicity
 
