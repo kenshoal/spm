@@ -23,6 +23,10 @@ from app.controllers.registration_controller import router as registration_route
 from app.controllers.technical_support_controller import (
     router as technical_support_router,
 )
+from app.controllers.waitlist_controller import (
+    coordination_router as waitlist_coordination_router,
+)
+from app.controllers.waitlist_controller import router as waitlist_router
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.repositories.coordinator_assignment_repository import (
@@ -86,6 +90,9 @@ from app.services.technical_support_service import (
     TechnicalSupportError,
     TechnicalSupportService,
 )
+from app.services.waitlist_rules import WaitlistRuleError
+from app.services.waitlist_service import WaitlistService
+from app.services.waitlist_timer import build_waitlist_timer
 
 
 def build_periodic_task_runner() -> PeriodicTaskRunner | None:
@@ -101,6 +108,9 @@ def build_periodic_task_runner() -> PeriodicTaskRunner | None:
         handlers["registration_window_notices"] = (
             build_registration_window_notifier().run_once
         )
+    # SCRUM-24: the waiting-list timer and its outbox relay, on their own switch.
+    if settings.waitlist_timers_enabled:
+        handlers["waitlist_timers"] = build_waitlist_timer().run_once
     if not handlers:
         return None
     return PeriodicTaskRunner(
@@ -161,6 +171,11 @@ def create_app(
         if registration_repository is not None
         else None
     )
+    application.state.waitlist_service = (
+        WaitlistService(registration_repository)
+        if registration_repository is not None
+        else None
+    )
     application.state.event_transition_service = (
         EventTransitionService(event_request_service)
         if event_request_service is not None
@@ -190,6 +205,8 @@ def create_app(
     application.include_router(arrangement_review_router)
     application.include_router(registration_router)
     application.include_router(registration_info_router)
+    application.include_router(waitlist_router)
+    application.include_router(waitlist_coordination_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(
@@ -471,6 +488,17 @@ def create_app(
             content={
                 "detail": {"code": error.code, "message": str(error)},
             },
+        )
+
+    # The same trick for the SCRUM-24 waiting-list refusals (D10): one 409 per
+    # rule error, each carrying its own code.
+    @application.exception_handler(WaitlistRuleError)
+    async def waitlist_refused(
+        request: Request, error: WaitlistRuleError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status,
+            content={"detail": error.detail, "code": error.code},
         )
 
     @application.exception_handler(SupabaseRepositoryError)

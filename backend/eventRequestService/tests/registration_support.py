@@ -156,6 +156,10 @@ class FakeRegistrationRepository:
     def count_active(self, event_id: str) -> int:
         return self._stored_count(event_id)
 
+    def places_taken(self, event_id: str) -> int:
+        """D6's capacity source; FakeWaitlistRepository adds pending offers."""
+        return self._stored_count(event_id)
+
     def _stored_count(self, event_id: str) -> int:
         """The table's real count; register uses this so a subclass can fake a stale read."""
         return sum(

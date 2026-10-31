@@ -269,6 +269,75 @@ export function describeNotification(notification: AppNotification, roles: reado
         href: null,
       };
     }
+    case "waitlist_offered":
+    case "waitlist_offer_expiring": {
+      // SCRUM-24 AC5: to the Attendee. There is no Attendee event page yet,
+      // so no link; an offer and its warning show the acceptance deadline.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      const expiring = notification.event_type === "waitlist_offer_expiring";
+      const expires = notification.payload.expires_at;
+      return {
+        message: event
+          ? expiring
+            ? `Your place offer for ${event} expires soon.`
+            : `You're offered a place at ${event}.`
+          : expiring
+            ? "Your place offer expires soon."
+            : "You're offered a place at an event.",
+        href: null,
+        ...(typeof expires === "string" && expires
+          ? { detail: `Accept by ${formatDateTime(expires)}.` }
+          : {}),
+      };
+    }
+    case "waitlist_offer_expired": {
+      // SCRUM-24 AC5: the Attendee is back in the queue (D3).
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      return {
+        message: event
+          ? `Your place offer for ${event} expired; you're back in the queue.`
+          : "Your place offer expired; you're back in the queue.",
+        href: null,
+      };
+    }
+    case "waitlist_offer_revoked": {
+      // SCRUM-24 AC5: a Coordinator chose someone else for that place (D9);
+      // the holder keeps their position.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      return {
+        message: event
+          ? `The place offer for ${event} went to someone else; you keep your place in the queue.`
+          : "The place offer went to someone else; you keep your place in the queue.",
+        href: null,
+      };
+    }
+    case "waitlist_closed": {
+      // SCRUM-24 D11/D12: past the cut-off the list closes and a freed place
+      // opens to normal registration.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      return {
+        message: event
+          ? `The waiting list for ${event} has closed.`
+          : "The waiting list for your event has closed.",
+        href: null,
+        ...(event ? { detail: "Any place that frees up will open to registration." } : {}),
+      };
+    }
+    case "waitlist_event_cancelled": {
+      // SCRUM-24 D13: the event's cancellation releases every waiting-list place.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      return {
+        message: event
+          ? `${event} has been cancelled, so you're off its waiting list.`
+          : "An event you were waiting for has been cancelled, so you're off its waiting list.",
+        href: null,
+      };
+    }
     default:
       return { message: "There's an update on an event request.", href: null };
   }

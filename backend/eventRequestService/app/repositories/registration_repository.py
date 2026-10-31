@@ -51,6 +51,8 @@ class RegistrationRepository(Protocol):
 
     def count_active_for_events(self, event_ids: list[str]) -> dict[str, int]: ...
 
+    def places_taken(self, event_id: str) -> int: ...
+
     def has_active(self, event_id: str, attendee_id: str) -> bool: ...
 
     def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]: ...
@@ -184,15 +186,29 @@ class SupabaseRegistrationRepository:
             counts[event_id] = self._count_active(event_id)
         return counts
 
+    def places_taken(self, event_id: str) -> int:
+        """D6 (SCRUM-24): pending offers hold capacity like registrations.
+
+        One exact-count request per table per event, as above.
+        """
+        return self._count_active(event_id) + self._count_offered(event_id)
+
     def _count_active(self, event_id: str) -> int:
+        return self._exact_count(
+            "/event_registrations",
+            {"status": "eq.Registered", "event_request_id": f"eq.{event_id}"},
+        )
+
+    def _count_offered(self, event_id: str) -> int:
+        return self._exact_count(
+            "/event_waitlist_entries",
+            {"status": "eq.Offered", "event_request_id": f"eq.{event_id}"},
+        )
+
+    def _exact_count(self, path: str, filters: dict[str, str]) -> int:
         try:
             response = self._client.head(
-                "/event_registrations",
-                params={
-                    "status": "eq.Registered",
-                    "event_request_id": f"eq.{event_id}",
-                },
-                headers={"Prefer": "count=exact"},
+                path, params=filters, headers={"Prefer": "count=exact"}
             )
             response.raise_for_status()
         except httpx.HTTPError as error:
