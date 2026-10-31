@@ -108,6 +108,13 @@ class Venue(VenueBase):
     updated_at: datetime = Field(default_factory=_now)
 
 
+class VenueSearchResult(Venue):
+    """A venue search match. ``tentatively_held`` marks a venue that is free at
+    the searched time except for active tentative holds (SCRUM-18 AC6)."""
+
+    tentatively_held: bool = False
+
+
 class VenueLocation(BaseModel):
     """The minimum venue facts other services need to place equipment (SCRUM-13 D11)."""
 

@@ -264,3 +264,53 @@ jobs:
         run: >-
           python3 database/tests/test_event_auto_completion_concurrency.py
           --dsn "$SCRUM40_TEST_DSN" --disposable
+
+  scrum18-database-verify:
+    name: Verify SCRUM-18 venue holds and the shared conflict guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SCRUM18_TEST_DSN: postgresql://postgres@127.0.0.1:5432/scrum48_ci18
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create the empty disposable holds database
+        run: >-
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres
+          -c 'CREATE DATABASE scrum48_ci18'
+      - name: Bootstrap the venue and booking schema, then apply 0066
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -I database/tests/bootstrap_event_change_approval.py --disposable --dsn "$SCRUM18_TEST_DSN"
+          psql -X -v ON_ERROR_STOP=1 -d "$SCRUM18_TEST_DSN" -f database/migrations/0066_venue_holds.sql
+      - name: Verify holds and the approval and reschedule paths that share the guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          for verifier in \
+            verify_venue_holds.sql \
+            verify_venue_booking_conflict_guard.sql \
+            verify_venue_booking_decisions.sql \
+            verify_versioned_venue_booking_creation.sql \
+            verify_event_change_date_approval.sql \
+            verify_venue_timing_change_reviews.sql \
+            verify_venue_block_booking_reviews.sql
+          do
+            psql -X -v ON_ERROR_STOP=1 -d "$SCRUM18_TEST_DSN" -f "database/$verifier"
+          done
+      - name: Verify competing hold, approval and release transactions
+        run: >-
+          python3 database/tests/test_venue_hold_concurrency.py
+          --dsn "$SCRUM18_TEST_DSN" --disposable

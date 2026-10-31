@@ -111,6 +111,24 @@ def test_explicit_plan_rejects_unaccepted_identity_fields(monkeypatch):
     assert (repository.rows, repository.change_request_rows) == before
 
 
+# SCRUM-18 AC2-X3 (cross-cutting): a reschedule onto another event's tentative hold is refused with
+# hold_conflict evidence (0066's guard), not reported as an unavailable decision.
+def test_native_hold_conflict_is_returned_as_booking_conflict_evidence(monkeypatch):
+    client, repository, event, pending, plan, _, calls = date_decision_fixture(monkeypatch)
+    evidence = [{"booking_id": plan[0]["booking_id"], "refusal_codes": ["hold_conflict"], "conflicting_booking_ids": [], "conflicting_block_ids": []}]
+
+    def conflict(*args):
+        calls.append(deepcopy(args))
+        raise EventRequestRpcError("private_sql_relation_details", "P0005", json.dumps(evidence))
+
+    monkeypatch.setattr(repository, "approve_date_change_request", conflict)
+    with client:
+        response = client.post(f"/event-requests/{event}/change-requests/{pending['id']}/decision", headers=headers("coord-1"), json={"decision": "Approved", "booking_plan": plan})
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "BOOKING_CONFLICT"
+    assert response.json()["detail"]["bookings"] == evidence
+
+
 # AC4-N7 (negative): native conflict evidence becomes a safe structured refusal, never a generic success or raw SQL disclosure.
 def test_native_date_conflict_returns_safe_per_booking_evidence(monkeypatch):
     client, repository, event, pending, plan, _, calls = date_decision_fixture(monkeypatch)

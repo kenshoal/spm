@@ -1,4 +1,4 @@
--- Venue replacement requests (SCRUM-63 AC4, AC5). Run once, after 0064.
+-- Venue replacement requests (SCRUM-63 AC4, AC5). Run once, after 0064 and 0066.
 --
 -- When a venue block flags an approved booking (0064), the event's coordinator can
 -- ask for a replacement at another venue. The replacement is an ordinary pending
@@ -16,7 +16,8 @@
 --     Errors: P0002 booking or venue not found; P0003 caller is not the event's
 --     coordinator; P0004 booking not approved, booking not flagged, or event changed;
 --     22023 same venue; 23505 a replacement is already active.
---   * decide_venue_booking_request (0054) is unchanged except the end of the approval
+--   * decide_venue_booking_request (0066, which keeps 0054's guard and adds SCRUM-18's
+--     hold handling) is unchanged except the end of the approval
 --     path: when the approved request replaces a booking, that booking is cancelled
 --     (by the approver, only if it is still approved) and its open 'venue_block' flags
 --     are cleared with 0032's clear_arrangement_review, in the same transaction. A
@@ -144,6 +145,7 @@ DECLARE
     v_blocks uuid[];
     v_guard jsonb;
     v_bookings uuid[];
+    v_holds uuid[];
 BEGIN
     IF p_decision IS NULL OR p_decision NOT IN ('approved', 'rejected') THEN
         RAISE EXCEPTION 'decision must be approved or rejected' USING ERRCODE = '22023';
@@ -182,6 +184,12 @@ BEGIN
             decided_at = now()
         WHERE r.id = p_booking_request_id
         RETURNING * INTO v_request;
+        -- SCRUM-18: a rejected conversion ends its hold. An expired hold is left to
+        -- the sweep, which marks it expired and sends its notice.
+        UPDATE public.venue_holds AS h
+        SET status = 'released', closed_at = now(), closed_by = p_decided_by
+        WHERE h.booking_request_id = v_request.id AND h.status = 'active'
+          AND h.expires_at > now();
         RETURN jsonb_build_object('outcome', 'rejected', 'booking', to_jsonb(v_request));
     END IF;
 
@@ -211,18 +219,22 @@ BEGIN
     v_bookings := ARRAY(
         SELECT jsonb_array_elements_text(v_guard -> 'conflicting_booking_ids')::uuid
     );
+    v_holds := ARRAY(
+        SELECT jsonb_array_elements_text(v_guard -> 'conflicting_hold_ids')::uuid
+    );
 
     IF cardinality(v_codes) > 0 THEN
         INSERT INTO public.venue_booking_refusals (
             booking_request_id, refused_by, refusal_codes,
-            conflicting_block_ids, conflicting_booking_ids
+            conflicting_block_ids, conflicting_booking_ids, conflicting_hold_ids
         )
-        VALUES (p_booking_request_id, p_decided_by, v_codes, v_blocks, v_bookings);
+        VALUES (p_booking_request_id, p_decided_by, v_codes, v_blocks, v_bookings, v_holds);
         RETURN jsonb_build_object(
             'outcome', 'refused',
             'refusal_codes', to_jsonb(v_codes),
             'conflicting_block_ids', to_jsonb(v_blocks),
             'conflicting_booking_ids', to_jsonb(v_bookings),
+            'conflicting_hold_ids', to_jsonb(v_holds),
             'booking', to_jsonb(v_request)
         );
     END IF;
@@ -233,6 +245,12 @@ BEGIN
         decided_at = now()
     WHERE r.id = p_booking_request_id
     RETURNING * INTO v_request;
+    -- SCRUM-18: an approved conversion becomes the booking, so its hold ends. An
+    -- expired hold is never converted; the sweep marks it expired.
+    UPDATE public.venue_holds AS h
+    SET status = 'converted', closed_at = now(), closed_by = p_decided_by
+    WHERE h.booking_request_id = v_request.id AND h.status = 'active'
+      AND h.expires_at > now();
 
     -- SCRUM-63 AC5: an approved replacement cancels the booking it replaces and clears
     -- that booking's venue-block flags, in this transaction. An original that is no
