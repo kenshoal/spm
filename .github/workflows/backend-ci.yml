@@ -289,12 +289,11 @@ jobs:
         run: >-
           psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres
           -c 'CREATE DATABASE scrum48_ci18'
-      - name: Bootstrap the venue and booking schema, then apply 0066
+      - name: Bootstrap the venue and booking schema (includes 0066, then 0068)
         shell: bash
         run: |
           set -euo pipefail
           python3 -I database/tests/bootstrap_event_change_approval.py --disposable --dsn "$SCRUM18_TEST_DSN"
-          psql -X -v ON_ERROR_STOP=1 -d "$SCRUM18_TEST_DSN" -f database/migrations/0066_venue_holds.sql
       - name: Verify holds and the approval and reschedule paths that share the guard
         shell: bash
         run: |
