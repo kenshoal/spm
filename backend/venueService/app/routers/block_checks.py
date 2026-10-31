@@ -9,7 +9,7 @@ from app.block_checks import check_availability
 from app.booking_models import BookingRequestStatus
 from app.booking_repository import BookingRequestStore, get_booking_repository
 from app.dependencies import Principal, require_booking_reader
-from app.routers.venues import BlockRepoDep, RepoDep
+from app.routers.venues import BlockRepoDep, HoldStoreDep, RepoDep
 
 router = APIRouter(prefix="/venues", tags=["venue block checks"])
 
@@ -22,6 +22,7 @@ def availability(
     repo: RepoDep,
     blocks: BlockRepoDep,
     bookings: Annotated[BookingRequestStore, Depends(get_booking_repository)],
+    holds: HoldStoreDep,
 ) -> AvailabilityResult:
     """Check venue status, blocks and approved bookings by date and time; does
     not reserve or lock a venue.
@@ -37,4 +38,5 @@ def availability(
         payload,
         blocks.list_for_venue(venue_id),
         bookings.list_by_status(BookingRequestStatus.APPROVED),
+        holds.list_for_venue(venue_id, payload.start_date, payload.end_date),
     )

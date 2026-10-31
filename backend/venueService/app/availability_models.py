@@ -40,6 +40,13 @@ class BookingOverlap(Period):
     booking_id: str
 
 
+class HoldOverlap(Period):
+    """The part of an active tentative hold (SCRUM-18) that a requested period
+    shares, setup and turnaround included."""
+
+    hold_id: str
+
+
 class AvailabilityResult(BaseModel):
     venue_id: str
     available: bool
@@ -50,7 +57,9 @@ class AvailabilityResult(BaseModel):
             "setup_outside_window",
             "turnaround_outside_window",
             "booking_conflict",
+            "hold_conflict",
         ]
     ]
     conflicts: list[BlockConflict]
     booking_conflicts: list[BookingOverlap] = []
+    hold_conflicts: list[HoldOverlap] = []

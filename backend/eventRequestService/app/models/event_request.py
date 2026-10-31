@@ -220,9 +220,10 @@ class EventChangeBookingConflict(BaseModel):
     """Only authorised, schema-checked conflict facts may cross the API boundary."""
 
     booking_id: UUID
+    # hold_conflict: an active tentative hold (SCRUM-18, 0066) covers the new time.
     refusal_codes: list[Literal[
         "venue_unavailable", "active_block", "setup_outside_window",
-        "turnaround_outside_window", "booking_conflict",
+        "turnaround_outside_window", "booking_conflict", "hold_conflict",
     ]] = Field(min_length=1)
     conflicting_booking_ids: list[UUID]
     conflicting_block_ids: list[UUID]

@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 const venues = new Map();
 const blocks = new Map();
 const bookings = new Map();
+const holds = new Map();
 const NOTIFICATION_SEED = "http://127.0.0.1:8107/__seed";
 const REASONS = ["maintenance", "renovation", "safety", "internal_use"];
 const SESSIONS = {
@@ -66,14 +67,22 @@ function overlaps(a, b) {
 // SCRUM-66: like venueService, a time is free when its own setup and turnaround fit 07:00-24:00,
 // no active block overlaps it and no approved booking overlaps it once both are padded with the
 // venue's setup and turnaround. Blocks are not padded.
-function freeAt(venue, day, start, end) {
+// SCRUM-18: a hold protects its time while active and unexpired.
+const protecting = (hold) => hold.status === "active" && new Date(hold.expires_at).getTime() > Date.now();
+
+// With withHolds, active holds count as taken too, padded like bookings.
+function freeAt(venue, day, start, end, withHolds = false) {
   const setup = venue.setup_minutes ?? 0;
   const turnaround = venue.turnaround_minutes ?? 0;
   if (start - setup < 420 || end + turnaround > 1440) return false;
   const wanted = { start_date: day, end_date: day, start_minute: start, end_minute: end };
   const padded = { ...wanted, start_minute: start - setup, end_minute: end + turnaround };
+  const taken = [
+    ...[...bookings.values()].filter((b) => b.status === "approved"),
+    ...(withHolds ? [...holds.values()].filter(protecting) : []),
+  ];
   return ![...blocks.values()].some((b) => b.venue_id === venue.id && b.status === "active" && overlaps(b, wanted))
-    && ![...bookings.values()].some((b) => b.venue_id === venue.id && b.status === "approved"
+    && !taken.some((b) => b.venue_id === venue.id
       && overlaps({ ...b, start_minute: b.start_minute - setup, end_minute: b.end_minute + turnaround }, padded));
 }
 
@@ -128,7 +137,8 @@ createServer(async (request, response) => {
     const facilities = url.searchParams.getAll("facility").map((f) => f.toLowerCase());
     const access = url.searchParams.getAll("accessibility").map((a) => a.toLowerCase());
     // SCRUM-23 / SCRUM-15 / SCRUM-65: a dated search skips venues blocked or
-    // booked at an overlapping time, or with no free time that day.
+    // booked at an overlapping time, or with no free time that day. SCRUM-18: a
+    // venue free except for holds is returned as tentatively held.
     const day = url.searchParams.get("date");
     const wanted = startParam !== null && endParam !== null
       ? { start_date: day, end_date: day, start_minute: Number(startParam), end_minute: Number(endParam) }
@@ -137,19 +147,20 @@ createServer(async (request, response) => {
       return send(response, 422, { detail: [{ type: "invalid_times" }] });
     }
     // With only a date, the day counts when some 15-minute booking would be accepted (SCRUM-66).
-    const freeOn = (v) => {
+    const freeOn = (v, withHolds) => {
       if (!day) return true;
-      if (wanted) return freeAt(v, day, wanted.start_minute, wanted.end_minute);
-      return Array.from({ length: 68 }, (_, i) => 420 + i * 15).some((start) => freeAt(v, day, start, start + 15));
+      if (wanted) return freeAt(v, day, wanted.start_minute, wanted.end_minute, withHolds);
+      return Array.from({ length: 68 }, (_, i) => 420 + i * 15).some((start) => freeAt(v, day, start, start + 15, withHolds));
     };
     return send(response, 200, [...venues.values()].filter((v) =>
       v.status === "available"
-      && freeOn(v)
+      && freeOn(v, false)
       && (!capacity || v.max_capacity >= Number(capacity))
       && (!location || v.location.toLowerCase().includes(location.toLowerCase()))
       && (!layout || v.supported_layouts.includes(layout))
       && facilities.every((f) => v.facilities.map((x) => x.toLowerCase()).includes(f))
-      && access.every((a) => v.accessibility_features.map((x) => x.toLowerCase()).includes(a))));
+      && access.every((a) => v.accessibility_features.map((x) => x.toLowerCase()).includes(a)))
+      .map((v) => ({ ...v, tentatively_held: !freeOn(v, true) })));
   }
 
   // Mirrors venueService's POST /venues/{id}/suitability rules (SCRUM-12) so the
@@ -347,6 +358,65 @@ createServer(async (request, response) => {
     return send(response, 200, booking);
   }
 
+  // SCRUM-18: tentative holds, mirroring venueService. A hold protects its time
+  // (see protecting), padded like a booking; converting creates a pending
+  // booking linked to the hold.
+  const holdsPath = url.pathname.match(/^\/venues\/([^/]+)\/holds$/);
+  if (holdsPath && request.method === "POST") {
+    if (role !== "event_coordinator") return send(response, 403, { detail: "Insufficient permissions" });
+    const target = venues.get(decodeURIComponent(holdsPath[1]));
+    if (!target) return send(response, 404, { detail: "Venue not found" });
+    const body = await readJson(request);
+    const expires = new Date(body?.expires_at ?? "").getTime();
+    if (!validTimes(body?.start_minute, body?.end_minute) || !(expires > Date.now()) || expires > Date.now() + 7 * 864e5) {
+      return send(response, 422, { detail: "Invalid hold" });
+    }
+    const setup = target.setup_minutes ?? 0;
+    const turnaround = target.turnaround_minutes ?? 0;
+    const wanted = { start_date: body.start_date, end_date: body.end_date, start_minute: body.start_minute - setup, end_minute: body.end_minute + turnaround };
+    const pad = (item) => ({ ...item, start_minute: item.start_minute - setup, end_minute: item.end_minute + turnaround });
+    const clashBookings = [...bookings.values()].filter((b) => b.venue_id === target.id && b.status === "approved" && overlaps(pad(b), wanted));
+    const clashHolds = [...holds.values()].filter((h) => h.venue_id === target.id && protecting(h) && overlaps(pad(h), wanted));
+    if (clashBookings.length || clashHolds.length) {
+      return send(response, 409, { detail: {
+        refusal_codes: [...(clashBookings.length ? ["booking_conflict"] : []), ...(clashHolds.length ? ["hold_conflict"] : [])],
+        conflicting_block_ids: [], conflicting_booking_ids: clashBookings.map((b) => b.id), conflicting_hold_ids: clashHolds.map((h) => h.id),
+      } });
+    }
+    const hold = {
+      id: randomUUID(), venue_id: target.id, event_request_id: body.event_request_id, start_date: body.start_date,
+      end_date: body.end_date, start_minute: body.start_minute, end_minute: body.end_minute, expires_at: body.expires_at,
+      status: "active", booking_request_id: null, placed_by: "playwright-coordinator", placed_at: new Date().toISOString(), closed_at: null,
+    };
+    holds.set(hold.id, hold);
+    return send(response, 201, hold);
+  }
+  if (url.pathname === "/venue-holds" && request.method === "GET") {
+    if (role !== "event_coordinator") return send(response, 403, { detail: "Insufficient permissions" });
+    const eventId = url.searchParams.get("event_request_id");
+    return send(response, 200, [...holds.values()].filter((h) => h.event_request_id === eventId));
+  }
+  const holdAction = url.pathname.match(/^\/venue-holds\/([^/]+)\/(release|convert)$/);
+  if (holdAction && request.method === "POST") {
+    if (role !== "event_coordinator") return send(response, 403, { detail: "Insufficient permissions" });
+    const hold = holds.get(decodeURIComponent(holdAction[1]));
+    if (!hold) return send(response, 404, { detail: "Venue hold not found" });
+    if (!protecting(hold)) return send(response, 409, { detail: "Hold is no longer active" });
+    if (holdAction[2] === "release") {
+      Object.assign(hold, { status: "released", closed_at: new Date().toISOString() });
+      return send(response, 200, hold);
+    }
+    const booking = withTimes({
+      id: randomUUID(), venue_id: hold.venue_id, event_request_id: hold.event_request_id, requested_by: "playwright-coordinator",
+      event_name: null, expected_attendance: null, requirements_note: null, start_date: hold.start_date, end_date: hold.end_date,
+      start_minute: hold.start_minute, end_minute: hold.end_minute, status: "pending", decision_reason: null,
+      suggested_alternative: null, decided_by: null, decided_at: null, created_at: new Date().toISOString(),
+    });
+    bookings.set(booking.id, booking);
+    hold.booking_request_id = booking.id;
+    return send(response, 201, { hold, booking });
+  }
+
   // Mirrors venueService's GET /venues/{id}/calendar (SCRUM-31, on times by SCRUM-69) so the
   // availability page can be driven in a browser. Each date is a partition of 07:00-24:00 into
   // blocked, booked and free ranges: an active block wins over an approved booking (which is split
@@ -390,10 +460,12 @@ createServer(async (request, response) => {
       // SCRUM-66: a booking occupies the venue's setup before it and turnaround after it.
       const padded = (b) => ({ start_minute: b.start_minute - (target.setup_minutes ?? 0), end_minute: b.end_minute + (target.turnaround_minutes ?? 0) });
       const booked = subtract(merge([...bookings.values()].filter((b) => b.venue_id === target.id && b.status === "approved" && on(b)).map((b) => clip(padded(b))).filter(([a, b]) => a < b)), blocked);
+      // SCRUM-18: active holds show as held where no block or booking is.
+      const held = subtract(merge([...holds.values()].filter((h) => h.venue_id === target.id && protecting(h) && on(h)).map((h) => clip(padded(h))).filter(([a, b]) => a < b)), merge([...blocked, ...booked]));
       const unavailable = target.status !== "available";
-      const entries = [...blocked.map(([a, b]) => ({ state: "blocked", start_minute: a, end_minute: b })), ...booked.map(([a, b]) => ({ state: "booked", start_minute: a, end_minute: b }))]
+      const entries = [...blocked.map(([a, b]) => ({ state: "blocked", start_minute: a, end_minute: b })), ...booked.map(([a, b]) => ({ state: "booked", start_minute: a, end_minute: b })), ...held.map(([a, b]) => ({ state: "held", start_minute: a, end_minute: b }))]
         .sort((x, y) => x.start_minute - y.start_minute);
-      const free = unavailable ? [] : subtract([[420, 1440]], merge([...blocked, ...booked])).map(([a, b]) => ({ start_minute: a, end_minute: b }));
+      const free = unavailable ? [] : subtract([[420, 1440]], merge([...blocked, ...booked, ...held])).map(([a, b]) => ({ start_minute: a, end_minute: b }));
       return { date, unavailable, entries, free };
     });
     return send(response, 200, { venue_id: target.id, month, days });

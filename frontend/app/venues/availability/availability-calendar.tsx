@@ -5,6 +5,7 @@ import { CLOSE_MINUTE, OPEN_MINUTE, timeRangeLabel } from "@/lib/venue-options";
 const ENTRY_STYLES = {
   booked: "bg-[#e8eefb] text-[#33456b]",
   blocked: "bg-[#fdecea] text-[#793f27]",
+  held: "bg-[#fff6dd] text-[#6f4b12]",
 } as const;
 
 function dayLabel(date: string): string {
