@@ -75,10 +75,12 @@ from app.services.registration_rules import (
     WithdrawalNotPermittedError,
 )
 from app.services.registration_service import (
+    AlreadyCheckedInError,
     AlreadyRegisteredError,
     AttendeeAlreadyRegisteredError,
     AttendeeNotFoundError,
     CapacityNotSetError,
+    NotEventDayError,
     RegistrationService,
 )
 from app.services.registration_window_notifier import (
@@ -417,6 +419,16 @@ def create_app(
             },
         )
 
+    @application.exception_handler(NotEventDayError)
+    async def not_event_day(request: Request, error: NotEventDayError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Check-in is only open on the event's days",
+                "code": "not_event_day",
+            },
+        )
+
     @application.exception_handler(RegistrationNotFoundError)
     async def registration_not_found(
         request: Request, error: RegistrationNotFoundError
@@ -426,6 +438,18 @@ def create_app(
             content={
                 "detail": "Registration not found",
                 "code": "registration_not_found",
+            },
+        )
+
+    @application.exception_handler(AlreadyCheckedInError)
+    async def already_checked_in(
+        request: Request, error: AlreadyCheckedInError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This attendee is already checked in",
+                "code": "already_checked_in",
             },
         )
 

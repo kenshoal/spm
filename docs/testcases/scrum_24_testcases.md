@@ -199,6 +199,8 @@ Layers: U = unit (`tests/test_waitlist_rules.py`), A = API (`tests/test_waitlist
 
 ## Latest execution record
 
+> **31 Oct:** on merging `dev`, the migration was renumbered `0065` → `0068` (`0065`–`0067` were taken) and its `withdraw_registration` now carries `0067`'s check-in refusal. Rows below that name `0065` refer to the same file before the rename.
+
 Environment codes: **unit** = local pytest, `backend/eventRequestService/.venv`, repository faked; **db** = disposable local `postgres:16` docker cluster (`scrum24-green` container, database `scrum48_scrum24`), dev's migrations then `0065`, one transaction per file; **ui** = Vitest, local. Gates G1–G4 answered 27 Oct (D1–D14 as recorded); G5 resolved as the assigned Coordinator; G6 teammate review still pending — this record is not a Done claim. Red commits are local-only on `feat/scrum-24-waiting-list` by plan (never pushed red); the green points are held for the owner's review before pushing.
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |

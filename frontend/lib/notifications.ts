@@ -94,6 +94,14 @@ export function describeNotification(notification: AppNotification, roles: reado
         href: null,
       };
     }
+    case "registration_withdrawn": {
+      // SCRUM-22 AC5: to the Attendee. There is no Attendee event page yet, so no link.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `You've withdrawn from ${name.trim()}.` : "Your registration has been withdrawn.",
+        href: null,
+      };
+    }
     case "registration_full": {
       // SCRUM-38 AC2: to the Organiser and the Coordinator, each linked to the page they can open.
       const name = notification.payload.event_name;
@@ -196,6 +204,32 @@ export function describeNotification(notification: AppNotification, roles: reado
           : `Your venue booking request${event ? ` for ${event}` : ""} was rejected.`,
         href: forOrganiser ? id && `/event-requests/${id}/edit` : href,
         ...(detail ? { detail } : {}),
+      };
+    }
+    case "venue_hold_expiring":
+    case "venue_hold_expired": {
+      // SCRUM-18: sent to the event's coordinator about their tentative hold.
+      const text = (key: string) => {
+        const value = notification.payload[key];
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+      };
+      const venue = text("venue_name") ?? "A venue";
+      const event = text("event_name");
+      const expires = text("expires_at");
+      const where = [
+        text("start_date") && text("end_date") && `${text("start_date")} to ${text("end_date")}`,
+        whenText(notification.payload, "start_minute", "end_minute", "slots"),
+      ].filter(Boolean);
+      const expiring = notification.event_type === "venue_hold_expiring";
+      return {
+        message: expiring
+          ? `Your hold on ${venue}${event ? ` for ${event}` : ""} expires soon.`
+          : `Your hold on ${venue}${event ? ` for ${event}` : ""} has expired and the time is free again.`,
+        href: id && `/coordination/requests/${id}`,
+        detail: [
+          ...where,
+          expiring && expires ? `Expires ${formatDateTime(expires)}. Request the booking or release the hold.` : null,
+        ].filter(Boolean).join(" · "),
       };
     }
     case "venue_block_affects_booking": {

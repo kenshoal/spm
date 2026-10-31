@@ -92,6 +92,32 @@ def test_register_server_error_is_a_repository_error(status_code: int) -> None:
     assert not isinstance(caught.value, RegistrationRpcError)
 
 
+@pytest.mark.parametrize(
+    ("call", "code", "message"),
+    [
+        (lambda repo: repo.register("e1", "a1", NOW), "P0004", "event full"),
+        (lambda repo: repo.coordinator_register("e1", "c1", "x@test.local"),
+         "P0004", "already registered"),
+        (lambda repo: repo.check_in("e1", "r1", "c1", NOW), "P0004", "not event day"),
+        (lambda repo: repo.withdraw("r1", "a1", NOW), "P0004", "already checked in"),
+        (lambda repo: repo.coordinator_register("e1", "c1", "x@test.local"),
+         "P0002", "attendee not found"),
+    ],
+)
+# AC4-N2 (negative): real PostgREST answers a RAISE with SQLSTATE P0002/P0004 as HTTP 500;
+# it is still the function's refusal, not an outage (found in the SCRUM-41 live check)
+def test_postgrest_500_for_a_function_refusal_is_a_refusal(call, code, message) -> None:  # type: ignore[no-untyped-def]
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            500, json={"code": code, "details": None, "hint": None, "message": message}
+        )
+
+    with pytest.raises(RegistrationRpcError) as raised:
+        call(make_repository(handler))
+
+    assert (raised.value.errcode, raised.value.reason) == (code, message)
+
+
 # AC5-N3 (negative): a network failure is a repository error
 def test_register_network_failure_is_a_repository_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -204,7 +230,9 @@ def test_list_for_event_pages_past_the_row_cap() -> None:
     assert len(rows) == 1001
     assert [r.url.params["offset"] for r in seen] == ["0", "1000"]
     assert seen[0].url.params["event_request_id"] == "eq.e1"
-    assert seen[0].url.params["select"] == "id,attendee_id,status,created_at,registered_by"
+    assert seen[0].url.params["select"] == (
+        "id,attendee_id,status,created_at,registered_by,attended_at,checked_in_by"
+    )
 
 
 # AC1-H1 (happy): coordinator_register calls the SCRUM-41 function with event, coordinator and email
@@ -235,6 +263,25 @@ def test_coordinator_register_refusal_carries_reason() -> None:
         make_repository(handler).coordinator_register("e1", "c1", "x@test.local")
 
     assert (raised.value.errcode, raised.value.reason) == ("P0002", "attendee not found")
+
+
+# AC1-H1 (happy): check_in calls the SCRUM-25 function with the event, registration, coordinator and clock
+def test_check_in_calls_the_database_function() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"id": "r1", "checked_in_by": "c1"})
+
+    make_repository(handler).check_in("e1", "r1", "c1", NOW)
+
+    assert seen[0].url.path == "/rest/v1/rpc/check_in_attendee"
+    assert json.loads(seen[0].content) == {
+        "p_event_request_id": "e1",
+        "p_registration_id": "r1",
+        "p_coordinator_id": "c1",
+        "p_now": NOW.isoformat(),
+    }
 
 
 # SCRUM-38 AC2-X1 (cross-cutting): the Organiser is fetched by its own query, one

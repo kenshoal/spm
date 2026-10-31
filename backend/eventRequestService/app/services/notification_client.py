@@ -223,6 +223,27 @@ class NotificationClient:
             },
         )
 
+    def notify_registration_withdrawn(
+        self,
+        *,
+        event_request_id: str,
+        attendee_id: str,
+        event_name: str | None,
+        registration_id: str,
+    ) -> None:
+        """Tell an Attendee their withdrawal is saved (SCRUM-22 AC5)."""
+        self._notify_of_registration(
+            "registration_withdrawn",
+            recipient_id=attendee_id,
+            registration_id=registration_id,
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "registration_id": registration_id,
+                "status": "Withdrawn",
+            },
+        )
+
     def notify_registration_full(
         self,
         *,

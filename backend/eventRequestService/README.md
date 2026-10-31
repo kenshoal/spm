@@ -103,7 +103,7 @@ last place cannot both succeed. Refusals carry a `code` beside `detail`.
 
 When a Confirmed event is full, an Attendee joins its waiting list; each place
 that opens is held for the next eligible Attendee for 72 hours. Migration
-`0065` holds the tables, the functions and the notification outbox; the
+`0068` holds the tables, the functions and the notification outbox; the
 pending offer counts against capacity everywhere (D6), so `places_remaining`
 in the SCRUM-21 views includes offers.
 

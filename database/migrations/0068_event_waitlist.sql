@@ -1,4 +1,6 @@
--- Event waiting list (SCRUM-24). Safe to re-run. Needs 0048, 0060 and 0062.
+-- Event waiting list (SCRUM-24). Safe to re-run. Needs 0048, 0060, 0061, 0062 and 0067.
+-- Renumbered from 0065 on merging dev (0065-0067 were taken). Its
+-- withdraw_registration replaces 0067's and keeps the check-in refusal.
 --
 -- When a Confirmed event is full, an Attendee can join its waiting list. Each
 -- place that opens is held for the next eligible Attendee for 72 hours (D1):
@@ -448,6 +450,12 @@ BEGIN
 
     IF v_row.status = 'Withdrawn' THEN
         RAISE EXCEPTION 'already withdrawn' USING ERRCODE = 'P0004';
+    END IF;
+
+    -- SCRUM-25 (0067): a checked-in attendee can't withdraw. Kept here because
+    -- this replaces 0067's version of the function.
+    IF v_row.attended_at IS NOT NULL THEN
+        RAISE EXCEPTION 'already checked in' USING ERRCODE = 'P0004';
     END IF;
 
     SELECT min(d) INTO v_start FROM unnest(v_event.proposed_date_times) AS d;

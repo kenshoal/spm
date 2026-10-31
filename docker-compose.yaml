@@ -124,6 +124,14 @@ services:
       AUTH_SERVICE_URL: http://auth-service:8000
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      # Email (SCRUM-57). Leave SMTP_HOST empty to keep email switched off.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      MAIL_FROM: "${MAIL_FROM:-SPM Notifications <no-reply@localhost>}"
+      INBOX_URL: ${INBOX_URL:-http://localhost:3000/notifications}
     healthcheck:
       test:
         - CMD

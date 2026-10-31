@@ -1,13 +1,13 @@
 import Link from "next/link";
 import type { SuitabilityFormValues } from "@/lib/venue-suitability";
-import { layoutLabel, prepTimeLabel, type Venue } from "@/lib/venues";
+import { layoutLabel, prepTimeLabel, type VenueSearchResult } from "@/lib/venues";
 import { SuitabilityCheck } from "./suitability-check";
 
 const NO_REQUIREMENTS: SuitabilityFormValues = {
   expected_attendance: "", required_layout: "", start_time: "", end_time: "", required_facilities: "", required_accessibility: "",
 };
 
-export function VenueResults({ venues, requirements = NO_REQUIREMENTS }: { venues: Venue[]; requirements?: SuitabilityFormValues }) {
+export function VenueResults({ venues, requirements = NO_REQUIREMENTS, month }: { venues: VenueSearchResult[]; requirements?: SuitabilityFormValues; month?: string | null }) {
   if (venues.length === 0) {
     return <p className="rounded-2xl border border-dashed border-[#cbd7d1] bg-white px-6 py-10 text-center text-sm text-[#718078]">No venue matches every filter. Try removing one.</p>;
   }
@@ -18,6 +18,9 @@ export function VenueResults({ venues, requirements = NO_REQUIREMENTS }: { venue
         {venues.map((venue) => (
           <article key={venue.id} aria-labelledby={`result-${venue.id}`} className="rounded-2xl border border-[#dce4e0] bg-white p-5">
             <h3 id={`result-${venue.id}`} className="text-lg font-bold text-[#1b2b25]">{venue.name}</h3>
+            {venue.tentatively_held ? (
+              <p className="mt-2 rounded-lg bg-[#fff6dd] px-3 py-2 text-sm text-[#6f4b12]"><span className="font-semibold">Tentatively held</span> at this time, not booked. The time frees up if the hold is released or expires.</p>
+            ) : null}
             <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
               <dt className="text-[#718078]">Location</dt><dd className="text-[#273832]">{venue.location}</dd>
               <dt className="text-[#718078]">Capacity</dt><dd className="text-[#273832]">{venue.max_capacity} people</dd>
@@ -27,7 +30,7 @@ export function VenueResults({ venues, requirements = NO_REQUIREMENTS }: { venue
               <dt className="text-[#718078]">Setup</dt><dd className="text-[#273832]">{prepTimeLabel(venue.setup_minutes)}</dd>
               <dt className="text-[#718078]">Turnaround</dt><dd className="text-[#273832]">{prepTimeLabel(venue.turnaround_minutes)}</dd>
             </dl>
-            <Link href={`/venues/availability?venue=${encodeURIComponent(venue.id)}`} className="mt-3 inline-flex min-h-9 items-center text-sm font-semibold text-[#0f6b5b] hover:underline">View availability</Link>
+            <Link href={`/venues/availability?venue=${encodeURIComponent(venue.id)}${month ? `&month=${month}` : ""}`} className="mt-3 inline-flex min-h-9 items-center text-sm font-semibold text-[#0f6b5b] hover:underline">View availability</Link>
             <SuitabilityCheck venueId={venue.id} defaults={requirements} />
           </article>
         ))}

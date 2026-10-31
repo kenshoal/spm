@@ -75,6 +75,10 @@ class RegistrationRepository(Protocol):
         self, registration_id: str, attendee_id: str, now: datetime
     ) -> dict[str, Any]: ...
 
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
 
 class SupabaseRegistrationRepository:
     def __init__(
@@ -253,7 +257,10 @@ class SupabaseRegistrationRepository:
             page = self._get(
                 "/event_registrations",
                 {
-                    "select": "id,attendee_id,status,created_at,registered_by",
+                    "select": (
+                        "id,attendee_id,status,created_at,registered_by,"
+                        "attended_at,checked_in_by"
+                    ),
                     "event_request_id": f"eq.{event_id}",
                     "order": "created_at.asc,id.asc",
                     "limit": str(PAGE_SIZE),
@@ -311,6 +318,21 @@ class SupabaseRegistrationRepository:
             action="registration",
         )
 
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """SCRUM-25: `check_in_attendee` rechecks everything under a lock."""
+        return self._rpc(
+            "check_in_attendee",
+            {
+                "p_event_request_id": event_id,
+                "p_registration_id": registration_id,
+                "p_coordinator_id": coordinator_id,
+                "p_now": now.isoformat(),
+            },
+            action="check-in",
+        )
+
     def _rpc(
         self, function: str, payload: dict[str, str], action: str
     ) -> dict[str, Any]:
@@ -324,13 +346,17 @@ class SupabaseRegistrationRepository:
             raise SupabaseRepositoryError(
                 f"Supabase could not complete the {action}"
             ) from error
-        if response.status_code >= 500:
-            raise SupabaseRepositoryError(f"Supabase could not complete the {action}")
         if response.is_error:
             try:
                 body = response.json()
             except ValueError:
                 body = {}
+            if not isinstance(body, dict):
+                body = {}
+            # PostgREST answers a RAISE with our P0002/P0004 SQLSTATEs as HTTP 500,
+            # so a P0 code means the function refused, not that Supabase is down.
+            if response.status_code >= 500 and not str(body.get("code", "")).startswith("P0"):
+                raise SupabaseRepositoryError(f"Supabase could not complete the {action}")
             raise RegistrationRpcError(
                 f"Supabase rejected the {action}",
                 errcode=body.get("code"),

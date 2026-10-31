@@ -62,6 +62,7 @@ def test_save_inserts_and_ignores_duplicates() -> None:
             "recipient_id": "coord-1",
             "payload": {"event_request_id": "11111111-1111-4111-8111-111111111111"},
             "event_id": "evt-1",
+            "in_inbox": True,
         },
     }
 
@@ -96,6 +97,7 @@ def test_list_for_recipient_filters_and_orders() -> None:
     assert rows == [stored_row()]
     assert captured == {
         "recipient_id": "eq.coord-1",
+        "in_inbox": "eq.true",
         "order": "created_at.desc,id.desc",
         "limit": "50",
         "select": "*",
@@ -200,3 +202,23 @@ def test_supabase_failures_raise_store_error(handler) -> None:
         repository_answering(handler).list_for_recipient(
             "coord-1", unread_only=False, limit=1
         )
+
+
+# AC2-P3 (partition): an email-only notification is stored hidden from the inbox, so it
+# still guards against duplicates without appearing in the list.
+def test_save_can_store_a_notification_hidden_from_the_inbox() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx2.Response(201, json=[stored_row(event_id="evt-1")])
+
+    repository_answering(handler).save(
+        event_type="coordinator_assigned",
+        recipient_id="coord-1",
+        payload={},
+        event_id="evt-1",
+        in_inbox=False,
+    )
+
+    assert captured["body"]["in_inbox"] is False  # type: ignore[index]

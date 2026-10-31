@@ -4,6 +4,8 @@
 --   psql -X -v ON_ERROR_STOP=1 -f database/verify_venue_booking_conflict_guard.sql
 --
 -- Times on the test day; "30 / 45" means setup 30 minutes, turnaround 45.
+-- Since 0066 the guard also returns conflicting_hold_ids, which this script
+-- ignores; verify_venue_holds.sql checks holds.
 
 BEGIN;
 
@@ -38,7 +40,7 @@ BEGIN
 
     -- AC3-H2: padding creates a conflict the booked times alone would not.
     v_result := private.check_booking_candidate(v_venue, v_day, v_day, 735, 780);
-    IF v_result <> jsonb_build_object('refusal_codes', '["booking_conflict"]'::jsonb,
+    IF v_result - 'conflicting_hold_ids' <> jsonb_build_object('refusal_codes', '["booking_conflict"]'::jsonb,
                                       'conflicting_booking_ids', jsonb_build_array(v_a)) THEN
         RAISE EXCEPTION 'AC3-H2: 12:15-13:00 not refused: %', v_result;
     END IF;
@@ -98,7 +100,7 @@ BEGIN
 
     -- AC4-H1: moving C onto A's time is refused with A; AC4-H2: a free time is clear.
     v_result := private.check_booking_candidate(v_venue, v_day, v_day, 660, 720, ARRAY[v_c]);
-    IF v_result <> jsonb_build_object('refusal_codes', '["booking_conflict"]'::jsonb,
+    IF v_result - 'conflicting_hold_ids' <> jsonb_build_object('refusal_codes', '["booking_conflict"]'::jsonb,
                                       'conflicting_booking_ids', jsonb_build_array(v_a)) THEN
         RAISE EXCEPTION 'AC4-H1: reschedule onto A not refused: %', v_result;
     END IF;

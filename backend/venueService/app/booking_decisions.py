@@ -6,7 +6,7 @@ rules neither authorize the caller nor save, reserve, notify or prevent races.
 """
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -14,9 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.availability_models import AvailabilityResult, Period
 from app.block_checks import check_availability
 from app.block_models import VenueBlock
+from app.hold_models import VenueHold
 from app.models import Slot, Venue
 from app.slots import check_time_range, slots_to_range, times_overlap
-from app.time_conflicts import CLOSE_MINUTE, OPEN_MINUTE, padded_range
+from app.time_conflicts import padded_range, window_refusals
 
 
 class _TimedPeriod(BaseModel):
@@ -102,6 +103,7 @@ RefusalCode = Literal[
     "setup_outside_window",
     "turnaround_outside_window",
     "booking_conflict",
+    "hold_conflict",
 ]
 
 
@@ -118,6 +120,7 @@ class DecisionAssessment(BaseModel):
     refusal_codes: list[RefusalCode] = Field(default_factory=list)
     availability: AvailabilityResult | None = None
     conflicting_booking_ids: list[str] = Field(default_factory=list)
+    conflicting_hold_ids: list[str] = Field(default_factory=list)
     reason: str | None = None
     suggested_alternative: str | None = None
 
@@ -129,6 +132,7 @@ def assess_booking_decision(
     venue: Venue,
     blocks: Sequence[VenueBlock] | None,
     confirmed_bookings: Sequence[ConfirmedVenueBooking] | None,
+    holds: Sequence[VenueHold] = (),
 ) -> DecisionAssessment:
     """Assess a decision using current data, without modifying any input.
 
@@ -157,12 +161,12 @@ def assess_booking_decision(
         refusals.extend(availability.reasons)
 
     # SCRUM-20: setup and turnaround pad both bookings and must stay in the window.
+    # The availability check reports the window codes too (SCRUM-66); add each once.
     setup, turnaround = venue.setup_minutes, venue.turnaround_minutes
     start, end = padded_range(booking.start_minute, booking.end_minute, setup, turnaround)
-    if start < OPEN_MINUTE:
-        refusals.append("setup_outside_window")
-    if end > CLOSE_MINUTE:
-        refusals.append("turnaround_outside_window")
+    for code in window_refusals(booking.start_minute, booking.end_minute, setup, turnaround):
+        if code not in refusals:
+            refusals.append(code)
 
     conflicting_ids = []
     if confirmed_bookings is None:
@@ -187,10 +191,32 @@ def assess_booking_decision(
         if conflicting_ids:
             refusals.append("booking_conflict")
 
+    # SCRUM-18: holds that still protect their time refuse it like bookings do;
+    # the caller leaves out the request's own event's holds (0066).
+    now = datetime.now(UTC)
+    hold_ids = sorted(
+        hold.id
+        for hold in holds
+        if hold.venue_id == booking.venue_id
+        and hold.protects(now)
+        and times_overlap(
+            booking.start_date,
+            booking.end_date,
+            start,
+            end,
+            hold.start_date,
+            hold.end_date,
+            *padded_range(hold.start_minute, hold.end_minute, setup, turnaround),
+        )
+    )
+    if hold_ids:
+        refusals.append("hold_conflict")
+
     return DecisionAssessment(
         allowed=not refusals,
         target_status=None if refusals else "approved",
         refusal_codes=refusals,
         availability=availability,
         conflicting_booking_ids=conflicting_ids,
+        conflicting_hold_ids=hold_ids,
     )

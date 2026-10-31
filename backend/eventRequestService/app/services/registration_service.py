@@ -50,6 +50,14 @@ class CapacityNotSetError(Exception):
     """The event has no registration capacity, so no place can be given."""
 
 
+class NotEventDayError(Exception):
+    """SCRUM-25: check-in is only open on the event's Asia/Singapore dates."""
+
+
+class AlreadyCheckedInError(Exception):
+    """The registration already has a check-in."""
+
+
 class RegistrationService:
     """Attendee view of Confirmed events and registration for them (SCRUM-21).
 
@@ -83,12 +91,17 @@ class RegistrationService:
             raise EventNotVisibleError
         rows = self.repository.list_for_event(event_id)
         registered = sum(1 for r in rows if r["status"] == "Registered")
+        attended = sum(
+            1 for r in rows if r["status"] == "Registered" and r.get("attended_at")
+        )
         return {
             "event_request_id": event_id,
             "registration_capacity": event.get("registration_capacity"),
             "registered": registered,
             "withdrawn": sum(1 for r in rows if r["status"] == "Withdrawn"),
             "places_available": places_remaining(event, registered),
+            "attended": attended,
+            "absent": registered - attended,
             "registrations": rows,
         }
 
@@ -121,6 +134,23 @@ class RegistrationService:
                 exc_info=True,
             )
         return registration
+
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """SCRUM-25: the database function checks assignment, status, event day
+        and the registration under lock, so there is no early check."""
+        try:
+            return self.repository.check_in(event_id, registration_id, coordinator_id, now)
+        except RegistrationRpcError as error:
+            refusal = {
+                "not event day": NotEventDayError,
+                "registration not found": RegistrationNotFoundError,
+                "already checked in": AlreadyCheckedInError,
+            }.get(error.reason or "")
+            if refusal is not None:
+                raise refusal from error
+            raise self._map_refusal(error) from error
 
     def _manages(
         self, event: dict[str, Any], caller_id: str, caller_roles: tuple[str, ...]
@@ -239,6 +269,14 @@ class RegistrationService:
             withdrawn = self.repository.withdraw(registration_id, attendee_id, now)
         except RegistrationRpcError as error:
             raise self._map_withdrawal_refusal(error) from error
+        # The withdrawal is saved: the notice is best-effort and never undoes it
+        # (SCRUM-22 AC5). A refused withdrawal raised above and tells nobody.
+        self.notification_client.notify_registration_withdrawn(
+            event_request_id=event["id"],
+            attendee_id=withdrawn["attendee_id"],
+            event_name=event.get("event_name"),
+            registration_id=withdrawn["id"],
+        )
         return {
             **withdrawn,
             "event": to_public_event(event, self.repository.count_active(event["id"])),
@@ -287,6 +325,8 @@ class RegistrationService:
         if error.errcode == REFUSED_ERRCODE:
             if error.reason == "already withdrawn":
                 return AlreadyWithdrawnError()
+            if error.reason == "already checked in":
+                return AlreadyCheckedInError()
             if error.reason == "withdrawal not permitted":
                 return WithdrawalNotPermittedError()
         return error

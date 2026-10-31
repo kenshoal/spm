@@ -42,7 +42,7 @@ Steps 1–4 below (test catalogue commit and Red tests) can start now. Hold comm
 
 ## 2. Design
 
-### 2.1 Migration `00NN_event_waitlist.sql` (next free number after `0064`; fetch again just before merging)
+### 2.1 Migration `0068_event_waitlist.sql` (first written as `0065`; renumbered on merging `dev` on 31 Oct)
 
 1. **Tables** (D10):
    - `event_waitlist_entries (id uuid pk, seq bigserial, event_request_id fk, attendee_id fk auth.users, status text CHECK IN ('Waiting','Offered','Accepted','Withdrawn'), queued_at, offered_at, expires_at, warned_at, withdrawn_at, place_id fk null)`, plus CHECKs: `Offered` ⇔ `offered_at`/`expires_at`/`place_id` set; `Withdrawn` ⇔ `withdrawn_at` set.

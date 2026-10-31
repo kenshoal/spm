@@ -1,8 +1,8 @@
 import { unstable_rethrow } from "next/navigation";
 import type { ReactNode } from "react";
 import { requireAnyRole } from "@/lib/auth";
-import { currentMonth, parseMonth } from "@/lib/block-calendar";
-import { getVenueCalendar } from "@/lib/venue-calendar";
+import { currentMonth } from "@/lib/block-calendar";
+import { getVenueCalendar, parseCalendarMonth } from "@/lib/venue-calendar";
 import { listVenues, type Venue } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../../components/app-shell";
 import { AvailabilityCalendarTable } from "./availability-calendar";
@@ -45,7 +45,7 @@ async function AvailabilityContent({ params }: { params: Record<string, string |
     return <p className="rounded-2xl border border-dashed border-[#cbd7d1] bg-white px-6 py-14 text-center text-sm text-[#718078]">No venues in the catalogue yet.</p>;
   }
 
-  const month = parseMonth(first(params.month), currentMonth());
+  const month = parseCalendarMonth(first(params.month), currentMonth());
   const selectedId = first(params.venue) || venues.value[0].id;
   const picker = <VenuePicker venues={venues.value} selected={selectedId} month={month} />;
   const venue = venues.value.find((candidate) => candidate.id === selectedId);
@@ -66,7 +66,7 @@ export default async function VenueAvailabilityPage({ searchParams }: { searchPa
       <div className="mb-8">
         <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0f6b5b]">Venue availability</p>
         <h1 className="text-3xl font-bold tracking-[-0.035em] text-[#17211d] sm:text-4xl">When is a venue free?</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#68776f] sm:text-base">Each slot is Available, Booked, Blocked, Unavailable or Not offered. Tentative holds are not shown yet.</p>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#68776f] sm:text-base">Each date shows the times that are booked, blocked or free between 07:00 and 24:00. Booked and tentatively held times include the venue&apos;s setup and turnaround.</p>
       </div>
       {await AvailabilityContent({ params })}
     </AppShell>

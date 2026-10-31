@@ -9,6 +9,9 @@ export interface EventRegistration {
   created_at: string;
   /** SCRUM-41: the coordinator who entered it; null when self-registered. */
   registered_by: string | null;
+  /** SCRUM-25: null until checked in. */
+  attended_at: string | null;
+  checked_in_by: string | null;
 }
 
 export interface RegistrationInfo {
@@ -17,6 +20,8 @@ export interface RegistrationInfo {
   registered: number;
   withdrawn: number;
   places_available: number | null;
+  attended: number;
+  absent: number;
   registrations: EventRegistration[];
 }
 
@@ -30,4 +35,12 @@ export async function getRegistrationInfo(eventRequestId: string): Promise<Regis
   if (response.status === 401) redirect("/auth");
   if (!response.ok) throw new Error("Registration information unavailable");
   return response.json() as Promise<RegistrationInfo>;
+}
+
+const singaporeDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Singapore" });
+
+/** SCRUM-25 D2: the same Asia/Singapore calendar-day rule check_in_attendee applies. */
+export function isEventDay(dates: string[], now: Date = new Date()): boolean {
+  const today = singaporeDay.format(now);
+  return dates.some((date) => singaporeDay.format(new Date(date)) === today);
 }
