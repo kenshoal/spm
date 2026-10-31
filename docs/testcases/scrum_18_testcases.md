@@ -132,4 +132,13 @@ Build: `feat/scrum-18-tentative-holds` working tree merged onto `dev` `5601fd9` 
 | Frontend | `vitest run`, lint, typecheck | 563 passed; clean | 13 new; AC6-H4 Red before the search label |
 | Build and E2E | `next build`, `npx playwright test` with `CI=1` | Build passed; 52/52 | The hold journey's search step failed before the search label (Red). An earlier run had one SCRUM-17 journey time out on its first page load and pass on retry; it then passed 3/3 with no retries, and the final run needed no retries |
 
-Not yet done: the shared rollout of 0066 (after merge), and setting `VENUE_HOLD_SWEEP_SECONDS` if the default 60 seconds is not wanted.
+## After merge
+
+PR #117 was merged into `dev` on 31 October 2026. Jaren's follow-up `b1d76ee` added `GRANT UPDATE (status, closed_at, closed_by) ON public.venue_holds TO service_role` to 0066: `decide_venue_booking_request` runs as its caller, venueService calls it as `service_role`, and Postgres checks the privilege even when no hold matches, so without the grant every booking decision was refused. The database checks above call the functions as the table owner, so they could not see it.
+
+| Check | Command and environment | Result | Remarks |
+| --- | --- | --- | --- |
+| Decisions as `service_role` | Rolled-back script that approves and rejects requests and places, converts, releases and sweeps holds as `service_role`, on a disposable PostgreSQL 16 built like shared (`bootstrap_event_change_approval.py` without 0064, 0066 and 0068) | Red with the 0066 merged in PR #117 (`permission denied for table venue_holds`, even with no hold); passed with `b1d76ee` | `verify_venue_holds.sql` passed on both. With `b1d76ee` on that database the guard, decision, booking creation, date change and timing verifiers and the concurrency test also passed. Executed with Claude Code |
+| Shared rollout | SQL Editor on shared development, `dev` `d522315`; Koei, 31 October 2026 | Passed | Read-only pre-check: 0066 and 0068 not applied; the 0054 guard, decision function, 0056 booking creation, booking times and venue padding present. Applied 0066, then `verify_venue_holds.sql`, `verify_venue_booking_conflict_guard.sql`, `verify_venue_booking_decisions.sql` and the `service_role` script passed. Read-only post-check: RLS on; `service_role` reads holds and updates only the three columns, with no insert or delete; browser roles have no access; the hold functions are `service_role` only; one version each of the guard and decision function, the decision with both `expires_at > now()` checks; no rows left behind |
+
+Not yet done: setting `VENUE_HOLD_SWEEP_SECONDS` if the default 60 seconds is not wanted.
