@@ -33,9 +33,10 @@ class BookingNotifier:
     def __init__(self, url: str | None) -> None:
         self._url = url
 
-    def send(self, event: dict[str, Any]) -> None:
+    def send(self, event: dict[str, Any]) -> bool:
+        """Send one event; True only if notificationService accepted it."""
         if self._url is None:
-            return
+            return False
         try:
             response = httpx.post(self._url, json=event, timeout=5)
             response.raise_for_status()
@@ -47,6 +48,8 @@ class BookingNotifier:
                 event.get("event_type"),
                 event.get("payload", {}).get("booking_request_id"),
             )
+            return False
+        return True
 
     def notify_decision(self, booking: BookingRequest, venue_name: str | None) -> None:
         """Send one event for an approved or rejected request."""

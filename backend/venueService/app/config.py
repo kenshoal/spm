@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     venue_storage_backend: Literal["memory", "supabase"] = "memory"
     supabase_url: AnyHttpUrl | None = None
     supabase_secret_key: SecretStr | None = None
+    # SCRUM-18: seconds between venue hold expiry sweeps with Supabase storage;
+    # 0 turns the sweep off.
+    venue_hold_sweep_seconds: float = 60
 
     model_config = SettingsConfigDict(
         env_file=".env",

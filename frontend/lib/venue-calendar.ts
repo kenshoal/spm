@@ -4,7 +4,8 @@ import { venueApiUrl } from "./venues";
 // One month of times for a venue (SCRUM-31, on times by SCRUM-69). Each date is a
 // partition of 07:00-24:00 into booked, blocked and free ranges, in minutes after
 // midnight. The API returns times only: never block reasons, event names or ids.
-export type CalendarEntryState = "booked" | "blocked";
+// SCRUM-18 adds tentative holds; a block wins over a booking and a booking over a hold.
+export type CalendarEntryState = "booked" | "blocked" | "held";
 
 export interface CalendarEntry {
   state: CalendarEntryState;
@@ -35,6 +36,7 @@ export interface VenueCalendar {
 export const ENTRY_LABELS: Record<CalendarEntryState, string> = {
   booked: "Booked",
   blocked: "Blocked",
+  held: "Tentatively held",
 };
 
 export function monthLabel(month: string): string {

@@ -26,6 +26,11 @@ import { TransitionButton } from "./transition-buttons";
 import { FinalEventEndForm } from "./final-event-end-form";
 import { ChangeRequestPanel } from "./change-request-panel";
 import { VenueBookingsLoading, VenueBookingsPanel } from "./venue-bookings-panel";
+import { VenueHoldsLoading, VenueHoldsPanel } from "./venue-holds-panel";
+
+// SCRUM-18: a venue can be held while the event is being finalised: approved,
+// not yet confirmed.
+const HOLDABLE_STATUSES = new Set(["Approved", "Planning", "Safety Review"]);
 import { TechnicalSupportLoading, TechnicalSupportPanel } from "./technical-support-panel";
 
 import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
@@ -117,6 +122,9 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
       ) : null}
       <Suspense fallback={<VenueBookingsLoading />}>
         <VenueBookingsPanel eventRequestId={request.id} />
+      </Suspense>
+      <Suspense fallback={<VenueHoldsLoading />}>
+        <VenueHoldsPanel eventRequestId={request.id} canPlace={HOLDABLE_STATUSES.has(request.status)} />
       </Suspense>
       {(SUPPORT_STATUSES as readonly string[]).includes(request.status) ? (
         <Suspense fallback={<TechnicalSupportLoading />}>

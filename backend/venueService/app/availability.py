@@ -4,14 +4,16 @@ A venue is free for a time when it is available, no active block overlaps the
 time, the time's setup and turnaround fit 07:00-24:00 and no approved booking's
 padded range overlaps the time's padded range. That is booking approval's rule
 (0054), so search never offers a time that approval would refuse. Blocks are
-compared without padding, as approval does.
+compared without padding, as approval does. Active, unexpired holds (SCRUM-18)
+take time like approved bookings.
 """
 
 from collections.abc import Iterable
-from datetime import date
+from datetime import UTC, date, datetime
 
 from app.block_models import BlockStatus, VenueBlock
 from app.booking_models import BookingRequest
+from app.hold_models import VenueHold
 from app.models import Venue, VenueStatus
 from app.slots import times_overlap
 from app.time_conflicts import (
@@ -48,6 +50,8 @@ def is_free(
     end_minute: int | None,
     blocks: Iterable[VenueBlock],
     bookings: Iterable[BookingRequest] = (),
+    holds: Iterable[VenueHold] = (),
+    now: datetime | None = None,
 ) -> bool:
     """Whether the venue is free at that time on that date, or, without a time,
     whether some 15-minute booking that day would be accepted."""
@@ -58,7 +62,14 @@ def is_free(
         for b in blocks
         if b.venue_id == venue.id and b.status == BlockStatus.ACTIVE
     ]
-    booked = padded_booked_ranges(venue, bookings)
+    at = now or datetime.now(UTC)
+    booked = padded_booked_ranges(venue, bookings) + [
+        (h.start_date, h.end_date, *padded_range(
+            h.start_minute, h.end_minute, venue.setup_minutes, venue.turnaround_minutes,
+        ))
+        for h in holds
+        if h.venue_id == venue.id and h.protects(at)
+    ]
     if start_minute is None or end_minute is None:
         return any(
             _free_at(venue, on_date, start, start + STEP_MINUTES, blocked, booked)

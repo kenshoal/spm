@@ -9,7 +9,9 @@ Each date is a partition of the window: ``entries`` and ``free`` are ordered,
 never overlap, and together cover exactly 07:00-24:00. Ranges are half-open, so
 a booking ending at 12:00 leaves 12:00 free. Where a block overlaps a booking
 the overlap is blocked and the booking is split around it, the same order the
-Venue Staff calendar uses (an active block, then an approved booking). Touching
+Venue Staff calendar uses (an active block, then an approved booking). An active,
+unexpired tentative hold (SCRUM-18) shows as ``held`` in time no block or booking
+covers, and held time is not free. Touching
 ranges of one state are merged, so the boundary between two events never shows.
 A venue blocked in the catalogue marks every date ``unavailable`` and has no
 free time; its blocks and bookings are still listed.
@@ -19,13 +21,14 @@ from __future__ import annotations
 
 import calendar as month_calendar
 import datetime as dt
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from enum import Enum
 
 from pydantic import BaseModel
 
 from app.block_models import BlockStatus, VenueBlock
 from app.booking_models import BookingRequest, BookingRequestStatus
+from app.hold_models import VenueHold
 from app.models import Venue, VenueStatus
 from app.time_conflicts import CLOSE_MINUTE, OPEN_MINUTE, padded_range
 
@@ -35,6 +38,7 @@ Minutes = tuple[int, int]
 class CalendarState(str, Enum):
     BOOKED = "booked"
     BLOCKED = "blocked"
+    HELD = "held"
 
 
 class CalendarEntry(BaseModel):
@@ -69,7 +73,7 @@ def month_bounds(month: str) -> tuple[dt.date, dt.date]:
     return dt.date(year, number, 1), dt.date(year, number, last)
 
 
-def occupied_minutes(venue: Venue, booking: BookingRequest) -> Minutes:
+def occupied_minutes(venue: Venue, booking: BookingRequest | VenueHold) -> Minutes:
     """The minutes a booking holds its venue on each of its dates.
 
     The booked time widened by the venue's setup and turnaround (SCRUM-66), the
@@ -121,6 +125,8 @@ def build_calendar(
     month: str,
     blocks: Iterable[VenueBlock],
     bookings: Iterable[BookingRequest],
+    holds: Sequence[VenueHold] = (),
+    now: dt.datetime | None = None,
 ) -> VenueCalendar:
     first, last = month_bounds(month)
     active = [
@@ -128,12 +134,14 @@ def build_calendar(
         for block in blocks
         if block.venue_id == venue.id and block.status == BlockStatus.ACTIVE
     ]
-    held = [
+    approved = [
         booking
         for booking in bookings
         if booking.venue_id == venue.id
         and booking.status is BookingRequestStatus.APPROVED
     ]
+    at = now or dt.datetime.now(dt.UTC)
+    held_holds = [hold for hold in holds if hold.venue_id == venue.id and hold.protects(at)]
     unavailable = venue.status != VenueStatus.AVAILABLE
 
     days = []
@@ -148,21 +156,31 @@ def build_calendar(
         booked = _subtract(
             _merge(
                 clipped
-                for booking in held
+                for booking in approved
                 if booking.start_date <= date <= booking.end_date
                 if (clipped := _clip(*occupied_minutes(venue, booking)))
             ),
             blocked,
         )
+        held = _subtract(
+            _merge(
+                clipped
+                for hold in held_holds
+                if hold.start_date <= date <= hold.end_date
+                if (clipped := _clip(*occupied_minutes(venue, hold)))
+            ),
+            _merge(blocked + booked),
+        )
         entries = sorted(
             [(CalendarState.BLOCKED, start, end) for start, end in blocked]
-            + [(CalendarState.BOOKED, start, end) for start, end in booked],
+            + [(CalendarState.BOOKED, start, end) for start, end in booked]
+            + [(CalendarState.HELD, start, end) for start, end in held],
             key=lambda item: item[1],
         )
         free = (
             []
             if unavailable
-            else _subtract([(OPEN_MINUTE, CLOSE_MINUTE)], _merge(blocked + booked))
+            else _subtract([(OPEN_MINUTE, CLOSE_MINUTE)], _merge(blocked + booked + held))
         )
         days.append(
             CalendarDay(

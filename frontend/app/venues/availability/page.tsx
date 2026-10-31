@@ -66,7 +66,7 @@ export default async function VenueAvailabilityPage({ searchParams }: { searchPa
       <div className="mb-8">
         <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0f6b5b]">Venue availability</p>
         <h1 className="text-3xl font-bold tracking-[-0.035em] text-[#17211d] sm:text-4xl">When is a venue free?</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#68776f] sm:text-base">Each date shows the times that are booked, blocked or free between 07:00 and 24:00. Booked times include the venue&apos;s setup and turnaround. Tentative holds are not shown yet.</p>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#68776f] sm:text-base">Each date shows the times that are booked, blocked or free between 07:00 and 24:00. Booked and tentatively held times include the venue&apos;s setup and turnaround.</p>
       </div>
       {await AvailabilityContent({ params })}
     </AppShell>
