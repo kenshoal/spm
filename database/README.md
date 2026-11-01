@@ -98,6 +98,12 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0076_registration_attendee_emails.sql` | Hotfix 16 (SCRUM-25, Q&A #32): `event_registration_attendee_emails` and `event_waitlist_attendee_emails`, so staff can tell who a registration or waiting-list place belongs to. Run once. |
 | `migrations/0077_coordinator_event_update.sql` | Hotfix 8 (SCRUM-29, Q&A #102): `update_event_by_coordinator` lets the assigned Coordinator update event details under the event lock, refusing a stale version; the existing review trigger flags arrangements for significant changes. Run after `0071`. |
 | `migrations/0078_block_reasons_equipment_failure_other.sql` | Hotfix 19 (Week 7 change 2): adds `equipment_failure` and `other` to `block_reason`, which listed only maintenance, renovation, safety and internal use. |
+| `migrations/0079_partial_change_approval.sql` | Hotfix 20 (Q&A #104): `partially_approve_event_change_request` accepts some fields of a change request and refuses the rest with reasons; `event_change_requests.rejected_changes` and the `Partially Approved` status. Run after `0071`. |
+| `migrations/0080_withdrawn_and_postponed_statuses.sql` | Hotfixes 21 and 22 (Q&A #103, #69, #121): adds the `Withdrawn` and `Postponed` event statuses; `advance_event_request_by_coordinator` accepts a withdrawal (Submitted, Under Review, Changes Requested) and cancelling a postponed event. |
+| `migrations/0081_postpone_and_resume_event.sql` | Hotfix 22: `postpone_event_by_coordinator` and `resume_postponed_event`, the `event_postponements` table, and a trigger that releases a postponed event's bookings, holds and reservations. Also refuses venue bookings for events that cannot use one. Run after `0080`. |
+| `migrations/0082_manual_registration_above_capacity.sql` | Hotfix 23 (Q&A #99): `coordinator_register_attendee` adds a VIP above the registration capacity up to the seats of the event's approved venues. |
+| `migrations/0083_change_event_organiser.sql` | Hotfix 24 (Q&A #59, #61): `change_event_organiser` and the `event_organiser_changes` audit table. Run after `0080`. |
+| `migrations/0084_essential_equipment_requirements.sql` | Hotfix 25 (Q&A #80, #106): `equipment_requirements.essential` and `set_requirement_essential`; the shared readiness check leaves out a requirement marked not essential. |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the

@@ -256,6 +256,468 @@ BEGIN
         RAISE EXCEPTION 'AC19-N1: an unknown block reason was accepted' USING ERRCODE = 'P9901';
     EXCEPTION WHEN invalid_text_representation THEN NULL; END;
 
+    -- 0079 AC20: a change request can be partly approved (Q&A #104)
+    DECLARE
+        v_pe uuid; v_c1 uuid; v_c2 uuid; v_c3 uuid;
+    BEGIN
+        INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance,
+                venue_requirements, equipment_requirements)
+            VALUES (v_user, 'VERIFY partial', 'Planning', 50, 'old venue', 'old equipment')
+            RETURNING id INTO v_pe;
+        INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+            VALUES (v_pe, v_who, v_who);
+        INSERT INTO public.event_change_requests (event_request_id, organiser_id, explanation,
+                proposed_changes, base_event_updated_at)
+            VALUES (v_pe, v_user, 'more people, new rooms',
+                '{"expected_attendance":60,"venue_requirements":"new venue","equipment_requirements":"new equipment"}',
+                (SELECT updated_at FROM public.event_requests WHERE id = v_pe))
+            RETURNING id INTO v_c1;
+
+        -- AC20-N3 (negative): a refused field without a reason changes nothing
+        BEGIN
+            PERFORM public.partially_approve_event_change_request(v_pe, v_c1, v_who,
+                ARRAY['expected_attendance'], '{"venue_requirements":"too small"}'::jsonb, NULL);
+            RAISE EXCEPTION 'AC20-N3: a missing reason was accepted' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+        ASSERT (SELECT status FROM public.event_change_requests WHERE id = v_c1) = 'Pending'
+            AND (SELECT expected_attendance FROM public.event_requests WHERE id = v_pe) = 50
+            AND (SELECT jsonb_object_keys(proposed_changes) FROM public.event_change_requests
+                 WHERE id = v_c1 ORDER BY 1 LIMIT 1) = 'equipment_requirements',
+            'AC20-N3: a refused partial decision must leave the request as it was';
+        -- AC20-N2 (negative): accepting nothing is a rejection, not a partial approval
+        BEGIN
+            PERFORM public.partially_approve_event_change_request(v_pe, v_c1, v_who,
+                ARRAY[]::text[], '{}'::jsonb, NULL);
+            RAISE EXCEPTION 'AC20-N2: accepting nothing was allowed' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+        -- AC20-N1 (negative): accepting everything is an ordinary approval
+        BEGIN
+            PERFORM public.partially_approve_event_change_request(v_pe, v_c1, v_who,
+                ARRAY['expected_attendance','venue_requirements','equipment_requirements'], '{}'::jsonb, NULL);
+            RAISE EXCEPTION 'AC20-N1: accepting everything was a partial approval' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+        -- AC20-N5 (negative): a field that was not proposed cannot be accepted
+        BEGIN
+            PERFORM public.partially_approve_event_change_request(v_pe, v_c1, v_who,
+                ARRAY['registration_needs'], '{}'::jsonb, NULL);
+            RAISE EXCEPTION 'AC20-N5: an unknown field was accepted' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+        -- AC20-N4 (negative): only the assigned Coordinator decides
+        BEGIN
+            PERFORM public.partially_approve_event_change_request(v_pe, v_c1, 'someone-else',
+                ARRAY['expected_attendance'], '{"venue_requirements":"x","equipment_requirements":"y"}'::jsonb, NULL);
+            RAISE EXCEPTION 'AC20-N4: another coordinator decided' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0003' THEN NULL; END;
+
+        -- AC20-H1 (happy): accept the attendance, refuse the other two with reasons
+        PERFORM public.partially_approve_event_change_request(v_pe, v_c1, v_who,
+            ARRAY['expected_attendance'],
+            '{"venue_requirements":"No room for it","equipment_requirements":"Not available"}'::jsonb,
+            'Only the numbers can change');
+        ASSERT (SELECT status FROM public.event_change_requests WHERE id = v_c1) = 'Partially Approved',
+            'AC20-H1: the request should end Partially Approved';
+        ASSERT (SELECT expected_attendance FROM public.event_requests WHERE id = v_pe) = 60
+            AND (SELECT venue_requirements FROM public.event_requests WHERE id = v_pe) = 'old venue'
+            AND (SELECT equipment_requirements FROM public.event_requests WHERE id = v_pe) = 'old equipment',
+            'AC20-H1: only the accepted field may be applied';
+        ASSERT (SELECT rejected_changes -> 'venue_requirements' ->> 'reason'
+                FROM public.event_change_requests WHERE id = v_c1) = 'No room for it'
+            AND (SELECT rejected_changes -> 'equipment_requirements' ->> 'value'
+                 FROM public.event_change_requests WHERE id = v_c1) = 'new equipment',
+            'AC20-H1: each refused field keeps its value and reason';
+        ASSERT (SELECT proposed_changes FROM public.event_change_requests WHERE id = v_c1)
+            = '{"expected_attendance":60}'::jsonb,
+            'AC20-H1: the request keeps only what was applied';
+        -- AC20-N6 (negative): a decided request cannot be decided again
+        BEGIN
+            PERFORM public.partially_approve_event_change_request(v_pe, v_c1, v_who,
+                ARRAY['expected_attendance'], '{}'::jsonb, NULL);
+            RAISE EXCEPTION 'AC20-N6: a decided request was decided again' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+    END;
+
+    -- 0080 AC21: a Coordinator records the withdrawal of a request under review (Q&A #103)
+    DECLARE
+        v_wd uuid; v_st text;
+    BEGIN
+        -- AC21-B1, AC21-B2 (boundary): the three review states can be withdrawn
+        FOREACH v_st IN ARRAY ARRAY['Submitted', 'Under Review', 'Changes Requested'] LOOP
+            INSERT INTO public.event_requests (organiser_id, event_name, status)
+                VALUES (v_user, 'VERIFY withdraw ' || v_st, v_st) RETURNING id INTO v_wd;
+            INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+                VALUES (v_wd, v_who, v_who);
+            -- AC21-N2 (negative): only the assigned Coordinator withdraws
+            BEGIN
+                PERFORM public.advance_event_request_by_coordinator(v_wd, 'someone-else', 'Withdrawn');
+                RAISE EXCEPTION 'AC21-N2: another coordinator withdrew the request' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0003' THEN NULL; END;
+            PERFORM public.advance_event_request_by_coordinator(v_wd, v_who, 'Withdrawn');
+            ASSERT (SELECT status FROM public.event_requests WHERE id = v_wd) = 'Withdrawn',
+                'AC21-H1: ' || v_st || ' must be withdrawable';
+        END LOOP;
+        -- AC21-H2 (happy): the withdrawal is recorded as its own step with who did it
+        ASSERT EXISTS (SELECT 1 FROM public.event_request_status_history
+                       WHERE event_request_id = v_wd AND new_status = 'Withdrawn'
+                         AND source = 'coordinator.withdrawal' AND actor_id = v_who),
+            'AC21-H2: the withdrawal is not in the status history';
+        -- AC21-B3 (boundary): one step later (Approved) it can no longer be withdrawn
+        INSERT INTO public.event_requests (organiser_id, event_name, status)
+            VALUES (v_user, 'VERIFY withdraw approved', 'Approved') RETURNING id INTO v_wd;
+        INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+            VALUES (v_wd, v_who, v_who);
+        BEGIN
+            PERFORM public.advance_event_request_by_coordinator(v_wd, v_who, 'Withdrawn');
+            RAISE EXCEPTION 'AC21-B3: an approved request was withdrawn' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+        ASSERT (SELECT status FROM public.event_requests WHERE id = v_wd) = 'Approved',
+            'AC21-B3: a refused withdrawal changed the status';
+    END;
+
+    -- 0081 AC22: postponing releases the arrangements and keeps the event (Q&A #69, #121)
+    DECLARE
+        v_pe uuid; v_pv uuid; v_pb uuid; v_ph uuid; v_pq uuid; v_pr uuid; v_pg uuid;
+    BEGIN
+        INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance,
+                proposed_date_times, registration_capacity)
+            VALUES (v_user, 'VERIFY postpone', 'Confirmed', 20, ARRAY[now() + interval '20 days'], 5)
+            RETURNING id INTO v_pe;
+        INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+            VALUES (v_pe, v_who, v_who);
+        INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+                supported_layouts, operating_slots)
+            VALUES ('VERIFY postpone venue', 'Test wing', 100, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+            RETURNING id INTO v_pv;
+        INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id, start_date,
+                end_date, start_minute, end_minute, status, decided_by, decided_at)
+            VALUES (v_pv, v_user, v_pe, v_day + 5, v_day + 5, 600, 720, 'approved', v_user, now())
+            RETURNING id INTO v_pb;
+        INSERT INTO public.venue_holds (venue_id, event_request_id, start_date, end_date, start_minute,
+                end_minute, expires_at, placed_by)
+            VALUES (v_pv, v_pe, v_day + 6, v_day + 6, 600, 720, now() + interval '2 days', v_user)
+            RETURNING id INTO v_ph;
+        INSERT INTO public.equipment (type, total_owned_quantity, home_location, operational_status)
+            VALUES ('VERIFY postpone kit', 5, 'Test wing', 'AVAILABLE') RETURNING id INTO v_pg;
+        INSERT INTO public.equipment_requirements (event_request_id, equipment_type, quantity, recorded_by)
+            VALUES (v_pe, 'VERIFY postpone kit', 2, v_user) RETURNING id INTO v_pq;
+        INSERT INTO public.equipment_reservations (equipment_id, event_request_id, requirement_id,
+                quantity, collection_date, return_date, created_by)
+            VALUES (v_pg, v_pe, v_pq, 2, v_day + 4, v_day + 5, v_user) RETURNING id INTO v_pr;
+        INSERT INTO public.event_registrations (event_request_id, attendee_id) VALUES (v_pe, v_user);
+
+        -- AC22-N1 (negative): a postponement needs a reason and changes nothing without one
+        BEGIN
+            PERFORM public.postpone_event_by_coordinator(v_pe, v_who, '  ');
+            RAISE EXCEPTION 'AC22-N1: a reasonless postponement was accepted' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+        ASSERT (SELECT status FROM public.event_requests WHERE id = v_pe) = 'Confirmed'
+            AND (SELECT status FROM public.venue_booking_requests WHERE id = v_pb) = 'approved',
+            'AC22-N1: a refused postponement changed something';
+        -- AC22-N3 (negative): only the assigned Coordinator postpones
+        BEGIN
+            PERFORM public.postpone_event_by_coordinator(v_pe, 'someone-else', 'Venue unavailable');
+            RAISE EXCEPTION 'AC22-N3: another coordinator postponed the event' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0003' THEN NULL; END;
+        -- AC22-N2 (negative): a request that is not yet approved is not postponed
+        DECLARE v_early uuid;
+        BEGIN
+            INSERT INTO public.event_requests (organiser_id, event_name, status)
+                VALUES (v_user, 'VERIFY postpone early', 'Submitted') RETURNING id INTO v_early;
+            INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+                VALUES (v_early, v_who, v_who);
+            BEGIN
+                PERFORM public.postpone_event_by_coordinator(v_early, v_who, 'x');
+                RAISE EXCEPTION 'AC22-N2: a submitted request was postponed' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+        END;
+
+        -- AC22-H1 (happy): postponing with no new date releases bookings, holds and reservations
+        PERFORM public.postpone_event_by_coordinator(v_pe, v_who, 'Venue unavailable on the day');
+        ASSERT (SELECT status FROM public.event_requests WHERE id = v_pe) = 'Postponed',
+            'AC22-H1: the event should be Postponed';
+        ASSERT (SELECT status FROM public.venue_booking_requests WHERE id = v_pb) = 'cancelled'
+            AND (SELECT status FROM public.venue_holds WHERE id = v_ph) = 'released'
+            AND NOT EXISTS (SELECT 1 FROM public.equipment_reservations WHERE event_request_id = v_pe)
+            AND (SELECT reason FROM public.equipment_reservation_releases WHERE reservation_id = v_pr)
+                = 'Event postponed',
+            'AC22-H1: bookings, holds and reservations should all be released';
+        -- AC22-H2 (happy): the record, requirement, registration and reason are kept
+        ASSERT EXISTS (SELECT 1 FROM public.equipment_requirements WHERE id = v_pq)
+            AND EXISTS (SELECT 1 FROM public.event_registrations WHERE event_request_id = v_pe)
+            AND (SELECT reason FROM public.event_postponements
+                 WHERE event_request_id = v_pe AND resumed_at IS NULL) = 'Venue unavailable on the day'
+            AND (SELECT previous_status FROM public.event_postponements
+                 WHERE event_request_id = v_pe) = 'Confirmed',
+            'AC22-H2: the postponed event should keep its record, requirement and registration';
+        -- AC22-N6 (negative): a postponed event cannot take a venue booking back
+        BEGIN
+            PERFORM public.create_event_venue_booking_request(jsonb_build_object(
+                'id', gen_random_uuid(), 'venue_id', v_pv, 'event_request_id', v_pe,
+                'requested_by', v_user, 'start_date', v_day + 12, 'end_date', v_day + 12,
+                'start_minute', 600, 'end_minute', 720, 'status', 'pending'),
+                (SELECT updated_at FROM public.event_requests WHERE id = v_pe));
+            RAISE EXCEPTION 'AC22-N6: a postponed event took a venue booking' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+        -- AC22-N4 (negative): a postponed event cannot be postponed again
+        BEGIN
+            PERFORM public.postpone_event_by_coordinator(v_pe, v_who, 'again');
+            RAISE EXCEPTION 'AC22-N4: postponed twice' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+
+        -- AC22-B1, AC22-B2 (boundary): a new date in the past or none is refused, a future one accepted
+        BEGIN
+            PERFORM public.resume_postponed_event(v_pe, v_who, ARRAY[now() - interval '1 minute']);
+            RAISE EXCEPTION 'AC22-B1: a past date was accepted' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+        BEGIN
+            PERFORM public.resume_postponed_event(v_pe, v_who, ARRAY[]::timestamptz[]);
+            RAISE EXCEPTION 'AC22-B2: no date was accepted' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+        ASSERT (SELECT status FROM public.event_requests WHERE id = v_pe) = 'Postponed',
+            'AC22-B1: a refused resume changed the status';
+        v_row := public.resume_postponed_event(v_pe, v_who, ARRAY[now() + interval '40 days']);
+        ASSERT v_row.status = 'Planning' AND v_row.proposed_date_times[1] > now() + interval '39 days',
+            'AC22-H3: resuming returns the event to Planning on the new date';
+        ASSERT (SELECT resumed_by FROM public.event_postponements WHERE event_request_id = v_pe) = v_who
+            AND (SELECT count(*) FROM public.event_request_status_history
+                 WHERE event_request_id = v_pe AND new_status = 'Postponed') = 1,
+            'AC22-H3: the resume is recorded';
+        -- AC22-N5 (negative): only a postponed event is resumed
+        BEGIN
+            PERFORM public.resume_postponed_event(v_pe, v_who, ARRAY[now() + interval '50 days']);
+            RAISE EXCEPTION 'AC22-N5: a planning event was resumed' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+        -- AC22-X1 (cross-cutting): a postponed event can still be cancelled
+        PERFORM public.postpone_event_by_coordinator(v_pe, v_who, 'Second postponement');
+        PERFORM public.advance_event_request_by_coordinator(v_pe, v_who, 'Cancelled');
+        ASSERT (SELECT status FROM public.event_requests WHERE id = v_pe) = 'Cancelled',
+            'AC22-X1: a postponed event should be cancellable';
+    END;
+
+    -- 0082 AC23: a VIP can be added above the registration capacity, up to the venue (Q&A #99)
+    DECLARE
+        v_ve uuid; v_ve2 uuid; v_vv uuid; v_u2 uuid; v_u3 uuid; v_m2 text; v_m3 text;
+    BEGIN
+        SELECT id, email INTO v_u2, v_m2 FROM auth.users ORDER BY created_at, id OFFSET 1 LIMIT 1;
+        SELECT id, email INTO v_u3, v_m3 FROM auth.users ORDER BY created_at, id OFFSET 2 LIMIT 1;
+        IF v_u3 IS NULL THEN
+            RAISE NOTICE 'AC23 skipped: it needs three users in auth.users';
+        ELSE
+            INSERT INTO public.event_requests (organiser_id, event_name, status, registration_capacity)
+                VALUES (v_user, 'VERIFY vip', 'Confirmed', 1) RETURNING id INTO v_ve;
+            INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+                VALUES (v_ve, v_who, v_who);
+            INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+                    supported_layouts, operating_slots)
+                VALUES ('VERIFY vip venue', 'Test wing', 2, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+                RETURNING id INTO v_vv;
+            INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id, start_date,
+                    end_date, start_minute, end_minute, status, decided_by, decided_at)
+                VALUES (v_vv, v_user, v_ve, v_day + 8, v_day + 8, 600, 720, 'approved', v_user, now());
+            INSERT INTO public.event_registrations (event_request_id, attendee_id) VALUES (v_ve, v_user);
+
+            -- AC23-H1 (happy): full at the registration capacity (1) but the venue seats 2
+            PERFORM public.coordinator_register_attendee(v_ve, v_who, v_m2);
+            ASSERT (SELECT count(*) FROM public.event_registrations
+                    WHERE event_request_id = v_ve AND status = 'Registered') = 2,
+                'AC23-H1: a VIP should be added above the registration capacity';
+            -- AC23-B1 (boundary): the places now equal the venue capacity, so one more is refused
+            BEGIN
+                PERFORM public.coordinator_register_attendee(v_ve, v_who, v_m3);
+                RAISE EXCEPTION 'AC23-B1: the venue capacity was exceeded' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+            ASSERT (SELECT count(*) FROM public.event_registrations
+                    WHERE event_request_id = v_ve AND status = 'Registered') = 2,
+                'AC23-B1: a refused VIP changed the registrations';
+            -- AC23-N1 (negative): with no approved venue there is no venue capacity to go above
+            INSERT INTO public.event_requests (organiser_id, event_name, status, registration_capacity)
+                VALUES (v_user, 'VERIFY vip no venue', 'Confirmed', 1) RETURNING id INTO v_ve2;
+            INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+                VALUES (v_ve2, v_who, v_who);
+            INSERT INTO public.event_registrations (event_request_id, attendee_id) VALUES (v_ve2, v_user);
+            BEGIN
+                PERFORM public.coordinator_register_attendee(v_ve2, v_who, v_m2);
+                RAISE EXCEPTION 'AC23-N1: a VIP went above capacity with no venue' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+            -- AC23-N2 (negative): a cancelled booking is not venue capacity
+            UPDATE public.venue_booking_requests SET status = 'cancelled', cancelled_by = v_user,
+                cancelled_at = now() WHERE event_request_id = v_ve;
+            BEGIN
+                PERFORM public.coordinator_register_attendee(v_ve, v_who, v_m3);
+                RAISE EXCEPTION 'AC23-N2: a cancelled booking still counted as capacity' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+        END IF;
+    END;
+
+    -- 0083 AC24: the assigned Coordinator changes the Event Organiser (Q&A #59, #61)
+    DECLARE
+        v_oe uuid; v_oe2 uuid; v_u2 uuid; v_m2 text; v_m3 text; v_org uuid; v_cr uuid;
+    BEGIN
+        SELECT id, email INTO v_u2, v_m2 FROM auth.users ORDER BY created_at, id OFFSET 1 LIMIT 1;
+        SELECT email INTO v_m3 FROM auth.users ORDER BY created_at, id OFFSET 2 LIMIT 1;
+        IF v_m3 IS NULL THEN
+            RAISE NOTICE 'AC24 skipped: it needs three users in auth.users';
+        ELSE
+            UPDATE auth.users SET raw_app_meta_data = '{"role":"event_organiser"}' WHERE id = v_u2;
+            INSERT INTO public.event_requests (organiser_id, event_name, status)
+                VALUES (v_user, 'VERIFY organiser', 'Planning') RETURNING id INTO v_oe;
+            INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+                VALUES (v_oe, v_who, v_who);
+            INSERT INTO public.event_change_requests (event_request_id, organiser_id, explanation,
+                    proposed_changes, base_event_updated_at)
+                VALUES (v_oe, v_user, 'more people', '{"expected_attendance":9}',
+                    (SELECT updated_at FROM public.event_requests WHERE id = v_oe))
+                RETURNING id INTO v_cr;
+
+            -- AC24-N1 (negative): an email nobody has is refused
+            BEGIN
+                PERFORM public.change_event_organiser(v_oe, v_who, 'nobody@example.test', 'left');
+                RAISE EXCEPTION 'AC24-N1: an unknown email was accepted' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0006' THEN NULL; END;
+            -- AC24-N2 (negative): a person who is not an Event Organiser is refused
+            BEGIN
+                PERFORM public.change_event_organiser(v_oe, v_who, v_m3, 'left');
+                RAISE EXCEPTION 'AC24-N2: a non-organiser was made organiser' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0006' THEN NULL; END;
+            -- AC24-N3 (negative): the current Organiser cannot be "changed" to themselves
+            UPDATE auth.users SET raw_app_meta_data = '{"role":"event_organiser"}' WHERE id = v_user;
+            BEGIN
+                PERFORM public.change_event_organiser(v_oe, v_who,
+                    (SELECT email FROM auth.users WHERE id = v_user), 'same');
+                RAISE EXCEPTION 'AC24-N3: changed to the same organiser' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+            -- AC24-N4 (negative): a reason is required
+            BEGIN
+                PERFORM public.change_event_organiser(v_oe, v_who, v_m2, '  ');
+                RAISE EXCEPTION 'AC24-N4: a reasonless change was accepted' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+            -- AC24-N5 (negative): only the assigned Coordinator changes the Organiser
+            BEGIN
+                PERFORM public.change_event_organiser(v_oe, 'someone-else', v_m2, 'left');
+                RAISE EXCEPTION 'AC24-N5: another coordinator changed the organiser' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0003' THEN NULL; END;
+            ASSERT (SELECT organiser_id FROM public.event_requests WHERE id = v_oe) = v_user
+                AND NOT EXISTS (SELECT 1 FROM public.event_organiser_changes WHERE event_request_id = v_oe),
+                'AC24-N1..N5: a refused change altered the event or left an audit row';
+
+            -- AC24-H1 (happy): the Organiser changes, the audit row is kept, a pending change follows
+            PERFORM public.change_event_organiser(v_oe, v_who, v_m2, 'Account deactivated');
+            ASSERT (SELECT organiser_id FROM public.event_requests WHERE id = v_oe) = v_u2,
+                'AC24-H1: the organiser should now be the new person';
+            ASSERT (SELECT previous_organiser_id FROM public.event_organiser_changes
+                    WHERE event_request_id = v_oe) = v_user
+                AND (SELECT reason FROM public.event_organiser_changes
+                     WHERE event_request_id = v_oe) = 'Account deactivated',
+                'AC24-H1: the change is not recorded with who it was from and why';
+            ASSERT (SELECT organiser_id FROM public.event_change_requests WHERE id = v_cr) = v_u2,
+                'AC24-H2: a pending change request should follow the new organiser';
+
+            -- AC24-N6 (negative): not for a cancelled event
+            INSERT INTO public.event_requests (organiser_id, event_name, status)
+                VALUES (v_user, 'VERIFY organiser cancelled', 'Cancelled') RETURNING id INTO v_oe2;
+            INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+                VALUES (v_oe2, v_who, v_who);
+            BEGIN
+                PERFORM public.change_event_organiser(v_oe2, v_who, v_m2, 'left');
+                RAISE EXCEPTION 'AC24-N6: a cancelled event changed organiser' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+
+            -- AC24-N7, AC24-H3: with a client organisation, only a member of it can take over
+            INSERT INTO public.client_organisations (name) VALUES ('VERIFY client') RETURNING id INTO v_org;
+            INSERT INTO public.organisation_members (user_id, organisation_id) VALUES (v_user, v_org);
+            INSERT INTO public.event_requests (organiser_id, event_name, status)
+                VALUES (v_user, 'VERIFY organiser org', 'Planning') RETURNING id INTO v_oe2;
+            INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+                VALUES (v_oe2, v_who, v_who);
+            ASSERT (SELECT organisation_id FROM public.event_requests WHERE id = v_oe2) = v_org,
+                'AC24-N7: the fixture event should belong to the organisation';
+            BEGIN
+                PERFORM public.change_event_organiser(v_oe2, v_who, v_m2, 'left');
+                RAISE EXCEPTION 'AC24-N7: someone outside the organisation took over' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0007' THEN NULL; END;
+            INSERT INTO public.organisation_members (user_id, organisation_id) VALUES (v_u2, v_org);
+            PERFORM public.change_event_organiser(v_oe2, v_who, v_m2, 'left');
+            ASSERT (SELECT organiser_id FROM public.event_requests WHERE id = v_oe2) = v_u2
+                AND (SELECT organisation_id FROM public.event_requests WHERE id = v_oe2) = v_org,
+                'AC24-H3: a colleague in the organisation takes over and the event keeps its organisation';
+        END IF;
+    END;
+
+    -- 0084 AC25: an equipment requirement can be marked not essential (Q&A #80, #106)
+    DECLARE
+        v_ee uuid; v_ev uuid; v_eq uuid; v_er public.equipment_requirements;
+    BEGIN
+        INSERT INTO public.event_requests (organiser_id, event_name, status)
+            VALUES (v_user, 'VERIFY essential', 'Planning') RETURNING id INTO v_ee;
+        INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+            VALUES (v_ee, v_who, v_who);
+        INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+                supported_layouts, operating_slots)
+            VALUES ('VERIFY essential venue', 'Test wing', 50, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+            RETURNING id INTO v_ev;
+        INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id, start_date,
+                end_date, start_minute, end_minute, status, decided_by, decided_at)
+            VALUES (v_ev, v_user, v_ee, v_day + 9, v_day + 9, 600, 720, 'approved', v_user, now());
+        INSERT INTO public.equipment_requirements (event_request_id, equipment_type, quantity, recorded_by)
+            VALUES (v_ee, 'VERIFY optional kit', 3, v_user) RETURNING id INTO v_eq;
+
+        -- AC25-H1 (happy): a requirement is essential unless said otherwise, and blocks the safety review
+        ASSERT (SELECT essential FROM public.equipment_requirements WHERE id = v_eq),
+            'AC25-H1: a requirement should be essential by default';
+        ASSERT private.event_readiness_issues(v_ee) @> jsonb_build_array(
+                jsonb_build_object('kind', 'equipment_not_reserved', 'requirement_id', v_eq,
+                                   'equipment_type', 'VERIFY optional kit', 'required', 3, 'reserved', 0)),
+            'AC25-H1: an unreserved essential requirement must be listed as outstanding';
+        BEGIN
+            PERFORM public.send_event_request_for_safety_review(v_ee, v_who);
+            RAISE EXCEPTION 'AC25-H1: sent for safety review with an essential requirement unreserved'
+                USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0005' THEN NULL; END;
+
+        -- AC25-N1 (negative): marking not essential needs a note, and changes nothing without one
+        BEGIN
+            PERFORM public.set_requirement_essential(v_eq, v_user, false, '  ');
+            RAISE EXCEPTION 'AC25-N1: no note was accepted' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+        -- AC25-N2 (negative): only the assigned Coordinator decides
+        BEGIN
+            PERFORM public.set_requirement_essential(v_eq, gen_random_uuid(), false, 'agreed with support');
+            RAISE EXCEPTION 'AC25-N2: another coordinator decided' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0003' THEN NULL; END;
+        -- AC25-N3 (negative): an unknown requirement
+        BEGIN
+            PERFORM public.set_requirement_essential(gen_random_uuid(), v_user, false, 'x');
+            RAISE EXCEPTION 'AC25-N3: an unknown requirement was accepted' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0002' THEN NULL; END;
+        ASSERT (SELECT essential FROM public.equipment_requirements WHERE id = v_eq),
+            'AC25-N1..N3: a refused change altered the requirement';
+
+        -- AC25-H2 (happy): not essential, so it no longer blocks, and the note is kept
+        v_er := public.set_requirement_essential(v_eq, v_user, false, 'Support will bring one on the day');
+        ASSERT NOT v_er.essential AND v_er.essential_note = 'Support will bring one on the day'
+            AND v_er.essential_set_by = v_user,
+            'AC25-H2: the decision and its note should be recorded';
+        ASSERT NOT (private.event_readiness_issues(v_ee) @> jsonb_build_array(
+                jsonb_build_object('kind', 'equipment_not_reserved', 'requirement_id', v_eq,
+                                   'equipment_type', 'VERIFY optional kit', 'required', 3, 'reserved', 0))),
+            'AC25-H2: a not-essential requirement must not be outstanding';
+        PERFORM public.send_event_request_for_safety_review(v_ee, v_who);
+        ASSERT (SELECT status FROM public.event_requests WHERE id = v_ee) = 'Safety Review',
+            'AC25-H2: the event should go to safety review with only a non-essential gap';
+        -- AC25-H3 (happy): marking it essential again puts it back in the check
+        v_er := public.set_requirement_essential(v_eq, v_user, true, NULL);
+        ASSERT v_er.essential AND v_er.essential_note IS NULL
+            AND private.event_readiness_issues(v_ee) @> jsonb_build_array(
+                jsonb_build_object('kind', 'equipment_not_reserved', 'requirement_id', v_eq,
+                                   'equipment_type', 'VERIFY optional kit', 'required', 3, 'reserved', 0)),
+            'AC25-H3: an essential requirement is outstanding again';
+        -- AC25-N4 (negative): a closed event's requirements are not changed
+        UPDATE public.event_requests SET status = 'Cancelled' WHERE id = v_ee;
+        BEGIN
+            PERFORM public.set_requirement_essential(v_eq, v_user, false, 'late');
+            RAISE EXCEPTION 'AC25-N4: a closed event was changed' USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+    END;
+
     RAISE NOTICE 'ALL RELEASE 1 HOTFIX VERIFICATIONS PASSED';
 END $$;
 

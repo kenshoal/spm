@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS auth.users (
     email text,
     email_confirmed_at timestamptz DEFAULT now(),
     raw_user_meta_data jsonb DEFAULT '{}',
+    raw_app_meta_data jsonb DEFAULT '{}',
     created_at timestamptz DEFAULT now()
 );
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS 'SELECT NULL::uuid';
