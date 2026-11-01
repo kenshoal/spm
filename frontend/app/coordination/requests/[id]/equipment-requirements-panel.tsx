@@ -1,5 +1,4 @@
 import { unstable_rethrow } from "next/navigation";
-import { listEquipment } from "@/lib/equipment";
 import {
   listEventRequirements,
   REQUIREMENT_STATUS_LABELS,
@@ -15,10 +14,6 @@ export async function EquipmentRequirementsPanel({ eventRequestId, canRecord }: 
   } catch (error) {
     unstable_rethrow(error);
   }
-  const types = await listEquipment().then((rows) => [...new Set(rows.map((row) => row.type))]).catch((error: unknown) => {
-    unstable_rethrow(error);
-    return [] as string[];
-  });
   return (
     <section aria-label="Equipment requirements" className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
       <h2 className="text-lg font-bold text-[#17211d]">Equipment requirements</h2>
@@ -38,7 +33,7 @@ export async function EquipmentRequirementsPanel({ eventRequestId, canRecord }: 
           ))}
         </ul>
       )}
-      {canRecord ? <EquipmentRequirementForm eventRequestId={eventRequestId} types={types} /> : null}
+      {canRecord ? <EquipmentRequirementForm eventRequestId={eventRequestId} /> : null}
     </section>
   );
 }

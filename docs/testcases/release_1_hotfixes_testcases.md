@@ -47,13 +47,15 @@ Manual check-in only, QR withdrawn; partly accepted change requests (#104); a `W
 | eventRequestService | `pytest -q`; `ruff check .` | 1133 passed, 1 skipped; clean | local, fakes for Supabase |
 | venueService | `pytest -q`; `ruff check .` | 743 passed, 10 skipped; clean | local |
 | equipmentService | `pytest -q`; `ruff check .` | 337 passed; clean | local |
+| authService | `pytest -q` | 60 passed | local |
 | notificationService | `pytest -q`; `ruff check .` | 85 passed; clean | local |
-| frontend | `npx vitest run`; `npm run lint`; `npm run typecheck` | 676+ passed; clean; clean | local, jsdom |
+| frontend | `npx vitest run`; `npm run lint`; `npm run typecheck`; `npm run build` | 678 passed; clean; clean; builds | local, jsdom |
+| Playwright | `playwright test` against the mock APIs in `e2e/support`, with the cached Chromium 1148 headless shell (the pinned build was not installed and was not downloaded) | 55 passed | local; a first run found 20 failures, all from the mocks not knowing coordinator sessions, and one duplicated-text clash that moved the edit form behind a button |
 | Database | `database/verify_release_1_hotfixes.sql` after all 83 migrations on vanilla PostgreSQL 16 with `database/tests/ci_platform_stub.sql` | ALL RELEASE 1 HOTFIX VERIFICATIONS PASSED | Docker, disposable |
 | Database mutation check | eight one-line faults in 0069 to 0077 | all eight caught (one needed AC13-N3 added) | Docker, disposable |
 | Existing database verifiers | the CI paths for SCRUM-35, 40 and 18 | pass with the new migrations | Docker, disposable |
 | Whole stack | five services, Next.js, GoTrue, PostgREST and Postgres in Docker; a scripted lifecycle with every role, then clicks in the browser | each hotfix behaved as specified (details in the pull request) | local, disposable |
 
-**Not run:** the shared Supabase database, real email delivery, Playwright, and the pull-request CI.
+**Not run:** the shared Supabase database, real email delivery, Playwright on the pinned browser build, and the pull-request CI.
 
 **Found and fixed while verifying:** the new venue-change trigger first used the lowest layout capacity and so missed a real capacity drop; the coordinator update returned the row from before the review trigger reopened the event; a client component imported a server-only module (unit tests mock it, only the running app failed); the cancel trigger cast a text coordinator id to a uuid.

@@ -67,3 +67,46 @@ test("offers check-in only where it is allowed", () => {
 
   expect(screen.queryAllByRole("button")).toHaveLength(0);
 });
+
+import { EventDetailsForm } from "@/app/coordination/requests/[id]/event-details-form";
+import type { EventRequest } from "@/lib/event-requests";
+
+vi.mock("@/app/coordination/requests/[id]/event-setup-actions", () => ({
+  saveEventDetails: vi.fn(),
+  saveRegistrationSettings: vi.fn(),
+  recordEquipmentRequirement: vi.fn(),
+  offerWaitlistPlace: vi.fn(),
+}));
+
+const event = {
+  id: "e1",
+  event_name: "Annual Gala",
+  purpose: "Raise funds",
+  description: "A dinner",
+  proposed_date_times: ["2026-12-10T02:00:00Z"],
+  expected_attendance: 100,
+  venue_requirements: "Hall",
+  accessibility_needs: "Ramp",
+  equipment_requirements: "Mic",
+  registration_needs: "Yes",
+  updated_at: "2026-11-01T00:00:00Z",
+} as unknown as EventRequest;
+
+// AC8-X1 (cross-cutting, hotfix 8): the event's text is not repeated on the page until editing starts
+test("shows no form fields until the coordinator chooses to edit", () => {
+  render(<EventDetailsForm request={event} />);
+
+  expect(screen.queryByText("Annual Gala")).toBeNull();
+  expect(screen.queryByRole("textbox")).toBeNull();
+});
+
+// AC8-H5 (happy, hotfix 8): editing offers every detail, dates in Singapore time, with the version seen
+test("opens an edit form with the stored values and the version it was loaded at", () => {
+  const { container } = render(<EventDetailsForm request={event} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+
+  expect((screen.getByLabelText("Date and time 1") as HTMLInputElement).value).toBe("2026-12-10T10:00");
+  expect((container.querySelector('input[name="expected_updated_at"]') as HTMLInputElement).value).toBe("2026-11-01T00:00:00Z");
+  expect(screen.getByText("Annual Gala")).toBeDefined();
+});

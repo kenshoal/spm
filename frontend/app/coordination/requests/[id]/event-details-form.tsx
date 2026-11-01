@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import type { EventRequest } from "@/lib/event-requests";
 import { singaporeLocalValue } from "@/lib/singapore-time";
 import { saveEventDetails, type SetupState } from "./event-setup-actions";
@@ -23,11 +23,22 @@ const TEXT_FIELDS = [
 // dates, attendance or requirements flags existing arrangements for review; on a
 // Confirmed event that returns it to Planning.
 export function EventDetailsForm({ request }: { request: EventRequest }) {
+  const [editing, setEditing] = useState(false);
   const [state, action, pending] = useActionState(saveEventDetails.bind(null, request.id), initialState);
   const dates = (request.proposed_date_times ?? []).map(singaporeLocalValue);
+  if (!editing) {
+    return (
+      <section aria-label="Edit event details" className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
+        <h2 className="text-lg font-bold text-[#17211d]">Edit event details</h2>
+        <button type="button" onClick={() => setEditing(true)} className="mt-3 min-h-11 rounded-xl border border-[#cfd9d4] bg-white px-4 text-sm font-semibold text-[#0f6b5b] hover:bg-[#f4f7f5]">
+          Edit details
+        </button>
+      </section>
+    );
+  }
   return (
-    <details className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
-      <summary className="cursor-pointer text-lg font-bold text-[#17211d]">Edit event details</summary>
+    <section aria-label="Edit event details" className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
+      <h2 className="text-lg font-bold text-[#17211d]">Edit event details</h2>
       <form key={request.updated_at} action={action} className="mt-4 space-y-4">
         <input type="hidden" name="expected_updated_at" value={request.updated_at} />
         {TEXT_FIELDS.map(([field, label]) => (
@@ -56,6 +67,6 @@ export function EventDetailsForm({ request }: { request: EventRequest }) {
         {state.saved ? <p role="status" className="text-sm text-[#145c40]">Details saved.</p> : null}
         {state.message ? <p role="alert" className="rounded-xl bg-[#fff4f3] px-4 py-3 text-sm text-[#8e3d35]">{state.message}</p> : null}
       </form>
-    </details>
+    </section>
   );
 }

@@ -7,15 +7,14 @@ const inputClass = "mt-2 w-full rounded-xl border border-[#cfd9d4] bg-white px-4
 const labelClass = "block text-sm font-semibold text-[#34463f]";
 const initialState: SetupState = {};
 
-export function EquipmentRequirementForm({ eventRequestId, types }: { eventRequestId: string; types: string[] }) {
+export function EquipmentRequirementForm({ eventRequestId }: { eventRequestId: string }) {
   const [state, action, pending] = useActionState(recordEquipmentRequirement.bind(null, eventRequestId), initialState);
   return (
     <form action={action} className="mt-5 space-y-4 border-t border-[#eef2f0] pt-4">
       <h3 className="text-sm font-bold text-[#17211d]">Record equipment needed</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={labelClass}>Equipment type
-          <input name="equipment_type" list="equipment-types" className={inputClass} />
-          <datalist id="equipment-types">{types.map((type) => <option key={type} value={type} />)}</datalist>
+          <input name="equipment_type" className={inputClass} />
         </label>
         <label className={labelClass}>Quantity<input name="quantity" type="number" min={1} step={1} className={inputClass} /></label>
       </div>

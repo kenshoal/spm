@@ -264,6 +264,16 @@ createServer(async (request, response) => {
     send(response, 200, [...arrangementReviews.values()].filter((row) => row.arrangement === url.searchParams.get("arrangement") && row.cleared_at === null));
     return;
   }
+  // Hotfixes 7 and 14: the coordinator's waiting list and the organiser's arrangements
+  // read as empty here; the real shapes are proved in the service tests.
+  if (request.method === "GET" && /^\/event-requests\/[^/]+\/waitlist$/.test(url.pathname)) {
+    send(response, 200, []);
+    return;
+  }
+  if (request.method === "GET" && /^\/event-requests\/[^/]+\/arrangements$/.test(url.pathname)) {
+    send(response, 200, { venues: [], equipment: [] });
+    return;
+  }
   const arrangementClearMatch = url.pathname.match(/^\/arrangement-reviews\/([^/]+)\/clear$/);
   if (request.method === "POST" && arrangementClearMatch) {
     const row = arrangementReviews.get(arrangementClearMatch[1]);
