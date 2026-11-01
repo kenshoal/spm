@@ -292,8 +292,8 @@ class FakeEventRequestRepository:
             raise EventRequestRpcError("not a safety officer", errcode="P0003")
         if row["status"] != "Safety Review":
             raise EventRequestRpcError("not allowed", errcode="P0004")
-        if decision not in {"approved", "changes_requested"} or (
-            decision == "changes_requested" and not (reason or "").strip()
+        if decision not in {"approved", "changes_requested", "rejected"} or (
+            decision in {"changes_requested", "rejected"} and not (reason or "").strip()
         ):
             raise EventRequestRpcError("invalid decision", errcode="22023")
         # 0045: a target outside this event is invalid input, not a missing event.

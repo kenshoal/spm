@@ -58,6 +58,33 @@ test.each([
   });
 });
 
+// AC3-H2 (happy, hotfix 3): rejecting sends the trimmed reason and each ticked arrangement.
+test("rejecting sends the reason and chosen targets", () => {
+  expect(
+    parseSafetyDecisionForm(
+      form([
+        ["decision", "rejected"],
+        ["reason", "  Exits blocked  "],
+        ["target", `venue_booking:${BOOKING}`],
+      ]),
+    ),
+  ).toEqual({
+    payload: {
+      decision: "rejected",
+      reason: "Exits blocked",
+      targets: [{ arrangement: "venue_booking", id: BOOKING }],
+    },
+    errors: {},
+  });
+});
+
+// AC3-N3 (negative, hotfix 3): rejecting without a reason asks for one and sends nothing.
+test("rejecting without a reason is refused locally", () => {
+  expect(parseSafetyDecisionForm(form([["decision", "rejected"], ["reason", "  "]])).errors).toEqual({
+    reason: "Say why the safety arrangement is rejected.",
+  });
+});
+
 // AC4a-H3 (happy): asking for changes sends the trimmed reason and each ticked arrangement.
 test("asking for changes sends the reason and chosen targets", () => {
   expect(
@@ -87,7 +114,7 @@ test("asking for changes sends the reason and chosen targets", () => {
 test.each([
   ["blank reason", [["decision", "changes_requested"], ["reason", "  "]], { reason: "Say what needs to change." }],
   ["2001 characters", [["decision", "changes_requested"], ["reason", "r".repeat(2001)]], { reason: "Keep the reason to 2000 characters or fewer." }],
-  ["unknown decision", [["decision", "rejected"]], { decision: "Choose approve or ask for changes." }],
+  ["unknown decision", [["decision", "maybe"]], { decision: "Choose approve, ask for changes or reject." }],
 ] as [string, [string, string][], Record<string, string>][])("refuses %s", (_label, fields, errors) => {
   expect(parseSafetyDecisionForm(form(fields)).errors).toEqual(errors);
 });
@@ -113,7 +140,7 @@ test("routes the Safety Officer to the safety queue", () => {
 
 // AC4a-X2 (cross-cutting): the decision form offers each arrangement as a target
 // and both decisions.
-test("offers each arrangement as a target and both decisions", () => {
+test("offers each arrangement as a target and all three decisions", () => {
   render(
     <SafetyDecisionForm
       eventRequestId="event-1"
@@ -128,7 +155,7 @@ test("offers each arrangement as a target and both decisions", () => {
   expect(screen.getByRole("checkbox", { name: "2 × Wireless microphone" })).toBeDefined();
   expect(screen.getByRole("button", { name: "Approve" })).toBeDefined();
   expect(screen.getByRole("button", { name: "Ask for changes" })).toBeDefined();
-  expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
+  expect(screen.getByRole("button", { name: "Reject safety arrangement" })).toBeDefined();
 });
 
 // AC2-N4 (negative, review of PR #62): when venue details or restrictions could

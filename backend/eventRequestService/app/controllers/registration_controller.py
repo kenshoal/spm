@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import ValidationError
 
 from app.clock import get_now
-from app.config import get_settings
+from app.config import get_notification_settings, get_settings
 from app.controllers.event_request_controller import (
     AuthenticatedCaller,
     get_authenticated_caller,
@@ -23,6 +23,7 @@ from app.repositories.coordinator_assignment_repository import (
     SupabaseCoordinatorAssignmentRepository,
 )
 from app.repositories.registration_repository import SupabaseRegistrationRepository
+from app.services.notification_client import NotificationClient
 from app.services.registration_service import (
     EVENT_COORDINATOR_ROLE,
     EVENT_ORGANISER_ROLE,
@@ -51,7 +52,11 @@ def get_registration_service(request: Request) -> RegistrationService:
             detail="Supabase is not configured for eventRequestService",
         ) from error
 
-    service = RegistrationService(repository, coordinators)
+    service = RegistrationService(
+        repository,
+        coordinators,
+        NotificationClient.from_settings(get_notification_settings()),
+    )
     request.app.state.registration_service = service
     return service
 

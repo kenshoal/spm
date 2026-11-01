@@ -9,6 +9,9 @@ lock.
 from datetime import datetime
 from typing import Any, Protocol
 
+import httpx
+
+from app.repositories import SupabaseRepositoryError
 from app.repositories.registration_repository import SupabaseRegistrationRepository
 
 WAITLIST_ENTRY_COLUMNS = (
@@ -47,6 +50,47 @@ class WaitlistRepository(Protocol):
 
 
 class SupabaseWaitlistRepository(SupabaseRegistrationRepository):
+    def process_waitlist_timers(self, now: datetime) -> int:
+        """Run one timer pass. The function returns nothing, so the count is 0."""
+        try:
+            response = self._client.post(
+                "/rpc/process_waitlist_timers", json={"p_now": now.isoformat()}
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the waiting-list timer pass"
+            ) from error
+        return 0
+
+    def pending_outbox(self) -> list[dict[str, Any]]:
+        return self._get(
+            "/waitlist_notification_outbox",
+            {
+                "select": "id,recipient_id,event_type,idempotency_key,payload",
+                "published_at": "is.null",
+                "order": "occurred_at.asc",
+            },
+        )
+
+    def mark_published(self, ids: list[str], now: Any = None) -> int:
+        """Stamp the delivered notices; a row already stamped is left alone."""
+        if not ids:
+            return 0
+        try:
+            response = self._client.patch(
+                "/waitlist_notification_outbox",
+                params={"id": f"in.({','.join(ids)})", "published_at": "is.null"},
+                json={"published_at": now.isoformat()},
+                headers={"Prefer": "return=representation"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not mark the waiting-list notices published"
+            ) from error
+        return len(response.json())
+
     def active_entry(
         self, event_id: str, attendee_id: str
     ) -> dict[str, Any] | None:

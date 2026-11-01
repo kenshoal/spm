@@ -41,7 +41,7 @@ DO UPDATE SET channel = EXCLUDED.channel, updated_at = now();
 
 ## Sending an event
 
-`POST /notifications/events` → `202 Accepted` with `{"status": "accepted"}`.
+`POST /notifications/events` → `202 Accepted` with `{"status": "accepted"}`. Internal: the sender must send `X-Internal-Token` matching `NOTIFICATION_INTERNAL_TOKEN`, otherwise `401` and nothing is stored.
 
 ```json
 {

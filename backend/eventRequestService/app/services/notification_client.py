@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
@@ -8,6 +9,11 @@ import httpx
 from app.config import NotificationSettings
 
 logger = logging.getLogger(__name__)
+
+
+def internal_headers() -> dict[str, str]:
+    """The shared secret notificationService requires of its senders (hotfix 17)."""
+    return {"X-Internal-Token": os.environ.get("NOTIFICATION_INTERNAL_TOKEN", "")}
 
 
 class NotificationClient:
@@ -76,6 +82,7 @@ class NotificationClient:
                         "assigned_by": assigned_by,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -122,6 +129,7 @@ class NotificationClient:
                         "assigned_by": assigned_by,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -157,6 +165,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -355,6 +364,7 @@ class NotificationClient:
                     "event_id": str(uuid5(NAMESPACE_URL, key)),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -399,6 +409,7 @@ class NotificationClient:
                     ),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -440,6 +451,7 @@ class NotificationClient:
                     ),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -478,6 +490,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
@@ -513,6 +526,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
@@ -532,19 +546,36 @@ class NotificationClient:
         """Tell the assigned Coordinator what the Safety Officer wants changed
         (SCRUM-60 AC4b). Sent once after the decision commits, like the
         clarification notice; the reason also stays readable on the request."""
+        self._notify_safety_outcome(
+            "safety_changes_requested", event_request_id, coordinator_id, reason
+        )
+
+    def notify_safety_rejected(
+        self, *, event_request_id: str, coordinator_id: str, reason: str
+    ) -> None:
+        """Tell the assigned Coordinator the safety arrangement was rejected and
+        must be revised and resubmitted (Q&A #130)."""
+        self._notify_safety_outcome(
+            "safety_rejected", event_request_id, coordinator_id, reason
+        )
+
+    def _notify_safety_outcome(
+        self, event_type: str, event_request_id: str, coordinator_id: str, reason: str
+    ) -> None:
         if self._url is None:
             return
         try:
             response = httpx.post(
                 self._url,
                 json={
-                    "event_type": "safety_changes_requested",
+                    "event_type": event_type,
                     "recipient_id": coordinator_id,
                     "payload": {
                         "event_request_id": event_request_id,
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -576,6 +607,7 @@ class NotificationClient:
                     "event_id": event_id,
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -615,6 +647,7 @@ class NotificationClient:
                     "event_id": str(uuid5(NAMESPACE_URL, idempotency_key)),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
@@ -649,6 +682,7 @@ class NotificationClient:
                     "event_id": event_id,
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:

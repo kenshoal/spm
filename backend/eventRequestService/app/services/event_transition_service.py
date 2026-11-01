@@ -279,8 +279,8 @@ class EventTransitionService:
                 event_request_id=event_request_id,
                 organiser_id=event_request.organiser_id,
             )
-        elif payload.decision == "changes_requested":
-            # The decision is saved: a failed lookup must not turn it into a 502,
+        else:
+            # Asking for changes or rejecting (Q&A #130). The decision is saved: a failed lookup must not turn it into a 502,
             # which the officer would retry into a 409. The reason stays readable
             # on the request.
             try:
@@ -296,7 +296,12 @@ class EventTransitionService:
                 )
                 coordinator_id = None
             if coordinator_id is not None:
-                self.notification_client.notify_safety_changes_requested(
+                notify = (
+                    self.notification_client.notify_safety_rejected
+                    if payload.decision == "rejected"
+                    else self.notification_client.notify_safety_changes_requested
+                )
+                notify(
                     event_request_id=event_request_id,
                     coordinator_id=coordinator_id,
                     reason=payload.reason,

@@ -306,14 +306,14 @@ class SafetyDecision(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    decision: Literal["approved", "changes_requested"]
+    decision: Literal["approved", "changes_requested", "rejected"]
     reason: str | None = Field(default=None, max_length=2_000)
     targets: list[SafetyTarget] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def changes_need_a_reason(self) -> "SafetyDecision":
-        if self.decision == "changes_requested" and not self.reason:
-            raise ValueError("a reason is required when asking for changes")
+        if self.decision != "approved" and not self.reason:
+            raise ValueError("a reason is required unless approving")
         if len({(t.arrangement, t.id) for t in self.targets}) != len(self.targets):
             raise ValueError("each arrangement can be listed only once")
         return self
@@ -322,7 +322,7 @@ class SafetyDecision(BaseModel):
 class SafetyReviewResponse(BaseModel):
     id: str
     event_request_id: str
-    decision: Literal["approved", "changes_requested"]
+    decision: Literal["approved", "changes_requested", "rejected"]
     reason: str | None
     targets: list[dict[str, Any]]
     decided_by: str

@@ -346,6 +346,16 @@ export function describeNotification(notification: AppNotification, roles: reado
         href: null,
       };
     }
+    case "safety_changes_requested":
+    case "safety_rejected": {
+      // To the coordinator; the event is back in planning (SCRUM-60, Q&A #130).
+      const reason = notification.payload.reason;
+      const why = typeof reason === "string" && reason.trim() ? ` ${reason.trim()}` : "";
+      return {
+        message: `${notification.event_type === "safety_rejected" ? "The Safety Officer rejected the safety arrangement" : "The Safety Officer asked for changes"}. Revise the arrangements and resubmit.${why}`,
+        href: id ? `/coordination/requests/${id}` : null,
+      };
+    }
     default:
       return { message: "There's an update on an event request.", href: null };
   }
