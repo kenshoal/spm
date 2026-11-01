@@ -716,3 +716,20 @@ Screenshots are in `output/playwright/scrum35-live-date-20261022/`, including `c
 | Evidence | Observed result | Boundary |
 | --- | --- | --- |
 | [Backend CI run 39779191382](https://github.com/jarenlimhaan/spm/actions/runs/39779191382), including the [native amendment job](https://github.com/jarenlimhaan/spm/actions/runs/39779191382/job/119825762515) | **Success**: seven native verifiers and four real lock races passed; event service **752 passed / 1 skipped / 1 warning** (25.21 s), venue **609**, equipment **333**, notification **53** and Auth **60** passed. Vera read the downloaded `/tmp/scrum35-publication-20261022/backend-ci-7095a79.log`. | The opt-in receiver test skipped because `SCRUM64_NOTIFICATION_RUNTIME` was unset (`test_arrangement_review_notification_http.py:28`). Local **753** included it; real shared staff delivery is separate evidence above. This successful initial snapshot does not establish CI for a subsequent PR head, human review or merge. |
+
+## Appendix sweep — labels checked, 1 November 2026
+
+The tracking sheet reported AC4-N5, AC4-N6, AC6-X1, AC2-N4, AC2-X2, AC3-H3, AC3-P3, AC2-N6, AC3-N12, AC3-N13, AC3-X8, AC3-N14, AC3-X9, AC3-X10, AC3-X22 and AC3-X30 as unmapped. Every active row already carries its AC purpose-label comment in the named file (no story prefix; left untouched, no second label stacked). No suite was run for this note:
+
+| Rows | Label already at |
+| --- | --- |
+| AC4-N5, AC4-N6 | `backend/eventRequestService/tests/test_change_rejection_auth.py` |
+| AC6-X1 | `frontend/__tests__/change-rejection-notification.test.ts` |
+| AC3-H3, AC3-P3, AC2-N6, AC3-N12, AC3-N13 | `backend/eventRequestService/tests/test_event_change_date_preview.py` (AC3-H3/AC3-P3 are the ids of the eligible-status parametrization) |
+| AC3-X8, AC3-N14 | `backend/eventRequestService/tests/test_event_change_date_preview_repository.py` |
+| AC3-X9 | `frontend/__tests__/date-change-preview-actions.test.ts` |
+| AC3-X10 | `frontend/__tests__/date-change-preview.test.tsx` |
+| AC3-X30 | `backend/eventRequestService/tests/test_date_change_repository.py` |
+| AC3-X22 | `database/verify_arrangement_review_flags.sql` — the date-change sections already labelled AC1-H1 and AC1-B1 (the approved SCRUM-35 date exception reconciled into the SCRUM-64 verifier) prove the expired plus future linked-reservation flags under one cause and the attendance-only exclusion; the AC3-X22 ID appears nowhere in code, and those sections keep their own labels |
+
+Skipped as retired, historical records retained above in this document: **AC2-N4** (valid rejection must be unavailable) and **AC2-X2** (neither decision button), retired 19 October 2026 when the rejection increment went live; no test carries either ID for this story today.

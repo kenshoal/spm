@@ -156,3 +156,21 @@ Not yet in this table, to add once the open questions are answered: the fallback
 | AC3-H1, P1, P2, N1, AC4-H2, X2, X3, N1 to N9 (UI and action) | Green | `frontend`: `npx vitest run` 69 files, 579 tests passed (29 in `venue-replacement.test.tsx`); lint and typecheck clean. Red before: the file failed on the missing export, then 2 of 4 new cases | Pass | as above, local | Claude for Kennedy, 30 Oct 2026 | Ten faults in the helper, the panel and the action were all caught |
 | AC3-E1, AC4-E1, AC5-E1 (E2E, mocked APIs) | Green | Playwright, Chrome channel, whole suite: 53 passed (2 in `venue-replacement.spec.ts`) | Pass | as above | Claude for Kennedy, 30 Oct 2026 | The mocks do not check the flag or the assignment; the verifier and venueService do |
 | Real stack, shared development, PR CI | Planned | Not run | Not executed | none | none | `0068` is **not applied to shared development**. Apply it only after this PR is merged, because venueService must send `replaces_booking_id` first |
+
+## Appendix sweep — labels checked, 1 November 2026
+
+The tracking sheet reported AC1-X1, AC2-H2, AC3-H1, AC3-P1, AC3-P2, AC3-N1, AC3-X1, AC4-H1, AC4-N1 to AC4-N9, AC4-P1, AC4-X1, AC4-X2, AC5-H1, AC5-N1 to AC5-N4, AC5-X1 and AC5-X2 as unmapped. Every row with a proving test already carries its AC purpose-label comment in a file this document names. The comments carry no story prefix; they were left untouched and no second label was stacked (one label per test). No suite was run for this note; the sweep only re-checked each row against its test or verifier section.
+
+| Rows | Label already at |
+| --- | --- |
+| AC3-H1, AC3-P1, AC3-P2, AC3-N1, AC4-X2 | `frontend/__tests__/venue-replacement.test.tsx` (AC3-H1 and AC4-X2 each label two tests) |
+| AC4-H1, AC4-N1 to AC4-N5, AC4-N7, AC4-N8, AC4-N9, AC4-P1, AC5-H1, AC5-N1 to AC5-N3, AC5-X2 | `backend/venueService/tests/test_booking_replacement.py` |
+| AC4-N6 (store error mapping, with the other replacement refusals) | `backend/venueService/tests/test_supabase_booking_repository.py`, the combined AC4-N1 to AC4-N7 label |
+| AC4-X1, AC5-X1 | `database/tests/test_venue_replacement_concurrency.py` |
+| AC4-H1, AC4-N1 to AC4-N9, AC5-H1, AC5-N1 to AC5-N4 (native proof) | the matching `-- AC…` sections of `database/verify_venue_replacement_requests.sql` |
+
+Three rows still have no proving test anywhere; the execution record above already notes that AC1-X1 and AC2-H2 stay with the API layer:
+
+- **AC1-X1**: the nearest test, `test_venue_blocks.py::test_non_venue_staff_cannot_create_block`, carries another story's `AC1-X2` label and covers only the coordinator 403; the organiser and no-token cases and the "flags nothing" assertion are untested.
+- **AC2-H2**: no test asserts that a block leaves the event's other bookings untouched.
+- **AC3-X1**: no test asserts flag visibility by role (venue staff and safety officer 200, unassigned coordinator 404, organiser 403); `test_booking_requests_by_event.py` covers booking-read roles without flags, under unprefixed AC3 IDs that collide with this story's.
