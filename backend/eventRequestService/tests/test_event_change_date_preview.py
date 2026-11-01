@@ -92,7 +92,8 @@ def test_refused_preview_has_specific_code_and_no_effects(monkeypatch, kind, cod
     if kind == "stale":
         repository.rows[event]["updated_at"] = "2026-10-22T01:00:01Z"
     elif kind == "state":
-        repository.rows[event]["status"] = "Confirmed"
+        # Hotfix 9 made Confirmed changeable, so a closed event is the obsolete state.
+        repository.rows[event]["status"] = "Completed"
     else:
         repository.change_request_rows[0]["proposed_changes"]["expected_attendance"] = 80
     before = protected(repository)

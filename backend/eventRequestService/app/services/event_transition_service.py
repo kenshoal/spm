@@ -87,6 +87,37 @@ class DecisionReasonRequiredError(Exception):
         super().__init__(f"A reason is required when the decision is {decision.value}")
 
 
+class TransitionInputInvalidError(Exception):
+    """The database refused the content of a postponement or resumption (SQLSTATE 22023)."""
+
+
+class OrganiserChangeRefusedError(Exception):
+    """Hotfix 24: the new Organiser cannot take over; carries the response status."""
+
+    status_code = 422
+
+
+class OrganiserNotFoundError(OrganiserChangeRefusedError):
+    def __init__(self) -> None:
+        super().__init__("No Event Organiser account has that email address.")
+
+
+class OrganiserOutsideOrganisationError(OrganiserChangeRefusedError):
+    status_code = 409
+
+    def __init__(self) -> None:
+        super().__init__(
+            "That Event Organiser is not in the client organisation this event belongs to."
+        )
+
+
+class OrganiserChangeInvalidError(OrganiserChangeRefusedError):
+    def __init__(self) -> None:
+        super().__init__(
+            "Give a reason, and choose someone other than the current Event Organiser."
+        )
+
+
 class SafetyDecisionInvalidError(Exception):
     """The database refused the decision's content (SQLSTATE 22023)."""
 
@@ -192,6 +223,107 @@ class EventTransitionService:
         self.event_request_service.notify_owners_of_cancellation(event_request)
         return event_request
 
+    def withdraw(self, event_request_id: str, caller_id: str) -> EventRequestResponse:
+        """Hotfix 21 (Q&A #103): the Coordinator records a withdrawal of a request
+        that is still under review."""
+        event_request = self._advance(
+            event_request_id, caller_id, EventRequestStatus.WITHDRAWN
+        )
+        self.notification_client.notify_event_request_withdrawn(
+            event_request_id=event_request_id,
+            event_name=event_request.event_name,
+            organiser_id=event_request.organiser_id,
+        )
+        return event_request
+
+    def postpone(
+        self, event_request_id: str, caller_id: str, reason: str
+    ) -> EventRequestResponse:
+        """Hotfix 22 (Q&A #69, #121): postpone with no new date; bookings are released."""
+        event_request = self._run_postponement(
+            event_request_id,
+            lambda: self.event_request_service.postpone_by_coordinator(
+                event_request_id, caller_id, reason
+            ),
+            "postpone",
+        )
+        self.event_request_service.notify_of_postponement(event_request, reason)
+        return event_request
+
+    def resume(
+        self, event_request_id: str, caller_id: str, new_date_times: list[str]
+    ) -> EventRequestResponse:
+        """Hotfix 22: give a postponed event its new date; it goes back to Planning."""
+        event_request = self._run_postponement(
+            event_request_id,
+            lambda: self.event_request_service.resume_postponed(
+                event_request_id, caller_id, new_date_times
+            ),
+            "resume",
+        )
+        self.event_request_service.notify_of_resumption(event_request)
+        return event_request
+
+    def _run_postponement(self, event_request_id: str, run: Any, verb: str) -> EventRequestResponse:
+        try:
+            return run()
+        except EventRequestRpcError as error:
+            if error.errcode == NOT_FOUND_ERRCODE:
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == NOT_ASSIGNED_ERRCODE:
+                raise TransitionForbiddenError(event_request_id) from error
+            if error.errcode == NOT_ALLOWED_ERRCODE:
+                raise TransitionNotAllowedError(
+                    event_request_id,
+                    f"Cannot {verb} event request {event_request_id} from its current status",
+                ) from error
+            if error.errcode == INVALID_PARAMETER_ERRCODE:
+                raise TransitionInputInvalidError(
+                    "A reason is required to postpone, and a new date must be in the future "
+                    "to resume."
+                ) from error
+            raise
+
+    def change_organiser(
+        self, event_request_id: str, caller_id: str, organiser_email: str, reason: str
+    ) -> EventRequestResponse:
+        """Hotfix 24 (Q&A #59, #61): the assigned Coordinator changes the Event Organiser."""
+        try:
+            previous_id, event_request = self.event_request_service.change_organiser(
+                event_request_id, caller_id, organiser_email, reason
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == NOT_FOUND_ERRCODE:
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == NOT_ASSIGNED_ERRCODE:
+                raise TransitionForbiddenError(event_request_id) from error
+            if error.errcode == NOT_ALLOWED_ERRCODE:
+                raise TransitionNotAllowedError(
+                    event_request_id,
+                    f"The Event Organiser of {event_request_id} cannot be changed from its "
+                    "current status",
+                ) from error
+            if error.errcode == "P0006":
+                raise OrganiserNotFoundError from error
+            if error.errcode == "P0007":
+                raise OrganiserOutsideOrganisationError from error
+            if error.errcode == INVALID_PARAMETER_ERRCODE:
+                raise OrganiserChangeInvalidError from error
+            raise
+        key = f"{event_request.id}:{event_request.updated_at.isoformat()}"
+        recipients = [(event_request.organiser_id, True)]
+        if previous_id is not None and previous_id != event_request.organiser_id:
+            recipients.append((previous_id, False))
+        for recipient_id, became_organiser in recipients:
+            self.notification_client.notify_event_organiser_changed(
+                event_request_id=event_request.id,
+                event_name=event_request.event_name,
+                change_key=key,
+                recipient_id=recipient_id,
+                became_organiser=became_organiser,
+            )
+        return event_request
+
     def complete(self, event_request_id: str, caller_id: str) -> EventRequestResponse:
         return self._advance(
             event_request_id, caller_id, EventRequestStatus.COMPLETED
@@ -279,8 +411,8 @@ class EventTransitionService:
                 event_request_id=event_request_id,
                 organiser_id=event_request.organiser_id,
             )
-        elif payload.decision == "changes_requested":
-            # The decision is saved: a failed lookup must not turn it into a 502,
+        else:
+            # Asking for changes or rejecting (Q&A #130). The decision is saved: a failed lookup must not turn it into a 502,
             # which the officer would retry into a 409. The reason stays readable
             # on the request.
             try:
@@ -296,7 +428,12 @@ class EventTransitionService:
                 )
                 coordinator_id = None
             if coordinator_id is not None:
-                self.notification_client.notify_safety_changes_requested(
+                notify = (
+                    self.notification_client.notify_safety_rejected
+                    if payload.decision == "rejected"
+                    else self.notification_client.notify_safety_changes_requested
+                )
+                notify(
                     event_request_id=event_request_id,
                     coordinator_id=coordinator_id,
                     reason=payload.reason,

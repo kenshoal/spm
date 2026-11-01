@@ -1,14 +1,15 @@
 import { unstable_rethrow } from "next/navigation";
-import { formatDateTime } from "@/lib/event-requests";
 import { getRegistrationInfo, type RegistrationInfo } from "@/lib/registration-info";
-import { CheckInButton } from "../coordination/requests/[id]/check-in-button";
+import { vipPlaces } from "@/lib/vip-places";
+import { RegistrationSettingsForm } from "../coordination/requests/[id]/registration-settings-form";
+import { RegistrationTable } from "./registration-table";
 import { ManualRegistrationForm } from "../coordination/requests/[id]/manual-registration-form";
 
 const sectionClass = "mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6";
 
-/** SCRUM-34: attendees are shown by account id only; no contact details exist here. */
-export async function RegistrationInfoPanel({ eventRequestId, canAddAttendee = false, canCheckIn = false }: {
-  eventRequestId: string; canAddAttendee?: boolean; canCheckIn?: boolean;
+/** SCRUM-34: each registration with its attendee (hotfix 16 adds their email, Q&A #32). */
+export async function RegistrationInfoPanel({ eventRequestId, canAddAttendee = false, canCheckIn = false, canSetSettings = false }: {
+  eventRequestId: string; canAddAttendee?: boolean; canCheckIn?: boolean; canSetSettings?: boolean;
 }) {
   let info: RegistrationInfo;
   try {
@@ -38,28 +39,17 @@ export async function RegistrationInfoPanel({ eventRequestId, canAddAttendee = f
       {info.registrations.length === 0 ? (
         <p className="mt-4 text-sm text-[#68776f]">No one has registered yet.</p>
       ) : (
-        <table className="mt-4 w-full text-left text-sm">
-          <thead className="text-xs text-[#68776f]"><tr><th className="py-2">Attendee</th><th>Status</th><th>Registered</th><th>Added by</th><th>Checked in</th></tr></thead>
-          <tbody>
-            {info.registrations.map((row) => (
-              <tr key={row.id} className="border-t border-[#e1e7e4]">
-                <td className="py-2 font-mono text-xs break-all">{row.attendee_id}</td>
-                <td>{row.status}</td>
-                <td><time dateTime={row.created_at}>{formatDateTime(row.created_at)}</time></td>
-                <td>{row.registered_by ? `Coordinator ${row.registered_by}` : "Self"}</td>
-                <td>
-                  {row.attended_at ? (
-                    <time dateTime={row.attended_at}>{formatDateTime(row.attended_at)}</time>
-                  ) : canCheckIn && row.status === "Registered" ? (
-                    <CheckInButton eventRequestId={eventRequestId} registrationId={row.id} />
-                  ) : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <RegistrationTable eventRequestId={eventRequestId} registrations={info.registrations} canCheckIn={canCheckIn} />
       )}
-      {canAddAttendee ? <ManualRegistrationForm eventRequestId={eventRequestId} /> : null}
+      {canSetSettings ? (
+        <RegistrationSettingsForm
+          eventRequestId={eventRequestId}
+          opensAt={info.registration_opens_at ?? null}
+          closesAt={info.registration_closes_at ?? null}
+          capacity={info.registration_capacity}
+        />
+      ) : null}
+      {canAddAttendee ? <ManualRegistrationForm eventRequestId={eventRequestId} vipPlaces={vipPlaces(info)} /> : null}
     </section>
   );
 }

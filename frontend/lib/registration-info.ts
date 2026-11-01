@@ -5,6 +5,8 @@ import { requireAccessToken } from "./auth";
 export interface EventRegistration {
   id: string;
   attendee_id: string;
+  /** Hotfix 16: so staff can look a person up; null if the lookup failed. */
+  attendee_email?: string | null;
   status: string;
   created_at: string;
   /** SCRUM-41: the coordinator who entered it; null when self-registered. */
@@ -17,6 +19,10 @@ export interface EventRegistration {
 export interface RegistrationInfo {
   event_request_id: string;
   registration_capacity: number | null;
+  /** Hotfix 23: seats of the booked venues; a VIP may be added up to this (Q&A #99). */
+  venue_capacity?: number | null;
+  registration_opens_at?: string | null;
+  registration_closes_at?: string | null;
   registered: number;
   withdrawn: number;
   places_available: number | null;

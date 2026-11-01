@@ -21,6 +21,10 @@ import { listSafetyReviews } from "@/lib/safety";
 import { formatBookingDates, listEventBookings } from "@/lib/event-bookings";
 import { listVenues } from "@/lib/venues";
 import { SUPPORT_STATUSES } from "@/lib/technical-support";
+import { EquipmentRequirementsPanel } from "./equipment-requirements-panel";
+import { EventDetailsForm } from "./event-details-form";
+import { ChangeOrganiserForm, PostponeEventForm, ResumeEventForm } from "./lifecycle-forms";
+import { WaitlistPanel } from "./waitlist-panel";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
 import { FinalEventEndForm } from "./final-event-end-form";
@@ -30,7 +34,16 @@ import { VenueHoldsLoading, VenueHoldsPanel } from "./venue-holds-panel";
 
 // SCRUM-18: a venue can be held while the event is being finalised: approved,
 // not yet confirmed.
+const REGISTRATION_SETTINGS_STATUSES = new Set(["Approved", "Planning", "Safety Review", "Confirmed"]);
+const DETAILS_EDITABLE_STATUSES = new Set(["Under Review", "Approved", "Planning", "Confirmed"]);
+const BOOKABLE_STATUSES = new Set(["Approved", "Planning"]);
 const HOLDABLE_STATUSES = new Set(["Approved", "Planning", "Safety Review"]);
+// Hotfix 22 (Q&A #69, #121): from these the Coordinator can postpone; Postponed gets a new date.
+const POSTPONABLE_STATUSES = new Set(["Approved", "Planning", "Safety Review", "Confirmed"]);
+// Hotfix 24 (Q&A #59, #61): the Event Organiser can be changed while the event is live.
+const ORGANISER_CHANGEABLE_STATUSES = new Set([
+  "Submitted", "Under Review", "Changes Requested", "Approved", "Planning", "Safety Review", "Confirmed", "Postponed",
+]);
 import { TechnicalSupportLoading, TechnicalSupportPanel } from "./technical-support-panel";
 
 import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
@@ -108,7 +121,7 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
       <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
       <Suspense fallback={<ArrangementReviewLoading />}><ArrangementReviewPanel eventId={id} /></Suspense>
       <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} canAcknowledge /></Suspense>
-      <Suspense fallback={<RegistrationInfoLoading />}><RegistrationInfoPanel eventRequestId={id} canAddAttendee={request.status === "Confirmed"} canCheckIn={request.status === "Confirmed" && isEventDay(request.proposed_date_times)} /></Suspense>
+      <Suspense fallback={<RegistrationInfoLoading />}><RegistrationInfoPanel eventRequestId={id} canSetSettings={REGISTRATION_SETTINGS_STATUSES.has(request.status)} canAddAttendee={request.status === "Confirmed"} canCheckIn={request.status === "Confirmed" && isEventDay(request.proposed_date_times)} /></Suspense>
       <div className="mt-5">
         <ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} />
       </div>
@@ -120,9 +133,12 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
           <SafetyReviewsPanel reviews={safetyResult.reviews} labels={bookingLabels} />
         </div>
       ) : null}
+      {request.status === "Confirmed" ? <WaitlistPanel eventRequestId={request.id} /> : null}
+      {DETAILS_EDITABLE_STATUSES.has(request.status) ? <EventDetailsForm request={request} /> : null}
       <Suspense fallback={<VenueBookingsLoading />}>
-        <VenueBookingsPanel eventRequestId={request.id} />
+        <VenueBookingsPanel eventRequestId={request.id} canRequest={BOOKABLE_STATUSES.has(request.status)} />
       </Suspense>
+      <EquipmentRequirementsPanel eventRequestId={request.id} canRecord={BOOKABLE_STATUSES.has(request.status)} />
       <Suspense fallback={<VenueHoldsLoading />}>
         <VenueHoldsPanel eventRequestId={request.id} canPlace={HOLDABLE_STATUSES.has(request.status)} />
       </Suspense>
@@ -155,6 +171,9 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
             <TransitionButton eventRequestId={request.id} kind="resume-review" />
           </div>
         ) : null}
+        {POSTPONABLE_STATUSES.has(request.status) ? <PostponeEventForm eventRequestId={request.id} /> : null}
+        {request.status === "Postponed" ? <ResumeEventForm eventRequestId={request.id} /> : null}
+        {ORGANISER_CHANGEABLE_STATUSES.has(request.status) ? <ChangeOrganiserForm eventRequestId={request.id} /> : null}
         {coordinatorActions(request.status).length === 0 && !canResumeReview ? (
           <p className="mt-3 text-sm leading-6 text-[#718078]">This request is {request.status.toLowerCase()} — no further actions are available.</p>
         ) : (

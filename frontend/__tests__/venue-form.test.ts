@@ -36,6 +36,7 @@ test("parses a complete venue", () => {
     facilities: ["Projector", "WiFi"],
     accessibility_features: ["Ramp access"],
     supported_layouts: ["theatre", "classroom"],
+    layout_capacities: {},
     setup_minutes: 0,
     turnaround_minutes: 0,
   });

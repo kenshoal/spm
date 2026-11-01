@@ -171,7 +171,8 @@ BEGIN
  ASSERT pg_temp.scrum35_state()=before_state,'AC3-N2: no-op approval changed state';
 
  -- AC3-N3 (negative): current source state is checked independently of matching base version.
- UPDATE public.event_requests SET status='Confirmed' WHERE id=p;
+ -- Hotfix 9 made Confirmed changeable (Q&A #8), so Safety Review is the ineligible state here.
+ UPDATE public.event_requests SET status='Safety Review' WHERE id=p;
  UPDATE public.event_change_requests SET proposed_changes='{"expected_attendance":60}'::jsonb,
   base_event_updated_at=(SELECT updated_at FROM public.event_requests WHERE id=p) WHERE id=pending.id;
  before_state:=pg_temp.scrum35_state();

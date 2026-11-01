@@ -120,7 +120,7 @@ def make_client(
         return authorization.removeprefix("Bearer ")
 
     app.dependency_overrides[get_current_user_id] = fake_user_id
-    return TestClient(app)
+    return TestClient(app, headers={"X-Internal-Token": "test-internal-token"})
 
 
 def signed_in_as(user_id: str) -> dict[str, str]:

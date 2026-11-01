@@ -38,7 +38,14 @@ class BookingNotifier:
         if self._url is None:
             return False
         try:
-            response = httpx.post(self._url, json=event, timeout=5)
+            response = httpx.post(
+                self._url,
+                json=event,
+                headers={
+                    "X-Internal-Token": os.environ.get("NOTIFICATION_INTERNAL_TOKEN", "")
+                },
+                timeout=5,
+            )
             response.raise_for_status()
         except httpx.HTTPError:
             # Log ids only: the receiver URL or response could hold secrets.

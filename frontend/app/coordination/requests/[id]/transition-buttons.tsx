@@ -8,6 +8,7 @@ import {
   sendForSafetyReview,
   startEventPlanning,
   startEventRequestReview,
+  withdrawEventRequest,
   type TransitionState,
 } from "../../actions";
 
@@ -16,6 +17,7 @@ type TransitionKind =
   | "planning"
   | "safety-review"
   | "resume-review"
+  | "withdrawal"
   | "cancellation"
   | "completion";
 
@@ -24,6 +26,7 @@ const actions = {
   planning: startEventPlanning,
   "safety-review": sendForSafetyReview,
   "resume-review": resumeEventRequestReview,
+  withdrawal: withdrawEventRequest,
   cancellation: cancelEventRequest,
   completion: completeEventRequest,
 } as const;
@@ -36,6 +39,7 @@ const buttons: Record<
   planning: { label: "Start planning", pending: "Starting planning…" },
   "safety-review": { label: "Send for safety review", pending: "Sending…" },
   "resume-review": { label: "Continue review", pending: "Continuing review…" },
+  withdrawal: { label: "Record withdrawal", pending: "Recording…", destructive: true },
   cancellation: {
     label: "Cancel event",
     pending: "Cancelling…",
@@ -44,7 +48,11 @@ const buttons: Record<
   completion: { label: "Mark complete", pending: "Marking complete…" },
 };
 
-const dialogs: Record<"cancellation" | "completion", { title: string; body: string }> = {
+const dialogs: Record<"withdrawal" | "cancellation" | "completion", { title: string; body: string }> = {
+  withdrawal: {
+    title: "Record the withdrawal of this request?",
+    body: "Use this when the Event Organiser has asked you to withdraw the request. It stays on record as withdrawn, separate from cancelled and rejected, and the organiser is told.",
+  },
   cancellation: {
     title: "Cancel this event?",
     body: "Cancelling stops all further coordination for this request. This cannot be undone.",
@@ -71,7 +79,7 @@ export function TransitionButton({
     transition,
     initialState,
   );
-  const dialog = kind === "cancellation" || kind === "completion" ? dialogs[kind] : null;
+  const dialog = kind === "withdrawal" || kind === "cancellation" || kind === "completion" ? dialogs[kind] : null;
 
   const buttonClass = config.destructive
     ? "rounded-lg border border-[#e4b6b0] bg-white px-4 py-2.5 text-sm font-semibold text-[#a23939] transition hover:bg-[#fff0f0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#a23939] disabled:cursor-not-allowed disabled:opacity-60"

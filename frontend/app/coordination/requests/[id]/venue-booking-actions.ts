@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sendJson } from "@/lib/api";
+import { timeRangeFrom } from "@/lib/venue-options";
 import { requireRole } from "@/lib/auth";
 import { venueApiUrl } from "@/lib/venues";
 
@@ -112,4 +113,55 @@ export async function requestReplacementVenue(
   const conflicts = readConflicts(await response.json().catch(() => null));
   revalidatePath(`/coordination/requests/${eventRequestId}`);
   return conflicts.length > 0 ? { conflicts } : {};
+}
+
+export interface RequestVenueState extends ReplacementState {
+  venueName?: string;
+  submitted?: boolean;
+}
+
+// Hotfix 6 (SCRUM-32, SCRUM-61): request a venue for the event. The API checks the
+// assignment and the event; a clash comes back as a warning (SCRUM-67), and Venue
+// Staff still decide the request.
+export async function requestVenueBooking(
+  eventRequestId: string,
+  previousState: RequestVenueState,
+  formData: FormData,
+): Promise<RequestVenueState> {
+  void previousState;
+  const venueId = String(formData.get("venue_id") ?? "");
+  const startDate = String(formData.get("start_date") ?? "");
+  const endDate = String(formData.get("end_date") ?? "") || startDate;
+  const range = timeRangeFrom(String(formData.get("start_time") ?? ""), String(formData.get("end_time") ?? ""));
+  if (!venueId || !startDate) return { message: "Choose a venue and a date." };
+  if (range.start_minute === null || range.end_minute === null || Object.keys(range.errors).length) {
+    return { message: "Choose a start time and a later end time." };
+  }
+  await requireRole("event_coordinator");
+  let response: Response;
+  try {
+    response = await sendJson(venueApiUrl, "/booking-requests", "POST", {
+      venue_id: venueId,
+      event_request_id: eventRequestId,
+      start_date: startDate,
+      end_date: endDate,
+      start_minute: range.start_minute,
+      end_minute: range.end_minute,
+    });
+  } catch {
+    return { message: "The venue could not be requested. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    const messages: Record<number, string> = {
+      403: "Only the event's coordinator can request a venue.",
+      404: "This event or venue could not be found, or the event is no longer assigned to you.",
+      409: "This event changed. Refresh the page and try again.",
+      422: "Check the dates and times, then try again.",
+    };
+    return { message: messages[response.status] ?? "The venue could not be requested. Please try again." };
+  }
+  const conflicts = readConflicts(await response.json().catch(() => null));
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  return { submitted: true, conflicts };
 }

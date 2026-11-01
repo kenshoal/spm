@@ -296,6 +296,7 @@ def test_the_service_emails_through_the_delivery_built_from_its_settings(
                     "event_type": "clarification_requested",
                     "recipient_id": "organiser-1",
                 },
+                headers={"X-Internal-Token": "test-internal-token"},
             )
     finally:
         main.get_settings.cache_clear()

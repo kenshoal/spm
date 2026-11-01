@@ -3,12 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAccessToken, requireRole } from "@/lib/auth";
+import { parsePartialDecision } from "@/lib/change-decision";
 import { parseFinalEndInput } from "@/lib/event-final-end";
 import { getEventChangeBookingPlan, getEventChangeDatePlan, type EventChangeBookingConflict, type EventChangeBookingPlan, type EventChangeDatePlan } from "@/lib/event-requests";
 
 export interface TransitionState {
   message?: string;
   errors?: { reason?: string };
+  // Hotfix 20: field name -> what is missing from that field's reason.
+  fieldErrors?: Record<string, string>;
   // SCRUM-58 AC3: what still blocks sending for safety review, one line each.
   outstanding?: string[];
   bookingConflicts?: EventChangeBookingConflict[];
@@ -21,7 +24,7 @@ const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
 async function transition(
   eventRequestId: string,
-  path: "review" | "planning" | "safety-review" | "resume-review" | "cancellation" | "completion",
+  path: "review" | "planning" | "safety-review" | "resume-review" | "withdrawal" | "cancellation" | "completion",
 ): Promise<TransitionState> {
   await requireRole("event_coordinator");
   const token = await requireAccessToken();
@@ -111,6 +114,16 @@ export async function resumeEventRequestReview(
   void previousState;
   void formData;
   return transition(eventRequestId, "resume-review");
+}
+
+export async function withdrawEventRequest(
+  eventRequestId: string,
+  previousState: TransitionState,
+  formData: FormData,
+): Promise<TransitionState> {
+  void previousState;
+  void formData;
+  return transition(eventRequestId, "withdrawal");
 }
 
 export async function cancelEventRequest(
@@ -250,6 +263,57 @@ export async function decideEventChangeRequest(
   return {};
 }
 
+
+/** Hotfix 20 (Q&A #104): accept some fields and refuse the others, each with a reason. */
+export async function decideEventChangeRequestPartly(
+  eventRequestId: string,
+  changeRequestId: string,
+  proposedFields: string[],
+  previousState: TransitionState,
+  formData: FormData,
+): Promise<TransitionState> {
+  void previousState;
+  await requireRole("event_coordinator");
+  const parsed = parsePartialDecision(formData, proposedFields);
+  if (!parsed.decision) return { message: parsed.message, fieldErrors: parsed.errors };
+  const note = String(formData.get("reason") ?? "").trim();
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/change-requests/${encodeURIComponent(changeRequestId)}/decision`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ decision: "Approved", reason: note || null, ...parsed.decision }),
+      },
+    );
+  } catch {
+    return { message: "The change decision could not be recorded. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    if (response.status === 409) {
+      const body = await response.json().catch(() => null);
+      if (body?.detail?.code === "BOOKING_CONFLICT") {
+        return { message: "Accepting the new dates would clash with a venue booking. Decide the dates on their own." };
+      }
+    }
+    return {
+      message: response.status === 403
+        ? "Only the coordinator currently assigned to this request can decide the change."
+        : response.status === 409
+          ? "This change is already decided or the event plan has changed. Refresh before deciding."
+          : response.status === 422
+            ? "Check the accepted fields and that every refused field has a reason. Dates need a complete booking plan."
+            : "The change decision could not be recorded. Please try again.",
+    };
+  }
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  revalidatePath("/event-requests");
+  return {};
+}
 
 export interface PreviewDateChangeState {
   plan?: EventChangeDatePlan;

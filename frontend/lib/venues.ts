@@ -12,6 +12,7 @@ export interface Venue {
   facilities: string[];
   accessibility_features: string[];
   supported_layouts: RoomLayout[];
+  layout_capacities?: Partial<Record<RoomLayout, number>>;
   operating_slots: Slot[];
   setup_minutes: number;
   turnaround_minutes: number;

@@ -65,6 +65,8 @@ def requirement_row(**overrides: Any) -> dict[str, Any]:
         "recorded_at": "2026-10-06T09:00:00+08:00",
         "updated_by": None,
         "updated_at": None,
+        "essential": True,
+        "essential_note": None,
     }
     row.update(overrides)
     return row

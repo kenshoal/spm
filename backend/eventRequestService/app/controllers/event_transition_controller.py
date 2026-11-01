@@ -12,8 +12,11 @@ from app.controllers.event_request_controller import (
     get_event_request_service,
 )
 from app.models.event_request import (
+    EventOrganiserChange,
+    EventPostponement,
     EventRequestResponse,
     EventRequestStatus,
+    EventResumption,
     EventReviewDecision,
     SafetyDecision,
     SafetyReviewResponse,
@@ -113,6 +116,54 @@ def cancel_event(
     service: ServiceDependency,
 ) -> EventRequestResponse:
     return service.cancel(str(event_request_id), caller_id)
+
+
+@router.post("/{event_request_id}/withdrawal", response_model=EventRequestResponse)
+def withdraw_request(
+    event_request_id: UUID,
+    caller_id: CallerDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    """Hotfix 21 (Q&A #103): the assigned Coordinator records a withdrawal."""
+    return service.withdraw(str(event_request_id), caller_id)
+
+
+@router.post("/{event_request_id}/postponement", response_model=EventRequestResponse)
+def postpone_event(
+    event_request_id: UUID,
+    payload: EventPostponement,
+    caller_id: CallerDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    """Hotfix 22 (Q&A #69, #121): postpone with no new date; arrangements are released."""
+    return service.postpone(str(event_request_id), caller_id, payload.reason)
+
+
+@router.post("/{event_request_id}/organiser", response_model=EventRequestResponse)
+def change_organiser(
+    event_request_id: UUID,
+    payload: EventOrganiserChange,
+    caller_id: CallerDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    """Hotfix 24 (Q&A #59, #61): the assigned Coordinator changes the Event Organiser."""
+    return service.change_organiser(
+        str(event_request_id), caller_id, payload.organiser_email, payload.reason
+    )
+
+
+@router.post("/{event_request_id}/resumption", response_model=EventRequestResponse)
+def resume_event(
+    event_request_id: UUID,
+    payload: EventResumption,
+    caller_id: CallerDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    """Hotfix 22: a postponed event is given its new date and returns to Planning."""
+    return service.resume(
+        str(event_request_id), caller_id,
+        [moment.isoformat() for moment in payload.proposed_date_times],
+    )
 
 
 @router.post(

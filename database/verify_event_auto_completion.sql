@@ -73,8 +73,16 @@ BEGIN
  INSERT INTO public.event_registration_reviews(event_request_id,event_updated_at,changed_fields,reason,raised_at,cleared_at,cleared_by)
  SELECT e,updated_at,ARRAY['registration_needs'],'VERIFY40 retained registration acknowledgement',transaction_timestamp(),clock_timestamp(),owner_id
  FROM public.event_requests WHERE id=e;
+ -- Hotfix 9: an event_change review on a Confirmed event reopens it (0071). This fixture
+ -- needs the review to sit beside a Confirmed event, so the trigger is off for one insert.
+ IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='arrangement_reviews_reopen_confirmed') THEN
+  ALTER TABLE public.arrangement_reviews DISABLE TRIGGER arrangement_reviews_reopen_confirmed;
+ END IF;
  INSERT INTO public.arrangement_reviews(event_request_id,arrangement,arrangement_id,trigger_id,trigger_type,changed_fields,reason)
  VALUES(e,'venue_booking',booking,gen_random_uuid(),'event_change',ARRAY['expected_attendance'],'VERIFY40 existing review remains outstanding');
+ IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='arrangement_reviews_reopen_confirmed') THEN
+  ALTER TABLE public.arrangement_reviews ENABLE TRIGGER arrangement_reviews_reopen_confirmed;
+ END IF;
  INSERT INTO public.event_request_outbox(event_request_id,organiser_id,event_type,payload)
  VALUES(e,owner_id,'event_request.submitted',jsonb_build_object('event_request_id',e));
  INSERT INTO public.notifications(recipient_id,event_type,payload,event_id)

@@ -17,6 +17,7 @@ export interface VenuePayload {
   setup_minutes: number | null;
   turnaround_minutes: number | null;
   status?: VenueStatus;
+  layout_capacities: Partial<Record<RoomLayout, number>>;
 }
 
 // Raw text as typed/checked on the form — no parsing, no filtering against
@@ -33,6 +34,7 @@ export interface VenueFormValues {
   setup_minutes: string;
   turnaround_minutes: string;
   status?: string;
+  layout_capacities: Record<string, string>;
 }
 
 // Comma-separated free text → trimmed, non-empty values, de-duplicated
@@ -91,11 +93,25 @@ export function readVenueFormValues(formData: FormData): VenueFormValues {
     facilities: text(formData, "facilities"),
     accessibility_features: text(formData, "accessibility_features"),
     supported_layouts: formData.getAll("supported_layouts").map(String),
+    layout_capacities: Object.fromEntries(
+      ROOM_LAYOUTS.map((layout) => [layout, text(formData, `layout_capacity_${layout}`)]),
+    ),
     setup_minutes: text(formData, "setup_minutes"),
     turnaround_minutes: text(formData, "turnaround_minutes"),
   };
   if (formData.has("status")) values.status = text(formData, "status");
   return values;
+}
+
+// Hotfix 12 (Q&A #112): blank means the layout uses the maximum capacity. Anything
+// that is not a positive whole number stays out, and the field error below says so.
+function layoutCapacities(formData: FormData): Partial<Record<RoomLayout, number>> {
+  const capacities: Partial<Record<RoomLayout, number>> = {};
+  for (const layout of ROOM_LAYOUTS) {
+    const value = text(formData, `layout_capacity_${layout}`);
+    if (/^\d+$/.test(value) && Number(value) > 0) capacities[layout] = Number(value);
+  }
+  return capacities;
 }
 
 export function parseVenueForm(
@@ -111,6 +127,7 @@ export function parseVenueForm(
     facilities: splitList(text(formData, "facilities")),
     accessibility_features: splitList(text(formData, "accessibility_features")),
     supported_layouts: pick(formData, "supported_layouts", ROOM_LAYOUTS),
+    layout_capacities: layoutCapacities(formData),
     setup_minutes: prepMinutes(text(formData, "setup_minutes")),
     turnaround_minutes: prepMinutes(text(formData, "turnaround_minutes")),
   };
@@ -122,6 +139,11 @@ export function parseVenueForm(
   if (!payload.name) errors.name = "Enter the venue name.";
   if (!payload.location) errors.location = "Enter the venue location.";
   if (capacity === null || capacity <= 0) errors.max_capacity = "Enter a whole number greater than zero.";
+  const badLayoutCapacity = ROOM_LAYOUTS.some((layout) => {
+    const value = text(formData, `layout_capacity_${layout}`);
+    return value !== "" && !(/^\d+$/.test(value) && Number(value) > 0);
+  });
+  if (badLayoutCapacity) errors.layout_capacities = "Enter a whole number greater than zero, or leave it blank.";
   const prepError = `Enter minutes in steps of ${PREP_MINUTES_STEP}, from 0 to ${MAX_PREP_MINUTES}.`;
   if (payload.setup_minutes === null) errors.setup_minutes = prepError;
   if (payload.turnaround_minutes === null) errors.turnaround_minutes = prepError;

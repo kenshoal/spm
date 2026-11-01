@@ -57,6 +57,14 @@ class VenueStatus(str, Enum):
     BLOCKED = "blocked"
 
 
+def _positive_layout_capacities(
+    value: dict[RoomLayout, int],
+) -> dict[RoomLayout, int]:
+    if any(capacity <= 0 for capacity in value.values()):
+        raise ValueError("Each layout's capacity must be a positive whole number")
+    return value
+
+
 class VenueBase(BaseModel):
     name: str = Field(min_length=1)
     location: str = Field(min_length=1)
@@ -64,12 +72,28 @@ class VenueBase(BaseModel):
     facilities: list[str] = Field(default_factory=list)
     accessibility_features: list[str] = Field(default_factory=list)
     supported_layouts: list[RoomLayout] = Field(default_factory=list)
+    # Hotfix 12 (Q&A #112): capacity per layout. A layout with no entry uses max_capacity.
+    layout_capacities: dict[RoomLayout, int] = Field(default_factory=dict)
     operating_slots: list[Slot] = Field(
         default_factory=lambda: [Slot.AM, Slot.PM, Slot.NIGHT]
     )
     # 0 means none; venues start with none until Venue Staff set one (SCRUM-59).
     setup_minutes: PrepMinutes = 0
     turnaround_minutes: PrepMinutes = 0
+
+
+    @field_validator("layout_capacities")
+    @classmethod
+    def _layout_capacities_are_positive(
+        cls, value: dict[RoomLayout, int]
+    ) -> dict[RoomLayout, int]:
+        return _positive_layout_capacities(value)
+
+    def capacity_for(self, layout: RoomLayout | None) -> int:
+        """The capacity to judge an event by: the layout's own when it has one."""
+        if layout is None:
+            return self.max_capacity
+        return self.layout_capacities.get(layout, self.max_capacity)
 
 
 class VenueCreate(VenueBase):
@@ -85,10 +109,18 @@ class VenueUpdate(BaseModel):
     facilities: list[str] | None = None
     accessibility_features: list[str] | None = None
     supported_layouts: list[RoomLayout] | None = None
+    layout_capacities: dict[RoomLayout, int] | None = None
     operating_slots: list[Slot] | None = None
     status: VenueStatus | None = None
     setup_minutes: PrepMinutes | None = None
     turnaround_minutes: PrepMinutes | None = None
+
+    @field_validator("layout_capacities")
+    @classmethod
+    def _update_layout_capacities_are_positive(
+        cls, value: dict[RoomLayout, int] | None
+    ) -> dict[RoomLayout, int] | None:
+        return None if value is None else _positive_layout_capacities(value)
 
     @field_validator("setup_minutes", "turnaround_minutes")
     @classmethod

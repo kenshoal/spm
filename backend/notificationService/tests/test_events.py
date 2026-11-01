@@ -5,6 +5,7 @@ import pytest
 from fakes import FakeNotificationRepository, make_client
 from fastapi.testclient import TestClient
 
+from app.auth import INTERNAL_TOKEN_HEADER
 from app.config import get_settings
 from app.main import create_app
 
@@ -165,9 +166,53 @@ def test_reports_missing_supabase_configuration(
     try:
         with TestClient(create_app()) as client:
             response = client.post(
-                ENDPOINT, json={"event_type": "event.cancelled", "recipient_id": "o-1"}
+                ENDPOINT,
+                json={"event_type": "event.cancelled", "recipient_id": "o-1"},
+                headers={INTERNAL_TOKEN_HEADER: "test-internal-token"},
             )
     finally:
         get_settings.cache_clear()
 
     assert response.status_code == 503
+
+
+# AC17-N1 (negative, hotfix 17): no token is refused and nothing is stored or emailed
+def test_event_without_the_internal_token_is_refused() -> None:
+    repository = FakeNotificationRepository()
+    with make_client(repository) as client:
+        client.headers.pop(INTERNAL_TOKEN_HEADER)
+        response = client.post(
+            ENDPOINT, json={"event_type": "event_cancelled", "recipient_id": "a1"}
+        )
+
+    assert response.status_code == 401
+    assert repository.rows == []
+
+
+# AC17-N2 (negative, hotfix 17): a wrong token is refused and nothing is stored
+def test_event_with_a_wrong_internal_token_is_refused() -> None:
+    repository = FakeNotificationRepository()
+    with make_client(repository) as client:
+        response = client.post(
+            ENDPOINT,
+            json={"event_type": "event_cancelled", "recipient_id": "a1"},
+            headers={INTERNAL_TOKEN_HEADER: "wrong"},
+        )
+
+    assert response.status_code == 401
+    assert repository.rows == []
+
+
+# AC17-N3 (negative, hotfix 17): with no token configured every sender is refused
+def test_event_is_refused_when_no_token_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("NOTIFICATION_INTERNAL_TOKEN")
+    repository = FakeNotificationRepository()
+    with make_client(repository) as client:
+        response = client.post(
+            ENDPOINT, json={"event_type": "event_cancelled", "recipient_id": "a1"}
+        )
+
+    assert response.status_code == 401
+    assert repository.rows == []

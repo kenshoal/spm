@@ -71,6 +71,8 @@ def test_assigned_coordinator_records_a_requirement(
         "recorded_by": C1,
         "updated_by": None,
         "updated_at": None,
+        "essential": True,
+        "essential_note": None,
     }
     assert req_store.inserts == [
         (

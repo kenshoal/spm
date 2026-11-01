@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
 from app.adapters import build_delivery
-from app.auth import get_current_user_id
+from app.auth import get_current_user_id, require_internal_caller
 from app.config import get_settings
 from app.delivery import Delivery
 from app.models import EventAccepted, NotificationEvent, NotificationResponse
@@ -98,11 +98,11 @@ def create_app(
         response_model=EventAccepted,
         status_code=status.HTTP_202_ACCEPTED,
         tags=["notifications"],
+        dependencies=[Depends(require_internal_caller)],
     )
     def receive_event(
         event: NotificationEvent, repository: RepositoryDependency, request: Request
     ) -> EventAccepted:
-        # Internal, service-to-service only: not yet authenticated (see README).
         delivery = request.app.state.delivery
         channel = delivery.channel_for(event.event_type) if delivery else "in_app"
         created = repository.save(

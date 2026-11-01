@@ -19,6 +19,7 @@ vi.mock("@/app/components/app-shell", () => ({ AppShell: () => null, workspaceLi
 vi.mock("@/app/components/status-history", () => ({ StatusHistory: () => null, StatusHistoryLoading: () => null }));
 vi.mock("@/app/components/registration-reviews", () => ({ RegistrationReviews: () => null, RegistrationReviewsLoading: () => null }));
 vi.mock("@/app/components/registration-info", () => ({ RegistrationInfoPanel: () => null, RegistrationInfoLoading: () => null }));
+vi.mock("@/app/components/event-arrangements", () => ({ EventArrangementsPanel: () => null }));
 vi.mock("@/app/event-requests/actions", () => ({ createEventChangeRequest: vi.fn() }));
 
 import EditEventRequestPage from "@/app/event-requests/[id]/edit/page";

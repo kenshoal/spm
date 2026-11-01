@@ -8,6 +8,7 @@ const causeLabels: Record<ArrangementReview["trigger_type"], string> = {
   safety_recheck: "Safety recheck",
   venue_timing_change: "Venue timing change",
   venue_block: "Venue blocked",
+  venue_change: "Venue changed",
 };
 
 export function ArrangementReviewList({ reviews, canClear = false }: { reviews: ArrangementReview[]; canClear?: boolean }) {

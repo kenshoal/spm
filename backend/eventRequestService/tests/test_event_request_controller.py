@@ -1,7 +1,7 @@
 import json
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
 
 import httpx
@@ -27,6 +27,11 @@ CANCEL_SOURCE_STATUSES = {
 
 
 class FakeEventRequestRepository:
+    def cancellation_staff_ids(
+        self, event_request_id: str, reason: str = "Event cancelled"
+    ) -> list[str]:
+        return []
+
     def __init__(self) -> None:
         self.rows: dict[str, dict[str, Any]] = {}
         self.coordinator_assignment_rows: list[dict[str, Any]] = []
@@ -186,11 +191,81 @@ class FakeEventRequestRepository:
                 to_status == "Cancelled"
                 and row["status"] in CANCEL_SOURCE_STATUSES
             )
+            # Hotfixes 21 and 22 (0080): a request under review can be withdrawn and a
+            # postponed event can still be cancelled.
+            or (
+                to_status == "Withdrawn"
+                and row["status"] in {"Submitted", "Under Review", "Changes Requested"}
+            )
+            or (to_status == "Cancelled" and row["status"] == "Postponed")
         )
         if not allowed:
             raise EventRequestRpcError("not allowed", errcode="P0004")
 
         row["status"] = to_status
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
+    def _assigned_row(self, event_request_id: str, coordinator_id: str) -> dict[str, Any]:
+        row = self.rows.get(event_request_id)
+        if row is None:
+            raise EventRequestRpcError("not found", errcode="P0002")
+        latest = max(
+            (a for a in self.coordinator_assignment_rows if a["event_request_id"] == event_request_id),
+            key=lambda assignment: assignment["id"],
+            default=None,
+        )
+        if latest is None or latest["coordinator_id"] != coordinator_id:
+            raise EventRequestRpcError("not assigned", errcode="P0003")
+        return row
+
+    ORGANISERS_BY_EMAIL: ClassVar[dict[str, str]] = {
+        "new@example.test": "organiser-2",
+        "gone@example.test": "organiser-1",
+    }
+
+    def change_organiser(
+        self, event_request_id: str, coordinator_id: str, organiser_email: str, reason: str
+    ) -> dict[str, Any]:
+        """Mirrors change_event_organiser (0083)."""
+        row = self._assigned_row(event_request_id, coordinator_id)
+        if row["status"] in {"Draft", "Completed", "Cancelled", "Rejected", "Withdrawn"}:
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+        if not reason.strip():
+            raise EventRequestRpcError("reason", errcode="22023")
+        new = self.ORGANISERS_BY_EMAIL.get(organiser_email.lower())
+        if new is None:
+            raise EventRequestRpcError("no such organiser", errcode="P0006")
+        if new == row["organiser_id"]:
+            raise EventRequestRpcError("same", errcode="22023")
+        row["organiser_id"] = new
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
+    def postpone_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, reason: str
+    ) -> dict[str, Any]:
+        """Mirrors postpone_event_by_coordinator (0081)."""
+        row = self._assigned_row(event_request_id, coordinator_id)
+        if row["status"] not in {"Approved", "Planning", "Safety Review", "Confirmed"}:
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+        if not reason.strip():
+            raise EventRequestRpcError("reason", errcode="22023")
+        row["status"] = "Postponed"
+        row["updated_at"] = datetime.now(UTC).isoformat()
+        return dict(row)
+
+    def resume_postponed(
+        self, event_request_id: str, coordinator_id: str, new_date_times: list[str]
+    ) -> dict[str, Any]:
+        """Mirrors resume_postponed_event (0081)."""
+        row = self._assigned_row(event_request_id, coordinator_id)
+        if row["status"] != "Postponed":
+            raise EventRequestRpcError("not allowed", errcode="P0004")
+        if not new_date_times:
+            raise EventRequestRpcError("date", errcode="22023")
+        row["status"] = "Planning"
+        row["proposed_date_times"] = list(new_date_times)
         row["updated_at"] = datetime.now(UTC).isoformat()
         return dict(row)
 
@@ -292,8 +367,8 @@ class FakeEventRequestRepository:
             raise EventRequestRpcError("not a safety officer", errcode="P0003")
         if row["status"] != "Safety Review":
             raise EventRequestRpcError("not allowed", errcode="P0004")
-        if decision not in {"approved", "changes_requested"} or (
-            decision == "changes_requested" and not (reason or "").strip()
+        if decision not in {"approved", "changes_requested", "rejected"} or (
+            decision in {"changes_requested", "rejected"} and not (reason or "").strip()
         ):
             raise EventRequestRpcError("invalid decision", errcode="22023")
         # 0045: a target outside this event is invalid input, not a missing event.

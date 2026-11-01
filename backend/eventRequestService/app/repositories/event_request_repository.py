@@ -59,6 +59,32 @@ class EventRequestRepository(Protocol):
 
     def get_by_id(self, event_request_id: str) -> dict[str, Any] | None: ...
 
+    def update_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        expected_updated_at: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any]: ...
+
+    def get_event_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]: ...
+
+    def cancellation_staff_ids(
+        self, event_request_id: str, reason: str = "Event cancelled"
+    ) -> list[str]: ...
+
+    def postpone_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, reason: str
+    ) -> dict[str, Any]: ...
+
+    def resume_postponed(
+        self, event_request_id: str, coordinator_id: str, new_date_times: list[str]
+    ) -> dict[str, Any]: ...
+
+    def change_organiser(
+        self, event_request_id: str, coordinator_id: str, organiser_email: str, reason: str
+    ) -> dict[str, Any]: ...
+
     def get_by_ids(
         self, event_request_ids: list[str]
     ) -> list[dict[str, Any]]: ...
@@ -123,6 +149,12 @@ class EventRequestRepository(Protocol):
 
     def approve_date_change_request(
         self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        reason: str | None, booking_plan: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]: ...
+
+    def partially_approve_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        accepted_fields: list[str], rejected_reasons: dict[str, str],
         reason: str | None, booking_plan: list[dict[str, Any]] | None,
     ) -> dict[str, Any]: ...
 
@@ -582,6 +614,22 @@ class SupabaseEventRequestRepository:
             "p_booking_plan": booking_plan,
         })
 
+    def partially_approve_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        accepted_fields: list[str], rejected_reasons: dict[str, str],
+        reason: str | None, booking_plan: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        """Hotfix 20: narrow the request to the accepted fields, then approve it."""
+        return self._call_rpc("partially_approve_event_change_request", {
+            "p_event_request_id": event_request_id,
+            "p_change_request_id": change_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_accepted_fields": accepted_fields,
+            "p_rejections": rejected_reasons,
+            "p_reason": reason,
+            "p_booking_plan": booking_plan,
+        })
+
     def decide_change_request(
         self,
         event_request_id: str,
@@ -679,6 +727,142 @@ class SupabaseEventRequestRepository:
             },
         )
         return [row["attendee_id"] for row in rows]
+
+    def update_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        expected_updated_at: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "update_event_by_coordinator",
+            {
+                "p_event_request_id": event_request_id,
+                "p_coordinator_id": coordinator_id,
+                "p_expected_updated_at": expected_updated_at,
+                "p_changes": changes,
+            },
+        )
+
+    def _read_rows(self, path: str, params: dict[str, str]) -> list[dict[str, Any]]:
+        try:
+            response = self._client.get(path, params=params)
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
+
+    def get_event_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]:
+        """What is booked and reserved for an event (hotfix 14)."""
+        bookings = self._read_rows(
+            "/venue_booking_requests",
+            {
+                "select": "start_date,end_date,start_minute,end_minute,venues(name,location)",
+                "event_request_id": f"eq.{event_request_id}",
+                "status": "eq.approved",
+                "order": "start_date.asc,start_minute.asc",
+            },
+        )
+        requirements = self._read_rows(
+            "/equipment_requirements",
+            {
+                "select": "id,equipment_type,quantity",
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "recorded_at.asc,id.asc",
+            },
+        )
+        reservations = self._read_rows(
+            "/equipment_reservations",
+            {
+                "select": "requirement_id,quantity",
+                "event_request_id": f"eq.{event_request_id}",
+            },
+        )
+        reserved: dict[str, int] = {}
+        for row in reservations:
+            reserved[row["requirement_id"]] = (
+                reserved.get(row["requirement_id"], 0) + row["quantity"]
+            )
+        return {
+            "venues": [
+                {
+                    "name": (row.get("venues") or {}).get("name"),
+                    "location": (row.get("venues") or {}).get("location"),
+                    "start_date": row["start_date"],
+                    "end_date": row["end_date"],
+                    "start_minute": row["start_minute"],
+                    "end_minute": row["end_minute"],
+                }
+                for row in bookings
+            ],
+            "equipment": [
+                {
+                    "equipment_type": row["equipment_type"],
+                    "quantity": row["quantity"],
+                    "reserved": reserved.get(row["id"], 0),
+                }
+                for row in requirements
+            ],
+        }
+
+    def postpone_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, reason: str
+    ) -> dict[str, Any]:
+        """Hotfix 22: Postponed, releasing bookings, holds and reservations."""
+        return self._call_rpc("postpone_event_by_coordinator", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_reason": reason,
+        })
+
+    def resume_postponed(
+        self, event_request_id: str, coordinator_id: str, new_date_times: list[str]
+    ) -> dict[str, Any]:
+        """Hotfix 22: Postponed -> Planning on the new date(s)."""
+        return self._call_rpc("resume_postponed_event", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_new_date_times": new_date_times,
+        })
+
+    def change_organiser(
+        self, event_request_id: str, coordinator_id: str, organiser_email: str, reason: str
+    ) -> dict[str, Any]:
+        """Hotfix 24: the assigned Coordinator hands the event to another Organiser."""
+        return self._call_rpc("change_event_organiser", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_new_organiser_email": organiser_email,
+            "p_reason": reason,
+        })
+
+    def cancellation_staff_ids(
+        self, event_request_id: str, reason: str = "Event cancelled"
+    ) -> list[str]:
+        """Staff responsible for the arrangements a cancellation or postponement just
+        released: who approved each booking and who made each reservation (SCRUM-57 AC1b)."""
+        bookings = self._read_rows(
+            "/venue_booking_requests",
+            {
+                "select": "decided_by",
+                "event_request_id": f"eq.{event_request_id}",
+                "status": "eq.cancelled",
+                "decided_by": "not.is.null",
+            },
+        )
+        releases = self._read_rows(
+            "/equipment_reservation_releases",
+            {
+                "select": "created_by",
+                "event_request_id": f"eq.{event_request_id}",
+                "reason": f"eq.{reason}",
+            },
+        )
+        staff = {row["decided_by"] for row in bookings} | {row["created_by"] for row in releases}
+        return sorted(staff)
 
     def _call_rpc(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:

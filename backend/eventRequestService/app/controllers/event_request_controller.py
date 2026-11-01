@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.models.arrangement_review import ArrangementReviewResponse
 from app.models.event_request import (
     AttendeeEventResponse,
+    EventArrangementsResponse,
     EventChangeBookingContext,
     EventChangeDatePlanResponse,
     EventChangeDecision,
@@ -17,6 +18,7 @@ from app.models.event_request import (
     EventChangeRequestResponse,
     EventChangeRequestStatus,
     EventClarificationResponse,
+    EventDetailsUpdate,
     EventFinalEndUpdate,
     EventRequestCreate,
     EventRequestResponse,
@@ -40,6 +42,7 @@ from app.services.event_request_service import (
     EventChangeBookingConflictError,
     EventChangeBookingPlanError,
     EventChangeDatePlanConflictError,
+    EventChangeSelectionError,
     EventRequestNotFoundError,
     EventRequestService,
 )
@@ -535,6 +538,21 @@ def decide_change_request(
     if change is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Change request not found")
     has_dates = "proposed_date_times" in change.proposed_changes
+    if payload.accepted_fields is not None:
+        # Hotfix 20 (Q&A #104): accept some fields, refuse the others with reasons.
+        if payload.booking_plan is not None and "proposed_date_times" not in payload.accepted_fields:
+            raise HTTPException(422, "Booking plan is only supported when the dates are accepted")
+        try:
+            return service.partially_approve_change_request(
+                request_id, str(change_request_id), coordinator_id, payload,
+            )
+        except EventChangeBookingConflictError as error:
+            raise HTTPException(409, detail={
+                "code": "BOOKING_CONFLICT", "message": str(error),
+                "bookings": [booking.model_dump(mode="json") for booking in error.bookings],
+            }) from error
+        except EventChangeSelectionError as error:
+            raise HTTPException(422, str(error)) from error
     if payload.booking_plan is not None and not has_dates:
         raise HTTPException(422, "Booking plan is only supported for date approval")
     if (
@@ -581,6 +599,29 @@ def update_event_request(
     service: ServiceDependency,
 ) -> EventRequestResponse:
     return service.update(str(event_request_id), organiser_id, payload)
+
+
+@router.patch("/{event_request_id}/details", response_model=EventRequestResponse)
+def update_event_details(
+    event_request_id: UUID,
+    payload: EventDetailsUpdate,
+    coordinator_id: CoordinatorDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    """Hotfix 8 (SCRUM-29, Q&A #102): the assigned Coordinator's edit."""
+    return service.update_by_coordinator(str(event_request_id), coordinator_id, payload)
+
+
+@router.get("/{event_request_id}/arrangements", response_model=EventArrangementsResponse)
+def get_event_arrangements(
+    event_request_id: UUID,
+    caller: CallerDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> dict:
+    """Hotfix 14: anyone who may read the event may see what is booked for it."""
+    get_event_request(event_request_id, caller, request, service)
+    return service.get_arrangements(str(event_request_id))
 
 
 @router.post("/{event_request_id}/submit", response_model=EventRequestResponse)

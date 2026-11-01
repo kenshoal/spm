@@ -23,7 +23,7 @@ export function RequestList({
   return (
     <div className="space-y-3">
       {requests.map((request) => {
-        const hasChangeWorkflow = request.status === "Approved" || request.status === "Planning";
+        const hasChangeWorkflow = request.status === "Confirmed" || request.status === "Approved" || request.status === "Planning";
         return (
           <article
             key={request.id}

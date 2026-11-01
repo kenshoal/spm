@@ -197,7 +197,7 @@ def search_venues(
     for venue in repo.list():
         if venue.status is not VenueStatus.AVAILABLE:
             continue
-        if required_capacity is not None and venue.max_capacity < required_capacity:
+        if required_capacity is not None and venue.capacity_for(layout) < required_capacity:
             continue
         if location is not None and location.lower() not in venue.location.lower():
             continue

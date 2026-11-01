@@ -6,7 +6,7 @@ const blocks = new Map();
 const bookings = new Map();
 const holds = new Map();
 const NOTIFICATION_SEED = "http://127.0.0.1:8107/__seed";
-const REASONS = ["maintenance", "renovation", "safety", "internal_use"];
+const REASONS = ["maintenance", "equipment_failure", "renovation", "safety", "internal_use", "other"];
 const SESSIONS = {
   "test-session": "event_organiser",
   "coordinator-session": "event_coordinator",

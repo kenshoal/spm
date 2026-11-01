@@ -5,7 +5,7 @@ import { ChangeRequestHistory } from "@/app/components/change-request-history";
 import { decideEventChangeRequest } from "@/app/coordination/actions";
 import type { EventChangeRequest } from "@/lib/event-requests";
 
-vi.mock("@/app/coordination/actions", () => ({ decideEventChangeRequest: vi.fn() }));
+vi.mock("@/app/coordination/actions", () => ({ decideEventChangeRequest: vi.fn(), decideEventChangeRequestPartly: vi.fn() }));
 const pending: EventChangeRequest = {
   id: "change-approval-1", event_request_id: "request-approval-1", organiser_id: "organiser-1",
   status: "Pending", explanation: "Use the updated non-date plan.",

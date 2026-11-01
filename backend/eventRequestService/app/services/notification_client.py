@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
@@ -8,6 +9,11 @@ import httpx
 from app.config import NotificationSettings
 
 logger = logging.getLogger(__name__)
+
+
+def internal_headers() -> dict[str, str]:
+    """The shared secret notificationService requires of its senders (hotfix 17)."""
+    return {"X-Internal-Token": os.environ.get("NOTIFICATION_INTERNAL_TOKEN", "")}
 
 
 class NotificationClient:
@@ -76,6 +82,7 @@ class NotificationClient:
                         "assigned_by": assigned_by,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -122,6 +129,7 @@ class NotificationClient:
                         "assigned_by": assigned_by,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -157,6 +165,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -291,6 +300,123 @@ class NotificationClient:
                 payload={"event_request_id": event_request_id, "event_name": event_name},
             )
 
+    def notify_event_no_longer_confirmed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        organiser_id: str,
+        version: str,
+    ) -> None:
+        """Tell the Organiser an applied change took the event back to planning (#105)."""
+        self._post_notice(
+            "event_no_longer_confirmed",
+            recipient_id=organiser_id,
+            key=f"event-no-longer-confirmed:{event_request_id}:{version}",
+            payload={"event_request_id": event_request_id, "event_name": event_name},
+        )
+
+    def notify_event_request_withdrawn(
+        self, *, event_request_id: str, event_name: str | None, organiser_id: str
+    ) -> None:
+        """Tell the Organiser the Coordinator recorded the withdrawal (Q&A #103)."""
+        self._post_notice(
+            "event_request_withdrawn",
+            recipient_id=organiser_id,
+            key=f"event-request-withdrawn:{event_request_id}",
+            payload={"event_request_id": event_request_id, "event_name": event_name},
+        )
+
+    def notify_event_organiser_changed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        change_key: str,
+        recipient_id: str,
+        became_organiser: bool,
+    ) -> None:
+        """Tell the previous and the new Organiser that the event changed hands (Q&A #59)."""
+        self._post_notice(
+            "event_organiser_changed",
+            recipient_id=recipient_id,
+            key=f"event-organiser-changed:{change_key}:{recipient_id}",
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "became_organiser": became_organiser,
+            },
+        )
+
+    def notify_event_postponed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        postponement_key: str,
+        recipient_ids: list[str],
+        reason: str,
+    ) -> None:
+        """Tell the Organiser, the registered Attendees and the staff whose bookings were
+        released that the event is postponed and a new date will follow (Q&A #69)."""
+        for recipient_id in recipient_ids:
+            self._post_notice(
+                "event_postponed",
+                recipient_id=recipient_id,
+                key=f"event-postponed:{postponement_key}:{recipient_id}",
+                payload={
+                    "event_request_id": event_request_id,
+                    "event_name": event_name,
+                    "reason": reason,
+                },
+            )
+
+    def notify_event_resumed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        resume_key: str,
+        recipient_ids: list[str],
+        proposed_date_times: list[str],
+    ) -> None:
+        """Tell the same people the postponed event has a new date."""
+        for recipient_id in recipient_ids:
+            self._post_notice(
+                "event_resumed",
+                recipient_id=recipient_id,
+                key=f"event-resumed:{resume_key}:{recipient_id}",
+                payload={
+                    "event_request_id": event_request_id,
+                    "event_name": event_name,
+                    "proposed_date_times": proposed_date_times,
+                },
+            )
+
+    def notify_event_change_partly_approved(
+        self,
+        *,
+        event_request_id: str,
+        change_request_id: str,
+        organiser_id: str,
+        accepted_fields: list[str],
+        refused: dict[str, str],
+        reason: str | None,
+    ) -> None:
+        """Tell the Organiser which fields were applied and why the others were not (#104)."""
+        self._post_notice(
+            "event_change_partly_approved",
+            recipient_id=organiser_id,
+            key=f"event-change-partly-approved:{change_request_id}",
+            payload={
+                "event_request_id": event_request_id,
+                "change_request_id": change_request_id,
+                "accepted_fields": accepted_fields,
+                "refused": refused,
+                "reason": reason,
+            },
+        )
+
     def notify_event_changed(
         self,
         *,
@@ -355,6 +481,7 @@ class NotificationClient:
                     "event_id": str(uuid5(NAMESPACE_URL, key)),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -399,6 +526,7 @@ class NotificationClient:
                     ),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -440,6 +568,7 @@ class NotificationClient:
                     ),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -478,6 +607,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
@@ -513,6 +643,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
@@ -532,19 +663,36 @@ class NotificationClient:
         """Tell the assigned Coordinator what the Safety Officer wants changed
         (SCRUM-60 AC4b). Sent once after the decision commits, like the
         clarification notice; the reason also stays readable on the request."""
+        self._notify_safety_outcome(
+            "safety_changes_requested", event_request_id, coordinator_id, reason
+        )
+
+    def notify_safety_rejected(
+        self, *, event_request_id: str, coordinator_id: str, reason: str
+    ) -> None:
+        """Tell the assigned Coordinator the safety arrangement was rejected and
+        must be revised and resubmitted (Q&A #130)."""
+        self._notify_safety_outcome(
+            "safety_rejected", event_request_id, coordinator_id, reason
+        )
+
+    def _notify_safety_outcome(
+        self, event_type: str, event_request_id: str, coordinator_id: str, reason: str
+    ) -> None:
         if self._url is None:
             return
         try:
             response = httpx.post(
                 self._url,
                 json={
-                    "event_type": "safety_changes_requested",
+                    "event_type": event_type,
                     "recipient_id": coordinator_id,
                     "payload": {
                         "event_request_id": event_request_id,
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -576,6 +724,7 @@ class NotificationClient:
                     "event_id": event_id,
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -615,6 +764,7 @@ class NotificationClient:
                     "event_id": str(uuid5(NAMESPACE_URL, idempotency_key)),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
@@ -649,6 +799,7 @@ class NotificationClient:
                     "event_id": event_id,
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
