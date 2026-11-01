@@ -132,3 +132,18 @@ Command (27 Oct 2026, on commit 78b9cd4): `cd backend/notificationService && .ve
 | AC3-P3 | Green | As expected | Pass (local, fake SMTP) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_smtp_mailer_skips_login_and_tls_when_not_configured |
 | AC3-P4 | Green | As expected | Pass (local) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_a_configured_host_selects_the_smtp_mailer |
 | AC3-N5 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_an_address_lookup_failure_is_raised |
+
+Run on 1 November 2026 for AC1 (commit 6a406eb, local): `cd backend/eventRequestService && .venv/bin/python -m pytest -q` (1093 passed, 1 skipped) and `ruff check .` (one error, in `tests/test_registration_window_notifier.py`, a file this work did not touch; it appears without these changes too). `cd frontend && npx vitest run` (72 files, 619 tests passed), `npm run lint` (clean), `npm run typecheck` (exit 0). Dependencies faked: the repository, the notification service and its HTTP calls. Mutation checks: sending the notice for a refused cancellation fails AC1-N1 and AC1-B1; removing the client's failure handling fails AC1-N3. **Not run:** CI, a real cancellation against the running services and the shared database, the browser, and `npm run test:e2e`/`build`. AC1-N3 was not mutation-checked for the service call itself.
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC1-H1 | Green | As expected | Pass (local, fakes) | commit 9bb8aa5, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_cancellation_owner_notice.py::test_cancelling_tells_the_organiser_and_the_coordinator (Depends on A6, A7) |
+| AC1-H2 | Green | As expected | Pass (local, fake HTTP) | commit 9bb8aa5, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_cancellation_owner_notice.py::test_the_client_posts_one_notice_per_recipient |
+| AC1-P1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_one_person_in_both_roles_is_told_once. Red first: two notices to one person |
+| AC1-P2 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_no_attendees_still_tells_the_organiser_and_coordinator. Passed on first run (characterisation of H1) |
+| AC1-X1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_attendee_notices_are_unchanged; the SCRUM-38 AC4 tests also still pass |
+| AC1-N1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_refused_cancellation_tells_nobody (409 and 403). Mutation-checked |
+| AC1-N2 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_coordinator_lookup_failure_still_tells_the_organiser. Red first: a saved cancellation answered `502` |
+| AC1-N3 | Green | As expected | Pass (local, fake HTTP) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_notification_outage_does_not_block_the_cancellation. Client failure handling mutation-checked |
+| AC1-B1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_cancelling_twice_tells_nobody_twice. Mutation-checked |
+| AC1-X2 | Green | As expected | Pass (local, vitest) | commit 6a406eb, local | Claude (AI) for Tate Lim, 1 Nov 2026 | frontend/__tests__/cancellation-recorded-notification.test.ts (3 tests). Not seen in a browser |
