@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+// SCRUM-30 AC1-H5, AC2 (happy): e2e — venue staff add a venue, see its attributes, then update it
 // Purpose: SCRUM-30 AC1–AC2 — venue staff add a venue, see its attributes, then update it.
 test("venue staff add and update a venue", async ({ page }) => {
   await page.goto("/auth");

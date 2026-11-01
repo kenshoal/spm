@@ -21,6 +21,8 @@ def response_row(**overrides: object) -> dict[str, object]:
     }
 
 
+# AC4-H3 (happy, SCRUM-28): assignment writes through the row-locking RPC,
+# never a race-prone direct insert
 # Purpose: Assignment must use the row-locking RPC instead of a race-prone direct insert.
 def test_create_sends_expected_supabase_request() -> None:
     captured: dict[str, object] = {}
@@ -58,6 +60,8 @@ def test_create_sends_expected_supabase_request() -> None:
     assert created["coordinator_id"] == "coord-1"
 
 
+# AC4-N6 (negative, SCRUM-28): the P0002/P0004/P0005 errcode contract survives the
+# transport, so the service maps conflicts on codes, not message text
 # Purpose: Database rule failures retain their stable error code for HTTP mapping.
 @pytest.mark.parametrize("errcode", ["P0002", "P0004", "P0005"])
 def test_create_preserves_assignment_rpc_error_code(errcode: str) -> None:
@@ -81,6 +85,7 @@ def test_create_preserves_assignment_rpc_error_code(errcode: str) -> None:
     assert exc_info.value.errcode == errcode
 
 
+# AC6-P4 (partition, SCRUM-14): "current" is the highest id, not the latest timestamp
 # Purpose: Confirms "current assignment" is the most recent row by id, not by timestamp.
 def test_latest_orders_by_id_descending() -> None:
     captured_query: dict[str, str] = {}
@@ -103,6 +108,7 @@ def test_latest_orders_by_id_descending() -> None:
     assert row["coordinator_id"] == "coord-2"
 
 
+# AC6-B1 (boundary, SCRUM-14): never-assigned means None, not an error
 # Purpose: Confirms no rows means no assignment yet, not an error.
 def test_latest_returns_none_when_never_assigned() -> None:
     repository = SupabaseCoordinatorAssignmentRepository(
@@ -114,6 +120,7 @@ def test_latest_returns_none_when_never_assigned() -> None:
     assert repository.latest_for_event_request("missing") is None
 
 
+# AC1-P3 (partition, SCRUM-14): the queue subtracts assigned request ids from the candidates
 # Purpose: Confirms awaiting-assignment reduces assigned rows to request ids.
 def test_assigned_event_request_ids_filters_to_the_given_requests() -> None:
     captured_query: dict[str, str] = {}
@@ -134,6 +141,7 @@ def test_assigned_event_request_ids_filters_to_the_given_requests() -> None:
     assert assigned == {"request-1"}
 
 
+# AC1-B3 (boundary, SCRUM-14): an empty candidate list answers without touching Supabase
 # Purpose: Empty awaiting-assignment candidate lists skip Supabase.
 def test_assigned_event_request_ids_skips_supabase_when_given_no_ids() -> None:
     def handler(request: httpx.Request) -> httpx.Response:

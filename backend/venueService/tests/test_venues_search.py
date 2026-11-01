@@ -21,6 +21,7 @@ def _make_venue(**overrides: object) -> dict:
     return client.post("/venues", json=payload).json()
 
 
+# SCRUM-9 AC3-P1, AC1 (partition): a venue below the requested capacity is excluded, one above is kept
 def test_capacity_filter_excludes_venues_below_requested_attendance() -> None:
     _make_venue(name="Small", max_capacity=50)
     _make_venue(name="Big", max_capacity=300)
@@ -31,6 +32,7 @@ def test_capacity_filter_excludes_venues_below_requested_attendance() -> None:
     assert [v["name"] for v in response.json()] == ["Big"]
 
 
+# SCRUM-9 AC4-H1 (happy): a venue blocked by an update is excluded from results
 def test_blocked_venue_is_excluded() -> None:
     ok = _make_venue(name="Open")
     blocked = _make_venue(name="Closed")
@@ -41,6 +43,7 @@ def test_blocked_venue_is_excluded() -> None:
     assert [v["name"] for v in response.json()] == [ok["name"]]
 
 
+# SCRUM-9 AC1-P2 (partition): the location filter is a case-insensitive substring match
 def test_location_filter_is_case_insensitive_substring() -> None:
     _make_venue(name="Central", location="Marina Bay")
     _make_venue(name="East", location="Tampines")
@@ -50,6 +53,7 @@ def test_location_filter_is_case_insensitive_substring() -> None:
     assert [v["name"] for v in response.json()] == ["Central"]
 
 
+# SCRUM-9 AC1-P3 (partition): the layout filter keeps only venues supporting it
 def test_layout_filter_matches_supported_layout() -> None:
     _make_venue(name="Theatre-ready", supported_layouts=["theatre", "classroom"])
     _make_venue(name="Boardroom-only", supported_layouts=["boardroom"])
@@ -72,6 +76,7 @@ def test_slot_filter_matches_operating_slots() -> None:
     assert sorted(v["name"] for v in response.json()) == ["Evenings", "Mornings"]
 
 
+# SCRUM-9 AC1-P4 (partition): every requested facility must be present (subset match)
 def test_facility_filter_requires_all_requested_facilities() -> None:
     _make_venue(name="Full", facilities=["projector", "microphone", "stage"])
     _make_venue(name="Partial", facilities=["projector"])
@@ -83,6 +88,7 @@ def test_facility_filter_requires_all_requested_facilities() -> None:
     assert [v["name"] for v in response.json()] == ["Full"]
 
 
+# SCRUM-9 AC1-P5 (partition): every requested accessibility feature must be present
 def test_accessibility_filter_requires_all_requested_features() -> None:
     _make_venue(name="Accessible", accessibility_features=["ramp", "hearing_loop"])
     _make_venue(name="Some", accessibility_features=["ramp"])
@@ -95,6 +101,7 @@ def test_accessibility_filter_requires_all_requested_features() -> None:
     assert [v["name"] for v in response.json()] == ["Accessible"]
 
 
+# SCRUM-9 AC2-H1, AC1 (happy): only venues matching every applied filter are returned
 def test_all_filters_apply_together() -> None:
     _make_venue(
         name="Match",
@@ -138,6 +145,7 @@ def test_all_filters_apply_together() -> None:
     assert [v["name"] for v in response.json()] == ["Match"]
 
 
+# SCRUM-9 AC2-P1 (partition): with no filters every available venue is returned
 def test_no_filters_returns_all_available_venues() -> None:
     _make_venue(name="One")
     _make_venue(name="Two")
@@ -147,6 +155,7 @@ def test_no_filters_returns_all_available_venues() -> None:
     assert {v["name"] for v in response.json()} == {"One", "Two"}
 
 
+# SCRUM-9 AC1-P6, AC4 (partition): a venue with no blocks or bookings on the date is kept
 def test_date_search_returns_venue_without_blocks() -> None:
     _make_venue(name="Any")
 

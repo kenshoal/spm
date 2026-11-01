@@ -18,12 +18,14 @@ const valid = {
   supported_layouts: ["theatre", "classroom"],
 };
 
+// SCRUM-30 AC1-P2 (partition): comma lists are trimmed, blank-free and de-duplicated
 // Purpose: Review focus 5 — comma lists are trimmed, blank-free and de-duplicated.
 test("splitList trims, drops blanks and de-duplicates case-insensitively", () => {
   expect(splitList("Projector, , projector ,WiFi")).toEqual(["Projector", "WiFi"]);
   expect(splitList("   ")).toEqual([]);
 });
 
+// SCRUM-30 AC1-H4 (happy): every catalogue attribute is captured from the form
 // Purpose: SCRUM-30 AC1 — every catalogue attribute is captured from the form.
 test("parses a complete venue", () => {
   const { payload, errors } = parseVenueForm(venueForm(valid), { includeStatus: false });
@@ -42,6 +44,7 @@ test("parses a complete venue", () => {
   });
 });
 
+// SCRUM-30 AC1-N4 (negative): a non-positive or non-integer capacity is reported, not sent
 // Purpose: Review focus 4 — capacity must be a whole number above zero.
 test.each(["abc", "0", "-3", "12.5", ""])("rejects capacity %j", (capacity) => {
   const { errors } = parseVenueForm(venueForm({ ...valid, max_capacity: capacity }), { includeStatus: false });
@@ -49,6 +52,7 @@ test.each(["abc", "0", "-3", "12.5", ""])("rejects capacity %j", (capacity) => {
   expect(errors.max_capacity).toBe("Enter a whole number greater than zero.");
 });
 
+// SCRUM-30 AC1-N5 (negative): missing name and location are reported instead of sent
 // Purpose: A venue needs a name and a location (operating slots retired by SCRUM-65:
 // every venue runs 07:00-24:00).
 test("reports missing required fields", () => {
@@ -60,6 +64,7 @@ test("reports missing required fields", () => {
   });
 });
 
+// SCRUM-30 AC1-P3 (partition): values outside the backend enums are dropped, not sent
 // Purpose: Values outside the backend enums are dropped rather than sent; operating
 // slots are no longer sent at all (SCRUM-65).
 test("ignores unknown layouts, slots and statuses", () => {
@@ -73,12 +78,14 @@ test("ignores unknown layouts, slots and statuses", () => {
   expect(payload.status).toBe("available");
 });
 
+// SCRUM-30 AC1-P4 (partition): the status field is sent only when editing
 // Purpose: Editing can take a venue out of service; creating cannot set status.
 test("includes status only when editing", () => {
   expect(parseVenueForm(venueForm({ ...valid, status: "blocked" }), { includeStatus: true }).payload.status).toBe("blocked");
   expect("status" in parseVenueForm(venueForm({ ...valid, status: "blocked" }), { includeStatus: false }).payload).toBe(false);
 });
 
+// SCRUM-30 AC1-N7 (negative): an invalid capacity is echoed verbatim so a correction never loses it
 // Purpose: Review finding 2 — an invalid capacity must echo back verbatim, not the
 // null parseVenueForm produces for it, so a corrected resubmission never loses it.
 test("readVenueFormValues keeps an invalid capacity and the raw comma text untouched", () => {
@@ -89,6 +96,7 @@ test("readVenueFormValues keeps an invalid capacity and the raw comma text untou
   expect(values.supported_layouts).toEqual(["theatre", "classroom"]);
 });
 
+// SCRUM-30 AC1-P5 (partition): no status is echoed when the create form omits the field
 // Purpose: The create form never submits a status field, so nothing should echo one.
 test("readVenueFormValues omits status when the field is absent", () => {
   expect("status" in readVenueFormValues(venueForm(valid))).toBe(false);

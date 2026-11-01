@@ -122,7 +122,7 @@ Results are from the run on 4 October 2026 by Claude Code on Kennedy's machine, 
 | AC3-P9 | Green | As expected | Pass | `d1159c1` | `test_missing_accessibility_feature_is_flagged` |
 | AC3-P10, AC3-P11 | Green | As expected | Pass | `d1159c1` | `test_accessibility_match_ignores_letter_case` |
 | AC3-B1 | Green | As expected | Pass | `d1159c1` | `test_no_optional_requirements_compares_attendance_only` |
-| AC3-X1 | Green | As expected | Pass | `d1159c1` | `test_all_unmet_attributes_are_reported_once` |
+| AC3-X1 | Green | As expected | Pass | `d1159c1` | `test_all_unmet_attributes_are_reported_once` (`backend/venueService/tests/test_suitability.py`); the test carries the in-file comment `# AC3-X1 (cross-cutting)…`, which predates the story-prefix convention and was left untouched (referenced, not relabelled) in the 1 Nov 2026 gap sweep |
 | AC3-N1 | Green | As expected | Pass | `d1159c1` | `test_unknown_venue_returns_404`; also confirmed live |
 | AC3-N2, AC3-N3 | Green | As expected | Pass | `d1159c1` | `test_unknown_layout_value_is_rejected`, `test_unknown_slot_value_is_rejected` |
 | AC3-X2 | Green | As expected | Pass | `d1159c1` | `test_check_requires_authentication`; confirmed live with no token and an invalid token (both 401) |
@@ -135,7 +135,7 @@ Results are from the run on 4 October 2026 by Claude Code on Kennedy's machine, 
 | AC3-H3 | Red then Green | As expected | Pass (UI addition) | `213a543` + working tree | `pre-fills each result's check form from the search filters` |
 | AC3-N4, AC3-N5, AC3-N6 | Red then Green | As expected | Pass (UI addition) | `213a543` + working tree | `reports a venue that no longer exists`, `redirects to sign-in...`, `reports ... as could not be checked` |
 | AC4-H4, AC4-H5 | Red then Green | As expected | Pass (UI addition) | `213a543` + working tree | `shows Not suitable with each mismatch...`, `shows Suitable with no mismatch list`, and `returns the result from the service`. Flipping the verdict wording made both verdict tests fail |
-| AC4-H6, AC5-X2 | Written after the code (not Red-first) | As expected | Pass (UI addition, mock venue API) | `213a543` + working tree | `e2e/venue-search.spec.ts`: `coordinator checks a venue's suitability from the search results`; the unit test `makes no call other than the suitability POST` covers AC5-X2. The same wording flip made the browser test fail |
+| AC4-H6, AC5-X2 | Written after the code (not Red-first) | As expected | Pass (UI addition, mock venue API) | `213a543` + working tree | `e2e/venue-search.spec.ts` (`frontend/e2e/`): `coordinator checks a venue's suitability from the search results`; the unit test `makes no call other than the suitability POST` covers AC5-X2. The same wording flip made the browser test fail. The test carries the in-file `Purpose: SCRUM-12 AC4-H6, AC5-X2` comment, left untouched (referenced, not relabelled) in the 1 Nov 2026 gap sweep |
 
 ## Latest verification
 

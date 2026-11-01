@@ -152,6 +152,21 @@ Limitations: one run; the Organiser's inbox *page* was not opened, so the card w
 | Retry of an AC1 notice while notificationService is down, against the live stack | Not executed | Covered by unit tests only. |
 | Pull-request CI and reviewer approval | Not executed | The branch is pushed; the pull request has not been opened from this session. |
 
+## Appendix sweep — labels checked, 1 November 2026
+
+The tracking sheet reported AC2-N1, AC3-H2, AC3-N1 to AC3-N4, AC3-N7, AC6-P2, AC6-P3, AC6-N1, AC6-N2 and AC6-X1 to AC6-X4 (15 rows) as unmapped. Every row already carries its proving AC label in a file this document names. The labels are the legacy unprefixed form (`# AC3-N4 (negative): …`), and the same ID strings are reused by other stories, which is why the sheet's ID-only lookup found no unambiguous owner; they were left untouched and no second label was stacked (one label per test). No suite was run for this note; the sweep only re-checked each row against the labelled test.
+
+| Rows | Label already at |
+| --- | --- |
+| AC2-N1 (4 tests: service URL unset, connection failure and non-2xx response are swallowed; assignment succeeds without a client) | `backend/eventRequestService/tests/test_notification_client.py` (3 `# AC2-N1` labels) and `backend/eventRequestService/tests/test_coordinator_assignment_service.py` (1) |
+| AC3-H2, AC3-N1, AC3-N2, AC3-N3, AC3-N4, AC3-N7 | `backend/eventRequestService/tests/test_clarification_notification.py` — AC3-N1–N3 share one combined label over a parametrized test (`ids=["AC3-N1", "AC3-N2", "AC3-N3"]`); AC3-H2, AC3-N4 and AC3-N7 each have their own label |
+| AC6-P2 (3 tests: one event_id to several recipients; no event_id stores each; payload defaults to empty), AC6-N2 (6 refusal cases, 422 and nothing stored), AC6-X3, AC6-N1 (API side: retry accepted twice, one row) | `backend/notificationService/tests/test_events.py` |
+| AC6-P3, AC6-N1 (repository side: `on_conflict` ignore-duplicates and the empty-list answer), AC6-X4 (parametrized legacy JWT bearer / `sb_secret` no Authorization header) | `backend/notificationService/tests/test_repository.py` |
+| AC6-X1 (3 tests: verified user id, lowercase `bearer` scheme, API-docs bearer sign-in) | `backend/notificationService/tests/test_auth.py` |
+| AC6-X2 | `frontend/__tests__/workspace-links.test.ts`, the `// AC6-X2 (cross-cutting): SCRUM-37 …` label |
+
+Counts re-derived from these labels match the execution record above (AC2-N1 "4 tests"; AC3-H2, AC3-N4 and AC3-N7 one test each; AC3-N1 to N3 one test, 3 cases; AC6-X1 to X4 six tests; AC6-P2 opens the AC6-P2 to P5 seven-test group). No row in this sweep is retired and none is unresolved.
+
 ## Definition of Done status
 
 - [x] AC1, AC2 and AC3 each have implementation evidence; AC6's in-app, prompt-delivery and relevance rules do too.

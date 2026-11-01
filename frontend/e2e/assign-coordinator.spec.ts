@@ -67,6 +67,7 @@ test.describe.serial("SCRUM-14 coordinator assignment", () => {
   });
 
   // Purpose: SCRUM-27 — the assignment workspace is closed to other roles.
+  // AC2-N1 (negative): an Organiser cannot open the Operations Manager's assignment workspace
   test("organisers cannot open the assignment workspace", async ({ page }) => {
     await page.context().addCookies(sessionCookie("test-session"));
     await page.goto("/operations/assignments");

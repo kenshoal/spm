@@ -18,6 +18,7 @@ afterEach(() => {
   session.redirect.mockReset();
 });
 
+// AC1-H1 (happy): an Organiser session passes the workspace guard without a redirect
 test("allows an authenticated Event Organiser into the event-request workspace", async () => {
   session.get.mockReturnValue({ value: "valid-token" });
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
@@ -35,6 +36,7 @@ test("allows an authenticated Event Organiser into the event-request workspace",
   expect(session.redirect).not.toHaveBeenCalled();
 });
 
+// AC1-N2 (negative): a signed-in user without the organiser role is redirected to /unauthorised
 test("redirects a signed-in user without the organiser role", async () => {
   session.get.mockReturnValue({ value: "valid-token" });
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
@@ -54,6 +56,7 @@ function credentials() {
   return form;
 }
 
+// AC2-H4 (happy): the auth screen offers accessible log in and sign up forms
 test("shows accessible login and sign-up forms", () => {
   render(<AuthForm />);
   expect(screen.getByRole("heading", { name: "Log in" })).toBeDefined();
@@ -77,6 +80,7 @@ test("registers through authService and handles confirmation", async () => {
   expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8001/auth/register");
 });
 
+// AC2-H2 (happy): a valid login stores an HTTP-only session cookie and opens the workspace
 test("stores a verified login in an HTTP-only cookie", async () => {
   const fetchMock = vi.fn()
     .mockResolvedValueOnce({
@@ -98,6 +102,7 @@ test("stores a verified login in an HTTP-only cookie", async () => {
 });
 
 // Purpose: A coordinator-only account must land in the workspace it can actually access.
+// AC1-P2 (partition): a Coordinator lands in the coordination workspace after login
 test("redirects a coordinator to assigned event requests after login", async () => {
   vi.stubGlobal("fetch", vi.fn()
     .mockResolvedValueOnce({
@@ -115,6 +120,7 @@ test("redirects a coordinator to assigned event requests after login", async () 
 });
 
 // Purpose: Multi-role and unsupported accounts receive a deterministic safe destination.
+// AC1-P1…P6, AC3 (partition): every role opens its own workspace and a multi-role list is honoured
 test("selects the default workspace from verified roles", () => {
   expect(workspaceForRoles(["event_coordinator", "event_organiser"])).toBe("/event-requests");
   expect(workspaceForRoles(["event_coordinator"])).toBe("/coordination/requests");
@@ -127,6 +133,7 @@ test("selects the default workspace from verified roles", () => {
 });
 
 // Purpose: A role lookup failure must not create a session whose destination is unknown.
+// AC2-N2 (negative): a failed role verification stores no session cookie and redirects nowhere
 test("does not store the session when workspace access cannot be verified", async () => {
   vi.stubGlobal("fetch", vi.fn()
     .mockResolvedValueOnce({
@@ -142,12 +149,14 @@ test("does not store the session when workspace access cannot be verified", asyn
   expect(session.redirect).not.toHaveBeenCalled();
 });
 
+// AC2-X1 (cross-cutting): logout removes the session cookie so no stale session survives
 test("logout clears the session cookie", async () => {
   await logout();
   expect(session.delete).toHaveBeenCalledWith("cs_access_token");
   expect(session.redirect).toHaveBeenCalledWith("/auth");
 });
 
+// AC3-N5 (negative): invalid credentials are reported without a success state
 test("reports invalid credentials and an unavailable service", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401 }));
   expect((await login({}, credentials())).success).not.toBe(true);

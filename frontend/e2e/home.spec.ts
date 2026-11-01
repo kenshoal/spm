@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-// Purpose: Proves unfinished work survives browser navigation and remains editable without being submitted.
+// SCRUM-8 AC3-H1 (happy): a draft survives navigation and reload and can be
+// reopened, edited and discarded without ever being submitted.
 test("organiser can save, reopen, update, and delete a draft", async ({ page }) => {
   await page.goto("/auth");
   await page.getByLabel("Email").fill("playwright@example.com");
@@ -47,7 +48,8 @@ test("organiser can save, reopen, update, and delete a draft", async ({ page }) 
   ).toHaveCount(0);
 });
 
-// Purpose: Proves a complete new form can be submitted directly and becomes visible but read-only.
+// SCRUM-11 AC5-H3, AC7 (happy): a complete submission becomes visible as
+// Submitted and its detail view is read-only.
 test("organiser can submit a complete new event request", async ({ page }) => {
   await page.goto("/auth");
   await page.getByLabel("Email").fill("playwright@example.com");

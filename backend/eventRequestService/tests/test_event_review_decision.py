@@ -55,6 +55,9 @@ def under_review_fixture() -> tuple[
     ],
 )
 # Purpose: Each supported review outcome updates the request and retains one decision.
+# SCRUM-17 AC2-P1, AC2-P2, AC2-P3 (partition): each supported decision outcome —
+# approve, clarify, reject — settles an Under Review request and retains exactly
+# one decision row carrying the coordinator's id and reason.
 def test_assigned_coordinator_can_record_review_decision(
     decision: str, reason: str | None
 ) -> None:
@@ -79,6 +82,8 @@ def test_assigned_coordinator_can_record_review_decision(
 
 @pytest.mark.parametrize("decision", ["Changes Requested", "Rejected"])
 # Purpose: A return or rejection cannot leave the organiser without an explanation.
+# SCRUM-17 AC3-N1 (negative): a blank reason for clarify or reject is refused
+# (422) and the request stays Under Review with no decision row.
 def test_return_or_rejection_requires_reason(decision: str) -> None:
     client, events, event_request_id = under_review_fixture()
 
@@ -95,6 +100,8 @@ def test_return_or_rejection_requires_reason(decision: str) -> None:
 
 
 # Purpose: A coordinator who is not currently assigned cannot decide the request.
+# SCRUM-17 AC2-N1 (negative): a coordinator other than the current assignee is
+# refused (403) and neither the status nor the history changes.
 def test_unassigned_coordinator_cannot_record_decision() -> None:
     client, events, event_request_id = under_review_fixture()
 
@@ -111,6 +118,8 @@ def test_unassigned_coordinator_cannot_record_decision() -> None:
 
 
 # Purpose: Reassignment immediately removes the former coordinator's authority to decide.
+# SCRUM-17 AC2-N2 (negative): reassignment immediately strips the former
+# coordinator's authority to decide (403), leaving the review untouched.
 def test_reassigned_away_coordinator_cannot_record_decision() -> None:
     events = FakeEventRequestRepository()
     assignments = FakeCoordinatorAssignmentRepository(events)
@@ -133,6 +142,9 @@ def test_reassigned_away_coordinator_cannot_record_decision() -> None:
 
 @pytest.mark.parametrize("status", ["Submitted", "Approved", "Rejected"])
 # Purpose: Stale or repeated review actions cannot overwrite a settled workflow state.
+# SCRUM-17 AC2-P4, AC2-P5, AC2-P6 (partition): a decision is accepted only
+# while the request is Under Review — a stale or repeated decision conflicts
+# (409) and writes no second outcome.
 def test_decision_requires_under_review_status(status: str) -> None:
     client, events, event_request_id = under_review_fixture()
     events.rows[event_request_id]["status"] = status
@@ -150,6 +162,9 @@ def test_decision_requires_under_review_status(status: str) -> None:
 
 
 # Purpose: Arbitrary lifecycle statuses cannot be smuggled through the decision endpoint.
+# SCRUM-17 AC2-N3 (negative): a lifecycle value outside the three review
+# outcomes cannot be smuggled through the decision endpoint (422) and nothing
+# is written.
 def test_decision_rejects_status_outside_review_outcomes() -> None:
     client, events, event_request_id = under_review_fixture()
 
@@ -166,6 +181,8 @@ def test_decision_rejects_status_outside_review_outcomes() -> None:
 
 
 # Purpose: A missing request returns 404 without creating an orphan decision record.
+# SCRUM-17 AC2-N4 (negative): an unknown request id returns 404 without
+# creating an orphan decision record.
 def test_decision_for_missing_request_returns_not_found() -> None:
     events = FakeEventRequestRepository()
     with make_client(events) as client:
@@ -190,6 +207,10 @@ def test_decision_for_missing_request_returns_not_found() -> None:
     ],
 )
 # Purpose: Review reasons are visible only through the event relationship that grants access.
+# SCRUM-17 AC3-P1, AC3-P2, AC3-P3, AC3-P4, AC3-P5 (partition): retained review
+# decisions are readable only through the request relationship — the owner and
+# the assigned coordinator see the outcome and reason, another organiser or
+# coordinator gets 404 and an unrelated role 403.
 def test_decision_history_visibility_follows_request_access(
     caller: AuthenticatedCaller, expected_status: int
 ) -> None:
@@ -217,6 +238,9 @@ def test_decision_history_visibility_follows_request_access(
 
 
 # Purpose: The organiser answers the retained clarification without mutating the submitted request.
+# SCRUM-17 AC4-H1 (happy): the owning organiser answers the retained
+# clarification, the response is kept, and the submitted fields and status stay
+# unchanged.
 def test_organiser_responds_without_editing_submitted_request() -> None:
     client, events, event_request_id = under_review_fixture()
     original_name = events.rows[event_request_id]["event_name"]
@@ -239,6 +263,9 @@ def test_organiser_responds_without_editing_submitted_request() -> None:
 
 @pytest.mark.parametrize("status", ["Draft", "Submitted", "Under Review", "Rejected"])
 # Purpose: Clarification responses are accepted only for the active returned review.
+# SCRUM-17 AC4-P1, AC4-P2, AC4-P3, AC4-P4 (partition): a clarification response
+# is accepted only while the active outcome is Changes Requested; every other
+# status conflicts (409) and the request is unchanged.
 def test_clarification_response_requires_changes_requested_status(status: str) -> None:
     events = FakeEventRequestRepository()
     event_request_id = submit_event_request(events)
@@ -256,6 +283,8 @@ def test_clarification_response_requires_changes_requested_status(status: str) -
 
 
 # Purpose: Another organiser cannot answer a clarification on someone else's request.
+# SCRUM-17 AC4-N1 (negative): another organiser cannot answer someone else's
+# clarification (404) and the clarification stays unanswered.
 def test_other_organiser_cannot_respond_to_clarification() -> None:
     client, events, event_request_id = under_review_fixture()
     events.decide_by_coordinator(
@@ -274,6 +303,8 @@ def test_other_organiser_cannot_respond_to_clarification() -> None:
 
 
 # Purpose: The assigned coordinator resumes review only after the organiser responds.
+# SCRUM-17 AC4-H2 (happy): after the organiser responds, the assigned
+# coordinator resumes the review and the request returns to Under Review.
 def test_assigned_coordinator_resumes_after_clarification_response() -> None:
     client, events, event_request_id = under_review_fixture()
     events.decide_by_coordinator(
@@ -292,6 +323,8 @@ def test_assigned_coordinator_resumes_after_clarification_response() -> None:
 
 
 # Purpose: A coordinator cannot skip the organiser's clarification response.
+# SCRUM-17 AC4-N2 (negative): the coordinator cannot skip the organiser's
+# response — resume conflicts (409) and the request stays Changes Requested.
 def test_coordinator_cannot_resume_before_organiser_response() -> None:
     client, events, event_request_id = under_review_fixture()
     events.decide_by_coordinator(
@@ -309,6 +342,9 @@ def test_coordinator_cannot_resume_before_organiser_response() -> None:
 
 
 # Purpose: A later approval must not overwrite the clarification exchange that informed it.
+# SCRUM-17 AC3-H1 (happy): the clarify → respond → resume → approve sequence
+# appends a second decision without overwriting the clarification exchange that
+# informed it.
 def test_review_history_retains_clarification_after_approval() -> None:
     client, events, event_request_id = under_review_fixture()
 
@@ -344,6 +380,8 @@ def test_review_history_retains_clarification_after_approval() -> None:
 
 
 # Purpose: A blank organiser response cannot turn an unanswered clarification into a completed exchange.
+# SCRUM-17 AC4-N3 (negative): a blank response is refused (422) and the
+# clarification stays unanswered with no timestamp.
 def test_blank_clarification_response_is_rejected_without_mutation() -> None:
     client, events, event_request_id = under_review_fixture()
     events.decide_by_coordinator(
@@ -364,6 +402,8 @@ def test_blank_clarification_response_is_rejected_without_mutation() -> None:
 
 
 # Purpose: A repeated response cannot replace the organiser's first retained answer.
+# SCRUM-17 AC4-N4 (negative): a repeated response conflicts (409) and cannot
+# replace the organiser's first retained answer.
 def test_duplicate_clarification_response_preserves_first_answer() -> None:
     client, events, event_request_id = under_review_fixture()
     events.decide_by_coordinator(
@@ -391,6 +431,8 @@ def test_duplicate_clarification_response_preserves_first_answer() -> None:
 
 @pytest.mark.parametrize(("length", "expected_status"), [(2_000, 200), (2_001, 422)])
 # Purpose: The decision-reason limit accepts the documented boundary and rejects overflow without writing it.
+# SCRUM-17 AC3-B1, AC3-B2 (boundary): a 2,000-character decision reason is
+# retained; 2,001 is refused (422) and writes nothing.
 def test_decision_reason_length_boundary(length: int, expected_status: int) -> None:
     client, events, event_request_id = under_review_fixture()
     reason = "r" * length
@@ -412,6 +454,8 @@ def test_decision_reason_length_boundary(length: int, expected_status: int) -> N
 
 @pytest.mark.parametrize(("length", "expected_status"), [(2_000, 200), (2_001, 422)])
 # Purpose: The response limit accepts the documented boundary and leaves an overflowing clarification unanswered.
+# SCRUM-17 AC4-B1, AC4-B2 (boundary): a 2,000-character response is retained;
+# 2,001 is refused (422) and the clarification stays unanswered.
 def test_clarification_response_length_boundary(length: int, expected_status: int) -> None:
     client, events, event_request_id = under_review_fixture()
     events.decide_by_coordinator(
@@ -442,6 +486,10 @@ def test_clarification_response_length_boundary(length: int, expected_status: in
     ],
 )
 # Purpose: Each SCRUM-17 mutation is restricted to the actor named by its acceptance criterion.
+# SCRUM-17 AC2-X1 (cross-cutting): each review mutation is restricted to the
+# actor its criterion names — decision and resume to the assigned coordinator,
+# the response to the owning organiser — and a wrong-role call (403) writes
+# nothing.
 def test_review_mutations_reject_wrong_role(
     monkeypatch: pytest.MonkeyPatch,
     roles: list[str],
@@ -500,6 +548,8 @@ def test_review_mutations_reject_wrong_role(
     ],
 )
 # Purpose: Missing authentication cannot mutate any SCRUM-17 review state.
+# SCRUM-17 AC2-X2 (cross-cutting): a caller with no session is refused (401) on
+# every review mutation and the request and its history are untouched.
 def test_review_mutations_require_session(
     path: str, payload: dict[str, str] | None
 ) -> None:
@@ -521,6 +571,8 @@ def test_review_mutations_require_session(
 
 @pytest.mark.parametrize("path", ["review", "resume-review", "decision", "cancellation", "completion"])
 # Purpose: Malformed request IDs are rejected at the HTTP boundary instead of reaching Supabase.
+# SCRUM-17 AC2-N5 (negative): malformed request ids are rejected at the HTTP
+# boundary (422) on every review transition route and never reach Supabase.
 def test_transition_routes_validate_event_request_uuid(path: str) -> None:
     with make_client() as client:
         response = client.post(
