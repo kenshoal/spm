@@ -10,6 +10,8 @@ remains the source of truth.** The labelled-test pass added comments only to
 files owned by this sweep; no suite was run in this pass, so every execution
 row is **Not executed** (`testing.md` §8).
 
+> **Update from PR #125 (1 Nov 2026).** (1) Jira changed after this document was drafted: at 16:07 the SCRUM-27 ACs were rewritten as AC1 to AC7 (Jira shows the time; the editor was not checked) (any role permits an action; the business roles including Safety Officer; only the Lead assigns Coordinators; several roles; relationship access is SCRUM-39; a stored role change applies at the next identity verification; only Admin grants roles, the Lead only Event Coordinator). This matrix follows the earlier three bullets. The new AC6 corresponds to the planned case AC3-N1, which still has no test. Re-base the IDs when the story owner reviews. (2) Cases added by PR #125 are in `frontend/__tests__/role-access.test.ts` (AC1-X2, AC1-N3, AC1-X3, AC1-N4, AC2-X2, AC3-P4, AC3-P5, AC3-P6), including a check that every page except sign-in and the refusal page calls a session or role guard; it was seen to fail when a guard was removed from a page.
+
 ## Story contract
 
 - AC1: Given an authenticated user, when they use the system, then the features available to them are determined by their role (Event Organiser, Event Coordinator, Event Operations Manager, Venue Staff, Technical Support Staff, Attendee).
@@ -104,6 +106,15 @@ UI = frontend Vitest, E2E = Playwright.
 | AC3-N1 | AC3 | A role granted or revoked mid-session takes effect on the next request | Negative | An open session whose roles change in the role store between requests | Repeat an authorised request after the change | Role added, then removed | The new feature set applies immediately; a revoked role is refused; no stale role is honoured | — | A |
 | AC3-X1 | AC3 | Every consuming service evaluates the whole roles tuple per request | Cross-cutting | authService returns the `roles` list; a protected endpoint in another service | Call protected endpoints as holders of various role sets | e.g. every role other than organiser or coordinator against the event info endpoint | Decisions use every held role: a role held in the tuple grants its feature; absent roles are refused | — | API-E (the per-service refusal suites are those services'; named, not claimed) |
 
+| AC1-X2 | AC1 | Each of the seven roles is offered its own links and no other role's | Cross-cutting | Each role in turn | Build the navigation links | organiser, coordinator, lead, venue staff, technical support, safety officer, attendee | Exactly that role's links and Notifications | — | UI (`role-access.test.ts`) |
+| AC1-N3 | AC1 | An unknown role, or no role at all, is offered nothing | Negative | Roles `admin`, `ghost`, `[]` | Build the links | — | No links | — | UI (same file) |
+| AC1-X3 | AC1 | Every page except sign-in and the refusal page checks the session or the role | Cross-cutting | The `app` folder | Read each `page.tsx` for a `require…` call | — | None without one | — | UI (same file) |
+| AC1-N4 | AC1 | The two public pages are the only pages without a check | Negative | The `app` folder | List pages with no `require…` call | — | Exactly sign-in and the refusal page | — | UI (same file) |
+| AC2-X2 | AC2 | The Event Coordinator Lead's workspace has no other role's links | Cross-cutting | Role `event_operations_manager` | Build the links | — | None of coordination, venues, bookings, equipment, safety, event requests | — | UI (same file) |
+| AC3-P4 | AC3 | A Lead who is also an Organiser is offered both workspaces | Partition | Roles Lead and Organiser | Build the links | — | My event requests, Assignments, Notifications | — | UI (same file) |
+| AC3-P5 | AC3 | The order roles are listed in does not change the links | Partition | Three roles, forward and reversed | Build the links | coordinator, venue staff, safety officer | Same links | — | UI (same file) |
+| AC3-P6 | AC3 | Several roles land in a fixed workspace | Partition | Role pairs | Choose the landing workspace | organiser+coordinator, Lead+venue staff, attendee+tech support, attendee+safety, unknown | `/event-requests`, `/operations/assignments`, `/equipment`, `/safety`, `/unauthorised` | — | UI (same file) |
+
 ## Latest execution record
 
 This pass (1 November 2026) designed the matrix from the approved ACs and added
@@ -125,4 +136,20 @@ can add or find labels; nothing below is pass/fail evidence.
 | AC2-H2, AC2-X1 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | SCRUM-14's `backend/eventRequestService/tests/test_coordinator_assignment_controller.py` (`test_assign_coordinator_requires_operations_manager_role`, `test_assign_coordinator_allows_event_operations_manager_role`) and SCRUM-62's labelled e2e journey — named, not claimed |
 | AC3-P2 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `backend/eventRequestService/tests/test_organisation_access.py::test_assigned_coordinator_access_survives_unrelated_organisation`, already labelled `AC8-X1` for SCRUM-39; named, not re-labelled |
 | AC3-X1 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | Per-service role-refusal suites, e.g. `backend/eventRequestService/tests/test_registration_info_api.py` `AC4-P1…P5` partition — those services' stories own the labels |
-| AC3-N1 | Planned | — | Not executed | — | — | gap: no automated test yet — story owner to write (role change mid-session recognised on the next request) |
+| AC1-X2, AC1-N3, AC1-X3, AC1-N4, AC2-X2, AC3-P4, AC3-P5, AC3-P6 | Automated (new, PR #125) | — | See the execution evidence below | — | — | `frontend/__tests__/role-access.test.ts` (20 tests) |
+| AC3-N1 | Planned | — | Not executed | — | — | gap: no automated test yet — story owner to write (role change mid-session recognised on the next request); this is the new Jira AC6 |
+
+## Execution evidence, 1 November 2026 (PR #125)
+
+The suites below were run after the new tests were added and after `dev` (`439fec0`) was merged into the PR #125 branch. They are the first run of this story's tests in this document. Every automated row above passed because the test it names is in a suite that passed; no row was run on its own. Environment: Kennedy's machine, Claude Code, pending human review; backend tests use in-memory stores and fakes; the browser tests use the Node mock services and the cached Chromium 1148 headless shell (the pinned build is not installed).
+
+| Check | Command and environment | Result |
+| --- | --- | --- |
+| venueService | `pytest`; `ruff check .` | 790 passed, 10 skipped; clean |
+| authService | `pytest`; `ruff check .` | 60 passed; clean |
+| eventRequestService | `pytest`; `ruff check .` | 1194 passed, 1 skipped; clean |
+| equipmentService | `pytest`; `ruff check .` | 354 passed; clean |
+| Frontend | `npx vitest run`; `npm run typecheck`; `npm run lint` | 80 files, 762 passed; clean; clean |
+| End-to-end | `playwright test` (whole suite) | 59 passed |
+
+Not run: the shared development database, pull-request CI at the time of writing, and reviewer sign-off. The new tests passed first time, so they found no defect; they close gaps in the record.

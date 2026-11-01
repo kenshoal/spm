@@ -4,6 +4,8 @@ Source: [Jira SCRUM-9](https://is212g9t4.atlassian.net/browse/SCRUM-9) (Event Co
 
 Status: **AI-drafted test design, not yet reviewed by a teammate (`testing.md` §10). Jira remains the source of truth.** The automated tests predate this document: this pass added label comments to them and designed the matrix, and ran no suite — every row below is **Not executed** and no pass/fail is claimed (`testing.md` §8).
 
+> **Update from PR #125 (1 Nov 2026).** (1) Jira changed after this document was drafted: the Product Owner rewrote the ACs into AC1 to AC6 at 11:54 and added out-of-scope, dependencies and a change log at 16:23 and 16:28 ("the meaning did not change", approved by Heng Rui). This matrix still follows the earlier four bullets. They map as: new AC1 = AC1, new AC2 and AC3 = AC2, new AC4 = AC3, new AC5 = AC4, new AC6 (roles) = the AC2-X rows. Re-base the IDs onto the new ACs when the story owner reviews. (2) The gap this document called out (AC3-B1 to AC3-B3) is now automated, and the role cases are added as AC2-X2 to AC2-X11, in `backend/venueService/tests/test_venues_search_contract.py`. (3) One case does not hold: AC2-X12.
+
 ## Story contract
 
 **User story:** As an Event Coordinator, I want to search and filter venues by my event's requirements, so that I can shortlist the venues that can host it.
@@ -92,6 +94,19 @@ Layer codes: **API** = `backend/venueService/tests/test_venues_search.py` (FastA
 | AC4-P2 | AC4 | A venue with an approved overlapping booking is hidden; a pending booking reserves nothing | Partition | Venue with an approved 10:00–12:00 booking and a pending 15:00–17:00 booking | Search 11:00–13:00, 12:00–14:00 and 15:00–16:00 on D | approved 600–720; pending 900–1020 | Absent only for the overlap with the approved booking | Pending booking does not exclude the venue | API |
 | AC4-B1 | AC4 | A date-only search excludes a venue with no free minute and keeps one with 15 free | Boundary | One venue covered 07:00–24:00 by block+booking; one blocked 07:00–23:45 | Search with `date` only | blocks 420–780 / 420–1425; booking 780–1440 | Fully covered venue absent; 15-minute venue present | — | API |
 
+| AC2-H4 | AC2 | The API result carries the six shortlist attributes | Happy | One venue with every attribute | `GET /venues/search` | Orchard Hall, Orchard Road, 180, projector and stage, ramp, theatre and boardroom | name, location, `max_capacity`, `supported_layouts`, `facilities`, `accessibility_features` equal what was stored | — | API (`test_venues_search_contract.py`) |
+| AC3-P2 | AC3 | A chosen layout's own capacity decides, not the maximum (Q&A #112) | Partition | Max 300, classroom 80 | `required_capacity=100&layout=classroom` | 100, classroom | Venue absent | — | API (same file) |
+| AC3-P3 | AC3 | A layout with no recorded capacity uses the maximum | Partition | Same venue | `required_capacity=100&layout=theatre` | 100, theatre | Venue present | — | API (same file) |
+| AC3-P4 | AC3 | With no layout chosen the maximum applies | Partition | Same venue | `required_capacity=250` | 250 | Venue present | — | API (same file) |
+| AC3-N1 | AC3 | A small venue is hidden even when everything else matches | Negative | 40-seat venue matching location, facility and layout | Search for 41 with those filters | 41 | No result | — | API (same file) |
+| AC2-X2, AC2-X3, AC2-X4 | AC2 | Event Coordinator, Venue Staff and Safety Officer can search | Cross-cutting | One venue; each role in turn | `GET /venues/search` | roles | 200 and the venue | — | API (same file) |
+| AC2-X5, AC2-X6, AC2-X7, AC2-X8, AC2-X9 | AC2 | Event Organiser, Attendee, Technical Support, Event Coordinator Lead and Admin are refused | Cross-cutting | One venue; each role in turn | `GET /venues/search` | roles | 403; no venue data in the body | Nothing returned | API (same file) |
+| AC2-X10 | AC2 | One permitted role among several is enough | Cross-cutting | Roles `attendee` and `event_coordinator` | `GET /venues/search` | — | 200 | — | API (same file) |
+| AC2-X11 | AC2 | A search with no session is refused | Cross-cutting | No session | `GET /venues/search` | — | 401 | — | API (same file) |
+| AC2-X12 | AC2 | A Safety Officer can open the venue search page (the Jira AC lets them search) | Cross-cutting | Safety Officer session | Open `/venues/search` | — | The page opens | — | E2E (not automated) |
+
+AC2-X12 **does not hold today** and has no test, because it would fail: `frontend/app/venues/search/page.tsx` line 18 admits only `event_coordinator` and `venue_staff`, and the navigation offers a Safety Officer no search link (the service does accept them). Decision for the Product Owner: admit the Safety Officer on the page, or reword the AC.
+
 ## Latest execution record
 
 This pass (test-case gap sweep, 1 Nov 2026, branch `docs/testcase-gap-sweep`, uncommitted working tree) added the `SCRUM-9 …` label comments and designed this matrix; **no suite was run**, so no row carries pass/fail evidence. Label-only edits were lint-checked (`ruff`, eslint) but that is not test evidence. Existing rows for the same behaviour in `docs/testcases/scrum_65_testcases.md` keep their own execution records there.
@@ -103,4 +118,21 @@ This pass (test-case gap sweep, 1 Nov 2026, branch `docs/testcase-gap-sweep`, un
 | AC1-N3, AC4-P1, AC4-P2, AC4-B1 | Automated (SCRUM-65 label; cross-referenced, not relabelled) | — | Not executed | Working tree of `docs/testcase-gap-sweep` | Test-case gap sweep (Claude), 1 Nov 2026 | `backend/venueService/tests/test_block_search_times.py`: SCRUM-65's AC4-N1 (`test_invalid_search_times_are_refused`), AC3-H2 (`test_blocked_time_is_not_offered_in_search`), AC4-H1 (`test_search_respects_booked_times`), AC4-B1 (`test_search_by_date_needs_free_time`) prove these rows; their IDs stay with SCRUM-65's matrix |
 | AC2-X1 | Automated (shares the test labelled SCRUM-30 AC2-N3; not relabelled) | — | Not executed | Working tree of `docs/testcase-gap-sweep` | Test-case gap sweep (Claude), 1 Nov 2026 | `backend/venueService/tests/test_venues_catalogue.py::test_venue_reads_forbidden_for_attendees` includes `GET /venues/search` → 403 for an attendee; Technical Support's 403 on search sits in `test_venue_locations.py` (SCRUM-13's AC1-X4) |
 | AC2-H3 | Automated (label added in this pass) | — | Not executed | Working tree of `docs/testcase-gap-sweep` | Test-case gap sweep (Claude), 1 Nov 2026 | `frontend/e2e/venue-search.spec.ts` (`coordinator filters venues by capacity and facilities`) |
-| AC3-B1, AC3-B2, AC3-B3 | Planned | — | Not executed | — | — | gap: no automated test yet — story owner to write (AC3's boundary N−1/N/N+1; today's test only straddles N with 50 and 300) |
+| AC3-B1, AC3-B2, AC3-B3 | Automated (new, PR #125) | — | See the execution evidence below | — | — | `backend/venueService/tests/test_venues_search_contract.py::test_capacity_boundary_is_the_maximum_capacity` (venue of 99, 100 and 101 against a required 100) |
+| AC2-H4, AC3-P2, AC3-P3, AC3-P4, AC3-N1, AC2-X2 to AC2-X11 | Automated (new, PR #125) | — | See the execution evidence below | — | — | `backend/venueService/tests/test_venues_search_contract.py` |
+| AC2-X12 | Not automated | The page admits only Event Coordinator and Venue Staff | **Fail (found by reading `app/venues/search/page.tsx:18`; not run)** | — | Claude Code, 1 Nov 2026 | Needs a decision; see above |
+
+## Execution evidence, 1 November 2026 (PR #125)
+
+The suites below were run after the new tests were added and after `dev` (`439fec0`) was merged into the PR #125 branch. They are the first run of this story's tests in this document. Every automated row above passed because the test it names is in a suite that passed; no row was run on its own. Environment: Kennedy's machine, Claude Code, pending human review; backend tests use in-memory stores and fakes; the browser tests use the Node mock services and the cached Chromium 1148 headless shell (the pinned build is not installed).
+
+| Check | Command and environment | Result |
+| --- | --- | --- |
+| venueService | `pytest`; `ruff check .` | 790 passed, 10 skipped; clean |
+| authService | `pytest`; `ruff check .` | 60 passed; clean |
+| eventRequestService | `pytest`; `ruff check .` | 1194 passed, 1 skipped; clean |
+| equipmentService | `pytest`; `ruff check .` | 354 passed; clean |
+| Frontend | `npx vitest run`; `npm run typecheck`; `npm run lint` | 80 files, 762 passed; clean; clean |
+| End-to-end | `playwright test` (whole suite) | 59 passed |
+
+Not run: the shared development database, pull-request CI at the time of writing, and reviewer sign-off. The new tests passed first time, so they found no defect; they close gaps in the record.

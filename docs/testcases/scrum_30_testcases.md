@@ -4,6 +4,8 @@ Source: [Jira SCRUM-30](https://is212g9t4.atlassian.net/browse/SCRUM-30) (Venue 
 
 Status: **AI-drafted test design, not yet reviewed by a teammate (`testing.md` §10). Jira remains the source of truth.** The automated tests predate this document: this pass added label comments to them and designed the matrix, and ran no suite — every row below is **Not executed** and no pass/fail is claimed (`testing.md` §8).
 
+> **Update from PR #125 (1 Nov 2026).** (1) **Jira's ACs changed after this document was drafted, and the new AC1 does not match the system.** At 16:07 the SCRUM-30 ACs were rewritten as AC1 to AC7 (Jira shows the time; the editor was not checked). AC1 now says a venue has "one daily operating start and end … on 15-minute steps within 07:00 to 24:00", and AC4 and AC5 say search and suitability use the venue's operating hours. The system does not do this: the form has no such field, and the stored `operating_slots` (AM, PM, NIGHT) are read by nothing since SCRUM-65 (assumption A1). This is a requirement-to-code mismatch, not a test gap: either per-venue operating times are built, or the AC is amended. It needs the Product Owner's decision. (2) The other new ACs map to this matrix as: AC2 = AC1 (update), AC3 = AC2, AC4 and AC5 = AC3, AC6 = AC1-N rows, AC7 = AC1-N1 and the new AC1-X rows. Re-base the IDs when the story owner reviews. (3) Cases added by PR #125 are in `backend/venueService/tests/test_venues_catalogue_contract.py`; the planned AC3-X1 case is now covered by AC3-X1 to AC3-X4.
+
 ## Story contract
 
 **User story:** As Venue Staff, I want to create and update venue records in the catalogue, so that Coordinators search and check suitability against accurate venue information.
@@ -86,6 +88,20 @@ Layer codes: **API** = `backend/venueService/tests/test_venues_catalogue.py` (Fa
 | AC2-N3 | AC2 | An attendee is refused catalogue reads | Negative | Attendee principal | `GET /venues`, `GET /venues/search`, `GET /venues/{id}`, `POST …/suitability` | attendee principal | 403 on all four | No venue data returned | API |
 | AC3-X1 | AC3 | An attribute update is reflected in venue search and suitability | Cross-cutting | Orchard Hall: capacity 200, facilities projector only | `PATCH` capacity 350 and facilities + stage; re-run search at required capacity 300; re-run suitability at attendance 300 requiring stage | update `{"max_capacity": 350, "facilities": ["projector", "stage"]}`; search `required_capacity=300`; suitability attendance 300 + stage | Search now returns Orchard Hall (it could not before the edit); suitability now reports `suitable: true` with no mismatches (it reported a capacity mismatch before) | No duplicate record; the edit does not create or cancel bookings; unrelated venues unchanged | API |
 
+| AC1-H6 | AC1 | Every catalogue attribute is stored on create and read back | Happy | Venue Staff session | `POST /venues`; `GET /venues/{id}` | Orchard Hall, Orchard Road, 200, projector and microphone, wheelchair_ramp and hearing_loop, theatre and classroom, AM and PM | 201; every field equals what was sent, on create and on re-read | — | API (`test_venues_catalogue_contract.py`) |
+| AC1-H7 | AC1 | Every attribute can be updated at once | Happy | Venue as above | `PATCH` all seven fields | Orchard Grand Hall, Marina Bay, 450, stage, lift, banquet, NIGHT | 200; every field changed | — | API (same file) |
+| AC1-P6 | AC1 | Facilities, accessibility and layouts may be empty | Partition | Venue Staff session | `POST` with only name, location, capacity | Bare, Anywhere, 10 | 201; the three lists are empty | — | API (same file) |
+| AC1-B1, AC1-B2 | AC1 | A maximum capacity of 1 is accepted and 0 is refused | Boundary | Venue Staff session | `POST` capacity 1, then 0 | 1; 0 | 201; 422 with no venue stored | — | API (same file) |
+| AC1-N8, AC1-N9, AC1-N10, AC1-N11 | AC1 | A negative capacity, a non-numeric capacity, a blank location and an unknown layout are each refused | Negative | Venue Staff session | `POST` each | -5; "many"; ""; "spaceship" | 422; no venue stored | Nothing stored | API (same file) |
+| AC1-N12 | AC1 | A refused update leaves the venue as it was | Negative | Venue exists | `PATCH` capacity 0 | 0 | 422; the venue read back is identical | Nothing changed | API (same file) |
+| AC1-X1, AC1-X2, AC1-X3, AC1-X4, AC1-X5 | AC1 | Event Coordinator, Safety Officer, Event Organiser, Technical Support and Attendee cannot create or update | Cross-cutting | Venue exists; each role in turn | `POST /venues` and `PATCH /venues/{id}` | roles | 403 and 403 | Venue unchanged | API (same file) |
+| AC2-H3, AC2-H4, AC2-H5 | AC2 | Event Coordinator, Venue Staff and Safety Officer read the current attributes | Happy | Venue updated to 260 seats; each role in turn | `GET /venues/{id}` | roles | 200; 260 and the facilities | — | API (same file) |
+| AC2-N4, AC2-N5, AC2-N6 | AC2 | Event Organiser, Technical Support and Event Coordinator Lead cannot read a venue | Negative | Venue exists; each role in turn | `GET /venues/{id}` and `GET /venues` | roles | 403 and 403 | — | API (same file) |
+| AC3-X1 | AC3 | An updated capacity changes who search finds | Cross-cutting | Venue of 50 | Search for 120 → none; `PATCH` to 150; search again | 120 | Not found, then found | — | API (same file) |
+| AC3-X2 | AC3 | Updated facilities, accessibility and layouts change what search finds | Cross-cutting | Venue with none | Search for stage, lift, banquet → none; `PATCH`; search again | stage, lift, banquet | Not found, then found | — | API (same file) |
+| AC3-X3 | AC3 | Taking a venue out of service removes it from search | Cross-cutting | Available venue | Search; `PATCH` blocked; search | — | Found, then not | — | API (same file) |
+| AC3-X4 | AC3 | An updated capacity and facilities change a suitability verdict | Cross-cutting | Venue of 40 seats, no facilities | Check 80 people and a stage → unsuitable with two mismatches; `PATCH` to 90 and a stage; check again | 80, stage | Unsuitable (capacity, facilities), then suitable with none | — | API (same file) |
+
 ## Latest execution record
 
 This pass (test-case gap sweep, 1 Nov 2026, branch `docs/testcase-gap-sweep`, uncommitted working tree) added the `SCRUM-30 …` label comments and designed this matrix; **no suite was run**, so no row carries pass/fail evidence. Label-only edits were lint-checked (`ruff`, eslint) but that is not test evidence. SCRUM-59's existing labels on the setup/turnaround tests in the same files were left untouched.
@@ -97,4 +113,19 @@ This pass (test-case gap sweep, 1 Nov 2026, branch `docs/testcase-gap-sweep`, un
 | AC1-H4, AC1-P2, AC1-P3, AC1-P4, AC1-P5, AC1-N4, AC1-N5, AC1-N7 | Automated (label added in this pass) | — | Not executed | Working tree of `docs/testcase-gap-sweep` | Test-case gap sweep (Claude), 1 Nov 2026 | `frontend/__tests__/venue-form.test.ts` |
 | AC1-H5 | Automated (label added in this pass) | — | Not executed | Working tree of `docs/testcase-gap-sweep` | Test-case gap sweep (Claude), 1 Nov 2026 | `frontend/e2e/venue-catalogue.spec.ts` (`venue staff add and update a venue`) |
 | AC1-H1, AC1-N1, AC1-N3, AC1-N5 (action layer) | Automated (label added in this pass) | — | Not executed | Working tree of `docs/testcase-gap-sweep` | Test-case gap sweep (Claude), 1 Nov 2026 | `frontend/__tests__/venue-actions.test.ts`: the same four rows proved through the `createVenue` / `updateVenue` server actions (`creates a venue and redirects…`, `a 403 explains…`, `a 404 on update explains…`, `an invalid form never calls fetch…`). Three further tests in that file — the backend-422 wording, the expired-session redirect to `/auth`, and the unreachable-service retry message — match no matrix row and were left unlabelled rather than given new IDs |
-| AC3-X1 | Planned | — | Not executed | — | — | gap: no automated test yet — story owner to write; nearest existing evidence is the status-only update→search case labelled SCRUM-9 AC4-H1 (`test_venues_search.py::test_blocked_venue_is_excluded`), and SCRUM-12's AC5-X1 proves a check never writes — neither edits attributes and re-runs both checks |
+| AC3-X1 (umbrella), AC1-H6, AC1-H7, AC1-P6, AC1-B1, AC1-B2, AC1-N8 to AC1-N12, AC1-X1 to AC1-X5, AC2-H3 to AC2-H5, AC2-N4 to AC2-N6, AC3-X1 to AC3-X4 | Automated (new, PR #125) | — | See the execution evidence below | — | — | `backend/venueService/tests/test_venues_catalogue_contract.py` (25 tests) |
+
+## Execution evidence, 1 November 2026 (PR #125)
+
+The suites below were run after the new tests were added and after `dev` (`439fec0`) was merged into the PR #125 branch. They are the first run of this story's tests in this document. Every automated row above passed because the test it names is in a suite that passed; no row was run on its own. Environment: Kennedy's machine, Claude Code, pending human review; backend tests use in-memory stores and fakes; the browser tests use the Node mock services and the cached Chromium 1148 headless shell (the pinned build is not installed).
+
+| Check | Command and environment | Result |
+| --- | --- | --- |
+| venueService | `pytest`; `ruff check .` | 790 passed, 10 skipped; clean |
+| authService | `pytest`; `ruff check .` | 60 passed; clean |
+| eventRequestService | `pytest`; `ruff check .` | 1194 passed, 1 skipped; clean |
+| equipmentService | `pytest`; `ruff check .` | 354 passed; clean |
+| Frontend | `npx vitest run`; `npm run typecheck`; `npm run lint` | 80 files, 762 passed; clean; clean |
+| End-to-end | `playwright test` (whole suite) | 59 passed |
+
+Not run: the shared development database, pull-request CI at the time of writing, and reviewer sign-off. The new tests passed first time, so they found no defect; they close gaps in the record.
