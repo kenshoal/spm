@@ -612,7 +612,8 @@ def test_health() -> None:
     }
 
 
-# Purpose: Proves an organiser can save and retrieve an intentionally incomplete draft.
+# SCRUM-8 AC1-H1 (happy): an incomplete save is stored as a Draft, owned by the
+# verified organiser, and reads back identical.
 def test_create_and_get_incomplete_draft() -> None:
     with make_client() as client:
         created = client.post(
@@ -628,7 +629,9 @@ def test_create_and_get_incomplete_draft() -> None:
     assert fetched.json() == created.json()
 
 
-# Purpose: Proves every event-request field survives a draft round trip unchanged.
+# SCRUM-8 AC2-P1, SCRUM-11 AC3-H1 (partition): every field round-trips under its
+# own column unchanged, attendance as one top-level value never merged into
+# venue_requirements.
 def test_all_draft_fields_round_trip_unchanged() -> None:
     payload = complete_payload()
     with make_client() as client:
@@ -667,6 +670,8 @@ def test_list_returns_only_the_current_organisers_requests() -> None:
 
 
 # Purpose: Proves reopening a draft updates the same record and supports clearing fields.
+# SCRUM-29 AC1-H1 (happy): an authorised organiser's edit updates the same
+# record and can clear a field — never creating a second request.
 def test_patch_updates_the_same_draft_and_can_clear_a_field() -> None:
     with make_client() as client:
         created = client.post(
@@ -695,7 +700,8 @@ def test_delete_removes_the_draft() -> None:
     assert fetched.status_code == 404
 
 
-# Purpose: Prevents one organiser from reading or mutating another organiser's Draft.
+# SCRUM-8 AC4-N1 (negative): another organiser cannot read, update or delete a
+# draft and the stored draft is unchanged (read-side scoping rules are SCRUM-39's).
 def test_other_organiser_cannot_read_update_or_delete() -> None:
     repository = FakeEventRequestRepository()
     created = repository.create(
@@ -746,7 +752,8 @@ def test_every_operation_rejects_unauthenticated_requests(
     assert response.status_code == 401
 
 
-# Purpose: Refuses an organiser identity supplied by the browser instead of a session.
+# SCRUM-8 AC4-X2 (cross-cutting): a caller-supplied organiser header without a
+# session cannot reach drafts (401).
 def test_organiser_header_cannot_bypass_authentication() -> None:
     with TestClient(create_app(FakeEventRequestRepository())) as client:
         response = client.get(
@@ -757,7 +764,8 @@ def test_organiser_header_cannot_bypass_authentication() -> None:
     assert response.status_code == 401
 
 
-# Purpose: Binds stored ownership to the identity verified by authService.
+# SCRUM-8 AC4-X1 (cross-cutting): ownership binds to the authService-verified
+# identity, never to a spoofed X-Organiser-Id header.
 def test_verified_identity_overrides_spoofed_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -797,7 +805,8 @@ def test_verified_identity_overrides_spoofed_header(
     "roles",
     [["attendee"], ["admin"], ["event_operations_manager"]],
 )
-# Purpose: Prevents authenticated non-organisers from accessing organiser requests.
+# SCRUM-11 AC1-X1 (cross-cutting): only authenticated event organisers reach
+# submission; attendee, admin and operations-manager roles get 403.
 def test_event_request_operations_require_organiser_role(
     monkeypatch: pytest.MonkeyPatch,
     roles: list[str],
@@ -849,7 +858,8 @@ def test_invalid_session_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.status_code == 401
 
 
-# Purpose: Prevents invalid attendance from being persisted in a Draft.
+# SCRUM-8 AC2-B1, SCRUM-11 AC3-B1 (boundary): attendance just below the minimum
+# (0, the shared request model's gt=0 rule) is refused at save.
 def test_rejects_invalid_expected_attendance() -> None:
     with make_client() as client:
         response = client.post(
@@ -860,7 +870,8 @@ def test_rejects_invalid_expected_attendance() -> None:
     assert response.status_code == 422
 
 
-# Purpose: Proves a complete new form can enter coordination without a prior Draft.
+# SCRUM-11 AC5-P1 (partition): a complete new form can submit directly into
+# Submitted as exactly one row, never stored as a Draft first.
 def test_submit_complete_new_event_request_directly() -> None:
     repository = FakeEventRequestRepository()
     with make_client(repository) as client:
@@ -873,7 +884,8 @@ def test_submit_complete_new_event_request_directly() -> None:
 
 
 @pytest.mark.parametrize("missing_field", list(complete_payload()))
-# Purpose: Prevents any incomplete new form from entering the coordination workflow.
+# SCRUM-11 AC2-P1, AC4 (partition): omitting any one of the nine required fields
+# refuses submission (422) and stores nothing.
 def test_direct_submission_requires_every_form_field(missing_field: str) -> None:
     repository = FakeEventRequestRepository()
     payload = complete_payload()
@@ -886,7 +898,8 @@ def test_direct_submission_requires_every_form_field(missing_field: str) -> None
     assert repository.rows == {}
 
 
-# Purpose: Moves the existing Draft to Submitted without creating a duplicate record.
+# SCRUM-8 AC7-H1, SCRUM-11 AC5-H1 (happy): the same draft record moves to
+# Submitted under its own id with the submitted values, one row total.
 def test_submit_completed_draft() -> None:
     repository = FakeEventRequestRepository()
     with make_client(repository) as client:
@@ -905,7 +918,8 @@ def test_submit_completed_draft() -> None:
     assert len(repository.rows) == 1
 
 
-# Purpose: Keeps an incomplete saved Draft editable when submission validation fails.
+# SCRUM-11 AC4-N1 (negative): a refused submission leaves the draft an editable
+# Draft with its saved values.
 def test_incomplete_draft_remains_draft_after_rejected_submission() -> None:
     repository = FakeEventRequestRepository()
     with make_client(repository) as client:
@@ -923,7 +937,8 @@ def test_incomplete_draft_remains_draft_after_rejected_submission() -> None:
     assert fetched.json()["event_name"] == "Incomplete"
 
 
-# Purpose: Prevents ambiguous local times from being persisted with the wrong offset.
+# SCRUM-11 AC2-N1, AC4 (negative): timezone-unaware dates are refused (422) and
+# nothing is stored.
 def test_submission_requires_timezone_aware_dates() -> None:
     repository = FakeEventRequestRepository()
     payload = complete_payload()
@@ -936,7 +951,8 @@ def test_submission_requires_timezone_aware_dates() -> None:
     assert repository.rows == {}
 
 
-# Purpose: Prevents one organiser from submitting another organiser's Draft.
+# SCRUM-11 AC1-N1 (negative): another organiser's draft cannot be submitted (404)
+# and stays Draft.
 def test_other_organiser_cannot_submit_draft() -> None:
     repository = FakeEventRequestRepository()
     created = repository.create(
@@ -957,7 +973,8 @@ def test_other_organiser_cannot_submit_draft() -> None:
     assert repository.rows[created["id"]]["status"] == "Draft"
 
 
-# Purpose: Prevents resubmission, editing and deletion after coordination begins.
+# SCRUM-11 AC7-N1, AC1 (negative): a Submitted request refuses edit, resubmission
+# and deletion (409), keeps its values and still reads back for the organiser.
 def test_submitted_request_is_read_only() -> None:
     repository = FakeEventRequestRepository()
     with make_client(repository) as client:

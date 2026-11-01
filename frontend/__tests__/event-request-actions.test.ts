@@ -47,7 +47,8 @@ function completeFormData(): FormData {
   return formData;
 }
 
-// Purpose: Proves the create form sends incomplete values to the draft endpoint and returns to the list.
+// SCRUM-8 AC2-P2 (partition): untouched fields reach the draft endpoint as null
+// or empty lists and the save still succeeds.
 test("creates an incomplete draft through the event request API", async () => {
   const response = { ok: true, json: vi.fn().mockResolvedValue({ id: "draft-1" }) };
   const fetchMock = vi.fn().mockResolvedValue(response);
@@ -86,7 +87,8 @@ test("updates the same draft through the event request API", async () => {
   expect(navigation.redirect).toHaveBeenCalledWith("/event-requests");
 });
 
-// Purpose: Sends a complete new form directly to the authenticated submission endpoint.
+// SCRUM-11 AC5-P2 (partition): the direct-submission action posts the completed
+// form to the submissions endpoint and lands on the submitted list.
 test("submits a complete new event request directly", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201 });
   vi.stubGlobal("fetch", fetchMock);
@@ -102,7 +104,9 @@ test("submits a complete new event request directly", async () => {
   );
 });
 
-// Purpose: Submits the current values against the existing draft instead of creating a duplicate request.
+// SCRUM-8 AC7-H2, SCRUM-11 AC5-H2 (happy): the submit action targets the
+// existing draft's endpoint and hands over the saved form values, creating no
+// duplicate.
 test("submits a completed existing draft", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
   vi.stubGlobal("fetch", fetchMock);
@@ -145,7 +149,8 @@ test("responds to a clarification request", async () => {
   expect(navigation.redirect).not.toHaveBeenCalled();
 });
 
-// Purpose: Keeps a submitted request visible as read-only when a duplicate submission is attempted.
+// SCRUM-11 AC7-N2 (negative): a repeated submission reports the read-only state
+// instead of redirecting away from the form.
 test("reports that an already submitted request is read-only", async () => {
   vi.stubGlobal(
     "fetch",
@@ -164,7 +169,8 @@ test("reports that an already submitted request is read-only", async () => {
   expect(navigation.redirect).not.toHaveBeenCalled();
 });
 
-// Purpose: Gives the organiser a recoverable error without losing form values when the API is unavailable.
+// SCRUM-11 AC4-N3 (negative): an unreachable API leaves a recoverable submission
+// error without a redirect or a duplicate submission.
 test("returns an actionable error when submission cannot reach the API", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
 
@@ -176,7 +182,8 @@ test("returns an actionable error when submission cannot reach the API", async (
   expect(navigation.redirect).not.toHaveBeenCalled();
 });
 
-// Purpose: Stops incomplete form data before it can enter the coordination workflow.
+// SCRUM-11 AC4-P2, AC2 (partition): incomplete submission names the missing
+// fields and never calls the API.
 test("requires all submission fields before calling the API", async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -192,7 +199,8 @@ test("requires all submission fields before calling the API", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-// Purpose: Ensures invalid optional attendance is rejected before an unusable draft reaches the API.
+// SCRUM-8 AC2-B2, SCRUM-11 AC3-B2 (boundary): attendance just below the minimum
+// is stopped before the API is called.
 test("rejects non-positive attendance without calling the API", async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
