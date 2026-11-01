@@ -109,6 +109,7 @@ class RegistrationService:
         emails = self._attendee_emails(event_id)
         rows = [{**row, "attendee_email": emails.get(row["id"])} for row in rows]
         return {
+            "venue_capacity": self._venue_capacity(event_id),
             "event_request_id": event_id,
             "registration_capacity": event.get("registration_capacity"),
             "registration_opens_at": event.get("registration_opens_at"),
@@ -120,6 +121,16 @@ class RegistrationService:
             "absent": registered - attended,
             "registrations": rows,
         }
+
+    def _venue_capacity(self, event_id: str) -> int | None:
+        """Only a hint for the VIP form (hotfix 23): the database enforces the limit."""
+        try:
+            return self.repository.event_venue_capacity(event_id)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not read the venue capacity of event request %s", event_id, exc_info=True
+            )
+            return None
 
     def _attendee_emails(self, event_id: str) -> dict[str, str]:
         """Emails help staff but are not worth failing the list over."""

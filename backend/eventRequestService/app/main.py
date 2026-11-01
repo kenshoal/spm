@@ -58,10 +58,12 @@ from app.services.event_request_service import (
 from app.services.event_transition_service import (
     DecisionReasonRequiredError,
     EventTransitionService,
+    OrganiserChangeRefusedError,
     SafetyApprovalBlockedError,
     SafetyDecisionInvalidError,
     SafetyReviewNotReadyError,
     TransitionForbiddenError,
+    TransitionInputInvalidError,
     TransitionNotAllowedError,
 )
 from app.services.notification_client import NotificationClient
@@ -336,6 +338,21 @@ def create_app(
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content={"detail": str(error), "outstanding": error.outstanding},
+        )
+
+    @application.exception_handler(OrganiserChangeRefusedError)
+    async def organiser_change_refused(
+        request: Request, error: OrganiserChangeRefusedError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=error.status_code, content={"detail": str(error)})
+
+    @application.exception_handler(TransitionInputInvalidError)
+    async def transition_input_invalid(
+        request: Request, error: TransitionInputInvalidError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(error)},
         )
 
     @application.exception_handler(SafetyDecisionInvalidError)

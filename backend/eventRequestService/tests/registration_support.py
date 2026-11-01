@@ -158,6 +158,11 @@ class FakeRegistrationRepository:
     def attendee_emails(self, event_id: str) -> dict[str, str]:
         return dict(self.emails)
 
+    venue_capacity: int | None = None
+
+    def event_venue_capacity(self, event_id: str) -> int | None:
+        return self.venue_capacity
+
     def list_confirmed_events(self) -> list[dict[str, Any]]:
         return [dict(r) for r in self.events.values() if r["status"] == "Confirmed"]
 

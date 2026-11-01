@@ -20,6 +20,7 @@ _TERMINAL_STATUSES = {
     EventRequestStatus.COMPLETED,
     EventRequestStatus.CANCELLED,
     EventRequestStatus.REJECTED,
+    EventRequestStatus.WITHDRAWN,
 }
 
 # Statuses in which a request has (or awaits) a responsible Coordinator and

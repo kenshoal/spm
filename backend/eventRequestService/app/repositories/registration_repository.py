@@ -63,6 +63,8 @@ class RegistrationRepository(Protocol):
 
     def attendee_emails(self, event_id: str) -> dict[str, str]: ...
 
+    def event_venue_capacity(self, event_id: str) -> int | None: ...
+
     def set_registration_settings(
         self,
         event_id: str,
@@ -321,6 +323,24 @@ class SupabaseRegistrationRepository:
                 }
             )
         return venues
+
+    def event_venue_capacity(self, event_id: str) -> int | None:
+        """The seats of the event's approved venues, each venue counted once (hotfix 23).
+
+        A Coordinator may add a VIP above the registration capacity up to this number
+        (Q&A #99); None when no venue is booked, so there is no room above the capacity."""
+        rows = self._get(
+            "/venue_booking_requests",
+            {
+                "select": "venue_id,venues(max_capacity)",
+                "event_request_id": f"eq.{event_id}",
+                "status": "eq.approved",
+            },
+        )
+        by_venue = {
+            row["venue_id"]: (row.get("venues") or {}).get("max_capacity") or 0 for row in rows
+        }
+        return sum(by_venue.values()) if by_venue else None
 
     def attendee_emails(self, event_id: str) -> dict[str, str]:
         """Registration id to attendee email for one event (hotfix 16, 0076)."""

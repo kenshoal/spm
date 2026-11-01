@@ -171,6 +171,7 @@ def test_event_without_registrations_is_empty() -> None:
     assert response.json() == {
         "event_request_id": event_id,
         "registration_capacity": None,
+        "venue_capacity": None,
         "registration_opens_at": None,
         "registration_closes_at": None,
         "registered": 0,

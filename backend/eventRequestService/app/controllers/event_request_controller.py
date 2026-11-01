@@ -42,6 +42,7 @@ from app.services.event_request_service import (
     EventChangeBookingConflictError,
     EventChangeBookingPlanError,
     EventChangeDatePlanConflictError,
+    EventChangeSelectionError,
     EventRequestNotFoundError,
     EventRequestService,
 )
@@ -537,6 +538,21 @@ def decide_change_request(
     if change is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Change request not found")
     has_dates = "proposed_date_times" in change.proposed_changes
+    if payload.accepted_fields is not None:
+        # Hotfix 20 (Q&A #104): accept some fields, refuse the others with reasons.
+        if payload.booking_plan is not None and "proposed_date_times" not in payload.accepted_fields:
+            raise HTTPException(422, "Booking plan is only supported when the dates are accepted")
+        try:
+            return service.partially_approve_change_request(
+                request_id, str(change_request_id), coordinator_id, payload,
+            )
+        except EventChangeBookingConflictError as error:
+            raise HTTPException(409, detail={
+                "code": "BOOKING_CONFLICT", "message": str(error),
+                "bookings": [booking.model_dump(mode="json") for booking in error.bookings],
+            }) from error
+        except EventChangeSelectionError as error:
+            raise HTTPException(422, str(error)) from error
     if payload.booking_plan is not None and not has_dates:
         raise HTTPException(422, "Booking plan is only supported for date approval")
     if (

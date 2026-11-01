@@ -9,6 +9,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -33,6 +34,10 @@ class EventRequestStatus(str, Enum):
     COMPLETED = "Completed"
     CANCELLED = "Cancelled"
     REJECTED = "Rejected"
+    # Hotfixes 21 and 22: the Coordinator records a withdrawal (Q&A #103) and an event
+    # can be postponed with no new date (Q&A #69, #121).
+    WITHDRAWN = "Withdrawn"
+    POSTPONED = "Postponed"
 
 
 class EventRequestFields(BaseModel):
@@ -171,6 +176,8 @@ class EventChangeRequestStatus(str, Enum):
     PENDING = "Pending"
     APPROVED = "Approved"
     REJECTED = "Rejected"
+    # Hotfix 20 (Q&A #104): some fields accepted, the others refused with reasons.
+    PARTIALLY_APPROVED = "Partially Approved"
 
 
 class EventChangeRequestCreate(BaseModel):
@@ -229,12 +236,58 @@ class EventChangeBookingConflict(BaseModel):
     conflicting_block_ids: list[UUID]
 
 
+class EventPostponement(BaseModel):
+    """Hotfix 22: why the event is postponed. The new date comes later (ResumeEvent)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str = Field(min_length=1, max_length=2_000)
+
+
+class EventOrganiserChange(BaseModel):
+    """Hotfix 24 (Q&A #59, #61): the Coordinator hands an event to another Organiser."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    organiser_email: str = Field(min_length=3, max_length=320)
+    reason: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("organiser_email")
+    @classmethod
+    def looks_like_an_email(cls, value: str) -> str:
+        local, _, domain = value.partition("@")
+        if not local or "." not in domain or " " in value:
+            raise ValueError("organiser_email must be an email address")
+        return value
+
+
+class EventResumption(BaseModel):
+    """Hotfix 22: the new date(s) a postponed event is planned for."""
+
+    proposed_date_times: list[AwareDatetime] = Field(min_length=1)
+
+
 class EventChangeDecision(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     decision: EventChangeRequestStatus
     reason: str | None = Field(default=None, max_length=2_000)
     booking_plan: list[EventChangeBookingPlanItem] | None = None
+    # Hotfix 20 (Q&A #104): accept only these fields and refuse the rest, each with a
+    # reason. Valid only with an Approved decision; the database checks the fields.
+    accepted_fields: list[str] | None = Field(default=None, min_length=1)
+    rejected_reasons: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def partial_fields_need_an_approval(self) -> "EventChangeDecision":
+        if self.accepted_fields is None and self.rejected_reasons is not None:
+            raise ValueError("rejected_reasons needs accepted_fields")
+        if (
+            self.accepted_fields is not None
+            and self.decision != EventChangeRequestStatus.APPROVED
+        ):
+            raise ValueError("accepted_fields only applies to an Approved decision")
+        return self
 
     @field_validator("decision")
     @classmethod
@@ -403,6 +456,16 @@ class EventChangeRequestResponse(BaseModel):
     created_at: datetime
     decided_at: datetime | None = None
     applied_booking_plan: list[EventChangeBookingPlanItem] | None = None
+    # Hotfix 20: field -> {"value": proposed value, "reason": why it was refused}.
+    rejected_changes: dict[str, Any] | None = None
+
+    @model_serializer(mode="wrap")
+    def omit_absent_rejections(self, handler: Any) -> dict[str, Any]:
+        """A request nobody partly refused reads exactly as it did before hotfix 20."""
+        data = handler(self)
+        if data.get("rejected_changes") is None:
+            data.pop("rejected_changes", None)
+        return data
 
 
 class EventChangeDatePlanBooking(BaseModel):

@@ -69,7 +69,21 @@ class EventRequestRepository(Protocol):
 
     def get_event_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]: ...
 
-    def cancellation_staff_ids(self, event_request_id: str) -> list[str]: ...
+    def cancellation_staff_ids(
+        self, event_request_id: str, reason: str = "Event cancelled"
+    ) -> list[str]: ...
+
+    def postpone_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, reason: str
+    ) -> dict[str, Any]: ...
+
+    def resume_postponed(
+        self, event_request_id: str, coordinator_id: str, new_date_times: list[str]
+    ) -> dict[str, Any]: ...
+
+    def change_organiser(
+        self, event_request_id: str, coordinator_id: str, organiser_email: str, reason: str
+    ) -> dict[str, Any]: ...
 
     def get_by_ids(
         self, event_request_ids: list[str]
@@ -135,6 +149,12 @@ class EventRequestRepository(Protocol):
 
     def approve_date_change_request(
         self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        reason: str | None, booking_plan: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]: ...
+
+    def partially_approve_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        accepted_fields: list[str], rejected_reasons: dict[str, str],
         reason: str | None, booking_plan: list[dict[str, Any]] | None,
     ) -> dict[str, Any]: ...
 
@@ -594,6 +614,22 @@ class SupabaseEventRequestRepository:
             "p_booking_plan": booking_plan,
         })
 
+    def partially_approve_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        accepted_fields: list[str], rejected_reasons: dict[str, str],
+        reason: str | None, booking_plan: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        """Hotfix 20: narrow the request to the accepted fields, then approve it."""
+        return self._call_rpc("partially_approve_event_change_request", {
+            "p_event_request_id": event_request_id,
+            "p_change_request_id": change_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_accepted_fields": accepted_fields,
+            "p_rejections": rejected_reasons,
+            "p_reason": reason,
+            "p_booking_plan": booking_plan,
+        })
+
     def decide_change_request(
         self,
         event_request_id: str,
@@ -772,9 +808,42 @@ class SupabaseEventRequestRepository:
             ],
         }
 
-    def cancellation_staff_ids(self, event_request_id: str) -> list[str]:
-        """Staff responsible for the arrangements a cancellation just released:
-        who approved each booking and who made each reservation (SCRUM-57 AC1b)."""
+    def postpone_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, reason: str
+    ) -> dict[str, Any]:
+        """Hotfix 22: Postponed, releasing bookings, holds and reservations."""
+        return self._call_rpc("postpone_event_by_coordinator", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_reason": reason,
+        })
+
+    def resume_postponed(
+        self, event_request_id: str, coordinator_id: str, new_date_times: list[str]
+    ) -> dict[str, Any]:
+        """Hotfix 22: Postponed -> Planning on the new date(s)."""
+        return self._call_rpc("resume_postponed_event", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_new_date_times": new_date_times,
+        })
+
+    def change_organiser(
+        self, event_request_id: str, coordinator_id: str, organiser_email: str, reason: str
+    ) -> dict[str, Any]:
+        """Hotfix 24: the assigned Coordinator hands the event to another Organiser."""
+        return self._call_rpc("change_event_organiser", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_new_organiser_email": organiser_email,
+            "p_reason": reason,
+        })
+
+    def cancellation_staff_ids(
+        self, event_request_id: str, reason: str = "Event cancelled"
+    ) -> list[str]:
+        """Staff responsible for the arrangements a cancellation or postponement just
+        released: who approved each booking and who made each reservation (SCRUM-57 AC1b)."""
         bookings = self._read_rows(
             "/venue_booking_requests",
             {
@@ -789,7 +858,7 @@ class SupabaseEventRequestRepository:
             {
                 "select": "created_by",
                 "event_request_id": f"eq.{event_request_id}",
-                "reason": "eq.Event cancelled",
+                "reason": f"eq.{reason}",
             },
         )
         staff = {row["decided_by"] for row in bookings} | {row["created_by"] for row in releases}

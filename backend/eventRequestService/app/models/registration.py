@@ -49,6 +49,8 @@ class RegistrationInfoResponse(BaseModel):
 
     event_request_id: str
     registration_capacity: int | None
+    # Hotfix 23: the seats of the booked venues; a VIP may be added up to this (Q&A #99).
+    venue_capacity: int | None = None
     registration_opens_at: AwareDatetime | None = None
     registration_closes_at: AwareDatetime | None = None
     registered: int
