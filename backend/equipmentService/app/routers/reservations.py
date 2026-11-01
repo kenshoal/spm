@@ -12,7 +12,7 @@ snapshot shows them) but never the event itself: the RPC copies
 event_request_id from the requirement (D7).
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -213,6 +213,57 @@ def reserve_equipment(
             )
         data = data[0]
     return ReservationOut.model_validate(data)
+
+
+class ReservationRelease(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    reason: str = Field(min_length=1, max_length=2_000)
+
+
+class ReservationReleaseOut(BaseModel):
+    reservation_id: UUID
+    event_request_id: UUID
+    requirement_id: UUID
+    quantity: int
+    released_by: UUID
+    released_at: datetime
+    reason: str
+
+
+@router.post("/{reservation_id}/release", response_model=ReservationReleaseOut)
+def release_reservation(
+    reservation_id: UUID,
+    payload: ReservationRelease,
+    user: StaffDep,
+    client: ClientDep,
+) -> ReservationReleaseOut:
+    """Release a reservation so its units are free again (hotfix 11, Q&A #114).
+
+    A replacement is a release followed by a new reservation, which reruns every
+    availability check. The function records who released what and when.
+    """
+    try:
+        response = client.rpc(
+            "release_equipment_reservation",
+            {
+                "p_reservation_id": str(reservation_id),
+                "p_actor": user.id,
+                "p_reason": payload.reason,
+            },
+        ).execute()
+    except APIError as error:
+        if error.code == "P0002":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Reservation not found") from error
+        if error.code == "22023":
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "A reason is required"
+            ) from error
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Database operation failed"
+        ) from error
+    data = response.data
+    return ReservationReleaseOut.model_validate(data[0] if isinstance(data, list) else data)
 
 
 @router.get("/by-event/{event_request_id}", response_model=list[ReservationOut])
