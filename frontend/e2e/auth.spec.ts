@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+// AC1-X1, AC3, AC4 (cross-cutting): the protected journey refuses missing and expired sessions, rejects bad credentials and admits a valid login
 test("protected pages require a valid session", async ({ page }) => {
   await page.goto("/event-requests");
   await expect(page).toHaveURL(/\/auth$/);
@@ -30,6 +31,7 @@ test("protected pages require a valid session", async ({ page }) => {
   await expect(page).toHaveURL(/\/auth$/);
 });
 
+// AC1-N1 (negative): an authenticated user without the page's role is redirected to /unauthorised
 test("event-request pages require the Event Organiser role", async ({ page }) => {
   await page.context().addCookies([{
     name: "cs_access_token",
@@ -44,6 +46,7 @@ test("event-request pages require the Event Organiser role", async ({ page }) =>
 });
 
 // Purpose: A coordinator must reach the coordination workspace without knowing its URL.
+// AC1-P2 (partition): a Coordinator lands in the coordination workspace after login
 test("coordinator login opens assigned event requests", async ({ page }) => {
   await page.goto("/auth");
   await page.getByLabel("Email").fill("coordinator@example.com");

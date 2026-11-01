@@ -79,6 +79,7 @@ test("groups every status into exactly one tab plus all", () => {
   );
 });
 
+// AC6-P5 (partition, SCRUM-28): a completed event files under the Completed tab
 // Purpose: A completed event shows under Completed without a hard-coded empty list.
 test("files Completed requests under the completed tab", () => {
   const groups = groupRequests([makeRequest("Completed")]);
@@ -106,6 +107,7 @@ test("keeps in-progress statuses visible after leaving Submitted", () => {
   ]);
 });
 
+// AC6-P1 (partition, SCRUM-28): closed statuses stay reachable through All only
 // Purpose: Cancelled and Rejected stay reachable through All only — no Closed tab.
 test("shows closed statuses only under all", () => {
   const groups = groupRequests([makeRequest("Cancelled"), makeRequest("Rejected")]);
@@ -117,6 +119,8 @@ test("shows closed statuses only under all", () => {
   expect(groups.completed).toEqual([]);
 });
 
+// AC1-P1 (partition, SCRUM-28): exactly Completed, Cancelled and Rejected are terminal,
+// so the coordinator action window excludes exactly those
 // Purpose: The coordinator action window excludes terminal statuses.
 test("treats only Completed, Cancelled, Rejected and Withdrawn as terminal", () => {
   const terminal = EVENT_REQUEST_STATUSES.filter(isTerminalStatus);
@@ -124,6 +128,7 @@ test("treats only Completed, Cancelled, Rejected and Withdrawn as terminal", () 
   expect(terminal).toEqual(["Completed", "Cancelled", "Rejected", "Withdrawn"]);
 });
 
+// AC6-H1 (happy, SCRUM-28): the progress display marks the request's current stage
 // Purpose: The progress stepper marks the request's current milestone for screen readers.
 test("marks the current stage for an in-flight request", () => {
   render(<StatusProgress status="Under Review" />);
@@ -132,6 +137,7 @@ test("marks the current stage for an in-flight request", () => {
   expect(current.textContent).toContain("Under Review");
 });
 
+// AC6-H2 (happy, SCRUM-28): a known assignment is announced without moving the workflow stage
 // Purpose: Submitted copy reflects a known assignment without changing workflow status.
 test("shows that a submitted request has an assigned coordinator", () => {
   render(<StatusProgress status="Submitted" coordinatorAssigned />);
@@ -162,6 +168,7 @@ test("marks Safety Review as current after Planning", () => {
   expect(stages[4]).toContain("Completed stage: Planning");
 });
 
+// AC6-P3 (partition, SCRUM-28): a later-stage status shows the earlier stages as done
 // Purpose: Approval and completion stages are announced as done as the event advances.
 test("marks Confirmed as current with earlier stages done", () => {
   render(<StatusProgress status="Confirmed" />);
@@ -216,6 +223,7 @@ test("shows the full journey and an explicit notice for cancelled", () => {
   expect(screen.getByText(/ended as cancelled/i)).toBeDefined();
 });
 
+// AC6-P4 (partition, SCRUM-28): Completed reads as the final reached stage
 // Purpose: Completion reads as an end state with the final milestone reached.
 test("marks Completed as the final reached stage", () => {
   render(<StatusProgress status="Completed" />);
@@ -226,6 +234,7 @@ test("marks Completed as the final reached stage", () => {
   expect(screen.getByText(/reached the final stage/i)).toBeDefined();
 });
 
+// SCRUM-17 AC3-H2 (happy): the retained outcome and its reason render for the request's related actors.
 // Purpose: The organiser can read the coordinator's retained clarification reason.
 test("shows the review decision and reason", () => {
   render(
@@ -250,6 +259,7 @@ test("shows the review decision and reason", () => {
   expect(screen.getByText("Clarify the equipment requirements.")).toBeDefined();
 });
 
+// SCRUM-17 AC1-H1 (happy): the assigned coordinator sees every submitted field needed for a decision, with no editing controls.
 // Purpose: A coordinator sees every submitted field needed for review without receiving edit controls.
 test("renders every submitted request field as read-only details", () => {
   const request: EventRequest = {
@@ -284,6 +294,7 @@ test("renders every submitted request field as read-only details", () => {
   expect(screen.queryByRole("button", { name: /save|submit|delete/i })).toBeNull();
 });
 
+// SCRUM-17 AC3-X1 (cross-cutting): a history outage surfaces an accessible alert instead of an apparently empty review record.
 // Purpose: A history outage is visible instead of being mistaken for an empty review record.
 test("shows an accessible error when review activity is unavailable", () => {
   render(<ReviewDecisionHistory decisions={[]} unavailable />);
@@ -293,6 +304,7 @@ test("shows an accessible error when review activity is unavailable", () => {
   ).toMatch(/could not be loaded/i);
 });
 
+// SCRUM-17 AC3-H3 (happy): the final decision renders beside the clarification exchange that informed it.
 // Purpose: A final decision must not erase the clarification exchange that informed it.
 test("keeps clarification and organiser response visible beside the final decision", () => {
   render(

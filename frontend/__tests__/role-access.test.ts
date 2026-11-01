@@ -9,8 +9,8 @@ import { workspaceForRoles } from "@/lib/auth";
 
 const links = (roles: string[]) => workspaceLinks(roles).map((link) => link.href);
 
-// SCRUM-27 AC1-P1..AC1-P7 (partition): each role, in the order organiser, coordinator, lead, venue staff,
-// technical support, safety officer, attendee, is offered its own workspace and nothing that belongs to another role
+// SCRUM-27 AC1-X2 (cross-cutting): each of the seven roles (organiser, coordinator, lead, venue staff, technical
+// support, safety officer, attendee) is offered its own workspace and nothing that belongs to another role
 test.each([
   ["event_organiser", ["/event-requests", "/notifications"]],
   ["event_coordinator", ["/coordination/requests", "/venues/search", "/notifications"]],
@@ -23,12 +23,12 @@ test.each([
   expect(links([role])).toEqual(expected);
 });
 
-// SCRUM-27 AC1-N1, AC1-N2 (negative): an unknown role (admin, ghost), or no role at all, is offered nothing
+// SCRUM-27 AC1-N3 (negative): an unknown role (admin, ghost), or no role at all, is offered nothing
 test.each([[["admin"]], [["ghost"]], [[]]])("offers no workspace to %j", (roles) => {
   expect(workspaceLinks(roles)).toEqual([]);
 });
 
-// SCRUM-27 AC2-X1 (cross-cutting): the Event Coordinator Lead's own workspace has no coordinator, venue or equipment links
+// SCRUM-27 AC2-X2 (cross-cutting): the Event Coordinator Lead's own workspace has no coordinator, venue or equipment links
 test("the Event Coordinator Lead is not offered another role's workspace", () => {
   const lead = links(["event_operations_manager"]);
 
@@ -37,7 +37,7 @@ test("the Event Coordinator Lead is not offered another role's workspace", () =>
   }
 });
 
-// SCRUM-27 AC3-H1 (happy): a person with two roles gets both workspaces, and each role's own links only once
+// SCRUM-27 AC3-P4 (partition): a person with two roles gets both workspaces, and each role's own links only once
 test("a Lead who is also an Organiser is offered both workspaces", () => {
   expect(links(["event_operations_manager", "event_organiser"])).toEqual([
     "/event-requests",
@@ -46,7 +46,7 @@ test("a Lead who is also an Organiser is offered both workspaces", () => {
   ]);
 });
 
-// SCRUM-27 AC3-P1 (partition): the order the roles are listed in does not change what is offered
+// SCRUM-27 AC3-P5 (partition): the order the roles are listed in does not change what is offered
 test("the order of a person's roles does not change their links", () => {
   const forward = links(["event_coordinator", "venue_staff", "safety_officer"]);
   const backward = links(["safety_officer", "venue_staff", "event_coordinator"]);
@@ -54,7 +54,7 @@ test("the order of a person's roles does not change their links", () => {
   expect(backward).toEqual(forward);
 });
 
-// SCRUM-27 AC3-P2 (partition): a person with several roles lands in the first workspace in a fixed order
+// SCRUM-27 AC3-P6 (partition): a person with several roles lands in the first workspace in a fixed order
 test.each([
   [["event_coordinator", "event_organiser"], "/event-requests"],
   [["venue_staff", "event_operations_manager"], "/operations/assignments"],
@@ -75,7 +75,7 @@ function pages(directory: string, base = directory): string[] {
   });
 }
 
-// SCRUM-27 AC1-X6 (cross-cutting): every page except sign-in and the refusal page checks the session or the role
+// SCRUM-27 AC1-X3 (cross-cutting): every page except sign-in and the refusal page checks the session or the role
 test("no page is left without a session or role check", () => {
   const root = join(process.cwd(), "app");
   const guard = /require(Role|AnyRole|Organiser|AuthenticatedUser|AccessToken|EventOrganiser)\b/;
@@ -88,7 +88,7 @@ test("no page is left without a session or role check", () => {
   expect(unguarded).toEqual([]);
 });
 
-// SCRUM-27 AC1-N9 (negative): the two public pages are the only exceptions, so a new page needs a check or an entry here
+// SCRUM-27 AC1-N4 (negative): the two public pages are the only exceptions, so a new page needs a check or an entry here
 test("the public pages are exactly sign-in and the refusal page", () => {
   const root = join(process.cwd(), "app");
   const without = pages(root).filter((page) => !/require[A-Z]/.test(readFileSync(join(root, page), "utf8")));

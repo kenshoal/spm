@@ -41,6 +41,7 @@ beforeEach(() => {
   navigation.revalidatePath.mockReset();
 });
 
+// SCRUM-30 AC1-H1 (happy): a valid create posts the parsed payload and opens the venue list
 // Purpose: A valid create posts the parsed payload and opens the venue list.
 test("creates a venue and redirects to the venue list", async () => {
   navigation.redirect.mockImplementation(() => { throw new Error("NEXT_REDIRECT"); });
@@ -68,6 +69,7 @@ test("creates a venue and redirects to the venue list", async () => {
   expect(navigation.redirect).toHaveBeenCalledWith("/venues");
 });
 
+// SCRUM-30 AC1-N5 (negative): invalid form values are echoed raw and never sent to the venue service
 // Purpose: Invalid input never reaches the API and the raw values are echoed
 // back so a corrected resubmission doesn't lose what was typed.
 test("an invalid form never calls fetch and echoes the raw values", async () => {
@@ -93,6 +95,7 @@ test("an invalid form never calls fetch and echoes the raw values", async () => 
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+// SCRUM-30 AC1-N1 (negative): a refused create explains that only Venue Staff can change the catalogue
 // Purpose: Only Venue Staff may change the catalogue; the backend's refusal is explained.
 test("a 403 explains that only Venue Staff can change the catalogue", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
@@ -115,6 +118,7 @@ test("a 403 explains that only Venue Staff can change the catalogue", async () =
   });
 });
 
+// SCRUM-30 AC1-N3 (negative): updating a venue removed since the page loaded is explained, not created
 // Purpose: A venue removed since the page loaded is explained.
 test("a 404 on update explains the venue no longer exists", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));

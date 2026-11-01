@@ -1,125 +1,155 @@
 # SCRUM-27 — Authorise Access by Role
 
-**Jira:** [SCRUM-27](https://is212g9t4.atlassian.net/browse/SCRUM-27)
+Source: [Jira SCRUM-27](https://is212g9t4.atlassian.net/browse/SCRUM-27). The
+story decides what an authenticated user may do: the features available to them
+follow from the roles they hold.
 
-**User story:** As a ConnectSphere system user, I want to see and do only the features my role permits, so that I act only within my responsibilities.
+Status (1 November 2026): **AI-drafted test design from the approved Jira ACs
+(pulled 1 November 2026), teammate review pending (`testing.md` §10); Jira
+remains the source of truth.** The labelled-test pass added comments only to
+files owned by this sweep; no suite was run in this pass, so every execution
+row is **Not executed** (`testing.md` §8).
 
-**How this document was made.** The story was built in Sprint 1 (done on 24 September 2026) and this record was written afterwards, on 1 November 2026. The acceptance criteria are the Jira text as it stands today (three bullets, numbered AC1 to AC3 here). The review below is a proposal that the story owner or Product Owner has not approved yet. Role checks were written inside every later story, so this story has no code of its own: the document gathers the cases that prove it across authService, eventRequestService, venueService, equipmentService and the frontend. Those tests keep the case IDs of the story that wrote them and are cited by file and name; a few are labelled for this story as well. The tests marked "new" were written for this document; they passed first time, so they found no defect.
+> **Update from PR #125 (1 Nov 2026).** (1) Jira changed after this document was drafted: at 16:07 the SCRUM-27 ACs were rewritten as AC1 to AC7 (Jira shows the time; the editor was not checked) (any role permits an action; the business roles including Safety Officer; only the Lead assigns Coordinators; several roles; relationship access is SCRUM-39; a stored role change applies at the next identity verification; only Admin grants roles, the Lead only Event Coordinator). This matrix follows the earlier three bullets. The new AC6 corresponds to the planned case AC3-N1, which still has no test. Re-base the IDs when the story owner reviews. (2) Cases added by PR #125 are in `frontend/__tests__/role-access.test.ts` (AC1-X2, AC1-N3, AC1-X3, AC1-N4, AC2-X2, AC3-P4, AC3-P5, AC3-P6), including a check that every page except sign-in and the refusal page calls a session or role guard; it was seen to fail when a guard was removed from a page.
 
-## Story contract review
+## Story contract
 
-The acceptance criteria were checked against Week 4 core feature 1 (*User Authorisation and Authentication*), Week 7 Customer Changes #5 and #6, GitHub Discussions #129 (the Event Operations Manager is the Event Coordinator Lead, renamed), #132 (the Lead cannot cancel) and #136 (the Lead cannot change an event's essential arrangements and can only view active events), and against the role code in each service.
+- AC1: Given an authenticated user, when they use the system, then the features available to them are determined by their role (Event Organiser, Event Coordinator, Event Operations Manager, Venue Staff, Technical Support Staff, Attendee).
+- AC2: An Event Operations Manager can assign or reassign Event Coordinators but cannot perform unrelated role-specific actions unless they also hold the corresponding role.
+- AC3: Given a person with multiple roles, when authorised functionality is evaluated, then the system recognises all assigned roles.
 
-| Original criterion | Outcome | Reason |
+### Scope
+
+- **Included:** role recognition in authService (`/auth/me` reading
+  `app_metadata` and the `staff_roles` table, the full `roles` list), the
+  role-assignment endpoint's permission rule (Event Operations Manager may
+  assign only `event_coordinator`; Admin any role), the coordinator-assignment
+  feature's role gate, the frontend role-driven workspaces
+  (`workspaceForRoles`, `workspaceLinks`, per-page role guards), and the
+  six-role partition in the browser.
+- **Excluded (related stories, named not claimed):** SCRUM-39 (restrict data
+  access by relationship — organisation sharing, 404 for unrelated organisers);
+  SCRUM-45 (maintain the equipment catalogue) and SCRUM-16 (maintain equipment
+  status) own their own role gates on equipment data; SCRUM-19 (the
+  Coordinator's right to list Technical Support Staff only); SCRUM-14/SCRUM-62
+  own the coordinator-assignment product behaviour and its queue UI;
+  SCRUM-60 introduced the Safety Officer role, which sits alongside the six
+  roles above; SCRUM-26 owns authentication itself (a valid session).
+- **Boundary note:** the six roles are an enumeration, so there is no numeric
+  boundary for AC1 — the partition over roles *is* the boundary work. The only
+  genuine boundary in this story is the role-count edge of AC3 (zero roles),
+  covered by AC3-B1.
+
+### Actors and permissions
+
+| Role (string) | Features the role grants | Explicitly refused |
 | --- | --- | --- |
-| AC1. Given an authenticated user, when they use the system, then the features available to them are determined by their role (Event Organiser, Event Coordinator, Event Operations Manager, Venue Staff, Technical Support Staff, Attendee). | Clarify | The role list is out of date: the Safety Officer (Week 7 #6) exists, and an Admin may assign roles. "Event Operations Manager" is shown as "Event Coordinator Lead" (#129) but its role id stays `event_operations_manager`. "Features" means three things: the links a person is offered, the pages they may open, and the API calls the services accept. Access to a particular event (an Organiser sees only their own client's events) is SCRUM-39, not this story. |
-| AC2. An Event Operations Manager can assign or reassign Event Coordinators but cannot perform unrelated role-specific actions unless they also hold the corresponding role. | Clarify | Name the actions: the Lead assigns and reassigns, reads the awaiting-assignment queue and lists coordinators; the Lead cannot cancel or complete an event (#132), start planning, change arrangements (#136), record equipment, manage venues, search venues, or create event requests. |
-| AC3. Given a person with multiple roles, when authorised functionality is evaluated, then the system recognises all assigned roles. | Keep | Testable as written. |
+| Event Organiser (`event_organiser`) | `/event-requests` workspace; organiser features on own requests | the assignment workspace; listing staff |
+| Event Coordinator (`event_coordinator`) | `/coordination/requests` workspace; coordination features on assigned events; listing Technical Support Staff only (SCRUM-19) | the role-assignment endpoint; other roles' workspaces |
+| Event Operations Manager (`event_operations_manager`) | `/operations/assignments` workspace; assigning and reassigning Event Coordinators; listing Event Coordinators | assigning any role other than `event_coordinator`; listing holders of any other role |
+| Venue Staff (`venue_staff`) | `/venues`, booking requests, venue blocks, venue search workspaces | staff listing; the assignment workspace |
+| Technical Support Staff (`technical_support`) | `/equipment` workspace | staff listing; the assignment workspace |
+| Attendee (`attendee`) | the default role when no role is stored; no staff workspace links | every staff workspace (`/unauthorised`) |
+| Admin (`admin`) — outside AC1's six | assigning any role; listing holders of any role | — (supporting role for AC2) |
 
-Approval of this review: **not recorded.** Replace this line with the approver and date once the story owner or Jaren (Product Owner) has approved it.
+Every request re-reads the roles from the verified token (`roles` tuple built
+per request); hidden buttons are not authorisation — each service and page
+guard re-checks the role.
 
-## Increment scope
+### Assumptions and open questions
 
-- **Included:** reading a person's roles (`GET /auth/me`, from the staff roles table first, then the sign-up metadata, else Attendee); assigning roles (`PATCH /auth/users/{id}/role`, admin, and Lead for Event Coordinator only); the role guard on each service's routes; the frontend's role-based links, page guards and landing workspace.
-- **Excluded:** which events a role may see (SCRUM-39); sign-in and sign-up themselves (SCRUM-26); the content of each role's own actions (their stories). Their tests are cited only where they prove a refusal.
-- **Actors:** the seven roles Event Organiser, Event Coordinator, Event Coordinator Lead, Venue Staff, Technical Support, Safety Officer and Attendee, plus Admin for assigning roles.
-- **State and persistence:** roles are rows in `staff_roles` (and the account's metadata). A refused call changes nothing.
-- **Team proposals:** a person who holds no role is an Attendee; the first role returned is their main role (it decides the landing workspace through a fixed order).
+1. `staff_roles` is the authoritative role store; `app_metadata.roles` is the
+   mirror authService writes back after an assignment. When the table is
+   reachable it wins; a user with no roles anywhere defaults to `attendee`.
+2. Role changes take effect on the next request because roles are re-read per
+   request; no test currently proves this freshness (AC3-N1, a gap row below).
+3. A caller holding `event_operations_manager` *and* another role keeps the
+   manager capability (AC3); AC2's refusals apply to holders who lack the
+   relevant role.
+4. The Admin role is not one of AC1's six roles; its any-role assignment right
+   is recorded under AC2-P1 as the partition context for "who may assign".
 
-## Acceptance criteria
+## Test case specification
 
-- **AC1:** Given a signed-in user, when they use the system, then they are offered, may open and may call only what their role permits: other roles' links are absent, other roles' pages redirect to the unauthorised page, and other roles' API calls get 403 (401 with no session); a person with no role is an Attendee.
-- **AC2:** Given an Event Coordinator Lead, when they work, then they can assign and reassign Event Coordinators, but a call that belongs to another role (cancelling, completing, planning, recording equipment, managing or searching venues, creating event requests, listing other roles) is refused unless they hold that role as well.
-- **AC3:** Given a person with several roles, when their access is evaluated, then every role they hold counts: they are offered the links of all of them, each of their roles' calls is accepted, and the order the roles are listed in changes nothing except the landing workspace.
-
-## Test-case specification
-
-Cases cited from other stories keep their own IDs in the code (shown in the evidence column of the execution record).
+Layers: A = API (authService pytest), API-E = API (eventRequestService pytest),
+UI = frontend Vitest, E2E = Playwright.
 
 | ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AC1-H1 | AC1, AC3 | Roles come from the staff roles table | Happy | Account with sign-up role `event_coordinator`; two rows in `staff_roles` | `GET /auth/me` | rows event_operations_manager, technical_support | Both roles returned; the table wins over the metadata | — | API |
-| AC1-H2 | AC1 | An admin assigns a role | Happy | Admin session | `PATCH /auth/users/user-id/role` | technical_support | 200; role stored | — | API |
-| AC1-P1 | AC1 | Event Organiser is offered only its own workspace | Partition | Role `event_organiser` | Build the links | — | My event requests, Notifications | — | UI unit (new) |
-| AC1-P2 | AC1 | Event Coordinator | Partition | Role `event_coordinator` | Build the links | — | Coordination, Venue search, Notifications | — | UI unit (new) |
-| AC1-P3 | AC1 | Event Coordinator Lead | Partition | Role `event_operations_manager` | Build the links | — | Assignments, Notifications | — | UI unit (new) |
-| AC1-P4 | AC1 | Venue Staff | Partition | Role `venue_staff` | Build the links | — | Venues, Booking requests, Venue blocks, Venue search, Arrangement reviews, Notifications | — | UI unit (new) |
-| AC1-P5 | AC1 | Technical Support | Partition | Role `technical_support` | Build the links | — | Equipment, Equipment requests, Arrangement reviews, Notifications | — | UI unit (new) |
-| AC1-P6 | AC1 | Safety Officer | Partition | Role `safety_officer` | Build the links | — | Safety checks, Notifications | — | UI unit (new) |
-| AC1-P7 | AC1 | Attendee | Partition | Role `attendee` | Build the links | — | Events, Notifications | — | UI unit (new) |
-| AC1-P8 | AC1 | A person with no role is an Attendee | Partition | Account with no role metadata (`{}` and `None`) | `GET /auth/me` | — | role `attendee`, roles `["attendee"]` | — | API |
-| AC1-N1 | AC1 | An unknown role is offered nothing | Negative | Roles `admin`, `ghost` | Build the links | — | No links | — | UI unit (new) |
-| AC1-N2 | AC1 | No roles at all is offered nothing | Negative | Roles `[]` | Build the links | — | No links | — | UI unit (new) |
-| AC1-N3 | AC1 | An attendee, an admin and the Lead cannot create or change event requests | Negative | Each role | `POST /event-requests/submissions` | complete request | 403 | No request stored | API |
-| AC1-N4 | AC1 | Only the Lead can assign a coordinator | Negative | A caller who is not the Lead | `POST /event-requests/{id}/coordinator` | — | 403 | No assignment | API |
-| AC1-N5 | AC1 | Only the Lead can read the awaiting-assignment queue | Negative | A caller who is not the Lead | `GET /event-requests/awaiting-assignment` | — | 403 | — | API |
-| AC1-N6 | AC1, AC2 | Only an admin can assign roles; the Lead may assign Event Coordinator only | Negative | Callers technical_support, Lead and attendee | `PATCH` another user's role | technical_support | 403 | No role written, no account updated | API |
-| AC1-N7 | AC1 | Assigning a role needs a session | Negative | No token | `PATCH` role | — | 401 | — | API |
-| AC1-N8 | AC1 | An unknown role cannot be assigned | Negative | Admin session | `PATCH` role | invalid role | 422 | No role written | API |
-| AC1-N9 | AC1 | The two public pages are the only ones without a check | Negative | The `app` folder | List pages with no `require…` call | — | Exactly sign-in and the refusal page | — | UI unit (new) |
-| AC1-X1 | AC1 | Venue routes admit only the permitted roles | Cross-cutting | Each role | Search, read, create, update venues | — | Permitted roles 200; every other role 403; no session 401 | Venue unchanged on refusal | API (SCRUM-9 AC6, SCRUM-30 AC1-X, AC2-N) |
-| AC1-X2 | AC1 | Only the assigned Coordinator records equipment | Cross-cutting | Roles Technical Support, Organiser, Venue Staff, Lead, Attendee | `POST /equipment-requirements` | — | 403 for each | No requirement stored; eventRequestService not asked | API (SCRUM-33 AC6-X12 to X16) |
-| AC1-X3 | AC1 | The browser turns away the wrong role | Cross-cutting | Organiser, then coordinator session | Open `/venues/search`; open `/venues/new`; open event-request pages as a non-organiser | — | Redirected to the unauthorised page | — | E2E |
-| AC1-X4 | AC1 | A signed-in user without the Organiser role is turned away | Cross-cutting | Signed in, no `event_organiser` | Open the event-request workspace | — | Redirect to the unauthorised page | — | UI unit |
-| AC1-X5 | AC1 | A coordinator lands in the coordination workspace | Cross-cutting | Coordinator account | Log in | — | `/coordination/requests` | — | UI unit |
-| AC1-X6 | AC1 | Every page except the two public ones checks the session or role | Cross-cutting | The `app` folder | Read each `page.tsx` for a `require…` call | — | None without one | — | UI unit (new) |
-| AC2-H1 | AC2 | The Lead gives someone the Event Coordinator role | Happy | Lead session | `PATCH /auth/users/{id}/role` | event_coordinator | 200 | — | API |
-| AC2-H2 | AC2 | The Lead lists coordinators to choose from | Happy | Lead session | `GET /auth/users?role=event_coordinator` | — | The coordinators | — | API |
-| AC2-H3 | AC2 | The Lead assigns a coordinator to a submitted request | Happy | Submitted request | `POST /event-requests/{id}/coordinator` | — | 201; the coordinator is current | Status unchanged | API |
-| AC2-H4 | AC2 | The Lead reassigns, and the history is kept | Happy | Assigned request | Assign a second coordinator | — | The latest is current; both rows kept | — | API |
-| AC2-H5 | AC2 | The Lead assigns and reassigns in the browser | Happy | Lead session; mock API | Assign, then reassign | — | New coordinator shown | — | E2E |
-| AC2-H6 | AC2 | The Lead role is recognised among a person's other roles | Happy | A caller with the Lead role and another | Assign | — | Allowed | — | API |
-| AC2-N1 | AC2 | The Lead cannot list the holders of another role | Negative | Lead session | `GET /auth/users?role=venue_staff` | — | 403 | — | API |
-| AC2-N2 | AC2 | The Lead cannot list Technical Support staff | Negative | Lead session | List Technical Support users | — | 403 | — | API |
-| AC2-N3 | AC2 | The Lead and an Organiser cannot cancel or complete an event | Negative | Event assigned to the caller's id | `POST .../cancellation` and `.../completion` | roles event_organiser, event_operations_manager | 403 on each | Status unchanged | API |
-| AC2-N4 | AC2 | The Lead cannot start planning | Negative | Approved event | `POST .../planning` | role event_operations_manager | 403 | Status unchanged | API (SCRUM-58 AC4-N6) |
-| AC2-N5 | AC2 | The Lead cannot record equipment | Negative | Lead session | `POST /equipment-requirements` | — | 403 | Nothing stored | API (SCRUM-33 AC6-X15) |
-| AC2-N6 | AC2 | The Lead cannot create, read or search venues | Negative | Lead session | Create, read and search a venue | — | 403 on each | Nothing stored | API (SCRUM-30 AC1-X6, AC2-N3; SCRUM-9 AC6-N4) |
-| AC2-N7 | AC2 | The Lead cannot assign Technical Support or any role but Event Coordinator | Negative | Lead session | `PATCH` role | technical_support | 403 | No role written | API |
-| AC2-N8 | AC2 | The Lead cannot read an event's decision history | Negative | Event under review | `GET /event-requests/{id}/decisions` | role event_operations_manager | 403 | — | API |
-| AC2-X1 | AC2 | The Lead's own workspace has no other role's links | Cross-cutting | Lead roles | Build the links | — | None of coordination, venues, bookings, equipment, safety, event requests | — | UI unit (new) |
-| AC3-H1 | AC3 | A Lead who is also an Organiser is offered both workspaces | Happy | Roles Lead and Organiser | Build the links | — | My event requests, Assignments, Notifications | — | UI unit (new) |
-| AC3-H2 | AC3 | A Lead who is also an Organiser acts as the Organiser | Happy | Roles Lead and Organiser; a spoofed header | `POST /event-requests` | `X-Organiser-Id: attacker` | 201; the organiser is the verified id | The header ignored | API |
-| AC3-H3 | AC3 | Every role a person holds is returned, the first as the main role | Happy | Metadata roles Lead and Technical Support | `GET /auth/me` | — | `role` is the first; `roles` lists both | — | API |
-| AC3-H4 | AC3 | Roles from the staff roles table are all returned | Happy | Two rows | `GET /auth/me` | — | Both | — | API (same case as AC1-H1) |
-| AC3-H5 | AC3 | A person with Lead and Technical Support roles can use Technical Support's calls | Happy | Roles Lead and Technical Support | Update an equipment arrangement | — | 200 | — | API (SCRUM-33 AC5-P8) |
-| AC3-H6 | AC3 | One permitted role is enough to search venues | Happy | Roles attendee and event_coordinator | `GET /venues/search` | — | 200 | — | API (SCRUM-9 AC6-P1) |
-| AC3-P1 | AC3 | The order roles are listed in does not change the links | Partition | Three roles, forward and reversed | Build the links | coordinator, venue staff, safety officer | Same links | — | UI unit (new) |
-| AC3-P2 | AC3 | Several roles land in a fixed workspace | Partition | Role pairs | Choose the landing workspace | organiser+coordinator, Lead+venue staff, attendee+tech support, attendee+safety, unknown | `/event-requests`, `/operations/assignments`, `/equipment`, `/safety`, `/unauthorised` | — | UI unit (new) |
-| AC3-P3 | AC3 | The default workspace for verified roles is deterministic | Partition | Verified roles | Select the workspace | — | The same workspace each time | — | UI unit |
+| AC1-P1 | AC1 | The Event Organiser's workspace is the event-request area | Partition | Verified session holding `event_organiser` | Resolve the role's workspace and load `/event-requests` | Roles `["event_organiser"]`; the multi-role assertion `["event_coordinator", "event_organiser"]` also lands here | `/event-requests` | — | UI + E2E |
+| AC1-P2 | AC1 | The Coordinator's workspace is the coordination area | Partition | Verified session holding `event_coordinator` | Log in as a coordinator and observe the landing page | `coordinator@example.com` | `/coordination/requests` with the assigned-requests heading | — | UI + E2E |
+| AC1-P3 | AC1 | The Operations Manager's workspace is the assignment area | Partition | Verified session holding `event_operations_manager` | Log in as an operations manager and observe the landing page | `ops@example.com` | `/operations/assignments` | — | UI + E2E |
+| AC1-P4 | AC1 | Venue Staff's workspace is the venue area with its three links | Partition | Verified session holding `venue_staff` | Resolve the role's workspace and navigation links | Roles `["venue_staff"]` | `/venues`, plus Booking requests, Venue blocks and Venue search links | No other role's links | UI |
+| AC1-P5 | AC1 | Technical Support Staff's workspace is the equipment area | Partition | Verified session holding `technical_support` | Resolve the role's workspace and navigation links | Roles `["technical_support"]` | `/equipment`, plus the arrangement-reviews link | No other role's links | UI |
+| AC1-P6 | AC1 | The Attendee has no staff workspace | Partition | Verified session holding only `attendee` | Resolve the role's workspace and navigation links | Roles `["attendee"]` | `/unauthorised`; empty navigation links | No staff link renders | UI |
+| AC1-N1 | AC1 | The browser refuses an authenticated user who lacks the page's role | Negative | Valid session whose role is `admin` | Visit `/event-requests` | Session `non-organiser-session` | Redirect to `/unauthorised`; the "Your role can't use this page" heading | No organiser data renders | E2E |
+| AC1-N2 | AC1 | The workspace guard redirects a signed-in user without the role | Negative | Valid session; verified roles lack `event_organiser` | Resolve `requireEventOrganiser` | Roles `["admin"]` | Redirect to `/unauthorised` | — | UI |
+| AC1-X1 | AC1 | The app shell shows only the workspaces the user's roles grant | Cross-cutting | Verified roles | Render `workspaceLinks(roles)` for each role and for a multi-role user | Each role; `["event_coordinator", "venue_staff"]` | One link per granted workspace; the multi-role user gets the union; attendee gets none | No link to a workspace the roles do not grant | UI |
+| AC2-H1 | AC2 | The Operations Manager assigns an Event Coordinator through the role endpoint | Happy | Operations Manager session; target user exists | `PATCH /auth/users/{user_id}/role` with `role=event_coordinator` | Manager caller; target `member@example.com` | 200; response role `event_coordinator`; `staff_roles` upsert carries `assigned_by` = manager id; `app_metadata.roles` refreshed | No other role written | A |
+| AC2-H2 | AC2 | The Operations Manager reassigns the Coordinator and the old Coordinator loses the event | Happy | Seeded Submitted request; operations and coordinator sessions | Assign in the browser, verify the coordinator sees it, reassign, verify the old coordinator's queue empties | "Harbour Lights Gala"; `coordinator@example.com` → `reassign.coordinator@example.com` | The card moves to the new coordinator's group; the old coordinator's list no longer shows the event | — | E2E (SCRUM-62's labelled journey; named, not re-labelled) |
+| AC2-H3 | AC2 | The Operations Manager lists the Coordinators available for assignment | Happy | Operations Manager session | `GET /auth/users?role=event_coordinator` | — | 200 with the coordinator id/email list, sorted | — | A |
+| AC2-P1 | AC2 | Partition over assignable roles: an Admin assigns each staff role | Partition | Admin session | `PATCH /auth/users/{user_id}/role` with `technical_support`, then `event_operations_manager`, then `safety_officer` | The three role values | 200 each; the assigned role is stored and returned | — | A |
+| AC2-N1 | AC2 | An Organiser cannot open the Operations Manager's assignment workspace | Negative | Valid Organiser session | Visit `/operations/assignments` | Session `test-session` (`event_organiser`) | Redirect to `/unauthorised` | No assignment queue renders | E2E |
+| AC2-N2 | AC2 | The Operations Manager cannot assign any role other than Event Coordinator | Negative | Operations Manager session | `PATCH /auth/users/{user_id}/role` with `role=technical_support` | — | 403 "Insufficient permissions"; no upsert and no metadata update | `staff_roles` and `app_metadata` unchanged | A |
+| AC2-N3 | AC2 | The Operations Manager cannot list the holders of other roles | Negative | Operations Manager session | `GET /auth/users?role=venue_staff` | — | 403 | — | A |
+| AC2-N4 | AC2 | Roles without assignment duty cannot use the role endpoint at all | Negative | Caller is `technical_support`, or `attendee` with and without stored metadata | `PATCH /auth/users/{user_id}/role` | The three parametrized caller shapes | 403 each; no upsert; no metadata update | Role store unchanged | A |
+| AC2-N5 | AC2 | The role endpoint requires a session | Negative | — | `PATCH /auth/users/{user_id}/role` without an Authorization header | — | 401; no write | Role store unchanged | A (see SCRUM-26 AC4-N4) |
+| AC2-N6 | AC2 | An unknown role value is rejected by validation | Negative | Admin session | `PATCH /auth/users/{user_id}/role` with `role=superuser` | — | 422; no upsert; no metadata update | Role store unchanged | A |
+| AC2-N7 | AC2 | Without the secret key the role feature is unavailable, not half-written | Negative | `SUPABASE_SECRET_KEY` absent | `PATCH /auth/users/{user_id}/role` | — | 503 "Role assignment is not configured" | No role written | A |
+| AC2-N8 | AC2 | A role-store outage is reported as a gateway failure and writes nothing | Negative | `staff_roles` upsert raises a Postgrest error | `PATCH /auth/users/{user_id}/role` | — | 502 "Role store unavailable" | No partial write | A |
+| AC2-X1 | AC2 | The assignment feature re-checks the Operations Manager role at its own API, behind the UI | Cross-cutting | Callers with and without `event_operations_manager` in their verified roles | Call the coordinator-assignment endpoints as a non-manager, then as a multi-role manager | `roles: ["venue_staff", "event_operations_manager"]` | Non-manager: 403, nothing written; the multi-role manager is allowed because one held role qualifies | No assignment written by a caller lacking the role | API-E |
+| AC3-H1 | AC3 | A person holding several roles has all of them recognised | Happy | `staff_roles` holds two rows for the user | `GET /auth/me` with a valid token | `event_operations_manager` + `technical_support` | 200; `roles` lists both; `role` is the first | No role dropped | A |
+| AC3-P1 | AC3 | Roles held as a list in the verified identity are returned in full | Partition | `app_metadata.roles` holds a list | `GET /auth/me` | `["event_operations_manager", "technical_support"]` | `roles` returned as the full list, in order | — | A |
+| AC3-P2 | AC3 | A multi-role caller keeps each feature they hold | Partition | Caller holds `event_organiser` and `event_coordinator` and is the assigned Coordinator on another organiser's request | `GET /event-requests/{request_id}` | Caller with both roles | 200 — the coordinator access survives the unrelated organisation | — | API-E (SCRUM-39's labelled test; named, not re-labelled) |
+| AC3-P3 | AC3 | Workspace resolution honours the whole multi-role list, not just its first entry | Partition | — | `workspaceForRoles(["event_coordinator", "event_organiser"])` | The two roles | `/event-requests` — the organiser workspace, not the first list entry's coordination one | — | UI (same test as AC1-P1…P6) |
+| AC3-B1 | AC3 | With zero roles the identity defaults to Attendee | Boundary | Valid token; no role metadata stored (`{}` or absent) | `GET /auth/me` | `app_metadata` `{}` and `None` | 200; `role` and `roles` are `attendee` | No role is invented | A |
+| AC3-N1 | AC3 | A role granted or revoked mid-session takes effect on the next request | Negative | An open session whose roles change in the role store between requests | Repeat an authorised request after the change | Role added, then removed | The new feature set applies immediately; a revoked role is refused; no stale role is honoured | — | A |
+| AC3-X1 | AC3 | Every consuming service evaluates the whole roles tuple per request | Cross-cutting | authService returns the `roles` list; a protected endpoint in another service | Call protected endpoints as holders of various role sets | e.g. every role other than organiser or coordinator against the event info endpoint | Decisions use every held role: a role held in the tuple grants its feature; absent roles are refused | — | API-E (the per-service refusal suites are those services'; named, not claimed) |
+
+| AC1-X2 | AC1 | Each of the seven roles is offered its own links and no other role's | Cross-cutting | Each role in turn | Build the navigation links | organiser, coordinator, lead, venue staff, technical support, safety officer, attendee | Exactly that role's links and Notifications | — | UI (`role-access.test.ts`) |
+| AC1-N3 | AC1 | An unknown role, or no role at all, is offered nothing | Negative | Roles `admin`, `ghost`, `[]` | Build the links | — | No links | — | UI (same file) |
+| AC1-X3 | AC1 | Every page except sign-in and the refusal page checks the session or the role | Cross-cutting | The `app` folder | Read each `page.tsx` for a `require…` call | — | None without one | — | UI (same file) |
+| AC1-N4 | AC1 | The two public pages are the only pages without a check | Negative | The `app` folder | List pages with no `require…` call | — | Exactly sign-in and the refusal page | — | UI (same file) |
+| AC2-X2 | AC2 | The Event Coordinator Lead's workspace has no other role's links | Cross-cutting | Role `event_operations_manager` | Build the links | — | None of coordination, venues, bookings, equipment, safety, event requests | — | UI (same file) |
+| AC3-P4 | AC3 | A Lead who is also an Organiser is offered both workspaces | Partition | Roles Lead and Organiser | Build the links | — | My event requests, Assignments, Notifications | — | UI (same file) |
+| AC3-P5 | AC3 | The order roles are listed in does not change the links | Partition | Three roles, forward and reversed | Build the links | coordinator, venue staff, safety officer | Same links | — | UI (same file) |
+| AC3-P6 | AC3 | Several roles land in a fixed workspace | Partition | Role pairs | Choose the landing workspace | organiser+coordinator, Lead+venue staff, attendee+tech support, attendee+safety, unknown | `/event-requests`, `/operations/assignments`, `/equipment`, `/safety`, `/unauthorised` | — | UI (same file) |
 
 ## Latest execution record
 
-Build: `b5b53b0` (`dev` after PR #123) plus this branch's working tree (`docs/testcases-scrum-9-27-30`), run on Kennedy's machine on 1 November 2026 with Claude Code, pending human review. Backend tests ran against fakes of Supabase and of the other services; the browser tests ran against the Node mock services. "Red first" was not observed for any case.
+This pass (1 November 2026) designed the matrix from the approved ACs and added
+label comments only; **no suite was run**, so every row is **Not executed**.
+"Automated (label added in this pass)" marks tests labelled on this branch;
+"Automated (existing test)" marks tests that exist outside this sweep's file
+list (or already carry another story's label), named here so the story owner
+can add or find labels; nothing below is pass/fail evidence.
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC1-H1, AC1-H2, AC1-P8, AC1-N6, AC1-N7, AC1-N8, AC2-H1, AC2-H2, AC2-N1, AC2-N7, AC3-H3, AC3-H4 | Green | Roles read from the table, all returned, default Attendee; admin assigns; Lead limited to Event Coordinator and its list; unknown role and no session refused | Pass | b5b53b0 + working tree, local | Claude Code, 1 Nov 2026 | `backend/authService/tests/test_registration.py`; authService suite 60 passed |
-| AC2-N2 | Green | The Lead cannot list Technical Support staff | Pass | same | same | `backend/authService/tests/test_list_technical_support_users.py` |
-| AC1-N3, AC1-N4, AC1-N5, AC2-H3, AC2-H4, AC2-H6, AC2-N3, AC2-N4, AC2-N8, AC3-H2 | Green | Organiser operations refused to attendee, admin and Lead; only the Lead assigns and reads the queue; the Lead cannot cancel, complete or start planning; a Lead who is an Organiser acts as one | Pass | same | same | `test_event_request_controller.py`, `test_coordinator_assignment_controller.py`, `test_event_transition_controller.py`, `test_event_planning.py` (SCRUM-58 AC4-N5, N6), `test_event_review_decision.py`; eventRequestService suite 1194 passed, 1 skipped |
-| AC1-X2, AC2-N5, AC3-H5 | Green | Only the assigned Coordinator records equipment; the Lead is refused; a Lead with Technical Support can update | Pass | same | same | `backend/equipmentService/tests/test_requirements_record.py` (SCRUM-33 AC6-X12 to X16) and `test_requirements_arrangement.py` (AC5-P8); equipmentService suite 354 passed |
-| AC1-X1, AC2-N6, AC3-H6 | Green | Venue routes admit the permitted roles only; the Lead is refused; one permitted role is enough | Pass | same | same | `backend/venueService/tests/test_venues_search_contract.py` and `test_venues_catalogue_contract.py` (new) and `test_venues_catalogue.py`; venueService suite 790 passed, 10 skipped |
-| AC1-P1 to AC1-P7, AC1-N1, AC1-N2, AC1-N9, AC1-X6, AC2-X1, AC3-H1, AC3-P1, AC3-P2 | Green | Each role's links; unknown and no roles offered nothing; the only unguarded pages are sign-in and the refusal page; the Lead's workspace is its own; two roles give two workspaces in a fixed order | Pass | same | same | New: `frontend/__tests__/role-access.test.ts` (20 passed). AC1-X6 and AC1-N9 were also run against a page with its guard removed: both failed as they should, then the page was restored |
-| AC1-X4, AC1-X5, AC3-P3 | Green | Non-organiser turned away; coordinator lands in coordination; default workspace deterministic | Pass | same | same | `frontend/__tests__/auth.test.tsx` (10 passed) |
-| AC1-X3, AC2-H5 | Green | Wrong-role page access redirects; the Lead assigns and reassigns | Pass | same | same | `frontend/e2e/auth.spec.ts`, `venue-search.spec.ts`, `venue-catalogue.spec.ts`, `assign-coordinator.spec.ts` against the Node mock services (14 passed across the five specs run) |
+| AC1-P1…P6, AC1-N2, AC3-P3 | Automated (label added in this pass) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `frontend/__tests__/auth.test.tsx` — one test resolves all six role workspaces (and the multi-role list), so the range label `AC1-P1…P6, AC3` sits above it; AC1-N2 is the without-the-role redirect test |
+| AC1-P2, AC1-N1 | Automated (label added in this pass) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `frontend/e2e/auth.spec.ts` — the coordinator-login journey (AC1-P2) and the admin-session refusal (AC1-N1) |
+| AC2-N1 | Automated (label added in this pass) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `frontend/e2e/assign-coordinator.spec.ts`, second test |
+| AC1-X1 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `frontend/__tests__/workspace-links.test.ts` — all five tests already carry labels owned by SCRUM-64 (`AC5-X9`), SCRUM-37 (`AC6-X2`) and SCRUM-23 (`AC1-X3`, `AC1-X4`); a second label per test is not allowed, so they are named here, not re-labelled |
+| AC1-P3 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | Landing-page assertion inside `frontend/e2e/assign-coordinator.spec.ts` first test, already labelled `AC3-H2` for SCRUM-62; named, not re-labelled |
+| AC2-H1, AC2-P1, AC2-N2, AC2-N4, AC2-N5, AC2-N6, AC2-N7, AC2-N8, AC3-H1, AC3-P1, AC3-B1 | Automated (label added in this pass) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `backend/authService/tests/test_registration.py` — labels added in the follow-through pass. AC2-H1 is `test_operations_manager_assigns_event_coordinator`; AC2-P1 spans `test_admin_assigns_role` and `test_admin_assigns_event_operations_manager_role` (its third case, SCRUM-60-labelled `test_admin_assigns_safety_officer_role`, is named, not re-labelled); AC2-N2/N4 share the parametrized `test_admin_endpoint_requires_admin_role`; AC2-N5 shares `test_admin_endpoint_requires_authentication` with SCRUM-26 AC4-N4; AC2-N6 `test_admin_endpoint_rejects_invalid_role`; AC2-N7 `test_admin_endpoint_returns_503_without_secret_key`; AC2-N8 `test_admin_endpoint_maps_role_store_failure`; AC3-H1 `test_current_user_reads_roles_from_staff_roles_table`; AC3-P1 `test_current_user_returns_all_roles`; AC3-B1 the parametrized `test_current_user_defaults_role_to_attendee` |
+| AC2-H3, AC2-N3 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `backend/authService/tests/test_registration.py` — `test_operations_manager_lists_event_coordinators` and `test_operations_manager_cannot_list_other_roles` already carry SCRUM-14's AC2-H3 and AC2-N11 labels and a test takes one label, so they are named here, not re-labelled |
+| AC2-H2, AC2-X1 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | SCRUM-14's `backend/eventRequestService/tests/test_coordinator_assignment_controller.py` (`test_assign_coordinator_requires_operations_manager_role`, `test_assign_coordinator_allows_event_operations_manager_role`) and SCRUM-62's labelled e2e journey — named, not claimed |
+| AC3-P2 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `backend/eventRequestService/tests/test_organisation_access.py::test_assigned_coordinator_access_survives_unrelated_organisation`, already labelled `AC8-X1` for SCRUM-39; named, not re-labelled |
+| AC3-X1 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | Per-service role-refusal suites, e.g. `backend/eventRequestService/tests/test_registration_info_api.py` `AC4-P1…P5` partition — those services' stories own the labels |
+| AC1-X2, AC1-N3, AC1-X3, AC1-N4, AC2-X2, AC3-P4, AC3-P5, AC3-P6 | Automated (new, PR #125) | — | See the execution evidence below | — | — | `frontend/__tests__/role-access.test.ts` (20 tests) |
+| AC3-N1 | Planned | — | Not executed | — | — | gap: no automated test yet — story owner to write (role change mid-session recognised on the next request); this is the new Jira AC6 |
 
-### Local validation evidence
+## Execution evidence, 1 November 2026 (PR #125)
 
-| Check | Command and environment | Result | Remarks |
-| --- | --- | --- | --- |
-| authService | `pytest`; `ruff check .` | 60 passed; clean | Supabase and the admin client are mocks |
-| eventRequestService | `pytest`; `ruff check .` | 1194 passed, 1 skipped; clean | Fake repositories; the identity service is a stub |
-| equipmentService | `pytest`; `ruff check .` | 354 passed; clean | Fake Data API and fake event service |
-| venueService | `pytest`; `ruff check .` | 790 passed, 10 skipped; clean | In-memory store |
-| Frontend unit | `npx vitest run` (whole frontend suite) | 80 files, 762 passed | jsdom |
-| Frontend static checks | `npm run typecheck`; `npm run lint` | Clean | — |
-| End-to-end | `playwright test venue-search venue-catalogue assign-coordinator auth.spec equipment-catalogue` with the cached Chromium 1148 headless shell | 14 passed | The pinned browser build is not installed and was not downloaded |
+The suites below were run after the new tests were added and after `dev` (`439fec0`) was merged into the PR #125 branch. They are the first run of this story's tests in this document. Every automated row above passed because the test it names is in a suite that passed; no row was run on its own. Environment: Kennedy's machine, Claude Code, pending human review; backend tests use in-memory stores and fakes; the browser tests use the Node mock services and the cached Chromium 1148 headless shell (the pinned build is not installed).
 
-Not run: a real sign-in against Supabase and the real role table in this pass (the earlier whole-stack run in the hotfix record used them for the hotfix flows), pull-request CI, reviewer approval.
+| Check | Command and environment | Result |
+| --- | --- | --- |
+| venueService | `pytest`; `ruff check .` | 790 passed, 10 skipped; clean |
+| authService | `pytest`; `ruff check .` | 60 passed; clean |
+| eventRequestService | `pytest`; `ruff check .` | 1194 passed, 1 skipped; clean |
+| equipmentService | `pytest`; `ruff check .` | 354 passed; clean |
+| Frontend | `npx vitest run`; `npm run typecheck`; `npm run lint` | 80 files, 762 passed; clean; clean |
+| End-to-end | `playwright test` (whole suite) | 59 passed |
 
-## Open questions
-
-1. **Role list.** The story names six roles; the system has Safety Officer and an Admin who assigns roles. Reword AC1 or accept the list in this document.
-2. **Lead may view active events (#136).** The customer said the Lead can view the current status of active events but change nothing. The Lead's page lists assignments and active events grouped by coordinator (SCRUM-62); whether the Lead can open an individual event's detail is covered there, not here, and the Lead is refused an event's decision history (AC2-N8). Confirm that is intended.
-3. **Pages are guarded one by one.** Each page calls its own check; there is no central route table. AC1-X6 catches a page that has no check but not one that has the wrong one, so a role mistake in a single page would pass. A route-to-roles table with one test per row would close this; it is a design change and not part of this story.
-4. **Safety Officer on the venue search page.** The service admits the Safety Officer; the page does not (SCRUM-9, *Open questions*).
+Not run: the shared development database, pull-request CI at the time of writing, and reviewer sign-off. The new tests passed first time, so they found no defect; they close gaps in the record.

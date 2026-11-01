@@ -7,8 +7,8 @@ import type { Venue } from "@/lib/venues";
 
 afterEach(cleanup);
 
+// SCRUM-9 AC1-H1 (happy): every filter is sent to the search, lists as repeated parameters
 // Purpose: SCRUM-9 AC1 — every filter is sent, lists as repeated parameters.
-// SCRUM-9 AC1-H1 (happy): every filter reaches the query, lists as repeated parameters
 test("builds a query from every filter", () => {
   const { query, errors } = buildVenueSearch({
     required_capacity: "80",
@@ -30,13 +30,13 @@ test("builds a query from every filter", () => {
 });
 
 // Purpose: An untouched form does not search.
-// SCRUM-9 AC1-P8 (partition): an untouched form does not search
+// SCRUM-9 AC1-P1 (partition): an untouched form sends no query
 test("returns no query when nothing is filled in", () => {
   expect(buildVenueSearch({})).toEqual({ query: null, errors: {} });
 });
 
 // Purpose: Review focus 4 — a non-positive or non-integer capacity is reported, not sent.
-// SCRUM-9 AC1-N2 (negative): a non-positive or non-integer capacity is reported, not sent
+// SCRUM-9 AC1-N1 (negative): a non-positive or non-integer capacity is reported, not sent
 test.each(["0", "abc", "2.5", "-1"])("rejects capacity %j", (value) => {
   expect(buildVenueSearch({ required_capacity: value })).toEqual({
     query: null,
@@ -45,7 +45,7 @@ test.each(["0", "abc", "2.5", "-1"])("rejects capacity %j", (value) => {
 });
 
 // Purpose: Values outside the backend enums are dropped instead of causing a 422.
-// SCRUM-9 AC1-N3 (negative): values outside the allowed lists are dropped, not sent
+// SCRUM-9 AC1-P7 (partition): a layout outside the enum is dropped instead of causing a 422
 test("drops unknown slot and layout values", () => {
   expect(buildVenueSearch({ layout: "ballroom", location: "East" }).query).toBe("location=East");
 });
@@ -62,7 +62,7 @@ test.each([
 
 // Purpose: A date that matches YYYY-MM-DD but isn't a real calendar date
 // (e.g. February 30) is dropped instead of causing a 422 from the venue service.
-// SCRUM-9 AC1-N5 (negative): an impossible date is dropped, not sent
+// SCRUM-9 AC1-N2 (negative): a date that is not a real calendar day is dropped, not sent
 test("drops a date that is not a real calendar date", () => {
   expect(buildVenueSearch({ date: "2026-02-30", location: "East" }).query).toBe("location=East");
 });
@@ -74,8 +74,8 @@ const venue: Venue = {
   status: "available", created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
 };
 
+// SCRUM-9 AC2-H2 (happy): each result shows the attributes a coordinator shortlists by
 // Purpose: SCRUM-9 AC2 — each result shows the attributes a coordinator shortlists by.
-// SCRUM-9 AC3-H2 (happy): each result shows its name, location, capacity, layouts, facilities and accessibility
 test("shows key attributes for each result", () => {
   render(<VenueResults venues={[venue]} />);
 
@@ -88,7 +88,7 @@ test("shows key attributes for each result", () => {
 });
 
 // Purpose: No matches is stated plainly so the coordinator can loosen filters.
-// SCRUM-9 AC3-N1 (negative): no match is stated plainly
+// SCRUM-9 AC2-N1 (negative): no match is stated plainly so the coordinator can loosen filters
 test("explains when no venue matches", () => {
   render(<VenueResults venues={[]} />);
 

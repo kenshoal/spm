@@ -230,6 +230,7 @@
       "item": [
         {
           "name": "AC1-X3 Assigned coordinator records a requirement",
+          "description": "SCRUM-33 AC1-X3 (cross-cutting): a real record through the real services stores the row linked to the event with its name snapshot.",
           "request": {
             "method": "POST",
             "header": [
@@ -266,6 +267,7 @@
         },
         {
           "name": "AC6-X26 Unassigned coordinator is not found",
+          "description": "SCRUM-33 AC6-X26 (cross-cutting): a real unassigned coordinator is refused with the same 404 as a missing event and nothing is stored.",
           "request": {
             "method": "POST",
             "header": [
@@ -304,6 +306,7 @@
       "item": [
         {
           "name": "AC4-X2 Technical support sees the requirement in the queue",
+          "description": "SCRUM-33 AC4-X2 (cross-cutting): the real review queue lists the requirement recorded through the real services.",
           "request": {
             "method": "GET",
             "header": [
@@ -339,6 +342,7 @@
       "item": [
         {
           "name": "AC5-X4a Requested to in progress",
+          "description": "SCRUM-33 AC5-X4 (cross-cutting): the real transition requested to in_progress is stored with who made it.",
           "request": {
             "method": "PATCH",
             "header": [
@@ -371,6 +375,7 @@
         },
         {
           "name": "AC5-X4b In progress to arranged",
+          "description": "SCRUM-33 AC5-X4 (cross-cutting): the real transition in_progress to arranged keeps the audit trail.",
           "request": {
             "method": "PATCH",
             "header": [
@@ -403,6 +408,7 @@
         },
         {
           "name": "AC5-X4c Stale repeat is a conflict",
+          "description": "SCRUM-33 AC5-X4 (cross-cutting): the stale repeat of the real transition is a 409 conflict and leaves the row unchanged.",
           "request": {
             "method": "PATCH",
             "header": [
@@ -435,6 +441,7 @@
         },
         {
           "name": "AC5-X4d Coordinator sees the arrangement",
+          "description": "SCRUM-33 AC5-X4 (cross-cutting): the coordinator reads the real arranged status with the support staff recorded as updated_by.",
           "request": {
             "method": "GET",
             "header": [
@@ -471,6 +478,7 @@
       "item": [
         {
           "name": "AC6-X27 Publishable key cannot read requirements",
+          "description": "SCRUM-33 AC6-X27 (cross-cutting): the publishable browser key is refused 401 with 42501 instead of reading requirements.",
           "request": {
             "method": "GET",
             "header": [

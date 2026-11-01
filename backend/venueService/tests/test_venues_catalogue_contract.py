@@ -34,7 +34,7 @@ def _sign_in_as(*roles: str) -> None:
     app.dependency_overrides.pop(require_venue_staff, None)
 
 
-# SCRUM-30 AC1-H1 (happy): Venue Staff create a venue with every catalogue attribute and all are stored
+# SCRUM-30 AC1-H6 (happy): Venue Staff create a venue with every catalogue attribute and all are stored
 def test_create_stores_every_attribute() -> None:
     response = client.post("/venues", json=FULL)
 
@@ -45,7 +45,7 @@ def test_create_stores_every_attribute() -> None:
     assert client.get(f"/venues/{body['id']}").json()[field] == value
 
 
-# SCRUM-30 AC1-H2 (happy): Venue Staff update every attribute at once
+# SCRUM-30 AC1-H7 (happy): Venue Staff update every attribute at once
 def test_update_changes_every_attribute() -> None:
     venue = _create()
     changes = {
@@ -65,7 +65,7 @@ def test_update_changes_every_attribute() -> None:
         assert response.json()[field] == value, field
 
 
-# SCRUM-30 AC1-P1 (partition): a venue may be created with no facilities, accessibility or layouts
+# SCRUM-30 AC1-P6 (partition): a venue may be created with no facilities, accessibility or layouts
 def test_optional_lists_may_be_empty() -> None:
     response = client.post(
         "/venues",
@@ -88,7 +88,7 @@ def test_capacity_boundary(capacity: int, status: int) -> None:
     assert len(client.get("/venues").json()) == (1 if status == 201 else 0)
 
 
-# SCRUM-30 AC1-N1, AC1-N2, AC1-N3, AC1-N4 (negative): invalid input is refused and nothing is stored
+# SCRUM-30 AC1-N8, AC1-N9, AC1-N10, AC1-N11 (negative): invalid input is refused and nothing is stored
 @pytest.mark.parametrize(
     "bad",
     [
@@ -97,7 +97,7 @@ def test_capacity_boundary(capacity: int, status: int) -> None:
         {"location": ""},
         {"supported_layouts": ["spaceship"]},
     ],
-    ids=["AC1-N1", "AC1-N2", "AC1-N3", "AC1-N4"],
+    ids=["AC1-N8", "AC1-N9", "AC1-N10", "AC1-N11"],
 )
 def test_invalid_venue_is_refused(bad: dict) -> None:
     response = client.post("/venues", json={**FULL, **bad})
@@ -106,7 +106,7 @@ def test_invalid_venue_is_refused(bad: dict) -> None:
     assert client.get("/venues").json() == []
 
 
-# SCRUM-30 AC1-N5 (negative): a refused update changes nothing
+# SCRUM-30 AC1-N12 (negative): a refused update changes nothing
 def test_invalid_update_leaves_the_venue_unchanged() -> None:
     venue = _create()
 
@@ -136,10 +136,10 @@ def test_other_roles_cannot_change_the_catalogue(role: str) -> None:
     assert client.get(f"/venues/{venue['id']}").json() == venue
 
 
-# SCRUM-30 AC2-H1, AC2-H2, AC2-H3 (happy): the three permitted roles read the current attributes
+# SCRUM-30 AC2-H3, AC2-H4, AC2-H5 (happy): the three permitted roles read the current attributes
 @pytest.mark.parametrize(
     "role", ["event_coordinator", "venue_staff", "safety_officer"],
-    ids=["AC2-H1", "AC2-H2", "AC2-H3"],
+    ids=["AC2-H3", "AC2-H4", "AC2-H5"],
 )
 def test_permitted_roles_read_current_attributes(role: str) -> None:
     venue = _create()
@@ -153,10 +153,10 @@ def test_permitted_roles_read_current_attributes(role: str) -> None:
     assert response.json()["facilities"] == ["projector", "microphone"]
 
 
-# SCRUM-30 AC2-N1..N3 (negative): roles outside the permitted three cannot read a venue
+# SCRUM-30 AC2-N4, AC2-N5, AC2-N6 (negative): roles outside the permitted three cannot read a venue
 @pytest.mark.parametrize(
     "role", ["event_organiser", "technical_support", "event_operations_manager"],
-    ids=["AC2-N1", "AC2-N2", "AC2-N3"],
+    ids=["AC2-N4", "AC2-N5", "AC2-N6"],
 )
 def test_other_roles_cannot_read_a_venue(role: str) -> None:
     venue = _create()
@@ -166,7 +166,7 @@ def test_other_roles_cannot_read_a_venue(role: str) -> None:
     assert client.get("/venues").status_code == 403
 
 
-# SCRUM-30 AC3-H1 (happy): an updated capacity changes who is found by search
+# SCRUM-30 AC3-X1 (cross-cutting): an updated capacity changes who is found by search
 def test_updated_capacity_is_reflected_in_search() -> None:
     venue = _create(max_capacity=50)
     assert client.get("/venues/search", params={"required_capacity": 120}).json() == []
@@ -178,7 +178,7 @@ def test_updated_capacity_is_reflected_in_search() -> None:
     ]
 
 
-# SCRUM-30 AC3-H2 (happy): updated facilities, accessibility and layouts change what search finds
+# SCRUM-30 AC3-X2 (cross-cutting): updated facilities, accessibility and layouts change what search finds
 def test_updated_lists_are_reflected_in_search() -> None:
     venue = _create(facilities=[], accessibility_features=[], supported_layouts=["theatre"])
     wanted = [("facility", "stage"), ("accessibility", "lift"), ("layout", "banquet")]
@@ -192,7 +192,7 @@ def test_updated_lists_are_reflected_in_search() -> None:
     assert [v["name"] for v in client.get("/venues/search", params=wanted).json()] == ["Orchard Hall"]
 
 
-# SCRUM-30 AC3-H3 (happy): taking a venue out of service removes it from search
+# SCRUM-30 AC3-X3 (cross-cutting): taking a venue out of service removes it from search
 def test_blocking_a_venue_removes_it_from_search() -> None:
     venue = _create()
     assert len(client.get("/venues/search").json()) == 1
@@ -202,7 +202,7 @@ def test_blocking_a_venue_removes_it_from_search() -> None:
     assert client.get("/venues/search").json() == []
 
 
-# SCRUM-30 AC3-H4 (happy): an updated capacity and facilities change a suitability verdict
+# SCRUM-30 AC3-X4 (cross-cutting): an updated capacity and facilities change a suitability verdict
 def test_updates_are_reflected_in_suitability() -> None:
     venue = _create(max_capacity=40, facilities=[])
     ask = {"expected_attendance": 80, "required_facilities": ["stage"]}

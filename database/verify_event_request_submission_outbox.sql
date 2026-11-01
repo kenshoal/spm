@@ -19,6 +19,8 @@ BEGIN
         RAISE EXCEPTION 'Verification requires at least one Supabase Auth user';
     END IF;
 
+    -- SCRUM-8 AC6-N1, SCRUM-11 AC8-N1 (negative): a Draft insert records no
+    -- submission outbox event.
     INSERT INTO public.event_requests (organiser_id, status, event_name)
     VALUES (test_organiser_id, 'Draft', 'AC9 draft verification')
     RETURNING id INTO draft_request_id;
@@ -31,10 +33,14 @@ BEGIN
         RAISE EXCEPTION 'A Draft insert must not record a submission event';
     END IF;
 
+    -- SCRUM-11 AC8-H1 (happy): the Draft-to-Submitted write records exactly one
+    -- event_request.submitted event.
     UPDATE public.event_requests
     SET status = 'Submitted'
     WHERE id = draft_request_id AND status = 'Draft';
 
+    -- SCRUM-11 AC8-X1 (cross-cutting): a repeated status write records no second
+    -- event (UNIQUE (event_request_id, event_type) + ON CONFLICT DO NOTHING).
     -- A retry or repeated write cannot record a second event.
     UPDATE public.event_requests
     SET status = 'Submitted'
@@ -51,6 +57,8 @@ BEGIN
             recorded_events;
     END IF;
 
+    -- SCRUM-11 AC8-P1, AC2 (partition): a direct submission carrying "Not
+    -- required" / "Not known yet" placeholders records exactly one event.
     INSERT INTO public.event_requests (
         organiser_id,
         status,

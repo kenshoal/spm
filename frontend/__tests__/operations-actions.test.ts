@@ -23,6 +23,7 @@ beforeEach(() => {
   navigation.revalidatePath.mockReset();
 });
 
+// AC2-H2 (happy, SCRUM-14): assigning posts the chosen coordinator for that request
 // Purpose: SCRUM-14 AC2 — assigning posts the chosen coordinator for that request.
 test("assigns the chosen coordinator through the event request API", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201 });
@@ -39,6 +40,7 @@ test("assigns the chosen coordinator through the event request API", async () =>
   expect(navigation.revalidatePath).toHaveBeenCalledWith("/operations/assignments");
 });
 
+// AC6-H5 (happy, SCRUM-14): reassignment says "reassigned", not "assigned"
 // Purpose: SCRUM-14 AC6 — reassigning an already-assigned request says "reassigned", not "assigned".
 test("reports a reassignment when the request already had a coordinator", async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201 });
@@ -49,6 +51,7 @@ test("reports a reassignment when the request already had a coordinator", async 
   expect(state).toEqual({ assigned: true, message: "Coordinator reassigned." });
 });
 
+// AC2-N6 (negative, SCRUM-14): an empty choice is caught before any request is sent
 // Purpose: Submitting without a choice is caught before any request is sent.
 test("requires a coordinator to be chosen", async () => {
   const fetchMock = vi.fn();
@@ -60,6 +63,7 @@ test("requires a coordinator to be chosen", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+// AC2-N7 (negative, SCRUM-14): a refusal shows the backend's reason and does not revalidate
 // Purpose: The backend's reason for refusing (terminal status, not a coordinator) is shown.
 test("shows the backend's reason when assignment is refused", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
@@ -74,6 +78,7 @@ test("shows the backend's reason when assignment is refused", async () => {
   expect(navigation.revalidatePath).not.toHaveBeenCalled();
 });
 
+// AC2-N8 (negative, SCRUM-14): a request deleted or closed since the page loaded is explained
 // Purpose: A request deleted or closed since the page loaded is explained.
 test("explains a request that no longer exists", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
@@ -83,6 +88,7 @@ test("explains a request that no longer exists", async () => {
   expect(state).toEqual({ message: "This request no longer exists. Refresh the page." });
 });
 
+// AC2-N9 (negative, SCRUM-14): an unreachable API leaves the manager a retryable error
 // Purpose: An unreachable API leaves the manager on the page with a retryable error.
 test("returns a retryable error when the API cannot be reached", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
@@ -92,6 +98,7 @@ test("returns a retryable error when the API cannot be reached", async () => {
   expect(state).toEqual({ message: "The coordinator could not be assigned. Please try again." });
 });
 
+// AC2-N10 (negative, SCRUM-14): an expired session sends the manager to sign in
 // Purpose: An expired session sends the manager to sign in.
 test("redirects to sign-in when the session has expired", async () => {
   navigation.redirect.mockImplementation(() => {

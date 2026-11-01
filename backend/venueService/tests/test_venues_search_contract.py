@@ -32,7 +32,7 @@ def _sign_in_as(*roles: str) -> None:
     )
 
 
-# SCRUM-9 AC3-H1 (happy): each result shows name, location, capacity, layouts, facilities and accessibility
+# SCRUM-9 AC2-H4 (happy): each result shows name, location, capacity, layouts, facilities and accessibility
 def test_result_shows_the_attributes_a_coordinator_shortlists_by() -> None:
     _make_venue(
         name="Orchard Hall",
@@ -53,21 +53,21 @@ def test_result_shows_the_attributes_a_coordinator_shortlists_by() -> None:
     assert result["accessibility_features"] == ["ramp"]
 
 
-# SCRUM-9 AC4-B1, AC4-B2, AC4-B3 (boundary): one below, exactly at and one above the maximum capacity
+# SCRUM-9 AC3-B1, AC3-B2, AC3-B3 (boundary): a venue one below, exactly at and one above the required capacity of 100
 @pytest.mark.parametrize(
-    ("required", "shown"),
-    [(99, True), (100, True), (101, False)],
-    ids=["AC4-B1", "AC4-B2", "AC4-B3"],
+    ("capacity", "shown"),
+    [(99, False), (100, True), (101, True)],
+    ids=["AC3-B1", "AC3-B2", "AC3-B3"],
 )
-def test_capacity_boundary_is_the_maximum_capacity(required: int, shown: bool) -> None:
-    _make_venue(name="Hundred", max_capacity=100)
+def test_capacity_boundary_is_the_maximum_capacity(capacity: int, shown: bool) -> None:
+    _make_venue(name="Boundary", max_capacity=capacity)
 
-    names = [v["name"] for v in client.get("/venues/search", params={"required_capacity": required}).json()]
+    names = [v["name"] for v in client.get("/venues/search", params={"required_capacity": 100}).json()]
 
-    assert names == (["Hundred"] if shown else [])
+    assert names == (["Boundary"] if shown else [])
 
 
-# SCRUM-9 AC4-P1, AC4-P2, AC4-P3 (partition): a chosen layout's own capacity decides (Q&A #112); otherwise the maximum
+# SCRUM-9 AC3-P2, AC3-P3, AC3-P4 (partition): a chosen layout's own capacity decides (Q&A #112); otherwise the maximum
 @pytest.mark.parametrize(
     ("params", "shown"),
     [
@@ -75,7 +75,7 @@ def test_capacity_boundary_is_the_maximum_capacity(required: int, shown: bool) -
         ({"required_capacity": 100, "layout": "theatre"}, True),
         ({"required_capacity": 250}, True),
     ],
-    ids=["AC4-P1", "AC4-P2", "AC4-P3"],
+    ids=["AC3-P2", "AC3-P3", "AC3-P4"],
 )
 def test_search_uses_the_chosen_layouts_capacity(params: dict, shown: bool) -> None:
     _make_venue(
@@ -90,7 +90,7 @@ def test_search_uses_the_chosen_layouts_capacity(params: dict, shown: bool) -> N
     assert names == (["Flexible"] if shown else [])
 
 
-# SCRUM-9 AC4-N1 (negative): a venue below the required capacity is never offered, whatever else matches
+# SCRUM-9 AC3-N1 (negative): a venue below the required capacity is never offered, whatever else matches
 def test_a_small_venue_that_matches_every_other_filter_is_still_hidden() -> None:
     _make_venue(
         name="Cosy", max_capacity=40, location="Marina Bay", facilities=["projector"],
@@ -105,10 +105,10 @@ def test_a_small_venue_that_matches_every_other_filter_is_still_hidden() -> None
     assert results == []
 
 
-# SCRUM-9 AC6-H1, AC6-H2, AC6-H3 (happy): the three permitted roles can search
+# SCRUM-9 AC2-X2, AC2-X3, AC2-X4 (cross-cutting): the three permitted roles can search
 @pytest.mark.parametrize(
     "role", ["event_coordinator", "venue_staff", "safety_officer"],
-    ids=["AC6-H1", "AC6-H2", "AC6-H3"],
+    ids=["AC2-X2", "AC2-X3", "AC2-X4"],
 )
 def test_permitted_roles_can_search(role: str) -> None:
     _make_venue(name="Open")
@@ -120,11 +120,11 @@ def test_permitted_roles_can_search(role: str) -> None:
     assert [v["name"] for v in response.json()] == ["Open"]
 
 
-# SCRUM-9 AC6-N1..N5 (negative): every other role is refused, and nothing is returned
+# SCRUM-9 AC2-X5..AC2-X9 (cross-cutting): every other role is refused, and nothing is returned
 @pytest.mark.parametrize(
     "role",
     ["event_organiser", "attendee", "technical_support", "event_operations_manager", "admin"],
-    ids=["AC6-N1", "AC6-N2", "AC6-N3", "AC6-N4", "AC6-N5"],
+    ids=["AC2-X5", "AC2-X6", "AC2-X7", "AC2-X8", "AC2-X9"],
 )
 def test_other_roles_are_refused_a_search(role: str) -> None:
     _make_venue(name="Internal")
@@ -136,7 +136,7 @@ def test_other_roles_are_refused_a_search(role: str) -> None:
     assert "Internal" not in response.text
 
 
-# SCRUM-9 AC6-P1 (partition): a person with several roles may search when any one is permitted
+# SCRUM-9 AC2-X10 (cross-cutting): a person with several roles may search when any one is permitted
 def test_a_multi_role_user_may_search_if_one_role_is_permitted() -> None:
     _make_venue(name="Open")
     _sign_in_as("attendee", "event_coordinator")
@@ -144,7 +144,7 @@ def test_a_multi_role_user_may_search_if_one_role_is_permitted() -> None:
     assert client.get("/venues/search").status_code == 200
 
 
-# SCRUM-9 AC6-N6 (negative): a search with no session is refused with 401
+# SCRUM-9 AC2-X11 (cross-cutting): a search with no session is refused with 401
 def test_a_search_without_a_session_is_unauthenticated() -> None:
     app.dependency_overrides.clear()
 

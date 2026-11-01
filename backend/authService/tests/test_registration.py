@@ -62,6 +62,8 @@ def test_register_rejects_short_password(client: TestClient, supabase: Mock) -> 
     supabase.auth.sign_up.assert_not_called()
 
 
+# SCRUM-26 AC2-H1 (happy): valid credentials return the Supabase session
+# tokens with no-store caching.
 def test_login_returns_supabase_tokens(client: TestClient, supabase: Mock) -> None:
     supabase.auth.sign_in_with_password.return_value = SimpleNamespace(
         session=SimpleNamespace(
@@ -114,6 +116,9 @@ def test_login_returns_supabase_tokens(client: TestClient, supabase: Mock) -> No
         ),
     ],
 )
+# SCRUM-26 AC3-N1, AC3-N2, AC3-N3, AC3-N4 (negative): each provider refusal or
+# outage maps to its own status and generic message — invalid credentials,
+# unconfirmed email, rate limit, provider 500.
 def test_login_maps_provider_errors(
     client: TestClient,
     supabase: Mock,
@@ -132,6 +137,8 @@ def test_login_maps_provider_errors(
     assert response.json() == {"detail": expected_detail}
 
 
+# SCRUM-26 AC2-N1, AC2-B1 (negative): an empty password (0 characters, just
+# below the 1-character minimum) is refused before the provider is called.
 def test_login_rejects_empty_password(client: TestClient, supabase: Mock) -> None:
     response = client.post(
         "/auth/login", json={"email": "member@example.com", "password": ""}
@@ -141,6 +148,8 @@ def test_login_rejects_empty_password(client: TestClient, supabase: Mock) -> Non
     supabase.auth.sign_in_with_password.assert_not_called()
 
 
+# SCRUM-26 AC3-N4 (negative): a sign-in that returns no session is a 502 with
+# no token.
 def test_login_requires_session(client: TestClient, supabase: Mock) -> None:
     supabase.auth.sign_in_with_password.return_value = SimpleNamespace(session=None)
 
@@ -152,6 +161,8 @@ def test_login_requires_session(client: TestClient, supabase: Mock) -> None:
     assert response.status_code == 502
 
 
+# SCRUM-26 AC3-N4 (negative): a provider network failure during sign-in is a
+# 502 with no token.
 def test_login_maps_network_failure_to_bad_gateway(
     client: TestClient, supabase: Mock
 ) -> None:
@@ -168,6 +179,9 @@ def test_login_maps_network_failure_to_bad_gateway(
     assert response.json() == {"detail": "Authentication provider unavailable"}
 
 
+# SCRUM-26 AC1-X2, AC2-H3 (cross-cutting): /auth/me verifies the token against
+# Supabase and reads roles only from server-trusted app_metadata, ignoring a
+# client-supplied user_metadata role claim.
 def test_current_user_verifies_supabase_access_token(
     client: TestClient, supabase: Mock
 ) -> None:
@@ -193,7 +207,8 @@ def test_current_user_verifies_supabase_access_token(
     supabase.auth.get_user.assert_called_once_with("access-token")
 
 
-# SCRUM-27 AC3-H3 (happy): every role a person holds is returned, the first as their main role
+# SCRUM-27 AC3-P1 (partition): the full roles list held in the verified
+# identity is returned in order, with the first entry as role.
 def test_current_user_returns_all_roles(client: TestClient, supabase: Mock) -> None:
     supabase.auth.get_user.return_value = SimpleNamespace(
         user=SimpleNamespace(
@@ -213,7 +228,8 @@ def test_current_user_returns_all_roles(client: TestClient, supabase: Mock) -> N
     ]
 
 
-# SCRUM-27 AC1-H1, AC3-H4 (happy): roles come from the staff roles table, all of them, ahead of the sign-up metadata
+# SCRUM-27 AC3-H1 (happy): every role stored in staff_roles is recognised on
+# /auth/me.
 def test_current_user_reads_roles_from_staff_roles_table(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -245,7 +261,8 @@ def test_current_user_reads_roles_from_staff_roles_table(
 
 
 @pytest.mark.parametrize("app_metadata", [{}, None])
-# SCRUM-27 AC1-P8 (partition): a person with no role is an attendee
+# SCRUM-27 AC3-B1 (boundary): with zero roles stored (empty or absent
+# metadata) the identity defaults to attendee.
 def test_current_user_defaults_role_to_attendee(
     client: TestClient, supabase: Mock, app_metadata: dict | None
 ) -> None:
@@ -262,7 +279,8 @@ def test_current_user_defaults_role_to_attendee(
     assert response.json()["roles"] == ["attendee"]
 
 
-# SCRUM-27 AC1-H2 (happy): an admin assigns a role
+# SCRUM-27 AC2-P1 (partition): an admin grants a staff role (technical_support)
+# through the role endpoint.
 def test_admin_assigns_role(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -310,7 +328,8 @@ def test_admin_assigns_role(
     )
 
 
-# SCRUM-27 AC2-H1 (happy): the Event Coordinator Lead gives someone the Event Coordinator role
+# SCRUM-27 AC2-H1 (happy): the Operations Manager assigns an Event Coordinator
+# and the write carries assigned_by and refreshes app_metadata.
 def test_operations_manager_assigns_event_coordinator(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -362,6 +381,8 @@ def test_operations_manager_assigns_event_coordinator(
 # Purpose: event_operations_manager is assignable after Coordinator assignment
 # (eventRequestService) introduced the role — confirms it works
 # through the real endpoint, not just directly via the Admin API.
+# SCRUM-27 AC2-P1 (partition): an admin grants the event_operations_manager
+# role through the real endpoint.
 def test_admin_assigns_event_operations_manager_role(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -436,7 +457,9 @@ def test_admin_assigns_safety_officer_role(
         ("attendee", None),
     ],
 )
-# SCRUM-27 AC1-N6, AC2-N7 (negative): only an admin can assign roles; the Lead cannot assign Technical Support or any role but Event Coordinator
+# SCRUM-27 AC2-N2, AC2-N4 (negative): callers without the assignment duty —
+# including an Operations Manager reaching for a non-coordinator role — are
+# refused (403) and no role write happens.
 def test_admin_endpoint_requires_admin_role(
     client: TestClient, supabase: Mock, admin: Mock, caller_role: str, app_metadata
 ) -> None:
@@ -460,7 +483,8 @@ def test_admin_endpoint_requires_admin_role(
     admin.auth.admin.update_user_by_id.assert_not_called()
 
 
-# SCRUM-27 AC1-N7 (negative): assigning a role needs a session
+# SCRUM-26 AC4-N4, SCRUM-27 AC2-N5 (negative): the role endpoint refuses a
+# caller with no session (401) before any write is attempted.
 def test_admin_endpoint_requires_authentication(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -472,7 +496,8 @@ def test_admin_endpoint_requires_authentication(
     admin.auth.admin.update_user_by_id.assert_not_called()
 
 
-# SCRUM-27 AC1-N8 (negative): an unknown role cannot be assigned
+# SCRUM-27 AC2-N6 (negative): an unknown role value is rejected by validation
+# (422) and nothing is written.
 def test_admin_endpoint_rejects_invalid_role(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -521,6 +546,8 @@ def test_admin_endpoint_maps_missing_user(
     assert response.json() == {"detail": "User not found"}
 
 
+# SCRUM-27 AC2-N8 (negative): a role-store outage is reported as a gateway
+# failure (502) and writes nothing.
 def test_admin_endpoint_maps_role_store_failure(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -549,6 +576,8 @@ def test_admin_endpoint_maps_role_store_failure(
     assert response.json() == {"detail": "Role store unavailable"}
 
 
+# SCRUM-27 AC2-N7 (negative): without the secret key the role feature is
+# unavailable (503), not half-written.
 def test_admin_endpoint_returns_503_without_secret_key(
     client: TestClient,
     supabase: Mock,
@@ -580,6 +609,8 @@ def test_admin_endpoint_returns_503_without_secret_key(
 
 
 @pytest.mark.parametrize("authorization", [None, "Basic abc", "Bearer ", "Bearer a b"])
+# SCRUM-26 AC4-N1 (negative): /auth/me refuses a missing or malformed bearer
+# header (401) before the provider is called.
 def test_current_user_requires_bearer_token(
     client: TestClient, supabase: Mock, authorization: str | None
 ) -> None:
@@ -592,6 +623,7 @@ def test_current_user_requires_bearer_token(
     supabase.auth.get_user.assert_not_called()
 
 
+# SCRUM-26 AC4-N2 (negative): an invalid or expired token is refused (401).
 def test_current_user_rejects_invalid_token(client: TestClient, supabase: Mock) -> None:
     supabase.auth.get_user.side_effect = AuthApiError("expired", 401, "bad_jwt")
 
@@ -600,6 +632,8 @@ def test_current_user_rejects_invalid_token(client: TestClient, supabase: Mock) 
     assert response.status_code == 401
 
 
+# SCRUM-26 AC4-N3 (negative): a provider outage while verifying fails closed
+# with 502.
 def test_current_user_maps_provider_failure(client: TestClient, supabase: Mock) -> None:
     supabase.auth.get_user.side_effect = AuthUnknownError(
         "connection failed", ConnectionError()
@@ -621,8 +655,8 @@ def _caller(supabase: Mock, roles: list[str]) -> None:
 COORDINATOR_EMAILS = {"coord-a": "alex@example.com", "coord-b": "blair@example.com"}
 
 
+# AC2-H3 (happy, SCRUM-14): the Operations Manager can list coordinators for the picker
 # Purpose: SCRUM-14 — an Operations Manager can list coordinators to choose from.
-# SCRUM-27 AC2-H2 (happy): the Lead lists coordinators to choose from
 def test_operations_manager_lists_event_coordinators(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -650,8 +684,8 @@ def test_operations_manager_lists_event_coordinators(
     )
 
 
+# AC2-N11 (negative, SCRUM-14): the manager may list coordinators only, not other roles
 # Purpose: An Operations Manager may list coordinators only, not other staff roles.
-# SCRUM-27 AC2-N1 (negative): the Lead cannot list the holders of another role
 def test_operations_manager_cannot_list_other_roles(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -668,6 +702,7 @@ def test_operations_manager_cannot_list_other_roles(
     assert response.status_code == 403
 
 
+# AC2-X1 (cross-cutting, SCRUM-14): only admins enumerate beyond the picker's role
 # Purpose: An admin may list the holders of any role.
 def test_admin_lists_any_role(client: TestClient, supabase: Mock, admin: Mock) -> None:
     _caller(supabase, ["admin"])
@@ -687,6 +722,7 @@ def test_admin_lists_any_role(client: TestClient, supabase: Mock, admin: Mock) -
     assert response.json() == [{"id": "venue-1", "email": "venue@example.com"}]
 
 
+# AC2-N12 (negative, SCRUM-14): roles without assignment duties cannot enumerate staff
 # Purpose: Roles without assignment duties cannot enumerate staff.
 def test_organiser_cannot_list_users(
     client: TestClient, supabase: Mock, admin: Mock
@@ -704,6 +740,7 @@ def test_organiser_cannot_list_users(
     assert response.status_code == 403
 
 
+# AC2-N13 (negative, SCRUM-14): listing staff requires a session
 # Purpose: Listing staff requires a session.
 def test_list_users_requires_authentication(
     client: TestClient, supabase: Mock, admin: Mock
@@ -713,6 +750,7 @@ def test_list_users_requires_authentication(
     assert response.status_code == 401
 
 
+# AC2-B2 (boundary, SCRUM-14): a dangling role row does not break the picker
 # Purpose: A role row left behind by a deleted account does not break the picker.
 def test_list_users_skips_deleted_accounts(
     client: TestClient, supabase: Mock, admin: Mock
@@ -739,6 +777,7 @@ def test_list_users_skips_deleted_accounts(
     assert response.json() == [{"id": "coord-a", "email": "alex@example.com"}]
 
 
+# AC2-N14 (negative, SCRUM-14): a role-store outage is a gateway failure, not an empty list
 # Purpose: A role-store outage is reported as a gateway failure, not an empty list.
 def test_list_users_maps_role_store_failure(
     client: TestClient, supabase: Mock, admin: Mock
