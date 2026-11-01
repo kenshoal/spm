@@ -279,6 +279,18 @@ class NotificationClient:
                 payload={"event_request_id": event_request_id, "event_name": event_name},
             )
 
+    def notify_event_cancellation_recorded(
+        self, *, event_request_id: str, event_name: str | None, recipient_ids: list[str]
+    ) -> None:
+        """Tell the Organiser and Coordinator the cancellation is recorded (SCRUM-57 AC1)."""
+        for recipient_id in recipient_ids:
+            self._post_notice(
+                "event_cancellation_recorded",
+                recipient_id=recipient_id,
+                key=f"event-cancellation-recorded:{event_request_id}:{recipient_id}",
+                payload={"event_request_id": event_request_id, "event_name": event_name},
+            )
+
     def notify_event_changed(
         self,
         *,

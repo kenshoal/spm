@@ -188,6 +188,8 @@ class EventTransitionService:
         )
         # Only after the cancellation is saved (SCRUM-38 AC4); best-effort.
         self.event_request_service.notify_attendees_of_cancellation(event_request)
+        # SCRUM-57 AC1: the people responsible for the event are told too.
+        self.event_request_service.notify_owners_of_cancellation(event_request)
         return event_request
 
     def complete(self, event_request_id: str, caller_id: str) -> EventRequestResponse:

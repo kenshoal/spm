@@ -4,7 +4,7 @@
 
 **User story:** As a user responsible for an event, I want to be notified when its workflow or important arrangements change, so that I can take the action required of my role.
 
-**Status of this document (27 October 2026): test design approved for AC2 and AC3; AC1 on hold.** The test design was drafted with AI assistance and reviewed and approved by Tate Lim (story owner) on 27 October 2026, including assumptions A2–A5 as written. AC1 is not designed until the PO answers Q1.
+**Status of this document (1 November 2026): test design approved for AC2 and AC3 (27 October 2026); AC1 split into AC1 (Organiser and Coordinator, designed 1 November 2026, build requested by Tate Lim) and AC1b (venue and equipment staff, on hold).** The test design was drafted with AI assistance. AC2/AC3 and assumptions A2–A5 were reviewed and approved by Tate Lim (story owner) on 27 October 2026. The AC1 cases below, and assumptions A6–A7, were drafted on 1 November 2026 and have **not** had a separate design review; Tate asked for AC1 to be built on that date. AC1b is not designed until the PO answers Q1.
 
 ## Story contract review
 
@@ -12,15 +12,15 @@ Jira lists two bullets. Numbering follows them, with the second bullet split in 
 
 | Jira bullet | Outcome | Reason | Proposed wording |
 | --- | --- | --- | --- |
-| 1. Cancellation notice to Organiser, Coordinator and venue/equipment staff | Keep as **AC1**, **on hold** | Intent is valid. The staff recipients are not defined, because staff have no individual assignment to a booking. Asked the PO on 27 Oct 2026 (Telegram, message 2825). | AC1: Given an event is cancelled, when the cancellation is recorded, then the Organiser, the assigned Coordinator and the staff responsible for its committed venue or equipment arrangements are each notified once. _Staff rule to be confirmed by the PO._ |
+| 1. Cancellation notice to Organiser, Coordinator and venue/equipment staff | **Split** → **AC1** (Organiser, Coordinator) and **AC1b** (staff, **on hold**) | Intent is valid. The Organiser and the assigned Coordinator are known for every event. The staff recipients are not defined, because staff have no individual assignment to a booking. Asked the PO on 27 Oct 2026 (Telegram, message 2825). | AC1: Given an event is cancelled, when the cancellation is recorded, then the Organiser and the assigned Coordinator are each notified once. AC1b: …and the staff responsible for its committed venue or equipment arrangements are each notified once. _Staff rule to be confirmed by the PO._ |
 | 2a. Per-type channel setting | **Split** from bullet 2 → **AC2** | Choosing a channel per type and delivering by email are separate behaviours with separate failure modes. | AC2: Given a notification of a given type is sent, when the channel setting for that type is in-app, email or both, then it is delivered by exactly the chosen channel(s). A type with no setting is delivered in-app only. |
 | 2b. Email delivery | **Split** from bullet 2 → **AC3** | As above. The "failed email never fails the action" rule is observable and gets its own cases. | AC3: Given a notification is delivered by email, when it is sent, then the recipient receives one email for it, and a failed email never fails or rolls back the action that caused the notification. |
 
-Scope effect: AC2 and AC3 are one shared change in notificationService (and one migration). AC1 reuses the existing `POST /notifications/events` and adds the staff recipients, so it can follow without reworking AC2 and AC3.
+Scope effect: AC2 and AC3 are one shared change in notificationService (and one migration). AC1 reuses the existing `POST /notifications/events` and needs no change in notificationService; it is a change in eventRequestService plus the inbox wording in the frontend. AC1b adds the staff recipients later, so it can follow without reworking AC1, AC2 or AC3.
 
 ## Included and excluded behaviour
 
-**Included:** channel setting per notification type; email delivery through SMTP; idempotent email (no second email for a retried event); email failure isolated from the caller; cancellation notices to Organiser, Coordinator and staff (AC1, once the staff rule is agreed).
+**Included:** channel setting per notification type; email delivery through SMTP; idempotent email (no second email for a retried event); email failure isolated from the caller; cancellation notices to the Organiser and the assigned Coordinator (AC1); to staff (AC1b, once the staff rule is agreed).
 
 **Excluded (named, not claimed):**
 
@@ -51,19 +51,31 @@ None. The story reacts to transitions owned by other stories (cancellation: `POS
 
 | # | Item | Status |
 | --- | --- | --- |
-| Q1 | Which staff are notified on cancellation (AC1). Proposed: the venue staff member who approved each booking (`decided_by`) and the technical support member who last updated each equipment item (`updated_by`), as proposed in SCRUM-64. | Asked the PO 27 Oct 2026; **no answer yet**. AC1 stays on hold. |
+| Q1 | Which staff are notified on cancellation (AC1b). Proposed: the venue staff member who approved each booking (`decided_by`) and the technical support member who last updated each equipment item (`updated_by`), as proposed in SCRUM-64. | Asked the PO 27 Oct 2026; **no answer yet**. AC1b stays on hold. |
 | A1 | Email provider: plain SMTP settings (host, port, user, password, sender). Real delivery via a dedicated Gmail account with an app password; Mailtrap sandbox for development. | Agreed with the story owner 27 Oct 2026. Gmail app-password behaviour **not yet verified** for this account. |
 | A2 | A type set to `email` only is still stored once (it is the duplicate guard) but is **not shown in the inbox**. | **Assumption, needs review.** Needs a column or filter on `notifications`. |
 | A3 | Email wording: a short generic message (type, one line, link to the inbox). Wording for each type lives in the frontend today (`describeNotification`) and is **not** duplicated in the backend. | **Assumption, needs review.** |
 | A4 | The recipient's address is looked up from Supabase Auth with the server key. | **Unverified.** Confirm the lookup works for the user ids that callers send before building. |
 | A5 | If the setting cannot be read, the notification falls back to in-app only. | **Assumption.** The requirement does not say. |
+| A6 | Only the assigned Coordinator can cancel (`POST /event-requests/{id}/cancellation`), so the Coordinator notice is a notice to the person who just cancelled. AC1 says the Coordinator is notified, so they are, once; the notice is a record in their inbox. | **Assumption, needs review.** Say if the Coordinator should be left out when they are the one cancelling. |
+| A7 | The Organiser and Coordinator get their own notice type, `event_cancellation_recorded`, separate from the Attendee's `event_cancelled`. Someone who is both an Attendee and the Organiser gets both. The notice links to the event and names it. | **Assumption, needs review.** Channel settings (AC2) apply to the new type by name; with no setting it is in-app. |
 
 ## Specification
 
-AC1 is not designed yet; its cases are written once Q1 is answered.
+AC1b is not designed yet; its cases are written once Q1 is answered. AC1 cases are listed first; a person is "told" when notificationService receives one `event_cancellation_recorded` notice for them.
 
 | ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC1-H1 | AC1 | Cancelling tells the Organiser and the assigned Coordinator | Happy | Confirmed event; Organiser `organiser-1`; assigned Coordinator `coord-1`; spy notification client | 1. Coordinator cancels the event | `event_id`, event name | `200`, status `Cancelled`; one notice each to `organiser-1` and `coord-1`, each naming the event | A notice to anyone else | API |
+| AC1-P1 | AC1 | One person who is both Organiser and Coordinator gets one notice | Partition | Organiser id equals Coordinator id | Cancel the event | same id | One notice to that person | Two notices to one person | API |
+| AC1-P2 | AC1 | A cancellation before any Attendee registered still tells the Organiser and Coordinator | Partition | No registered Attendees | Cancel the event | none | Notices to Organiser and Coordinator; none to Attendees | No notice only because there are no Attendees | API |
+| AC1-X1 | AC1 | Attendee notices are unchanged | Cross-cutting | Two registered Attendees | Cancel the event | `attendee-1`, `attendee-2` | Attendees still get `event_cancelled`; Organiser and Coordinator get `event_cancellation_recorded` | An Attendee told with the Organiser wording, or the reverse | API |
+| AC1-H2 | AC1 | The client posts one notice per recipient with a stable key | Happy | Fake HTTP post | Call the client for two recipients | `organiser-1`, `coord-1` | Two posts, type `event_cancellation_recorded`, key per event and recipient, payload has the event id and name | A shared key for two recipients | Unit |
+| AC1-N1 | AC1 | A refused cancellation tells nobody | Negative | Terminal status, or a Coordinator who is not assigned | Cancel the event | `Completed`/`coord-1`; `Confirmed`/`coord-2` | `409` / `403`; status unchanged; no notice | Any notice | API |
+| AC1-N2 | AC1 | If the Coordinator cannot be looked up, the cancellation stands and the Organiser is still told | Negative | Coordinator lookup raises a repository error | Cancel the event | as above | `200`, `Cancelled`; Organiser told; error logged | `5xx`; no notice to the Organiser | API |
+| AC1-N3 | AC1 | An unreachable notification service never blocks the cancellation | Negative | HTTP post raises a connection error | Cancel the event | as above | `200`, `Cancelled` | `5xx`; status rolled back | API |
+| AC1-B1 | AC1 | Cancelling twice tells nobody twice | Boundary | Event already `Cancelled` | Cancel again | as above | Second call refused (`409`); no further notice | A second notice | API |
+| AC1-X2 | AC1 | The inbox shows the notice with the event name and a link | Cross-cutting | Notice of the new type | Describe it for the Organiser and for the Coordinator | type, payload | Text names the event as cancelled; link goes to the event (`/event-requests/{id}/edit` for the Organiser, `/coordination/requests/{id}` for the Coordinator) | A blank text; no link | Unit (frontend) |
 | AC2-H1 | AC2 | A type set to `email` reaches the recipient by email | Happy | Setting `event_type=clarification_requested, channel=email`; fake mail sender; fake repository; recipient has address `organiser@test.local` | 1. POST an event of that type for that recipient | `event_id=ev-1` | `202`; one email to `organiser@test.local`; row stored once | No email to anyone else | API |
 | AC2-P1 | AC2 | `in_app` stores the row and sends no email | Partition | Setting `channel=in_app` | POST an event | as above | `202`; row stored and visible in the inbox; zero emails | Any email sent | API |
 | AC2-P2 | AC2 | `both` gives an inbox row and one email | Partition | Setting `channel=both` | POST an event | as above | `202`; row stored and visible in the inbox; one email | A second email | API |
@@ -120,3 +132,18 @@ Command (27 Oct 2026, on commit 78b9cd4): `cd backend/notificationService && .ve
 | AC3-P3 | Green | As expected | Pass (local, fake SMTP) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_smtp_mailer_skips_login_and_tls_when_not_configured |
 | AC3-P4 | Green | As expected | Pass (local) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_a_configured_host_selects_the_smtp_mailer |
 | AC3-N5 | Green | As expected | Pass (local, fakes) | commit 78b9cd4, local | Claude (AI) for Tate Lim, 27 Oct 2026 | test_adapters.py::test_an_address_lookup_failure_is_raised |
+
+Run on 1 November 2026 for AC1 (commit 6a406eb, local): `cd backend/eventRequestService && .venv/bin/python -m pytest -q` (1093 passed, 1 skipped) and `ruff check .` (one error, in `tests/test_registration_window_notifier.py`, a file this work did not touch; it appears without these changes too). `cd frontend && npx vitest run` (72 files, 619 tests passed), `npm run lint` (clean), `npm run typecheck` (exit 0). Dependencies faked: the repository, the notification service and its HTTP calls. Mutation checks: sending the notice for a refused cancellation fails AC1-N1 and AC1-B1; removing the client's failure handling fails AC1-N3. **Not run:** CI, a real cancellation against the running services and the shared database, the browser, and `npm run test:e2e`/`build`. AC1-N3 was not mutation-checked for the service call itself.
+
+| ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC1-H1 | Green | As expected | Pass (local, fakes) | commit 9bb8aa5, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_cancellation_owner_notice.py::test_cancelling_tells_the_organiser_and_the_coordinator (Depends on A6, A7) |
+| AC1-H2 | Green | As expected | Pass (local, fake HTTP) | commit 9bb8aa5, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_cancellation_owner_notice.py::test_the_client_posts_one_notice_per_recipient |
+| AC1-P1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_one_person_in_both_roles_is_told_once. Red first: two notices to one person |
+| AC1-P2 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_no_attendees_still_tells_the_organiser_and_coordinator. Passed on first run (characterisation of H1) |
+| AC1-X1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_attendee_notices_are_unchanged; the SCRUM-38 AC4 tests also still pass |
+| AC1-N1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_refused_cancellation_tells_nobody (409 and 403). Mutation-checked |
+| AC1-N2 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_coordinator_lookup_failure_still_tells_the_organiser. Red first: a saved cancellation answered `502` |
+| AC1-N3 | Green | As expected | Pass (local, fake HTTP) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_notification_outage_does_not_block_the_cancellation. Client failure handling mutation-checked |
+| AC1-B1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_cancelling_twice_tells_nobody_twice. Mutation-checked |
+| AC1-X2 | Green | As expected | Pass (local, vitest) | commit 6a406eb, local | Claude (AI) for Tate Lim, 1 Nov 2026 | frontend/__tests__/cancellation-recorded-notification.test.ts (3 tests). Not seen in a browser |

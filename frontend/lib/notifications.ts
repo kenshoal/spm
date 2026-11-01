@@ -132,6 +132,14 @@ export function describeNotification(notification: AppNotification, roles: reado
         href: null,
       };
     }
+    case "event_cancellation_recorded": {
+      // SCRUM-57 AC1: to the Organiser and the Coordinator, each linked to the page they can open.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `${name.trim()} has been cancelled.` : "Your event has been cancelled.",
+        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : `/event-requests/${id}/edit`),
+      };
+    }
     case "event_changed": {
       // SCRUM-38 AC4: the dates of an event the Attendee registered for changed.
       const name = notification.payload.event_name;

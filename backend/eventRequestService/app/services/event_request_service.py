@@ -613,6 +613,28 @@ class EventRequestService:
             )
             return []
 
+    def notify_owners_of_cancellation(self, event_request: EventRequestResponse) -> None:
+        """SCRUM-57 AC1: a saved cancellation reaches the Organiser and the Coordinator."""
+        recipient_ids = [event_request.organiser_id]
+        try:
+            coordinator_id = self.repository.latest_coordinator_id(event_request.id)
+        except SupabaseRepositoryError:
+            # The cancellation is already saved; tell the Organiser anyway.
+            logger.warning(
+                "Could not find the coordinator of event request %s to tell them "
+                "it was cancelled",
+                event_request.id,
+                exc_info=True,
+            )
+            coordinator_id = None
+        if coordinator_id is not None and coordinator_id not in recipient_ids:
+            recipient_ids.append(coordinator_id)
+        self.notification_client.notify_event_cancellation_recorded(
+            event_request_id=event_request.id,
+            event_name=event_request.event_name,
+            recipient_ids=recipient_ids,
+        )
+
     def notify_attendees_of_cancellation(self, event_request: EventRequestResponse) -> None:
         """SCRUM-38 AC4: a saved cancellation reaches every registered Attendee."""
         attendee_ids = self._registered_attendee_ids(event_request.id)
