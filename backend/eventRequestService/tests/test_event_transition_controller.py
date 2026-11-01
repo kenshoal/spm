@@ -351,6 +351,7 @@ def test_transitions_require_bearer_session(path: str) -> None:
 )
 # Purpose: Only coordinators may call the transition endpoints — organisers and
 # operations managers are refused even on requests they can read.
+# SCRUM-27 AC2-N3 (negative): the Lead and an Organiser cannot cancel or complete an event (Q&A #132)
 def test_transitions_require_coordinator_role(
     monkeypatch: pytest.MonkeyPatch,
     roles: list[str],

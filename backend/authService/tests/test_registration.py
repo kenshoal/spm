@@ -193,6 +193,7 @@ def test_current_user_verifies_supabase_access_token(
     supabase.auth.get_user.assert_called_once_with("access-token")
 
 
+# SCRUM-27 AC3-H3 (happy): every role a person holds is returned, the first as their main role
 def test_current_user_returns_all_roles(client: TestClient, supabase: Mock) -> None:
     supabase.auth.get_user.return_value = SimpleNamespace(
         user=SimpleNamespace(
@@ -212,6 +213,7 @@ def test_current_user_returns_all_roles(client: TestClient, supabase: Mock) -> N
     ]
 
 
+# SCRUM-27 AC1-H1, AC3-H4 (happy): roles come from the staff roles table, all of them, ahead of the sign-up metadata
 def test_current_user_reads_roles_from_staff_roles_table(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -243,6 +245,7 @@ def test_current_user_reads_roles_from_staff_roles_table(
 
 
 @pytest.mark.parametrize("app_metadata", [{}, None])
+# SCRUM-27 AC1-P8 (partition): a person with no role is an attendee
 def test_current_user_defaults_role_to_attendee(
     client: TestClient, supabase: Mock, app_metadata: dict | None
 ) -> None:
@@ -259,6 +262,7 @@ def test_current_user_defaults_role_to_attendee(
     assert response.json()["roles"] == ["attendee"]
 
 
+# SCRUM-27 AC1-H2 (happy): an admin assigns a role
 def test_admin_assigns_role(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -306,6 +310,7 @@ def test_admin_assigns_role(
     )
 
 
+# SCRUM-27 AC2-H1 (happy): the Event Coordinator Lead gives someone the Event Coordinator role
 def test_operations_manager_assigns_event_coordinator(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -431,6 +436,7 @@ def test_admin_assigns_safety_officer_role(
         ("attendee", None),
     ],
 )
+# SCRUM-27 AC1-N6, AC2-N7 (negative): only an admin can assign roles; the Lead cannot assign Technical Support or any role but Event Coordinator
 def test_admin_endpoint_requires_admin_role(
     client: TestClient, supabase: Mock, admin: Mock, caller_role: str, app_metadata
 ) -> None:
@@ -454,6 +460,7 @@ def test_admin_endpoint_requires_admin_role(
     admin.auth.admin.update_user_by_id.assert_not_called()
 
 
+# SCRUM-27 AC1-N7 (negative): assigning a role needs a session
 def test_admin_endpoint_requires_authentication(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -465,6 +472,7 @@ def test_admin_endpoint_requires_authentication(
     admin.auth.admin.update_user_by_id.assert_not_called()
 
 
+# SCRUM-27 AC1-N8 (negative): an unknown role cannot be assigned
 def test_admin_endpoint_rejects_invalid_role(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -614,6 +622,7 @@ COORDINATOR_EMAILS = {"coord-a": "alex@example.com", "coord-b": "blair@example.c
 
 
 # Purpose: SCRUM-14 — an Operations Manager can list coordinators to choose from.
+# SCRUM-27 AC2-H2 (happy): the Lead lists coordinators to choose from
 def test_operations_manager_lists_event_coordinators(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:
@@ -642,6 +651,7 @@ def test_operations_manager_lists_event_coordinators(
 
 
 # Purpose: An Operations Manager may list coordinators only, not other staff roles.
+# SCRUM-27 AC2-N1 (negative): the Lead cannot list the holders of another role
 def test_operations_manager_cannot_list_other_roles(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:

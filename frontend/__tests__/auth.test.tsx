@@ -35,6 +35,7 @@ test("allows an authenticated Event Organiser into the event-request workspace",
   expect(session.redirect).not.toHaveBeenCalled();
 });
 
+// SCRUM-27 AC1-X4 (cross-cutting): a signed-in user without the Organiser role is turned away from the event-request pages
 test("redirects a signed-in user without the organiser role", async () => {
   session.get.mockReturnValue({ value: "valid-token" });
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
@@ -98,6 +99,7 @@ test("stores a verified login in an HTTP-only cookie", async () => {
 });
 
 // Purpose: A coordinator-only account must land in the workspace it can actually access.
+// SCRUM-27 AC1-X5 (cross-cutting): a coordinator lands in the coordination workspace after login
 test("redirects a coordinator to assigned event requests after login", async () => {
   vi.stubGlobal("fetch", vi.fn()
     .mockResolvedValueOnce({
@@ -115,6 +117,7 @@ test("redirects a coordinator to assigned event requests after login", async () 
 });
 
 // Purpose: Multi-role and unsupported accounts receive a deterministic safe destination.
+// SCRUM-27 AC3-P3 (partition): several roles give a deterministic landing workspace
 test("selects the default workspace from verified roles", () => {
   expect(workspaceForRoles(["event_coordinator", "event_organiser"])).toBe("/event-requests");
   expect(workspaceForRoles(["event_coordinator"])).toBe("/coordination/requests");

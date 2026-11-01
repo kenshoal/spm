@@ -49,6 +49,7 @@ def headers(caller_id: str = "ops-1") -> dict[str, str]:
 
 
 # Purpose: Confirms an Operations Manager can assign a Coordinator.
+# SCRUM-27 AC2-H3 (happy): the Lead assigns a coordinator to a submitted request
 def test_assign_coordinator_to_submitted_request() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -167,6 +168,7 @@ def test_atomic_assignment_target_role_rejection_returns_conflict() -> None:
 
 
 # Purpose: Reassignment inserts a new row rather than overwriting, preserving history.
+# SCRUM-27 AC2-H4 (happy): the Lead can reassign, keeping the history
 def test_reassignment_preserves_history_and_get_returns_latest() -> None:
     event_requests = FakeEventRequestRepository()
     with make_client(event_requests) as client:
@@ -220,6 +222,7 @@ def test_requires_bearer_session() -> None:
 
 
 # Purpose: Refuses assignment for a caller who is not an Operations Manager.
+# SCRUM-27 AC1-N4 (negative): only the Lead can assign a coordinator
 def test_assign_coordinator_requires_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -259,6 +262,7 @@ def test_assign_coordinator_requires_operations_manager_role(
 
 
 # Purpose: Allows assignment when any caller role is Event Operations Manager.
+# SCRUM-27 AC2-H6 (happy): the Lead role is recognised among a person's other roles
 def test_assign_coordinator_allows_event_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -341,6 +345,7 @@ def test_awaiting_assignment_excludes_drafts() -> None:
 
 
 # Purpose: Confirms the queue is closed to non-Operations Manager callers.
+# SCRUM-27 AC1-N5 (negative): only the Lead can read the awaiting-assignment queue
 def test_awaiting_assignment_requires_operations_manager_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

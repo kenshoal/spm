@@ -26,6 +26,7 @@ const venue: Venue = {
 };
 
 // Purpose: SCRUM-30 AC1 — a new venue form asks for every catalogue attribute.
+// SCRUM-30 AC1-H6 (happy): the new venue form asks for every catalogue attribute and offers no status
 test("new venue form offers every attribute and no status", () => {
   render(<VenueForm />);
 
@@ -41,6 +42,7 @@ test("new venue form offers every attribute and no status", () => {
 });
 
 // Purpose: SCRUM-30 AC2 — editing starts from the venue's current attributes.
+// SCRUM-30 AC2-H6 (happy): editing starts from the venue's current attributes
 test("edit form is prefilled with the current attributes", () => {
   render(<VenueForm venue={venue} />);
 
@@ -61,6 +63,7 @@ test("edit form is prefilled with the current attributes", () => {
 // Uses "-3" rather than "abc": a number input sanitizes non-numeric text to "" in
 // the DOM regardless of which value set it, so only a syntactically-numeric-but-
 // invalid string can distinguish "echoed the typed text" from "fell back to venue".
+// SCRUM-30 AC1-N10 (negative): an invalid capacity stays as typed after a refused edit
 test("an invalid capacity echoed after a failed edit submission overrides the stored value", async () => {
   vi.mocked(updateVenue).mockResolvedValue({
     message: "Check the highlighted fields.",

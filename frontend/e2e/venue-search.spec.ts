@@ -4,6 +4,7 @@ const VENUE_API = "http://127.0.0.1:8105";
 
 // Purpose: SCRUM-9 AC2–AC4 — results match every filter, never fall below the
 // requested capacity, and exclude blocked venues.
+// SCRUM-9 AC2-X1 (cross-cutting): a coordinator's results match every filter, never fall below the capacity and exclude blocked venues
 test("coordinator filters venues by capacity and facilities", async ({ page, request }) => {
   const seed = (data: object) => request.post(`${VENUE_API}/__seed`, { data });
   await seed({ name: "Search Big Hall", location: "Search Wing", max_capacity: 300, facilities: ["Projector", "Stage"], supported_layouts: ["theatre"] });
@@ -28,6 +29,7 @@ test("coordinator filters venues by capacity and facilities", async ({ page, req
 });
 
 // Purpose: SCRUM-27 — organisers cannot search the internal venue catalogue.
+// SCRUM-9 AC6-X1 (cross-cutting): an Event Organiser cannot open venue search
 test("organisers cannot open venue search", async ({ page }) => {
   await page.context().addCookies([{ name: "cs_access_token", value: "test-session", url: "http://127.0.0.1:3100" }]);
   await page.goto("/venues/search");
@@ -35,6 +37,7 @@ test("organisers cannot open venue search", async ({ page }) => {
 });
 
 // Purpose: An expired venue-service session goes to sign-in, not an outage banner.
+// SCRUM-9 AC6-X2 (cross-cutting): an expired session goes to sign-in, not to results
 test("an expired venue-service session redirects to sign-in", async ({ page }) => {
   await page.context().addCookies([{ name: "cs_access_token", value: "other-coordinator-session", url: "http://127.0.0.1:3100" }]);
   await page.goto("/venues/search?required_capacity=10");

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // Purpose: SCRUM-30 AC1–AC2 — venue staff add a venue, see its attributes, then update it.
+// SCRUM-30 AC1-H8 (happy, E2E): Venue Staff add a venue, see its attributes and update it (AC1, AC2)
 test("venue staff add and update a venue", async ({ page }) => {
   await page.goto("/auth");
   await page.getByLabel("Email").fill("venue@example.com");
@@ -36,6 +37,7 @@ test("venue staff add and update a venue", async ({ page }) => {
 });
 
 // Purpose: SCRUM-27 — only Venue Staff can maintain the catalogue.
+// SCRUM-30 AC1-X7 (cross-cutting): an Event Coordinator cannot open the catalogue
 test("coordinators cannot open the venue catalogue", async ({ page }) => {
   await page.context().addCookies([{ name: "cs_access_token", value: "coordinator-session", url: "http://127.0.0.1:3100" }]);
   await page.goto("/venues/new");

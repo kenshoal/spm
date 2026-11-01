@@ -154,6 +154,7 @@ def test_other_roles_cannot_list_technical_support(
 
 # AC4-X1 (cross-cutting): regression — an Operations Manager may still list
 # coordinators only, so technical_support stays refused for them.
+# SCRUM-27 AC2-N2 (negative): the Lead cannot list Technical Support staff
 def test_operations_manager_cannot_list_technical_support(
     client: TestClient, supabase: Mock, admin: Mock
 ) -> None:

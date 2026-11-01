@@ -833,6 +833,7 @@ def test_organiser_header_cannot_bypass_authentication() -> None:
 
 
 # Purpose: Binds stored ownership to the identity verified by authService.
+# SCRUM-27 AC3-H2 (happy): a Lead who is also an Organiser acts as the Organiser, under the verified identity
 def test_verified_identity_overrides_spoofed_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -873,6 +874,7 @@ def test_verified_identity_overrides_spoofed_header(
     [["attendee"], ["admin"], ["event_operations_manager"]],
 )
 # Purpose: Prevents authenticated non-organisers from accessing organiser requests.
+# SCRUM-27 AC1-N3 (negative): an attendee, an admin and the Lead cannot create or change event requests
 def test_event_request_operations_require_organiser_role(
     monkeypatch: pytest.MonkeyPatch,
     roles: list[str],
