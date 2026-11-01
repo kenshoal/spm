@@ -17,12 +17,14 @@ from app.suitability_models import (
 def check_suitability(venue: Venue, request: SuitabilityRequest) -> SuitabilityResult:
     mismatches: list[SuitabilityMismatch] = []
 
-    if request.expected_attendance > venue.max_capacity:
+    # Q&A #112: judged by the chosen layout's own capacity when it has one.
+    capacity = venue.capacity_for(request.required_layout)
+    if request.expected_attendance > capacity:
         mismatches.append(
             SuitabilityMismatch(
                 attribute="capacity",
                 reason=(
-                    f"Venue capacity ({venue.max_capacity}) is below the expected "
+                    f"Venue capacity ({capacity}) is below the expected "
                     f"attendance ({request.expected_attendance})."
                 ),
             )
