@@ -20,6 +20,9 @@ export interface EquipmentRequirement {
   support_note: string | null;
   event_name: string | null;
   event_date_times: string[];
+  /** Hotfix 25 (Q&A #80, #106): false when the Coordinator agreed the event can go ahead without it. */
+  essential?: boolean;
+  essential_note?: string | null;
 }
 
 export interface EquipmentReservation {

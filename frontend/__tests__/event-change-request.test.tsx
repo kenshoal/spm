@@ -7,7 +7,7 @@ import { RequestList } from "@/app/event-requests/request-list";
 import type { EventChangeRequest, EventRequest } from "@/lib/event-requests";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock("@/app/coordination/actions", () => ({ decideEventChangeRequest: vi.fn(), loadEventChangeBookingPlan: vi.fn() }));
+vi.mock("@/app/coordination/actions", () => ({ decideEventChangeRequest: vi.fn(), decideEventChangeRequestPartly: vi.fn(), loadEventChangeBookingPlan: vi.fn() }));
 
 vi.mock("@/app/event-requests/actions", () => ({
   createEventChangeRequest: vi.fn().mockResolvedValue({ submitted: true }),

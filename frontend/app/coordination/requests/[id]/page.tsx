@@ -23,6 +23,7 @@ import { listVenues } from "@/lib/venues";
 import { SUPPORT_STATUSES } from "@/lib/technical-support";
 import { EquipmentRequirementsPanel } from "./equipment-requirements-panel";
 import { EventDetailsForm } from "./event-details-form";
+import { ChangeOrganiserForm, PostponeEventForm, ResumeEventForm } from "./lifecycle-forms";
 import { WaitlistPanel } from "./waitlist-panel";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
@@ -37,6 +38,12 @@ const REGISTRATION_SETTINGS_STATUSES = new Set(["Approved", "Planning", "Safety 
 const DETAILS_EDITABLE_STATUSES = new Set(["Under Review", "Approved", "Planning", "Confirmed"]);
 const BOOKABLE_STATUSES = new Set(["Approved", "Planning"]);
 const HOLDABLE_STATUSES = new Set(["Approved", "Planning", "Safety Review"]);
+// Hotfix 22 (Q&A #69, #121): from these the Coordinator can postpone; Postponed gets a new date.
+const POSTPONABLE_STATUSES = new Set(["Approved", "Planning", "Safety Review", "Confirmed"]);
+// Hotfix 24 (Q&A #59, #61): the Event Organiser can be changed while the event is live.
+const ORGANISER_CHANGEABLE_STATUSES = new Set([
+  "Submitted", "Under Review", "Changes Requested", "Approved", "Planning", "Safety Review", "Confirmed", "Postponed",
+]);
 import { TechnicalSupportLoading, TechnicalSupportPanel } from "./technical-support-panel";
 
 import { StatusHistory, StatusHistoryLoading } from '../../../components/status-history';
@@ -164,6 +171,9 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
             <TransitionButton eventRequestId={request.id} kind="resume-review" />
           </div>
         ) : null}
+        {POSTPONABLE_STATUSES.has(request.status) ? <PostponeEventForm eventRequestId={request.id} /> : null}
+        {request.status === "Postponed" ? <ResumeEventForm eventRequestId={request.id} /> : null}
+        {ORGANISER_CHANGEABLE_STATUSES.has(request.status) ? <ChangeOrganiserForm eventRequestId={request.id} /> : null}
         {coordinatorActions(request.status).length === 0 && !canResumeReview ? (
           <p className="mt-3 text-sm leading-6 text-[#718078]">This request is {request.status.toLowerCase()} — no further actions are available.</p>
         ) : (

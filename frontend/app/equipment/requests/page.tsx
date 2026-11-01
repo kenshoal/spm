@@ -63,6 +63,9 @@ export default async function EquipmentRequestsPage() {
               <li key={requirement.id} className="rounded-2xl border border-[#dce4e0] bg-white p-6">
                 <h2 className="text-lg font-bold text-[#17211d]">{requirement.quantity} × {requirement.equipment_type} <span className="text-sm font-normal text-[#68776f]">for {requirement.event_name ?? "an event"}</span></h2>
                 <p className="mt-1 text-sm text-[#526159]">{REQUIREMENT_STATUS_LABELS[requirement.status]} · {reserved} of {requirement.quantity} reserved</p>
+                {requirement.essential === false ? (
+                  <p className="mt-1 text-sm font-semibold text-[#7a4b0c]">Not essential: the Coordinator has agreed the event can be confirmed without it.{requirement.essential_note ? ` ${requirement.essential_note}` : ""}</p>
+                ) : null}
                 {requirement.technical_requirements ? <p className="mt-1 text-sm text-[#526159]">{requirement.technical_requirements}</p> : null}
                 <div className="mt-4 space-y-4">
                   <AvailabilityForm requirementId={requirement.id} equipmentType={requirement.equipment_type} defaults={defaults} />

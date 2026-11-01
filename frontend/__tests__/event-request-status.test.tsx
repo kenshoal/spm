@@ -35,7 +35,7 @@ function makeRequest(status: EventRequestStatus): EventRequest {
 
 // Purpose: Every backend status is representable — the UI never drops a workflow state.
 // AC5-X8, SCRUM-60 AC6-P2 (cross-cutting): the full status universe retains Safety Review between Planning and Confirmed.
-test("covers all eleven event request statuses", () => {
+test("covers all thirteen event request statuses", () => {
   expect(EVENT_REQUEST_STATUSES).toEqual([
     "Draft",
     "Submitted",
@@ -48,6 +48,8 @@ test("covers all eleven event request statuses", () => {
     "Completed",
     "Cancelled",
     "Rejected",
+    "Withdrawn",
+    "Postponed",
   ]);
 });
 
@@ -59,7 +61,8 @@ test("groups every status into exactly one tab plus all", () => {
 
   expect(groups.all).toHaveLength(EVENT_REQUEST_STATUSES.length);
   const tabbed = [...groups.draft, ...groups.submitted, ...groups["in-progress"], ...groups.completed];
-  expect(tabbed).toHaveLength(EVENT_REQUEST_STATUSES.length - 2);
+  // Cancelled, Rejected and Withdrawn are closed: they show under All only.
+  expect(tabbed).toHaveLength(EVENT_REQUEST_STATUSES.length - 3);
   expect(new Set(tabbed.map((request) => request.status))).toEqual(
     new Set([
       "Draft",
@@ -71,6 +74,7 @@ test("groups every status into exactly one tab plus all", () => {
       "Safety Review",
       "Confirmed",
       "Completed",
+      "Postponed",
     ]),
   );
 });
@@ -114,10 +118,10 @@ test("shows closed statuses only under all", () => {
 });
 
 // Purpose: The coordinator action window excludes terminal statuses.
-test("treats only Completed, Cancelled and Rejected as terminal", () => {
+test("treats only Completed, Cancelled, Rejected and Withdrawn as terminal", () => {
   const terminal = EVENT_REQUEST_STATUSES.filter(isTerminalStatus);
 
-  expect(terminal).toEqual(["Completed", "Cancelled", "Rejected"]);
+  expect(terminal).toEqual(["Completed", "Cancelled", "Rejected", "Withdrawn"]);
 });
 
 // Purpose: The progress stepper marks the request's current milestone for screen readers.

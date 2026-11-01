@@ -1,5 +1,6 @@
 import { unstable_rethrow } from "next/navigation";
 import { getRegistrationInfo, type RegistrationInfo } from "@/lib/registration-info";
+import { vipPlaces } from "@/lib/vip-places";
 import { RegistrationSettingsForm } from "../coordination/requests/[id]/registration-settings-form";
 import { RegistrationTable } from "./registration-table";
 import { ManualRegistrationForm } from "../coordination/requests/[id]/manual-registration-form";
@@ -48,7 +49,7 @@ export async function RegistrationInfoPanel({ eventRequestId, canAddAttendee = f
           capacity={info.registration_capacity}
         />
       ) : null}
-      {canAddAttendee ? <ManualRegistrationForm eventRequestId={eventRequestId} /> : null}
+      {canAddAttendee ? <ManualRegistrationForm eventRequestId={eventRequestId} vipPlaces={vipPlaces(info)} /> : null}
     </section>
   );
 }

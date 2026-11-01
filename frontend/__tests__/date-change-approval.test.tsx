@@ -6,7 +6,7 @@ import type { EventChangeBookingPlan, EventChangeRequest } from "@/lib/event-req
 
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
-vi.mock("@/app/coordination/actions", () => ({ decideEventChangeRequest: vi.fn(), loadEventChangeBookingPlan: vi.fn(), previewEventChangeDatePlan: vi.fn() }));
+vi.mock("@/app/coordination/actions", () => ({ decideEventChangeRequest: vi.fn(), decideEventChangeRequestPartly: vi.fn(), loadEventChangeBookingPlan: vi.fn(), previewEventChangeDatePlan: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 const pending: EventChangeRequest = {
   id: "35000000-0000-4000-8000-000000000031", event_request_id: "35000000-0000-4000-8000-000000000021", organiser_id: "organiser-1",

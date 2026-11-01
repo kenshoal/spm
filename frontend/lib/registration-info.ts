@@ -19,6 +19,8 @@ export interface EventRegistration {
 export interface RegistrationInfo {
   event_request_id: string;
   registration_capacity: number | null;
+  /** Hotfix 23: seats of the booked venues; a VIP may be added up to this (Q&A #99). */
+  venue_capacity?: number | null;
   registration_opens_at?: string | null;
   registration_closes_at?: string | null;
   registered: number;

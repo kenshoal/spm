@@ -1,5 +1,6 @@
 import type { EventChangeRequest } from "@/lib/event-requests";
 import { AppliedBookingPlan } from "./applied-booking-plan";
+import { RefusedChanges } from "./refused-changes";
 import { formatDateTime } from "@/lib/event-requests";
 
 const labels: Record<string, string> = {
@@ -23,7 +24,8 @@ export function ChangeRequestHistory({ requests }: { requests: EventChangeReques
             <ul className="mt-3 space-y-1 text-sm">
               {Object.entries(request.proposed_changes).map(([key, value]) => <li key={key}><strong>{labels[key] ?? key}:</strong> {Array.isArray(value) ? value.map(String).join(", ") : String(value)}</li>)}
             </ul>
-            {request.status === "Approved" ? <AppliedBookingPlan plan={request.applied_booking_plan} /> : null}
+            {request.status === "Approved" || request.status === "Partially Approved" ? <AppliedBookingPlan plan={request.applied_booking_plan} /> : null}
+            <RefusedChanges request={request} />
             {request.decision_reason ? <p className="mt-3 text-sm"><strong>Coordinator reason:</strong> {request.decision_reason}</p> : null}
             {request.status !== "Pending" && request.coordinator_id ? (
               <p className="mt-2 break-words text-sm"><strong>{request.status} by coordinator:</strong> {request.coordinator_id}</p>

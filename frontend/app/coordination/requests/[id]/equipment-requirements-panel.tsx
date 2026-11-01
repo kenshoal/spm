@@ -5,6 +5,7 @@ import {
   type EquipmentRequirement,
 } from "@/lib/equipment-requests";
 import { EquipmentRequirementForm } from "./equipment-requirement-form";
+import { EssentialForm } from "./essential-form";
 
 // Hotfix 7 (SCRUM-33): the event's equipment needs and how far each has got.
 export async function EquipmentRequirementsPanel({ eventRequestId, canRecord }: { eventRequestId: string; canRecord: boolean }) {
@@ -29,6 +30,10 @@ export async function EquipmentRequirementsPanel({ eventRequestId, canRecord }: 
               {" · "}{REQUIREMENT_STATUS_LABELS[requirement.status]}
               {requirement.technical_requirements ? <p className="mt-1 text-[#526159]">{requirement.technical_requirements}</p> : null}
               {requirement.support_note ? <p className="mt-1 text-[#526159]">Technical Support: {requirement.support_note}</p> : null}
+              {requirement.essential === false ? (
+                <p className="mt-1 font-semibold text-[#7a4b0c]">Not essential: the event can be confirmed without it.{requirement.essential_note ? ` ${requirement.essential_note}` : ""}</p>
+              ) : null}
+              {canRecord ? <EssentialForm eventRequestId={eventRequestId} requirementId={requirement.id} essential={requirement.essential !== false} /> : null}
             </li>
           ))}
         </ul>
