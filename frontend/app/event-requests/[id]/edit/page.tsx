@@ -11,6 +11,7 @@ import {
 import { AppShell, workspaceLinks } from "../../../components/app-shell";
 import { ArrowIcon } from "../../../components/icons";
 import { EventRequestForm } from "../../new/event-request-form";
+import { EventArrangementsPanel } from "../../../components/event-arrangements";
 import { RequestDetails } from "../../../components/request-details";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { ClarificationResponseForm } from "../clarification-response-form";
@@ -63,6 +64,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
         <div className="mb-6 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">{shared ? SHARED_NOTICE : "Your coordinator requested clarification. The submitted request remains read-only; respond below so review can continue."}</div>
         <RequestDetails request={result.request} coordinatorAssigned />
         <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
+        <EventArrangementsPanel eventRequestId={id} />
         {!shared ? <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} /></Suspense> : null}
         <div className="mt-5"><ReviewDecisionHistory decisions={decisions} unavailable={decisionResult.failed} /></div>
         <div className="mt-5">
@@ -89,7 +91,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
         .catch(() => ({ requests: [], failed: true as const })),
     ]);
     const hasPendingChange = changeResult.requests.some((change) => change.status === "Pending");
-    const canRequestChange = (result.request.status === "Approved" || result.request.status === "Planning")
+    const canRequestChange = (result.request.status === "Confirmed" || result.request.status === "Approved" || result.request.status === "Planning")
       && !shared && !hasPendingChange && !changeResult.failed;
     return (
       <div className="mx-auto max-w-4xl">
@@ -101,6 +103,7 @@ async function EditDraft({ id, viewerId }: { id: string; viewerId: string }) {
           action={canRequestChange ? <ChangeRequestDialog eventRequestId={id} /> : null}
         />
         <StatusHistory entries={result.history} unavailable={result.historyUnavailable} />
+        <EventArrangementsPanel eventRequestId={id} />
         {!shared ? <Suspense fallback={<RegistrationReviewsLoading />}><RegistrationReviews eventRequestId={id} /></Suspense> : null}
         {!shared ? <Suspense fallback={<RegistrationInfoLoading />}><RegistrationInfoPanel eventRequestId={id} /></Suspense> : null}
         <div className="mt-5"><ReviewDecisionHistory decisions={decisionResult.decisions} unavailable={decisionResult.failed} /></div>

@@ -57,6 +57,18 @@ export function VenueForm({ venue }: { venue?: Venue }) {
           ))}
         </div>
       </fieldset>
+      <fieldset>
+        <legend className={labelClass}>Capacity per layout</legend>
+        <p className="mt-1 text-xs text-[#718078]">Optional. A supported layout left blank uses the maximum capacity.</p>
+        <div className="mt-2 grid gap-3 sm:grid-cols-3">
+          {ROOM_LAYOUTS.map((layout) => (
+            <label key={layout} className="block text-sm text-[#273832]">{layoutLabel(layout)}
+              <input name={`layout_capacity_${layout}`} type="number" min={1} step={1} defaultValue={values ? values.layout_capacities[layout] ?? "" : venue?.layout_capacities?.[layout] ?? ""} className={inputClass} />
+            </label>
+          ))}
+        </div>
+        {errors.layout_capacities ? <p className="mt-1 text-sm text-[#a23939]">{errors.layout_capacities}</p> : null}
+      </fieldset>
       <p className="text-xs text-[#718078]">Every venue is bookable from 07:00 to 24:00 in 15-minute steps.</p>
       {state.message ? <p role="alert" className="rounded-xl bg-[#fff4f3] px-4 py-3 text-sm text-[#8e3d35]">{state.message}</p> : null}
       <button type="submit" disabled={isPending} className="min-h-11 rounded-xl bg-[#0f6b5b] px-5 text-sm font-bold text-white hover:bg-[#0b5b4d] disabled:opacity-60">

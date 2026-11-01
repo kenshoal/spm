@@ -40,7 +40,7 @@ export function ChangeRequestPanel({ requests, eventStatus }: {
   requests: EventChangeRequest[];
   eventStatus?: EventRequestStatus;
 }) {
-  const canDecide = eventStatus === "Approved" || eventStatus === "Planning";
+  const canDecide = eventStatus === "Confirmed" || eventStatus === "Approved" || eventStatus === "Planning";
   if (requests.length === 0) return null;
   return (
     <section aria-labelledby="change-requests-title" className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">

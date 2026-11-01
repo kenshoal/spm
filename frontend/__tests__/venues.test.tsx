@@ -72,6 +72,7 @@ test("an invalid capacity echoed after a failed edit submission overrides the st
       facilities: venue.facilities.join(", "),
       accessibility_features: venue.accessibility_features.join(", "),
       supported_layouts: venue.supported_layouts,
+      layout_capacities: {},
       setup_minutes: String(venue.setup_minutes),
       turnaround_minutes: String(venue.turnaround_minutes),
       status: venue.status,

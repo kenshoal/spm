@@ -10,6 +10,7 @@ import {
 import { listVenues } from "@/lib/venues";
 import { CancelBookingButton } from "./cancel-booking-button";
 import { RequestReplacementForm } from "./request-replacement-form";
+import { RequestVenueForm } from "./request-venue-form";
 import { timeRangeLabel } from "@/lib/venue-options";
 
 // Status is written out, never conveyed by colour alone.
@@ -88,7 +89,7 @@ export function VenueBookingsLoading() {
 // Every venue booking of the event and where each stands (SCRUM-61). A failed
 // load is an error, never an empty list; a failed venue-name load still lists
 // the bookings.
-export async function VenueBookingsPanel({ eventRequestId }: { eventRequestId: string }) {
+export async function VenueBookingsPanel({ eventRequestId, canRequest = false }: { eventRequestId: string; canRequest?: boolean }) {
   const [bookings, venues, reviews] = await Promise.all([
     listEventBookings(eventRequestId).then((value) => ({ value, failed: false as const })).catch(() => ({ value: [] as EventBooking[], failed: true as const })),
     listVenues().catch(() => []),
@@ -113,6 +114,7 @@ export async function VenueBookingsPanel({ eventRequestId }: { eventRequestId: s
           />
         </>
       )}
+      {canRequest ? <RequestVenueForm eventRequestId={eventRequestId} venues={venues.map(({ id, name }) => ({ id, name }))} /> : null}
     </section>
   );
 }

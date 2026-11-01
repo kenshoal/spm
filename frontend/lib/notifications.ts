@@ -108,7 +108,7 @@ export function describeNotification(notification: AppNotification, roles: reado
       const capacity = notification.payload.capacity;
       return {
         message: typeof name === "string" && name.trim() ? `Registration for ${name.trim()} is full.` : "Registration for your event is full.",
-        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : `/event-requests/${id}/edit`),
+        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : !roles.includes("event_organiser") ? null : `/event-requests/${id}/edit`),
         ...(typeof capacity === "number" ? { detail: `All ${capacity} places are taken.` } : {}),
       };
     }
@@ -344,6 +344,14 @@ export function describeNotification(notification: AppNotification, roles: reado
           ? `${event} has been cancelled, so you're off its waiting list.`
           : "An event you were waiting for has been cancelled, so you're off its waiting list.",
         href: null,
+      };
+    }
+    case "event_no_longer_confirmed": {
+      // To the Organiser: an applied change took the event back to planning (Q&A #105).
+      const name = notification.payload.event_name;
+      return {
+        message: `${typeof name === "string" && name.trim() ? name.trim() : "Your event"} is no longer confirmed. A change means its arrangements are being reviewed again.`,
+        href: id ? `/event-requests/${id}/edit` : null,
       };
     }
     case "safety_changes_requested":

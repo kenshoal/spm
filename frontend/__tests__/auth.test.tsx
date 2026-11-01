@@ -121,7 +121,9 @@ test("selects the default workspace from verified roles", () => {
   expect(workspaceForRoles(["event_operations_manager"])).toBe("/operations/assignments");
   expect(workspaceForRoles(["venue_staff"])).toBe("/venues");
   expect(workspaceForRoles(["technical_support"])).toBe("/equipment");
-  expect(workspaceForRoles(["attendee"])).toBe("/unauthorised");
+  // Hotfix 5: attendees have their own workspace now.
+  expect(workspaceForRoles(["attendee"])).toBe("/events");
+  expect(workspaceForRoles(["admin"])).toBe("/unauthorised");
 });
 
 // Purpose: A role lookup failure must not create a session whose destination is unknown.

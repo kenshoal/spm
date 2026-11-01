@@ -40,7 +40,8 @@ test("rejects the named Pending proposal and keeps a failed submission recoverab
 
 // AC4-P2, AC4-P3 (partition): a still-Pending proposal cannot expose rejection after current event eligibility has changed.
 test.each([
-  ["AC4-P2", "Confirmed"], ["AC4-P3", "Safety Review"],
+  // Hotfix 9 made Confirmed changeable (Q&A #8), so a finished event stands in for AC4-P2.
+  ["AC4-P2", "Completed"], ["AC4-P3", "Safety Review"],
 ] as const)("%s keeps rejection unavailable when the stored event is %s", (_id, eventStatus) => {
   render(<ChangeRequestPanel {...{ requests: [pending], eventStatus }} />);
   expect(screen.getByText(pending.explanation)).toBeDefined();

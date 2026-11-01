@@ -1,3 +1,4 @@
+import { ROOM_LAYOUTS } from "@/lib/venue-options";
 import { beforeEach, expect, test, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ redirect: vi.fn(), revalidatePath: vi.fn() }));
@@ -58,6 +59,7 @@ test("creates a venue and redirects to the venue list", async () => {
       facilities: [],
       accessibility_features: [],
       supported_layouts: [],
+      layout_capacities: {},
       setup_minutes: 0,
       turnaround_minutes: 0,
     }),
@@ -82,6 +84,7 @@ test("an invalid form never calls fetch and echoes the raw values", async () => 
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
+    layout_capacities: Object.fromEntries(ROOM_LAYOUTS.map((layout) => [layout, ""])),
 
     setup_minutes: "",
 
@@ -104,6 +107,7 @@ test("a 403 explains that only Venue Staff can change the catalogue", async () =
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
+    layout_capacities: Object.fromEntries(ROOM_LAYOUTS.map((layout) => [layout, ""])),
 
     setup_minutes: "",
 
@@ -135,6 +139,7 @@ test("a backend 422 is worded without referring to highlighted fields", async ()
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
+    layout_capacities: Object.fromEntries(ROOM_LAYOUTS.map((layout) => [layout, ""])),
 
     setup_minutes: "",
 
@@ -166,6 +171,7 @@ test("returns a retryable error when the venue service cannot be reached", async
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
+    layout_capacities: Object.fromEntries(ROOM_LAYOUTS.map((layout) => [layout, ""])),
 
     setup_minutes: "",
 

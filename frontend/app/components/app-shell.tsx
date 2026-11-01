@@ -30,12 +30,16 @@ export function workspaceLinks(roles: string[]): NavLink[] {
   }
   if (roles.includes("technical_support")) {
     links.push({ href: "/equipment", label: "Equipment" });
+    links.push({ href: "/equipment/requests", label: "Equipment requests" });
   }
   if (roles.includes("venue_staff") || roles.includes("technical_support")) {
     links.push({ href: "/arrangement-reviews", label: "Arrangement reviews" });
   }
   if (roles.includes("safety_officer")) {
     links.push({ href: "/safety", label: "Safety checks" });
+  }
+  if (roles.includes("attendee")) {
+    links.push({ href: "/events", label: "Events" });
   }
   // Last, so the logo (the first link) still opens the user's main workspace.
   if (links.length > 0) {
