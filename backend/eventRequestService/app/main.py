@@ -48,6 +48,7 @@ from app.services.event_request_service import (
     ClarificationResponseNotAllowedError,
     EventChangeRequestConflictError,
     EventChangeRequestForbiddenError,
+    EventDetailsConflictError,
     EventRequestForbiddenError,
     EventRequestNotDraftError,
     EventRequestNotFoundError,
@@ -79,9 +80,12 @@ from app.services.registration_service import (
     AlreadyRegisteredError,
     AttendeeAlreadyRegisteredError,
     AttendeeNotFoundError,
+    CapacityBelowTakenError,
     CapacityNotSetError,
     NotEventDayError,
     RegistrationService,
+    RegistrationSettingsInvalidError,
+    RegistrationSettingsNotAllowedError,
 )
 from app.services.registration_window_notifier import (
     build_registration_window_notifier,
@@ -350,6 +354,54 @@ def create_app(
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"detail": "Event not found", "code": "event_not_found"},
+        )
+
+    @application.exception_handler(EventDetailsConflictError)
+    async def event_details_conflict(
+        request: Request, error: EventDetailsConflictError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This event changed or cannot be edited now. Refresh and try again.",
+                "code": "event_details_conflict",
+            },
+        )
+
+    @application.exception_handler(CapacityBelowTakenError)
+    async def capacity_below_taken(
+        request: Request, error: CapacityBelowTakenError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Capacity cannot be below the places already taken",
+                "code": "capacity_below_taken",
+            },
+        )
+
+    @application.exception_handler(RegistrationSettingsNotAllowedError)
+    async def registration_settings_not_allowed(
+        request: Request, error: RegistrationSettingsNotAllowedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Registration settings cannot change at this stage",
+                "code": "registration_settings_not_allowed",
+            },
+        )
+
+    @application.exception_handler(RegistrationSettingsInvalidError)
+    async def registration_settings_invalid(
+        request: Request, error: RegistrationSettingsInvalidError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "detail": "Registration settings are invalid",
+                "code": "registration_settings_invalid",
+            },
         )
 
     @application.exception_handler(RegistrationNotOpenError)

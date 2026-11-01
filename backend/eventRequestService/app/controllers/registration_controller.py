@@ -18,6 +18,8 @@ from app.models.registration import (
     PublicEventResponse,
     RegistrationInfoResponse,
     RegistrationResponse,
+    RegistrationSettingsResponse,
+    RegistrationSettingsUpdate,
 )
 from app.repositories.coordinator_assignment_repository import (
     SupabaseCoordinatorAssignmentRepository,
@@ -138,6 +140,29 @@ def get_registration_info(
     if set(caller.roles).isdisjoint({EVENT_ORGANISER_ROLE, EVENT_COORDINATOR_ROLE}):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     return service.registration_info(str(event_request_id), caller.id, caller.roles)
+
+
+@management_router.put(
+    "/{event_request_id}/registration-settings",
+    response_model=RegistrationSettingsResponse,
+)
+def set_registration_settings(
+    event_request_id: UUID,
+    payload: RegistrationSettingsUpdate,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+    now: NowDependency,
+) -> dict:
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return service.set_registration_settings(
+        str(event_request_id),
+        caller.id,
+        payload.registration_opens_at,
+        payload.registration_closes_at,
+        payload.registration_capacity,
+        now,
+    )
 
 
 @management_router.post(

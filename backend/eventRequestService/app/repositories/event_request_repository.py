@@ -59,6 +59,18 @@ class EventRequestRepository(Protocol):
 
     def get_by_id(self, event_request_id: str) -> dict[str, Any] | None: ...
 
+    def update_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        expected_updated_at: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any]: ...
+
+    def get_event_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]: ...
+
+    def cancellation_staff_ids(self, event_request_id: str) -> list[str]: ...
+
     def get_by_ids(
         self, event_request_ids: list[str]
     ) -> list[dict[str, Any]]: ...
@@ -679,6 +691,109 @@ class SupabaseEventRequestRepository:
             },
         )
         return [row["attendee_id"] for row in rows]
+
+    def update_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        expected_updated_at: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "update_event_by_coordinator",
+            {
+                "p_event_request_id": event_request_id,
+                "p_coordinator_id": coordinator_id,
+                "p_expected_updated_at": expected_updated_at,
+                "p_changes": changes,
+            },
+        )
+
+    def _read_rows(self, path: str, params: dict[str, str]) -> list[dict[str, Any]]:
+        try:
+            response = self._client.get(path, params=params)
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
+
+    def get_event_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]:
+        """What is booked and reserved for an event (hotfix 14)."""
+        bookings = self._read_rows(
+            "/venue_booking_requests",
+            {
+                "select": "start_date,end_date,start_minute,end_minute,venues(name,location)",
+                "event_request_id": f"eq.{event_request_id}",
+                "status": "eq.approved",
+                "order": "start_date.asc,start_minute.asc",
+            },
+        )
+        requirements = self._read_rows(
+            "/equipment_requirements",
+            {
+                "select": "id,equipment_type,quantity",
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "recorded_at.asc,id.asc",
+            },
+        )
+        reservations = self._read_rows(
+            "/equipment_reservations",
+            {
+                "select": "requirement_id,quantity",
+                "event_request_id": f"eq.{event_request_id}",
+            },
+        )
+        reserved: dict[str, int] = {}
+        for row in reservations:
+            reserved[row["requirement_id"]] = (
+                reserved.get(row["requirement_id"], 0) + row["quantity"]
+            )
+        return {
+            "venues": [
+                {
+                    "name": (row.get("venues") or {}).get("name"),
+                    "location": (row.get("venues") or {}).get("location"),
+                    "start_date": row["start_date"],
+                    "end_date": row["end_date"],
+                    "start_minute": row["start_minute"],
+                    "end_minute": row["end_minute"],
+                }
+                for row in bookings
+            ],
+            "equipment": [
+                {
+                    "equipment_type": row["equipment_type"],
+                    "quantity": row["quantity"],
+                    "reserved": reserved.get(row["id"], 0),
+                }
+                for row in requirements
+            ],
+        }
+
+    def cancellation_staff_ids(self, event_request_id: str) -> list[str]:
+        """Staff responsible for the arrangements a cancellation just released:
+        who approved each booking and who made each reservation (SCRUM-57 AC1b)."""
+        bookings = self._read_rows(
+            "/venue_booking_requests",
+            {
+                "select": "decided_by",
+                "event_request_id": f"eq.{event_request_id}",
+                "status": "eq.cancelled",
+                "decided_by": "not.is.null",
+            },
+        )
+        releases = self._read_rows(
+            "/equipment_reservation_releases",
+            {
+                "select": "created_by",
+                "event_request_id": f"eq.{event_request_id}",
+                "reason": "eq.Event cancelled",
+            },
+        )
+        staff = {row["decided_by"] for row in bookings} | {row["created_by"] for row in releases}
+        return sorted(staff)
 
     def _call_rpc(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:

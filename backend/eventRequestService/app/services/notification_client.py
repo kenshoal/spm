@@ -300,6 +300,22 @@ class NotificationClient:
                 payload={"event_request_id": event_request_id, "event_name": event_name},
             )
 
+    def notify_event_no_longer_confirmed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        organiser_id: str,
+        version: str,
+    ) -> None:
+        """Tell the Organiser an applied change took the event back to planning (#105)."""
+        self._post_notice(
+            "event_no_longer_confirmed",
+            recipient_id=organiser_id,
+            key=f"event-no-longer-confirmed:{event_request_id}:{version}",
+            payload={"event_request_id": event_request_id, "event_name": event_name},
+        )
+
     def notify_event_changed(
         self,
         *,

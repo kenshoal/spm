@@ -42,6 +42,18 @@ class AttendeeAlreadyRegisteredError(AlreadyRegisteredError):
     """SCRUM-41: the same refusal, worded for the coordinator."""
 
 
+class CapacityBelowTakenError(Exception):
+    """Capacity cannot go below the places already taken (hotfix 4)."""
+
+
+class RegistrationSettingsNotAllowedError(Exception):
+    """The event's status does not allow changing registration settings (hotfix 4)."""
+
+
+class RegistrationSettingsInvalidError(Exception):
+    """The database refused the settings as invalid (hotfix 4)."""
+
+
 class AttendeeNotFoundError(Exception):
     """No account with that email holds the attendee role."""
 
@@ -94,9 +106,13 @@ class RegistrationService:
         attended = sum(
             1 for r in rows if r["status"] == "Registered" and r.get("attended_at")
         )
+        emails = self._attendee_emails(event_id)
+        rows = [{**row, "attendee_email": emails.get(row["id"])} for row in rows]
         return {
             "event_request_id": event_id,
             "registration_capacity": event.get("registration_capacity"),
+            "registration_opens_at": event.get("registration_opens_at"),
+            "registration_closes_at": event.get("registration_closes_at"),
             "registered": registered,
             "withdrawn": sum(1 for r in rows if r["status"] == "Withdrawn"),
             "places_available": places_remaining(event, registered),
@@ -104,6 +120,52 @@ class RegistrationService:
             "absent": registered - attended,
             "registrations": rows,
         }
+
+    def _attendee_emails(self, event_id: str) -> dict[str, str]:
+        """Emails help staff but are not worth failing the list over."""
+        try:
+            return self.repository.attendee_emails(event_id)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not read attendee emails for event request %s",
+                event_id,
+                exc_info=True,
+            )
+            return {}
+
+    def _event_venues(self, event_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Venues add to the public view; a failed lookup must not hide the event."""
+        try:
+            return self.repository.list_event_venues(event_ids)
+        except SupabaseRepositoryError:
+            logger.warning("Could not read event venues", exc_info=True)
+            return {}
+
+    def set_registration_settings(
+        self,
+        event_id: str,
+        coordinator_id: str,
+        opens_at: datetime,
+        closes_at: datetime,
+        capacity: int,
+        now: datetime,
+    ) -> dict[str, Any]:
+        """The database checks assignment, status and places taken under the event
+        lock. An unassigned caller is told the event does not exist (SCRUM-39)."""
+        try:
+            return self.repository.set_registration_settings(
+                event_id, coordinator_id, opens_at, closes_at, capacity, now
+            )
+        except RegistrationRpcError as error:
+            if error.errcode in {NOT_FOUND_ERRCODE, "P0003"}:
+                raise EventNotVisibleError from error
+            if error.errcode == "22023":
+                raise RegistrationSettingsInvalidError from error
+            if error.reason == "capacity below places taken":
+                raise CapacityBelowTakenError from error
+            if error.errcode == REFUSED_ERRCODE:
+                raise RegistrationSettingsNotAllowedError from error
+            raise
 
     def register_attendee(
         self, event_id: str, coordinator_id: str, attendee_email: str
@@ -171,11 +233,18 @@ class RegistrationService:
         # D6 (SCRUM-24): a pending offer holds its place against capacity, so
         # the public view counts registrations plus offers, never fewer.
         counts = {e["id"]: self.repository.places_taken(e["id"]) for e in events}
-        return [to_public_event(e, counts.get(e["id"], 0)) for e in events]
+        venues = self._event_venues([e["id"] for e in events])
+        return [
+            {**to_public_event(e, counts.get(e["id"], 0)), "venues": venues.get(e["id"], [])}
+            for e in events
+        ]
 
     def get_event(self, event_id: str) -> dict[str, Any]:
         event = self._visible_event(event_id)
-        return to_public_event(event, self.repository.places_taken(event_id))
+        return {
+            **to_public_event(event, self.repository.places_taken(event_id)),
+            "venues": self._event_venues([event_id]).get(event_id, []),
+        }
 
     def register(
         self, event_id: str, attendee_id: str, now: datetime
@@ -287,13 +356,17 @@ class RegistrationService:
         event_ids = sorted({r["event_request_id"] for r in registrations})
         events = {e["id"]: e for e in self.repository.get_events(event_ids)}
         counts = self.repository.count_active_for_events(event_ids)
+        venues = self._event_venues(event_ids)
         return [
             {
                 **registration,
-                "event": to_public_event(
-                    events[registration["event_request_id"]],
-                    counts.get(registration["event_request_id"], 0),
-                ),
+                "event": {
+                    **to_public_event(
+                        events[registration["event_request_id"]],
+                        counts.get(registration["event_request_id"], 0),
+                    ),
+                    "venues": venues.get(registration["event_request_id"], []),
+                },
             }
             for registration in registrations
             if registration["event_request_id"] in events

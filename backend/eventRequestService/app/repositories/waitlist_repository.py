@@ -48,6 +48,8 @@ class WaitlistRepository(Protocol):
 
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]: ...
 
+    def list_event_entries(self, event_id: str) -> list[dict[str, Any]]: ...
+
 
 class SupabaseWaitlistRepository(SupabaseRegistrationRepository):
     def process_waitlist_timers(self, now: datetime) -> int:
@@ -159,6 +161,31 @@ class SupabaseWaitlistRepository(SupabaseRegistrationRepository):
             },
             action="recipient choice",
         )
+
+    def list_event_entries(self, event_id: str) -> list[dict[str, Any]]:
+        """One event's Waiting and Offered entries in queue order, each with the
+        attendee's email (0076). The email is a convenience: a failed lookup
+        leaves it empty rather than hiding the queue."""
+        rows = self._get(
+            "/event_waitlist_entries",
+            {
+                "select": WAITLIST_ENTRY_COLUMNS,
+                "event_request_id": f"eq.{event_id}",
+                "status": "in.(Waiting,Offered)",
+                "order": "queued_at.asc,seq.asc",
+            },
+        )
+        emails: dict[str, str] = {}
+        try:
+            response = self._client.post(
+                "/rpc/event_waitlist_attendee_emails",
+                json={"p_event_request_id": event_id},
+            )
+            response.raise_for_status()
+            emails = {row["entry_id"]: row["attendee_email"] for row in response.json()}
+        except httpx.HTTPError:
+            pass
+        return [{**row, "attendee_email": emails.get(row["id"])} for row in rows]
 
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
         """The caller's current entries, oldest first, with their positions.

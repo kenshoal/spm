@@ -50,13 +50,15 @@ PUBLIC_KEYS = {
     "registration_closes_at",
     "registration_capacity",
     "places_remaining",
-}
+ "venues",}
 
 
 class FakeRegistrationRepository:
     def __init__(self) -> None:
         self.events: dict[str, dict[str, Any]] = {}
         self.registrations: list[dict[str, Any]] = []
+        self.event_venues: dict[str, list[dict[str, Any]]] = {}
+        self.emails: dict[str, str] = {}
         self._clock = 0
         # SCRUM-38: the assigned Coordinator per event, and a switch to fail the lookup.
         self.coordinators: dict[str, str] = {}
@@ -149,6 +151,12 @@ class FakeRegistrationRepository:
 
     def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]:
         return [dict(self.events[i]) for i in event_ids if i in self.events]
+
+    def list_event_venues(self, event_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        return {key: value for key, value in self.event_venues.items() if key in event_ids}
+
+    def attendee_emails(self, event_id: str) -> dict[str, str]:
+        return dict(self.emails)
 
     def list_confirmed_events(self) -> list[dict[str, Any]]:
         return [dict(r) for r in self.events.values() if r["status"] == "Confirmed"]

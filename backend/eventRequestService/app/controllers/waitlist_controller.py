@@ -86,6 +86,19 @@ def withdraw_waitlist_entry(
     return jsonable_encoder(service.withdraw(str(entry_id), attendee_id, now))
 
 
+@coordination_router.get("/{event_request_id}/waitlist")
+def list_event_waitlist(
+    event_request_id: UUID,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+) -> list[dict]:
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return jsonable_encoder(
+        service.list_for_event(str(event_request_id), caller.id, caller.roles)
+    )
+
+
 @coordination_router.post("/{event_request_id}/waitlist/{entry_id}/offer")
 def choose_waitlist_recipient(
     event_request_id: UUID,

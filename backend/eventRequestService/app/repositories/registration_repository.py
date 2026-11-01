@@ -59,6 +59,20 @@ class RegistrationRepository(Protocol):
 
     def get_event_access(self, event_id: str) -> dict[str, Any] | None: ...
 
+    def list_event_venues(self, event_ids: list[str]) -> dict[str, list[dict[str, Any]]]: ...
+
+    def attendee_emails(self, event_id: str) -> dict[str, str]: ...
+
+    def set_registration_settings(
+        self,
+        event_id: str,
+        coordinator_id: str,
+        opens_at: datetime,
+        closes_at: datetime,
+        capacity: int,
+        now: datetime,
+    ) -> dict[str, Any]: ...
+
     def list_for_event(self, event_id: str) -> list[dict[str, Any]]: ...
 
     def register(
@@ -247,7 +261,13 @@ class SupabaseRegistrationRepository:
         """Who may manage the event and its capacity (SCRUM-34)."""
         rows = self._get(
             "/event_requests",
-            {"select": "id,organiser_id,registration_capacity", "id": f"eq.{event_id}"},
+            {
+                "select": (
+                    "id,organiser_id,registration_capacity,"
+                    "registration_opens_at,registration_closes_at"
+                ),
+                "id": f"eq.{event_id}",
+            },
         )
         return rows[0] if rows else None
 
@@ -270,6 +290,73 @@ class SupabaseRegistrationRepository:
             rows.extend(page)
             if len(page) < PAGE_SIZE:
                 return rows
+
+    def list_event_venues(self, event_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Each event's approved bookings with their venue, for attendees (hotfix 5)."""
+        if not event_ids:
+            return {}
+        rows = self._get(
+            "/venue_booking_requests",
+            {
+                "select": (
+                    "event_request_id,start_date,end_date,start_minute,end_minute,"
+                    "venues(name,location)"
+                ),
+                "event_request_id": f"in.({','.join(event_ids)})",
+                "status": "eq.approved",
+                "order": "start_date.asc,start_minute.asc",
+            },
+        )
+        venues: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            venue = row.get("venues") or {}
+            venues.setdefault(row["event_request_id"], []).append(
+                {
+                    "name": venue.get("name"),
+                    "location": venue.get("location"),
+                    "start_date": row["start_date"],
+                    "end_date": row["end_date"],
+                    "start_minute": row["start_minute"],
+                    "end_minute": row["end_minute"],
+                }
+            )
+        return venues
+
+    def attendee_emails(self, event_id: str) -> dict[str, str]:
+        """Registration id to attendee email for one event (hotfix 16, 0076)."""
+        try:
+            response = self._client.post(
+                "/rpc/event_registration_attendee_emails",
+                json={"p_event_request_id": event_id},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the attendee email lookup"
+            ) from error
+        return {row["registration_id"]: row["attendee_email"] for row in response.json()}
+
+    def set_registration_settings(
+        self,
+        event_id: str,
+        coordinator_id: str,
+        opens_at: datetime,
+        closes_at: datetime,
+        capacity: int,
+        now: datetime,
+    ) -> dict[str, Any]:
+        return self._rpc(
+            "set_event_registration_settings",
+            {
+                "p_event_request_id": event_id,
+                "p_coordinator_id": coordinator_id,
+                "p_opens_at": opens_at.isoformat(),
+                "p_closes_at": closes_at.isoformat(),
+                "p_capacity": capacity,
+                "p_now": now.isoformat(),
+            },
+            action="registration settings",
+        )
 
     def register(
         self, event_id: str, attendee_id: str, now: datetime

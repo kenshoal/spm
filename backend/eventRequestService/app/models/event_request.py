@@ -319,6 +319,56 @@ class SafetyDecision(BaseModel):
         return self
 
 
+class EventDetailsUpdate(BaseModel):
+    """Hotfix 8 (SCRUM-29, Q&A #102): the Coordinator's edit. Omitted values stay.
+    expected_updated_at refuses an edit made from a page that has gone stale."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    expected_updated_at: AwareDatetime
+    event_name: str | None = Field(default=None, min_length=1, max_length=200)
+    purpose: str | None = Field(default=None, min_length=1, max_length=1_000)
+    description: str | None = Field(default=None, min_length=1, max_length=5_000)
+    proposed_date_times: list[AwareDatetime] | None = Field(default=None, min_length=1)
+    expected_attendance: int | None = Field(default=None, gt=0, le=2_147_483_647)
+    venue_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
+    accessibility_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
+    equipment_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
+    registration_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
+
+    @model_validator(mode="after")
+    def something_changes(self) -> "EventDetailsUpdate":
+        if self.model_fields_set <= {"expected_updated_at"}:
+            raise ValueError("no details to update")
+        for name in self.model_fields_set - {"expected_updated_at"}:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be cleared")
+        return self
+
+
+class EventArrangementVenue(BaseModel):
+    name: str
+    location: str
+    start_date: date
+    end_date: date
+    start_minute: int
+    end_minute: int
+
+
+class EventArrangementEquipment(BaseModel):
+    equipment_type: str
+    quantity: int
+    reserved: int
+
+
+class EventArrangementsResponse(BaseModel):
+    """Hotfix 14 (Week 1 brief, step 10): what is booked and reserved for an event,
+    as its Organiser may see it. Nothing about who decided or internal notes."""
+
+    venues: list[EventArrangementVenue]
+    equipment: list[EventArrangementEquipment]
+
+
 class SafetyReviewResponse(BaseModel):
     id: str
     event_request_id: str

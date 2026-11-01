@@ -18,6 +18,7 @@ class ArrangementReviewResponse(BaseModel):
         "safety_recheck",
         "venue_timing_change",
         "venue_block",
+        "venue_change",
     ]
     changed_fields: list[str]
     reason: str

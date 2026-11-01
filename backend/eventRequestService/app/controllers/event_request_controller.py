@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.models.arrangement_review import ArrangementReviewResponse
 from app.models.event_request import (
     AttendeeEventResponse,
+    EventArrangementsResponse,
     EventChangeBookingContext,
     EventChangeDatePlanResponse,
     EventChangeDecision,
@@ -17,6 +18,7 @@ from app.models.event_request import (
     EventChangeRequestResponse,
     EventChangeRequestStatus,
     EventClarificationResponse,
+    EventDetailsUpdate,
     EventFinalEndUpdate,
     EventRequestCreate,
     EventRequestResponse,
@@ -581,6 +583,29 @@ def update_event_request(
     service: ServiceDependency,
 ) -> EventRequestResponse:
     return service.update(str(event_request_id), organiser_id, payload)
+
+
+@router.patch("/{event_request_id}/details", response_model=EventRequestResponse)
+def update_event_details(
+    event_request_id: UUID,
+    payload: EventDetailsUpdate,
+    coordinator_id: CoordinatorDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    """Hotfix 8 (SCRUM-29, Q&A #102): the assigned Coordinator's edit."""
+    return service.update_by_coordinator(str(event_request_id), coordinator_id, payload)
+
+
+@router.get("/{event_request_id}/arrangements", response_model=EventArrangementsResponse)
+def get_event_arrangements(
+    event_request_id: UUID,
+    caller: CallerDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> dict:
+    """Hotfix 14: anyone who may read the event may see what is booked for it."""
+    get_event_request(event_request_id, caller, request, service)
+    return service.get_arrangements(str(event_request_id))
 
 
 @router.post("/{event_request_id}/submit", response_model=EventRequestResponse)

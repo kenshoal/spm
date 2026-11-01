@@ -59,7 +59,30 @@ class WaitlistService:
         return self._with_position(entry, attendee_id)
 
     def list_entries(self, attendee_id: str) -> list[dict[str, Any]]:
-        return self.repository.list_entries_for(attendee_id)
+        """The attendee's entries, each with its event's name (hotfix 5), so the
+        waiting-list page can say which event a place is for."""
+        entries = self.repository.list_entries_for(attendee_id)
+        events = {
+            event["id"]: event
+            for event in self.repository.get_events(
+                sorted({entry["event_request_id"] for entry in entries})
+            )
+        }
+        return [
+            {**entry, "event_name": events.get(entry["event_request_id"], {}).get("event_name")}
+            for entry in entries
+        ]
+
+    def list_for_event(
+        self, event_id: str, caller_id: str, caller_roles: tuple[str, ...]
+    ) -> list[dict[str, Any]]:
+        """The assigned Coordinator's view of the queue (SCRUM-24 AC3, Q&A #26)."""
+        if EVENT_COORDINATOR_ROLE not in caller_roles:
+            raise CoordinatorNotAssignedError
+        latest = self.repository.latest_coordinator_id(event_id)
+        if latest is None or latest != caller_id:
+            raise CoordinatorNotAssignedError
+        return self.repository.list_event_entries(event_id)
 
     def accept(
         self, entry_id: str, attendee_id: str, now: datetime

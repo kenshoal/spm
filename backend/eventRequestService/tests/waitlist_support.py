@@ -452,6 +452,17 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
                 marked += 1
         return marked
 
+    def list_event_entries(self, event_id: str) -> list[dict[str, Any]]:
+        live = [
+            e
+            for e in self.entries
+            if e["event_request_id"] == event_id and e["status"] in {"Waiting", "Offered"}
+        ]
+        return [
+            {**e, "attendee_email": f"{e['attendee_id']}@example.com"}
+            for e in sorted(live, key=lambda e: (e["queued_at"], e["seq"]))
+        ]
+
     def list_entries_for(self, attendee_id: str) -> list[dict[str, Any]]:
         """The caller's current entries, oldest first, with their positions.
 
