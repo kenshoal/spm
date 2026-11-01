@@ -22,6 +22,7 @@ def _sample_payload(**overrides: object) -> dict:
     return payload
 
 
+# SCRUM-30 AC1-H1 (happy): creating a venue stores it and returns the record
 def test_create_venue_returns_stored_record() -> None:
     response = client.post("/venues", json=_sample_payload())
 
@@ -34,6 +35,7 @@ def test_create_venue_returns_stored_record() -> None:
     assert body["updated_at"]
 
 
+# SCRUM-30 AC1-N1 (negative): a non-Venue-Staff role is refused venue creation with 403
 def test_non_venue_staff_cannot_create_venue() -> None:
     def forbidden() -> Principal:
         return Principal(
@@ -54,6 +56,7 @@ def test_non_venue_staff_cannot_create_venue() -> None:
     assert response.status_code == 403
 
 
+# SCRUM-30 AC2-N2 (negative): reading the catalogue without a session is refused with 401
 def test_venue_routes_require_authentication() -> None:
     app.dependency_overrides.clear()
 
@@ -62,12 +65,14 @@ def test_venue_routes_require_authentication() -> None:
     assert response.status_code == 401
 
 
+# SCRUM-30 AC1-N2 (negative): a non-positive capacity is refused at creation with 422
 def test_create_venue_rejects_non_positive_capacity() -> None:
     response = client.post("/venues", json=_sample_payload(max_capacity=0))
 
     assert response.status_code == 422
 
 
+# SCRUM-30 AC2-H1 (happy): viewing a venue shows its stored attributes
 def test_get_venue_shows_current_attributes() -> None:
     created = client.post("/venues", json=_sample_payload()).json()
 
@@ -77,12 +82,14 @@ def test_get_venue_shows_current_attributes() -> None:
     assert response.json() == created
 
 
+# SCRUM-30 AC2-N1 (negative): an unknown venue id returns 404
 def test_get_missing_venue_returns_404() -> None:
     response = client.get("/venues/does-not-exist")
 
     assert response.status_code == 404
 
 
+# SCRUM-30 AC1-H2 (happy): a partial update changes only the sent fields
 def test_update_venue_applies_partial_changes() -> None:
     created = client.post("/venues", json=_sample_payload()).json()
 
@@ -99,6 +106,7 @@ def test_update_venue_applies_partial_changes() -> None:
     assert body["updated_at"] >= created["updated_at"]
 
 
+# SCRUM-30 AC1-P1 (partition): the status can be updated to blocked
 def test_update_venue_can_block_it() -> None:
     created = client.post("/venues", json=_sample_payload()).json()
 
@@ -108,12 +116,14 @@ def test_update_venue_can_block_it() -> None:
     assert response.json()["status"] == "blocked"
 
 
+# SCRUM-30 AC1-N3 (negative): updating an unknown venue returns 404
 def test_update_missing_venue_returns_404() -> None:
     response = client.patch("/venues/does-not-exist", json={"max_capacity": 10})
 
     assert response.status_code == 404
 
 
+# SCRUM-30 AC2-P1 (partition): the catalogue lists every venue
 def test_list_venues_returns_all_created() -> None:
     client.post("/venues", json=_sample_payload(name="A"))
     client.post("/venues", json=_sample_payload(name="B"))
@@ -124,6 +134,7 @@ def test_list_venues_returns_all_created() -> None:
     assert {v["name"] for v in response.json()} == {"A", "B"}
 
 
+# SCRUM-30 AC2-N3 (negative): an attendee is refused catalogue reads with 403
 def test_venue_reads_forbidden_for_attendees() -> None:
     venue_id = client.post("/venues", json=_sample_payload()).json()["id"]
     app.dependency_overrides[require_authenticated] = lambda: Principal(

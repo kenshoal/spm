@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const VENUE_API = "http://127.0.0.1:8105";
 
+// SCRUM-9 AC2-H3, AC3, AC4 (happy): e2e — results match every filter, never fall below the requested capacity, and exclude blocked venues
 // Purpose: SCRUM-9 AC2–AC4 — results match every filter, never fall below the
 // requested capacity, and exclude blocked venues.
 test("coordinator filters venues by capacity and facilities", async ({ page, request }) => {
