@@ -32,6 +32,9 @@ class SpyNotificationClient:
     def notify_event_changed(self, **kwargs: Any) -> None:
         self.changed.append(kwargs)
 
+    def notify_event_cancellation_recorded(self, **kwargs: Any) -> None:
+        pass
+
     def notify_event_change_approved(self, **kwargs: Any) -> None:
         pass
 
