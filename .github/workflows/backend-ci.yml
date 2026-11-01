@@ -313,3 +313,41 @@ jobs:
         run: >-
           python3 database/tests/test_venue_hold_concurrency.py
           --dsn "$SCRUM18_TEST_DSN" --disposable
+
+  release1-database-verify:
+    name: Verify the Release 1 hotfix migrations on a full schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RELEASE1_TEST_DSN: postgresql://postgres@127.0.0.1:5432/scrum48_cirel1
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create the empty disposable database and the platform stub
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U postgres -c 'CREATE DATABASE scrum48_cirel1'
+          psql -X -v ON_ERROR_STOP=1 -d "$RELEASE1_TEST_DSN" -f database/tests/ci_platform_stub.sql
+      - name: Apply every migration in filename order
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in $(ls database/migrations/*.sql | sort); do
+            psql -X -v ON_ERROR_STOP=1 -q -d "$RELEASE1_TEST_DSN" -f "$migration"
+          done
+      - name: Verify the Release 1 hotfixes
+        run: >-
+          psql -X -v ON_ERROR_STOP=1 -d "$RELEASE1_TEST_DSN"
+          -f database/verify_release_1_hotfixes.sql
