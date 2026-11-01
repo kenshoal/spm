@@ -129,7 +129,7 @@ test("offers every block field with the viewed venue preselected", async () => {
   expect(within(form).getByLabelText("End time")).toBeDefined();
   expect(within(form).queryByRole("checkbox")).toBeNull();
   const reason = within(form).getByLabelText("Reason") as HTMLSelectElement;
-  expect([...reason.options].map((o) => o.textContent)).toEqual(["Choose a reason", "Maintenance", "Renovation", "Safety", "Internal use"]);
+  expect([...reason.options].map((o) => o.textContent)).toEqual(["Choose a reason", "Maintenance", "Equipment failure", "Renovation", "Safety", "Internal use", "Other"]);
   expect(within(form).getByLabelText(/Detail/)).toBeDefined();
   expect(within(form).getByRole("button", { name: "Block venue" })).toBeDefined();
 });

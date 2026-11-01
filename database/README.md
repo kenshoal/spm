@@ -97,6 +97,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0075_venue_change_reviews.sql` | Hotfix 13 (Q&A #120, #122): `venue_change` added to the review trigger types, and a trigger on `venues` flags live approved bookings when a venue becomes blocked, its maximum capacity falls below an event's expected attendance, or a layout, facility or accessibility feature is removed. Never changes a booking or an event. Run after `0074`, and only once the readers that accept `venue_change` are deployed. |
 | `migrations/0076_registration_attendee_emails.sql` | Hotfix 16 (SCRUM-25, Q&A #32): `event_registration_attendee_emails` and `event_waitlist_attendee_emails`, so staff can tell who a registration or waiting-list place belongs to. Run once. |
 | `migrations/0077_coordinator_event_update.sql` | Hotfix 8 (SCRUM-29, Q&A #102): `update_event_by_coordinator` lets the assigned Coordinator update event details under the event lock, refusing a stale version; the existing review trigger flags arrangements for significant changes. Run after `0071`. |
+| `migrations/0078_block_reasons_equipment_failure_other.sql` | Hotfix 19 (Week 7 change 2): adds `equipment_failure` and `other` to `block_reason`, which listed only maintenance, renovation, safety and internal use. |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the

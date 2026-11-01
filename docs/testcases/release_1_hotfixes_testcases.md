@@ -2,7 +2,7 @@
 
 Last reviewed: 1 November 2026
 
-Status: **built and verified on 1 November 2026 by Kennedy.** The scope is the 18 gaps found when the whole app was run against the Week 1 brief, the Week 4 and Week 7 documents and the GitHub discussions. Product Owner (Jaren) confirmation of the open decisions in the last section is still needed.
+Status: **built and verified on 1 November 2026 by Kennedy.** The scope is the 19 gaps found when the whole app was run against the Week 1 brief, the Week 4 and Week 7 documents and the GitHub discussions. Product Owner (Jaren) confirmation of the open decisions in the last section is still needed.
 
 These are corrections, not new stories. Each one traces to a customer source, and to the Jira story whose criteria it completes where there is one. IDs follow `AC<n>-<technique><k>`, where `<n>` is the hotfix number below. Every automated test carries its ID in a comment.
 
@@ -28,6 +28,7 @@ These are corrections, not new stories. Each one traces to a customer source, an
 | 16 | Registration lists showed account ids only | SCRUM-25 manual lookup, Q&A #32 | SCRUM-25, 34 | DB (0076), API, UI |
 | 17 | `POST /notifications/events` accepted anyone | Q&A #91 | SCRUM-57 | API |
 | 18 | Workspace links were hidden on phones | Week 1 brief section 7 | none | UI |
+| 19 | A venue could not be blocked for "equipment failure" or "other" | Week 7 change 2 | SCRUM-23 | DB (0078), API, UI |
 
 ## Rules chosen where the customer left room (team design proposals)
 
@@ -35,24 +36,25 @@ These are corrections, not new stories. Each one traces to a customer source, an
 - **Capacity per layout (12).** Judged by the chosen layout's capacity when it has one, otherwise `max_capacity`. Events record no layout, so venue flagging (13) uses the venue's maximum capacity only.
 - **Releasing (11).** A release moves the row to an audit table, so every existing reader stops counting it. A replacement is a release followed by a normal reservation, which reruns every check.
 - **Cancelling (10).** Pending and approved bookings become `cancelled`; reservations are released with reason `Event cancelled`; requirements are kept.
+- **Block reasons (19).** Week 7 change 2 names the reasons, so equipment failure and other are added beside the existing four. `internal_use` stays (removing an enum value breaks stored rows) and counts as one of the "other operational reasons". A detail is not forced for "other"; that is the Venue Staff's call.
 
 ## Not claimed here (decisions for the Product Owner)
 
-Manual check-in only, QR withdrawn; partly accepted change requests (#104); a `Withdrawn` event status (#103); postponement without a date (#69, #121); changing an event's Organiser (#59, #61); VIPs above normal capacity (#99); technical support in the safety readiness check (#80, #106); block reasons "equipment failure" and "other"; lifting a block early; venue operating hours (SCRUM-30); hiding Cancel on Completed events; recording the final end of a Confirmed event.
+Manual check-in only, QR withdrawn; partly accepted change requests (#104); a `Withdrawn` event status (#103); postponement without a date (#69, #121); changing an event's Organiser (#59, #61); VIPs above normal capacity (#99); technical support in the safety readiness check (#80, #106); lifting a block early; venue operating hours (SCRUM-30); hiding Cancel on Completed events; recording the final end of a Confirmed event.
 
 ## Latest execution record (1 November 2026, Kennedy's machine, branch `fix/release-1-hotfixes`)
 
 | Check | Command | Result | Environment |
 | --- | --- | --- | --- |
 | eventRequestService | `pytest -q`; `ruff check .` | 1133 passed, 1 skipped; clean | local, fakes for Supabase |
-| venueService | `pytest -q`; `ruff check .` | 743 passed, 10 skipped; clean | local |
+| venueService | `pytest -q`; `ruff check .` | 747 passed, 10 skipped; clean | local |
 | equipmentService | `pytest -q`; `ruff check .` | 337 passed; clean | local |
 | authService | `pytest -q` | 60 passed | local |
 | notificationService | `pytest -q`; `ruff check .` | 85 passed; clean | local |
-| frontend | `npx vitest run`; `npm run lint`; `npm run typecheck`; `npm run build` | 678 passed; clean; clean; builds | local, jsdom |
+| frontend | `npx vitest run`; `npm run lint`; `npm run typecheck`; `npm run build` | 680 passed; clean; clean; builds | local, jsdom |
 | Playwright | `playwright test` against the mock APIs in `e2e/support`, with the cached Chromium 1148 headless shell (the pinned build was not installed and was not downloaded) | 55 passed | local; a first run found 20 failures, all from the mocks not knowing coordinator sessions, and one duplicated-text clash that moved the edit form behind a button |
-| Database | `database/verify_release_1_hotfixes.sql` after all 83 migrations on vanilla PostgreSQL 16 with `database/tests/ci_platform_stub.sql` | ALL RELEASE 1 HOTFIX VERIFICATIONS PASSED | Docker, disposable |
-| Database mutation check | eight one-line faults in 0069 to 0077 | all eight caught (one needed AC13-N3 added) | Docker, disposable |
+| Database | `database/verify_release_1_hotfixes.sql` after all 84 migrations on vanilla PostgreSQL 16 with `database/tests/ci_platform_stub.sql` | ALL RELEASE 1 HOTFIX VERIFICATIONS PASSED | Docker, disposable |
+| Database mutation check | eight one-line faults in 0069 to 0077, and the verifier run without 0078 | all eight caught (one needed AC13-N3 added); AC19-H1 fails without 0078 | Docker, disposable |
 | Existing database verifiers | the CI paths for SCRUM-35, 40 and 18 | pass with the new migrations | Docker, disposable |
 | Whole stack | five services, Next.js, GoTrue, PostgREST and Postgres in Docker; a scripted lifecycle with every role, then clicks in the browser | each hotfix behaved as specified (details in the pull request) | local, disposable |
 

@@ -1,4 +1,4 @@
--- Run after 0069 to 0077 (Release 1 hotfixes 3, 4, 8 to 13, 16). Every change is
+-- Run after 0069 to 0078 (Release 1 hotfixes 3, 4, 8 to 13, 16, 19). Every change is
 -- rolled back. Borrows the oldest auth user as organiser, coordinator and staff.
 --   psql -X -v ON_ERROR_STOP=1 -f database/verify_release_1_hotfixes.sql
 --
@@ -240,6 +240,21 @@ BEGIN
         'AC16-H1: the registration email is missing';
     ASSERT NOT EXISTS (SELECT 1 FROM public.event_registration_attendee_emails(v_event)),
         'AC16-N1: another event leaked emails';
+
+    -- 0078 AC19: Week 7 change 2 block reasons (equipment failure and other)
+    INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+            supported_layouts, operating_slots)
+        VALUES ('VERIFY HOTFIX block venue', 'Test wing', 100, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+        RETURNING id INTO v_venue2;
+    PERFORM public.create_venue_block(v_venue2, v_day, v_day, 420, 480, 'equipment_failure', 'Projector fault', v_user);
+    PERFORM public.create_venue_block(v_venue2, v_day, v_day, 540, 600, 'other', 'Fire drill', v_user);
+    ASSERT (SELECT count(*) FROM public.venue_blocks
+            WHERE venue_id = v_venue2 AND reason_category IN ('equipment_failure', 'other')) = 2,
+        'AC19-H1: equipment_failure and other must be accepted as block reasons';
+    BEGIN
+        PERFORM public.create_venue_block(v_venue2, v_day, v_day, 660, 720, 'not_a_reason', NULL, v_user);
+        RAISE EXCEPTION 'AC19-N1: an unknown block reason was accepted' USING ERRCODE = 'P9901';
+    EXCEPTION WHEN invalid_text_representation THEN NULL; END;
 
     RAISE NOTICE 'ALL RELEASE 1 HOTFIX VERIFICATIONS PASSED';
 END $$;

@@ -40,7 +40,7 @@ def test_same_day_full_day_block_uses_chronological_slot_order() -> None:
 
 
 # AC1-P6 (partition): each story reason category is accepted by the API model
-@pytest.mark.parametrize("reason", list(BlockReason), ids=["AC1-P6a", "AC1-P6b", "AC1-P6c", "AC1-P6d"])
+@pytest.mark.parametrize("reason", list(BlockReason), ids=["AC1-P6a", "AC1-P6b", "AC1-P6c", "AC1-P6d", "AC1-P6e", "AC1-P6f"])
 def test_all_story_reasons_are_accepted(reason: BlockReason) -> None:
     assert VenueBlockCreate(**payload(reason_category=reason)).reason_category is reason
 
@@ -56,7 +56,7 @@ def test_all_story_reasons_are_accepted(reason: BlockReason) -> None:
         ({"start_minute": 405}, None),
         ({"end_minute": 720}, None),
         ({"reason_category": ""}, "reason_category"),
-        ({"reason_category": "other"}, "reason_category"),
+        ({"reason_category": "lunch_break"}, "reason_category"),
         ({"reason_detail": "x" * 1001}, "reason_detail"),
     ],
     ids=["AC1-N10a", "AC1-N10b", "AC1-N10c", "AC1-N10d", "AC1-N10e", "AC1-N10f", "AC1-N10g", "AC1-N10h"],

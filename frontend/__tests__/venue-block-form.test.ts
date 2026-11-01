@@ -51,6 +51,8 @@ test.each([
   ["AC1-P2", "renovation"],
   ["AC1-P3", "safety"],
   ["AC1-P4", "internal_use"],
+  ["AC1-P4b", "equipment_failure"],
+  ["AC1-P4c", "other"],
 ])("%s accepts reason %s", (_id, reason) => {
   const { payload, errors } = parseBlockForm(form({ ...valid, reason_category: reason }));
 

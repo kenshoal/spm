@@ -65,6 +65,25 @@ def test_create_block_stores_normalized_record_and_server_metadata(venue_id):
     assert client.get(f"/venues/{venue_id}").json()["status"] == "available"
 
 
+# AC1-P6e, AC1-P6f (partition): the Week 7 change 2 reasons "equipment failure" and "other" are accepted
+@pytest.mark.parametrize("reason", ["equipment_failure", "other"])
+def test_create_block_accepts_equipment_failure_and_other(venue_id, reason):
+    previous = app.dependency_overrides.copy()
+    app.dependency_overrides[require_venue_staff] = lambda: Principal(
+        user_id="test-staff", roles=("venue_staff",)
+    )
+    try:
+        response = client.post(
+            f"/venues/{venue_id}/blocks", json=payload(reason_category=reason)
+        )
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
+
+    assert response.status_code == 201
+    assert response.json()["reason_category"] == reason
+
+
 # AC1-X2 (cross-cutting): a non-Venue-Staff caller is refused and no block is stored
 def test_non_venue_staff_cannot_create_block(venue_id):
     app.dependency_overrides[require_authenticated] = lambda: Principal(
