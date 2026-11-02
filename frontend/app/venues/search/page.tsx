@@ -15,7 +15,7 @@ function first(value: string | string[] | undefined): string {
 }
 
 export default async function VenueSearchPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const user = await requireAnyRole(["event_coordinator", "venue_staff"]);
+  const user = await requireAnyRole(["event_coordinator", "venue_staff", "safety_officer"]);
   const raw = await searchParams;
   const input: VenueSearchInput = {
     required_capacity: first(raw.required_capacity),
