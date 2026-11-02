@@ -70,7 +70,7 @@ test("drops a date that is not a real calendar date", () => {
 const venue: Venue = {
   id: "v1", name: "Riverside Hall", location: "East Wing", max_capacity: 120,
   facilities: ["Projector"], accessibility_features: ["Ramp access"], supported_layouts: ["theatre"],
-  operating_slots: ["AM", "PM"], setup_minutes: 30, turnaround_minutes: 45,
+  operating_slots: ["AM", "PM"], setup_minutes: 30, turnaround_minutes: 45, operating_start_minute: 420, operating_end_minute: 1440,
   status: "available", created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
 };
 
@@ -106,9 +106,17 @@ test("shows setup and turnaround time for each result", () => {
 
 // AC4-H2 (happy): SCRUM-59 a time that was never set reads "None"
 test("shows None when a venue has no setup or turnaround time", () => {
-  render(<VenueResults venues={[{ ...venue, setup_minutes: 0, turnaround_minutes: 0 }]} />);
+  render(<VenueResults venues={[{ ...venue, setup_minutes: 0, turnaround_minutes: 0, operating_start_minute: 420, operating_end_minute: 1440 }]} />);
 
   const attributes = screen.getByRole("article", { name: "Riverside Hall" }).querySelector("dl") as HTMLElement;
   expect(within(attributes).getByText("Setup").nextElementSibling?.textContent).toBe("None");
   expect(within(attributes).getByText("Turnaround").nextElementSibling?.textContent).toBe("None");
+});
+
+// SCRUM-30 AC4-H3 (happy): each result shows the hours the venue is open
+test("shows the venue's operating hours on each result", () => {
+  render(<VenueResults venues={[{ ...venue, operating_start_minute: 540, operating_end_minute: 1080 }]} />);
+
+  const attributes = screen.getByRole("article", { name: "Riverside Hall" }).querySelector("dl") as HTMLElement;
+  expect(within(attributes).getByText("09:00–18:00 daily")).toBeDefined();
 });

@@ -14,7 +14,9 @@ from pydantic_core import PydanticCustomError
 from app.models import RoomLayout
 from app.slots import check_time_range
 
-SuitabilityAttribute = Literal["capacity", "layout", "facilities", "accessibility"]
+SuitabilityAttribute = Literal[
+    "capacity", "layout", "facilities", "accessibility", "operating_hours"
+]
 
 
 class SuitabilityRequest(BaseModel):

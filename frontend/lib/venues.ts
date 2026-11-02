@@ -16,6 +16,9 @@ export interface Venue {
   operating_slots: Slot[];
   setup_minutes: number;
   turnaround_minutes: number;
+  // SCRUM-30 AC1: the venue's daily operating hours, minutes after midnight (07:00 to 24:00).
+  operating_start_minute: number;
+  operating_end_minute: number;
   status: VenueStatus;
   created_at: string;
   updated_at: string;

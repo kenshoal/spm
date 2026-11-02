@@ -114,6 +114,9 @@ def check_availability(
     reasons.extend(
         window_refusals(requested.start_minute, requested.end_minute, setup, turnaround)
     )
+    # SCRUM-30 AC4: the requested time must lie inside the venue's operating hours.
+    if not venue.is_open_for(requested.start_minute, requested.end_minute):
+        reasons.append("outside_operating_hours")
     if booking_conflicts:
         reasons.append("booking_conflict")
     if hold_conflicts:

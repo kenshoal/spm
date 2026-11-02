@@ -1,7 +1,7 @@
 import { splitList } from "./venue-form";
 import { ROOM_LAYOUTS, timeRangeFrom, type RoomLayout } from "./venue-options";
 
-export type SuitabilityAttribute = "capacity" | "layout" | "facilities" | "accessibility";
+export type SuitabilityAttribute = "capacity" | "layout" | "facilities" | "accessibility" | "operating_hours";
 
 export interface SuitabilityResult {
   venue_id: string;
@@ -34,6 +34,7 @@ export const ATTRIBUTE_LABELS: Record<SuitabilityAttribute, string> = {
   layout: "Layout",
   facilities: "Facilities",
   accessibility: "Accessibility",
+  operating_hours: "Operating hours",
 };
 
 // Builds the POST body for /venues/{id}/suitability from raw form text. Only

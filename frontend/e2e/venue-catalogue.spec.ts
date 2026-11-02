@@ -84,3 +84,31 @@ test("venue staff set setup and turnaround time and coordinators see it", async 
   await expect(result).toContainText("30 min");
   await expect(result).toContainText("60 min");
 });
+
+// SCRUM-30 AC1-H8, AC6-E1 (happy and negative): e2e: venue staff set a venue's operating hours; an opening time
+// after the closing time is refused with the chosen times kept, and the corrected hours show on the catalogue
+test("venue staff set a venue's operating hours", async ({ page }) => {
+  await page.goto("/auth");
+  await page.getByLabel("Email").fill("venue@example.com");
+  await page.getByLabel("Password").fill("test-password-123");
+  await page.getByRole("button", { name: "Log in", exact: true }).last().click();
+  await expect(page).toHaveURL(/\/venues$/);
+
+  await page.getByRole("link", { name: "+ Add venue" }).click();
+  await page.getByLabel("Venue name").fill("Garden Pavilion");
+  await page.getByLabel("Location").fill("Level 1, South Wing");
+  await page.getByLabel("Maximum capacity").fill("30");
+  await page.getByLabel("Opening time").selectOption("1080");
+  await page.getByLabel("Closing time").selectOption("540");
+  await page.getByRole("button", { name: "Add venue" }).click();
+  await expect(page.getByText(/opening time before the closing time/i)).toBeVisible();
+  await expect(page.getByLabel("Opening time")).toHaveValue("1080");
+  await expect(page.getByLabel("Closing time")).toHaveValue("540");
+
+  await page.getByLabel("Opening time").selectOption("540");
+  await page.getByLabel("Closing time").selectOption("1080");
+  await page.getByRole("button", { name: "Add venue" }).click();
+
+  await expect(page).toHaveURL(/\/venues$/);
+  await expect(page.getByRole("article", { name: "Garden Pavilion" })).toContainText("Open 09:00–18:00 daily");
+});
