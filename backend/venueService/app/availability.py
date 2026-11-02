@@ -1,7 +1,8 @@
 """Dated availability for venue search (SCRUM-15, SCRUM-65, SCRUM-66).
 
 A venue is free for a time when it is available, no active block overlaps the
-time, the time's setup and turnaround fit 07:00-24:00 and no approved booking's
+time, the time's setup and turnaround fit 07:00-24:00, the time lies inside the venue's own
+operating hours (SCRUM-30 AC4) and no approved booking's
 padded range overlaps the time's padded range. That is booking approval's rule
 (0054), so search never offers a time that approval would refuse. Blocks are
 compared without padding, as approval does. Active, unexpired holds (SCRUM-18)
@@ -35,6 +36,9 @@ def _free_at(
     booked: list[tuple[date, date, int, int]],
 ) -> bool:
     setup, turnaround = venue.setup_minutes, venue.turnaround_minutes
+    # SCRUM-30 AC4: time outside the venue's operating hours is never free.
+    if not venue.is_open_for(start_minute, end_minute):
+        return False
     if window_refusals(start_minute, end_minute, setup, turnaround):
         return False
     padded = padded_range(start_minute, end_minute, setup, turnaround)
@@ -73,6 +77,10 @@ def is_free(
     if start_minute is None or end_minute is None:
         return any(
             _free_at(venue, on_date, start, start + STEP_MINUTES, blocked, booked)
-            for start in range(OPEN_MINUTE, CLOSE_MINUTE, STEP_MINUTES)
+            for start in range(
+                max(OPEN_MINUTE, venue.operating_start_minute),
+                min(CLOSE_MINUTE, venue.operating_end_minute),
+                STEP_MINUTES,
+            )
         )
     return _free_at(venue, on_date, start_minute, end_minute, blocked, booked)

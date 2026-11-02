@@ -56,8 +56,13 @@ test("coordinator postpones an event and later sets its new date", async ({ page
   await page.getByLabel("New date and time (Singapore time)").fill("2036-12-01T09:30");
   await page.getByRole("button", { name: "Set new date" }).click();
   await expect(page.getByRole("button", { name: "Set new date" })).toHaveCount(0);
-  const saved = await request.get(`${EVENT_API}/event-requests/${event.id}`, { headers: { Authorization: "Bearer coordinator-session" } });
-  expect(await saved.json()).toMatchObject({ status: "Planning", proposed_date_times: ["2036-12-01T09:30:00+08:00"] });
+  // The form can disappear a moment before the save lands, so wait for the saved event rather than read it once.
+  await expect
+    .poll(async () => {
+      const saved = await request.get(`${EVENT_API}/event-requests/${event.id}`, { headers: { Authorization: "Bearer coordinator-session" } });
+      return saved.json();
+    })
+    .toMatchObject({ status: "Planning", proposed_date_times: ["2036-12-01T09:30:00+08:00"] });
 });
 
 // AC24-X1 (cross-cutting, hotfix 24): the Coordinator hands the event to another Organiser
