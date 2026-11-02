@@ -351,3 +351,7 @@ jobs:
         run: >-
           psql -X -v ON_ERROR_STOP=1 -d "$RELEASE1_TEST_DSN"
           -f database/verify_release_1_hotfixes.sql
+      - name: Verify the hotfix 2 migrations
+        run: >-
+          psql -X -v ON_ERROR_STOP=1 -d "$RELEASE1_TEST_DSN"
+          -f database/verify_release_1_hotfixes_2.sql

@@ -104,6 +104,13 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0082_manual_registration_above_capacity.sql` | Hotfix 23 (Q&A #99): `coordinator_register_attendee` adds a VIP above the registration capacity up to the seats of the event's approved venues. |
 | `migrations/0083_change_event_organiser.sql` | Hotfix 24 (Q&A #59, #61): `change_event_organiser` and the `event_organiser_changes` audit table. Run after `0080`. |
 | `migrations/0084_essential_equipment_requirements.sql` | Hotfix 25 (Q&A #80, #106): `equipment_requirements.essential` and `set_requirement_essential`; the shared readiness check leaves out a requirement marked not essential. |
+| `migrations/0085_assignment_stale_view_guard.sql` | Hotfix 2 H7 (SCRUM-62 AC6, SCRUM-14 AC7): `assign_event_request_coordinator` takes the Coordinator the Lead saw and refuses a stale view (`P0006`); also refuses Withdrawn. The three-argument function is dropped. Run after `0084`. |
+| `migrations/0086_reschedule_confirmed_event.sql` | Hotfix 2 H4 (SCRUM-40 AC9, SCRUM-29 AC4): a Confirmed event with a recorded final end can be rescheduled; a new trigger returns it to Planning when its dates change. Run after `0085`. |
+| `migrations/0087_waitlist_offer_before_registration_close.sql` | Hotfix 2 H2 (SCRUM-24 AC2): a new waiting-list offer must end its 72 hours before registration closes; replaces `offer_open_place` and `choose_waitlist_recipient`. Run after `0086`. |
+| `migrations/0088_equipment_quantity_floor.sql` | Hotfix 2 H1 (SCRUM-45 AC2): `update_equipment_quantity` refuses a total below the peak reserved on any day still ahead (`P0004`). Run after `0087`. |
+| `migrations/0089_registration_filled_event.sql` | Hotfix 2 H5 (SCRUM-38 AC2): `event_registrations.filled_event`, set in the transaction by `register_for_event` and `coordinator_register_attendee`. Run after `0088`. |
+| `migrations/0090_booking_request_rules.sql` | Hotfix 2 H8 (SCRUM-32 AC2, AC6, AC7): booking requests only in Approved, Planning or Safety Review, no start date before today (Singapore), an accessibility snapshot; the creator moves to `private.insert_venue_booking_request` so a replacement (SCRUM-63) keeps working. Run after `0089`. |
+| `migrations/0091_accessibility_needs_flag_bookings.sql` | Hotfix 2 H9 (SCRUM-64 AC1, SCRUM-29 AC5, SCRUM-35 AC1, AC3): accessibility needs flag the venue bookings and are a supported change-request value. Run after `0090`. |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the

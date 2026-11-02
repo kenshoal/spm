@@ -102,9 +102,11 @@ BEGIN
   -- AC1-X5 (cross-cutting): a privileged actual schedule/end edit cannot clear or replace a protected Confirmed/terminal deadline.
   -- Hotfix 2 (0086, SCRUM-40 AC9): moving the dates of a Confirmed event is allowed, because it reopens the event
   -- and clears the end; verify_release_1_hotfixes_2.sql covers that. A direct end edit is still refused for Confirmed.
+  -- Before 0086 (the CI database for this verifier stops at 0063) the old rule still holds, so it is still checked.
   IF v_status=ANY(ARRAY['Confirmed','Completed','Cancelled','Rejected']) THEN
    FOREACH field IN ARRAY ARRAY['proposed_date_times','final_event_end_at'] LOOP
-    CONTINUE WHEN field='proposed_date_times' AND v_status='Confirmed';
+    CONTINUE WHEN field='proposed_date_times' AND v_status='Confirmed'
+     AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='reopen_confirmed_event_on_date_change');
     before_state:=pg_temp.end_state();
     BEGIN
      IF field='proposed_date_times' THEN
