@@ -100,6 +100,14 @@ BEGIN
     ASSERT v_row.status = 'Withdrawn', 'AC1-H2: withdrawal after window close refused';
     UPDATE public.event_requests SET registration_closes_at = c_closes WHERE id = v_event;
 
+    -- Hotfix 2 (0086, SCRUM-40 AC9): moving the dates of a Confirmed event now reopens it to
+    -- Planning. The next cases rewrite the dates only as fixtures, to test the cut-off, so the
+    -- reopening trigger is switched off for them (rolled back with everything else). A database
+    -- built before 0086 has no such trigger.
+    IF EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'reopen_confirmed_event_on_date_change') THEN
+        EXECUTE 'ALTER TABLE public.event_requests DISABLE TRIGGER reopen_confirmed_event_on_date_change';
+    END IF;
+
     -- AC1-B4 (boundary): a multi-date event is cut off at its earliest date.
     v_reg := public.register_for_event(v_event, v_att[4], c_now);
     UPDATE public.event_requests SET proposed_date_times = ARRAY[c_start + interval '2 days', c_start]
