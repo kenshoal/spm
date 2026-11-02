@@ -147,11 +147,11 @@ def test_same_type_twice_coexists(
     assert len(req_store.inserts) == 2
 
 
-# AC1-P5 to AC1-P10 (partition): every open event status accepts a requirement
+# AC6-P1 to AC6-P3 (partition): each status in the allow-list accepts a requirement
 @pytest.mark.parametrize(
     "event_status",
-    ["Submitted", "Under Review", "Changes Requested", "Approved", "Planning", "Confirmed"],
-    ids=["AC1-P5", "AC1-P6", "AC1-P7", "AC1-P8", "AC1-P9", "AC1-P10"],
+    ["Approved", "Planning", "Safety Review"],
+    ids=["AC6-P1", "AC6-P2", "AC6-P3"],
 )
 def test_open_event_statuses_accept_requirements(
     req_api: TestClient, req_events: FakeEventService, coordinator, event_status: str
@@ -357,11 +357,15 @@ def test_invalid_event_reference_is_refused(
     assert req_events.requests == []
 
 
-# AC7-N1 to AC7-N3 (negative): a cancelled, completed or rejected event refuses new requirements
+# AC6-N1 to AC6-N10 (negative): every status outside Approved, Planning and Safety
+# Review refuses a new requirement (409) and stores nothing
 @pytest.mark.parametrize(
     "event_status",
-    ["Cancelled", "Completed", "Rejected"],
-    ids=["AC7-N1", "AC7-N2", "AC7-N3"],
+    [
+        "Draft", "Submitted", "Under Review", "Changes Requested", "Confirmed",
+        "Completed", "Cancelled", "Rejected", "Withdrawn", "Postponed",
+    ],
+    ids=[f"AC6-N{k}" for k in range(1, 11)],
 )
 def test_closed_event_refuses_requirements(
     req_api: TestClient,

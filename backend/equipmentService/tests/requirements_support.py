@@ -212,7 +212,7 @@ class FakeEventService:
         self.event: dict[str, Any] = {
             "id": E1,
             "organiser_id": ORGANISER,
-            "status": "Under Review",
+            "status": "Planning",
             "event_name": "Annual Gala",
             "proposed_date_times": list(GALA_DATES),
             "equipment_requirements": "Organiser note: projector",

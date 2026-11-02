@@ -29,10 +29,9 @@ from app.rpc_errors import essential_rpc_error_to_http, requirement_rpc_error_to
 
 router = APIRouter(prefix="/equipment-requirements", tags=["equipment requirements"])
 
-# Event statuses that refuse new requirements (AC7). Everything else is open.
-CLOSED_EVENT_STATUSES = frozenset(
-    {"Cancelled", "Completed", "Rejected", "Withdrawn", "Postponed"}
-)
+# Event statuses that accept new requirements (SCRUM-33 AC6). Every other status,
+# including ones added later, is refused.
+RECORDABLE_EVENT_STATUSES = frozenset({"Approved", "Planning", "Safety Review"})
 
 RequirementStatus = Literal["requested", "in_progress", "arranged"]
 
@@ -160,7 +159,7 @@ def record_requirement(
     snapshot = events.snapshot_for_coordinator(
         str(payload.event_request_id), _token(authorization), user.id
     )
-    if snapshot.status in CLOSED_EVENT_STATUSES:
+    if snapshot.status not in RECORDABLE_EVENT_STATUSES:
         raise HTTPException(status.HTTP_409_CONFLICT, "Event is closed")
     equipment_type = _match_catalogue_type(client, payload.equipment_type)
     try:
