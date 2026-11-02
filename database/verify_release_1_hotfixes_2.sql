@@ -201,6 +201,70 @@ BEGIN
     END LOOP;
 END $$;
 
+-- 0088 (H1, SCRUM-45 AC2): a quantity cut below the peak reserved on any day is refused
+DO $$
+DECLARE
+    v_user uuid := (SELECT id FROM auth.users ORDER BY created_at, id LIMIT 1);
+    v_equip uuid; v_event uuid; v_req uuid;
+    v_today date := (now() AT TIME ZONE 'Asia/Singapore')::date;
+    v_row public.equipment;
+BEGIN
+    INSERT INTO public.equipment (type, total_owned_quantity, home_location, description)
+        VALUES ('VERIFY H2 kit', 10, 'Store', 'x') RETURNING id INTO v_equip;
+    INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance)
+        VALUES (v_user, 'VERIFY H2 quantity', 'Planning', 20) RETURNING id INTO v_event;
+    INSERT INTO public.equipment_requirements (event_request_id, equipment_type, quantity, event_name, event_date_times, recorded_by)
+        VALUES (v_event, 'VERIFY H2 kit', 9, 'e', ARRAY[now()], v_user) RETURNING id INTO v_req;
+    -- two overlapping reservations: 4 + 3 on the same two days (peak 7), and 2 on a later day alone
+    INSERT INTO public.equipment_reservations (requirement_id, event_request_id, equipment_id, quantity, collection_date, return_date, created_by)
+        VALUES (v_req, v_event, v_equip, 4, v_today + 10, v_today + 12, v_user),
+               (v_req, v_event, v_equip, 3, v_today + 11, v_today + 13, v_user),
+               (v_req, v_event, v_equip, 2, v_today + 20, v_today + 21, v_user);
+
+    -- AC2-N1 (negative): below the peak (7) is refused and nothing changes
+    BEGIN
+        PERFORM public.update_equipment_quantity(v_equip, 6, v_user);
+        RAISE EXCEPTION 'AC2-N1: a cut below the peak was accepted' USING ERRCODE = 'P9901';
+    EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+    ASSERT (SELECT total_owned_quantity FROM public.equipment WHERE id = v_equip) = 10,
+        'AC2-N1: a refused cut changed the quantity';
+    ASSERT (SELECT count(*) FROM public.equipment_quantity_history WHERE equipment_id = v_equip) = 0,
+        'AC2-N1: a refused cut wrote history';
+    -- AC2-B1 (boundary): exactly the peak is allowed
+    v_row := public.update_equipment_quantity(v_equip, 7, v_user);
+    ASSERT v_row.total_owned_quantity = 7, 'AC2-B1: a cut to exactly the peak should be saved';
+    ASSERT (SELECT count(*) FROM public.equipment_quantity_history WHERE equipment_id = v_equip) = 1,
+        'AC2-B1: the accepted cut should be in the history';
+    -- AC2-B2 (boundary): one below the peak is refused
+    BEGIN
+        PERFORM public.update_equipment_quantity(v_equip, 6, v_user);
+        RAISE EXCEPTION 'AC2-B2: one below the peak was accepted' USING ERRCODE = 'P9901';
+    EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+    -- AC2-P1 (partition): an increase is never refused
+    v_row := public.update_equipment_quantity(v_equip, 12, v_user);
+    ASSERT v_row.total_owned_quantity = 12, 'AC2-P1: an increase should be saved';
+    -- AC2-P2 (partition): reservations that have already been returned do not hold the total up
+    DELETE FROM public.equipment_reservations WHERE equipment_id = v_equip;
+    INSERT INTO public.equipment_reservations (requirement_id, event_request_id, equipment_id, quantity, collection_date, return_date, created_by)
+        VALUES (v_req, v_event, v_equip, 9, v_today - 20, v_today - 18, v_user);
+    v_row := public.update_equipment_quantity(v_equip, 1, v_user);
+    ASSERT v_row.total_owned_quantity = 1, 'AC2-P2: a returned reservation must not block a cut';
+    -- AC2-B3 (boundary): two reservations that start the same day are each counted once
+    INSERT INTO public.equipment_reservations (requirement_id, event_request_id, equipment_id, quantity, collection_date, return_date, created_by)
+        VALUES (v_req, v_event, v_equip, 3, v_today + 30, v_today + 31, v_user),
+               (v_req, v_event, v_equip, 3, v_today + 30, v_today + 32, v_user);
+    v_row := public.update_equipment_quantity(v_equip, 6, v_user);
+    ASSERT v_row.total_owned_quantity = 6, 'AC2-B3: 3 + 3 on the same day is a peak of 6, not 12';
+    BEGIN
+        PERFORM public.update_equipment_quantity(v_equip, 5, v_user);
+        RAISE EXCEPTION 'AC2-B3: a cut below 3 + 3 was accepted' USING ERRCODE = 'P9901';
+    EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+    DELETE FROM public.equipment_reservations WHERE equipment_id = v_equip AND collection_date >= v_today;
+    -- AC2-P3 (partition): zero stays allowed when nothing is reserved ahead
+    v_row := public.update_equipment_quantity(v_equip, 0, v_user);
+    ASSERT v_row.total_owned_quantity = 0, 'AC2-P3: zero should be allowed with nothing reserved ahead';
+END $$;
+
 DO $$ BEGIN RAISE NOTICE 'ALL HOTFIX 2 VERIFICATIONS PASSED'; END $$;
 
 ROLLBACK;
