@@ -25,6 +25,11 @@ from app.booking_decisions import DecisionDetails
 from app.booking_models import BookingRequest, BookingRequestStatus
 from app.booking_notifications import BookingNotifier, get_booking_notifier
 from app.booking_repository import BookingRequestStore, get_booking_repository
+from app.coordinator_lookup import (
+    CoordinatorLookup,
+    get_coordinator_lookup,
+    notice_recipient,
+)
 from app.dependencies import Principal, require_venue_staff
 from app.organiser_lookup import (
     OrganiserLookup,
@@ -52,6 +57,7 @@ def decide_booking_request(
     venues: RepoDep,
     notifier: NotifierDep,
     organisers: OrganiserLookupDep,
+    coordinators: Annotated[CoordinatorLookup, Depends(get_coordinator_lookup)],
 ) -> BookingRequest:
     """Approve or reject a pending request; the decider comes from the token.
 
@@ -80,7 +86,14 @@ def decide_booking_request(
         )
     venue = venues.get(outcome.booking.venue_id)
     venue_name = venue.name if venue else None
-    notifier.notify_decision(outcome.booking, venue_name)
+    # SCRUM-63 AC5: the decision on a replacement goes to the event's current Coordinator;
+    # an ordinary decision to the Coordinator who made the request (SCRUM-15 AC4).
+    if outcome.booking.replaces_booking_id:
+        recipient = notice_recipient(outcome.booking, coordinators)
+        if recipient is not None:
+            notifier.notify_decision(outcome.booking, venue_name, recipient)
+    else:
+        notifier.notify_decision(outcome.booking, venue_name)
     if outcome.booking.status == BookingRequestStatus.REJECTED:
         _notify_organiser(outcome.booking, venue_name, organisers, notifier)
     return outcome.booking

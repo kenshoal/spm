@@ -27,6 +27,11 @@ from app.booking_notifications import (
     get_booking_notifier,
 )
 from app.booking_repository import BookingRequestStore, get_booking_repository
+from app.coordinator_lookup import (
+    CoordinatorLookup,
+    get_coordinator_lookup,
+    notice_recipient,
+)
 from app.dependencies import (
     Principal,
     require_block_reader,
@@ -94,8 +99,9 @@ def create_venue_block(
     bookings: BookingRepoDep,
     notifier: Annotated[BookingNotifier, Depends(get_booking_notifier)],
     today: Annotated[date, Depends(current_venue_date)],
+    coordinators: Annotated[CoordinatorLookup, Depends(get_coordinator_lookup)],
 ) -> VenueBlock:
-    """Store a dated block, then alert the Coordinators of affected bookings.
+    """Store a dated block, then alert the current Coordinators of affected bookings.
 
     An approved booking that shares a date with the block, overlaps it in time
     and has not ended is affected (SCRUM-23 AC3, SCRUM-65). The block is saved regardless; notifying
@@ -122,7 +128,9 @@ def create_venue_block(
                 booking.end_minute,
             )
         ):
-            notifier.send(block_affects_booking_event(block, booking, venue.name))
+            recipient = notice_recipient(booking, coordinators)
+            if recipient is not None:
+                notifier.send(block_affects_booking_event(block, booking, venue.name, recipient))
             bookings.mark_needs_new_venue(booking.id)
     return block
 
