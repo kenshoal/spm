@@ -445,6 +445,116 @@ BEGIN
     ASSERT v_row.accessibility_needs = 'Hearing loop', 'AC2-X1: a replacement request carries the accessibility snapshot too';
 END $$;
 
+-- 0091 (H9, SCRUM-64 AC1, SCRUM-29 AC5, SCRUM-35 AC1 and AC3): accessibility needs flag venue bookings
+DO $$
+DECLARE
+    v_user uuid := (SELECT id FROM auth.users ORDER BY created_at, id LIMIT 1);
+    v_who text := v_user::text;
+    v_today date := (now() AT TIME ZONE 'Asia/Singapore')::date;
+    v_start timestamptz := ((now() AT TIME ZONE 'Asia/Singapore')::date + 40)::timestamp AT TIME ZONE 'Asia/Singapore' + interval '10 hours';
+    v_event uuid; v_venue uuid; v_booking uuid; v_equip uuid; v_req uuid;
+    v_row public.event_requests;
+    v_chg public.event_change_requests;
+    v_count integer;
+BEGIN
+    INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+            supported_layouts, operating_slots)
+        VALUES ('VERIFY H9 venue', 'Test wing', 100, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+        RETURNING id INTO v_venue;
+    INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance,
+            proposed_date_times, accessibility_needs)
+        VALUES (v_user, 'VERIFY H9 event', 'Planning', 20, ARRAY[v_start], 'Step-free access')
+        RETURNING id INTO v_event;
+    INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+        VALUES (v_event, v_who, v_who);
+    INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id, start_date, end_date,
+            start_minute, end_minute, status, decided_by, decided_at)
+        VALUES (v_venue, v_user, v_event, v_today + 40, v_today + 40, 600, 720, 'approved', v_user, now())
+        RETURNING id INTO v_booking;
+    -- an equipment reservation, which an accessibility change must NOT flag
+    INSERT INTO public.equipment (type, total_owned_quantity, home_location, description)
+        VALUES ('VERIFY H9 kit', 5, 'Store', 'x') RETURNING id INTO v_equip;
+    INSERT INTO public.equipment_requirements (event_request_id, equipment_type, quantity, event_name, event_date_times, recorded_by)
+        VALUES (v_event, 'VERIFY H9 kit', 2, 'e', ARRAY[v_start], v_user) RETURNING id INTO v_req;
+    INSERT INTO public.equipment_reservations (requirement_id, event_request_id, equipment_id, quantity,
+            collection_date, return_date, created_by)
+        VALUES (v_req, v_event, v_equip, 2, v_today + 39, v_today + 40, v_user);
+
+    -- AC1-N1 (negative): an ordinary edit, and a save with the same accessibility text, flag nothing
+    v_row := public.update_event_by_coordinator(v_event, v_who,
+        (SELECT updated_at FROM public.event_requests WHERE id = v_event),
+        '{"purpose": "A new purpose", "accessibility_needs": "Step-free access"}'::jsonb);
+    ASSERT (SELECT count(*) FROM public.arrangement_reviews WHERE event_request_id = v_event) = 0,
+        'AC1-N1: an unchanged accessibility value or an ordinary edit must not flag';
+
+    -- AC1-H1 (happy): the Coordinator edit flags the approved booking once, naming the field
+    v_row := public.update_event_by_coordinator(v_event, v_who,
+        (SELECT updated_at FROM public.event_requests WHERE id = v_event),
+        '{"accessibility_needs": "Step-free access and a hearing loop"}'::jsonb);
+    ASSERT (SELECT count(*) FROM public.arrangement_reviews
+            WHERE event_request_id = v_event AND arrangement = 'venue_booking' AND arrangement_id = v_booking
+              AND 'accessibility_needs' = ANY(changed_fields) AND cleared_at IS NULL) = 1,
+        'AC1-H1: the booking must be flagged once for the accessibility change';
+    ASSERT (SELECT count(*) FROM public.arrangement_reviews
+            WHERE event_request_id = v_event AND arrangement = 'equipment_reservation') = 0,
+        'AC1-N2: an accessibility change must not flag equipment reservations';
+
+    -- AC1-H2 (happy): a direct single-column update flags too, so the trigger must watch the column itself
+    DELETE FROM public.arrangement_review_notification_outbox
+        WHERE review_id IN (SELECT id FROM public.arrangement_reviews WHERE event_request_id = v_event);
+    DELETE FROM public.arrangement_reviews WHERE event_request_id = v_event;
+    UPDATE public.event_requests SET accessibility_needs = 'Step-free access and a ramp' WHERE id = v_event;
+    ASSERT (SELECT count(*) FROM public.arrangement_reviews
+            WHERE event_request_id = v_event AND arrangement = 'venue_booking' AND arrangement_id = v_booking
+              AND 'accessibility_needs' = ANY(changed_fields)) = 1,
+        'AC1-H2: a direct update of the column must flag the booking once';
+
+    -- AC1-P1 (partition): a blank-to-blank or whitespace-only change is no change
+    DELETE FROM public.arrangement_review_notification_outbox
+        WHERE review_id IN (SELECT id FROM public.arrangement_reviews WHERE event_request_id = v_event);
+    DELETE FROM public.arrangement_reviews WHERE event_request_id = v_event;
+    UPDATE public.event_requests SET accessibility_needs = NULL WHERE id = v_event;
+    DELETE FROM public.arrangement_review_notification_outbox
+        WHERE review_id IN (SELECT id FROM public.arrangement_reviews WHERE event_request_id = v_event);
+    DELETE FROM public.arrangement_reviews WHERE event_request_id = v_event;
+    UPDATE public.event_requests SET accessibility_needs = '   ' WHERE id = v_event;
+    ASSERT (SELECT count(*) FROM public.arrangement_reviews WHERE event_request_id = v_event) = 0,
+        'AC1-P1: empty and whitespace-only accessibility text are the same, so nothing is flagged';
+
+    -- AC3-H1 (happy): the change-request route applies the value and flags the booking once
+    UPDATE public.event_requests SET accessibility_needs = 'Step-free access' WHERE id = v_event;
+    DELETE FROM public.arrangement_review_notification_outbox
+        WHERE review_id IN (SELECT id FROM public.arrangement_reviews WHERE event_request_id = v_event);
+    DELETE FROM public.arrangement_reviews WHERE event_request_id = v_event;
+    v_chg := public.create_event_change_request(v_event, v_user, 'We need a quiet room as well',
+        '{"accessibility_needs": "Step-free access and a quiet room"}'::jsonb);
+    PERFORM public.approve_non_date_event_change_request(v_event, v_chg.id, v_who, NULL);
+    ASSERT (SELECT accessibility_needs FROM public.event_requests WHERE id = v_event) = 'Step-free access and a quiet room',
+        'AC3-H1: the approved accessibility value must be saved';
+    ASSERT (SELECT count(*) FROM public.arrangement_reviews
+            WHERE event_request_id = v_event AND arrangement = 'venue_booking' AND arrangement_id = v_booking
+              AND 'accessibility_needs' = ANY(changed_fields)) = 1,
+        'AC3-H1: the booking must be flagged once by the approval';
+
+    -- AC3-N1 (negative): a proposal that repeats the stored accessibility text is refused as no change
+    BEGIN
+        PERFORM public.create_event_change_request(v_event, v_user, 'Same again',
+            '{"accessibility_needs": "Step-free access and a quiet room"}'::jsonb);
+        RAISE EXCEPTION 'AC3-N1: an unchanged accessibility proposal was accepted' USING ERRCODE = 'P9901';
+    EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+
+    -- AC3-H2 (happy): the date route carries an accessibility value along with the new date
+    DELETE FROM public.arrangement_review_notification_outbox
+        WHERE review_id IN (SELECT id FROM public.arrangement_reviews WHERE event_request_id = v_event);
+    DELETE FROM public.arrangement_reviews WHERE event_request_id = v_event;
+    v_chg := public.create_event_change_request(v_event, v_user, 'Move a day and add a signer',
+        jsonb_build_object('proposed_date_times', jsonb_build_array(v_start + interval '1 day'),
+                           'accessibility_needs', 'Step-free access and a sign-language interpreter'));
+    PERFORM public.approve_date_event_change_request(v_event, v_chg.id, v_who, NULL, NULL);
+    ASSERT (SELECT accessibility_needs FROM public.event_requests WHERE id = v_event) = 'Step-free access and a sign-language interpreter',
+        'AC3-H2: the accessibility value must be saved with the date change';
+END $$;
+
 DO $$ BEGIN RAISE NOTICE 'ALL HOTFIX 2 VERIFICATIONS PASSED'; END $$;
 
 ROLLBACK;

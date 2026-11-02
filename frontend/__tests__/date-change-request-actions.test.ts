@@ -41,3 +41,18 @@ test("does not silently omit an invalid date from a mixed proposal", async () =>
   expect(fetchMock).not.toHaveBeenCalled();
   expect(revalidatePath).not.toHaveBeenCalled();
 });
+
+// SCRUM-35 AC1-P3 (partition): accessibility needs are a supported value, sent trimmed with the other fields
+test("sends the proposed accessibility needs", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 201 }));
+  vi.stubGlobal("fetch", fetchMock);
+  const form = new FormData();
+  form.set("explanation", "A guest now uses a wheelchair.");
+  form.set("accessibility_needs", "  Step-free access and a hearing loop  ");
+  const result = await createEventChangeRequest("event-35", {}, form);
+  expect(result).toEqual({ submitted: true });
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+    explanation: "A guest now uses a wheelchair.",
+    accessibility_needs: "Step-free access and a hearing loop",
+  });
+});
