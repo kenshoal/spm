@@ -838,9 +838,7 @@ class EventRequestService:
             try:
                 recipient_ids += [
                     staff_id
-                    for staff_id in self.repository.cancellation_staff_ids(
-                        event_request.id, released_reason
-                    )
+                    for staff_id in self.repository.cancellation_staff_ids(event_request.id)
                     if staff_id not in recipient_ids
                 ]
             except SupabaseRepositoryError:

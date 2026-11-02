@@ -69,9 +69,7 @@ class EventRequestRepository(Protocol):
 
     def get_event_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]: ...
 
-    def cancellation_staff_ids(
-        self, event_request_id: str, reason: str = "Event cancelled"
-    ) -> list[str]: ...
+    def cancellation_staff_ids(self, event_request_id: str) -> list[str]: ...
 
     def postpone_by_coordinator(
         self, event_request_id: str, coordinator_id: str, reason: str
@@ -839,11 +837,11 @@ class SupabaseEventRequestRepository:
             "p_reason": reason,
         })
 
-    def cancellation_staff_ids(
-        self, event_request_id: str, reason: str = "Event cancelled"
-    ) -> list[str]:
-        """Staff responsible for the arrangements a cancellation or postponement just
-        released: who approved each booking and who made each reservation (SCRUM-57 AC1b)."""
+    def cancellation_staff_ids(self, event_request_id: str) -> list[str]:
+        """Staff to tell when an event is cancelled or postponed (SCRUM-57 AC1): the Venue
+        Staff member in decided_by of each booking it released, the Technical Support Staff
+        member in updated_by of each equipment requirement (a requirement still requested has
+        none) and each Technical Support Staff member assigned through SCRUM-19. Each once."""
         bookings = self._read_rows(
             "/venue_booking_requests",
             {
@@ -853,16 +851,24 @@ class SupabaseEventRequestRepository:
                 "decided_by": "not.is.null",
             },
         )
-        releases = self._read_rows(
-            "/equipment_reservation_releases",
+        requirements = self._read_rows(
+            "/equipment_requirements",
             {
-                "select": "created_by",
+                "select": "updated_by",
                 "event_request_id": f"eq.{event_request_id}",
-                "reason": f"eq.{reason}",
+                "updated_by": "not.is.null",
             },
         )
-        staff = {row["decided_by"] for row in bookings} | {row["created_by"] for row in releases}
-        return sorted(staff)
+        assigned = self._read_rows(
+            "/technical_support_assignments",
+            {"select": "staff_id", "event_request_id": f"eq.{event_request_id}"},
+        )
+        staff = (
+            {row["decided_by"] for row in bookings}
+            | {row["updated_by"] for row in requirements}
+            | {row["staff_id"] for row in assigned}
+        )
+        return sorted(person for person in staff if person)
 
     def _call_rpc(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:

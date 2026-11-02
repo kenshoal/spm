@@ -317,12 +317,14 @@ def test_arrangements_add_up_reservations_per_requirement() -> None:
     ]
 
 
-# AC15-H1 (happy): staff are the approvers of bookings and makers of reservations, once each
+# AC15-H1 (happy): staff are the approvers of bookings, the staff who updated each requirement and
+# the assigned Technical Support Staff (SCRUM-57 AC1, hotfix 2 H11), once each
 def test_cancellation_staff_are_unique() -> None:
     repository = event_repository(
         {
             "venue_booking_requests": [{"decided_by": "v1"}, {"decided_by": "v1"}],
-            "equipment_reservation_releases": [{"created_by": "t1"}],
+            "equipment_requirements": [{"updated_by": "t1"}],
+            "technical_support_assignments": [{"staff_id": "t1"}],
         }
     )
 

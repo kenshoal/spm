@@ -27,9 +27,7 @@ CANCEL_SOURCE_STATUSES = {
 
 
 class FakeEventRequestRepository:
-    def cancellation_staff_ids(
-        self, event_request_id: str, reason: str = "Event cancelled"
-    ) -> list[str]:
+    def cancellation_staff_ids(self, event_request_id: str) -> list[str]:
         return []
 
     def __init__(self) -> None:
