@@ -4,6 +4,8 @@ Every test carries its case ID from docs/testcases/scrum_32_testcases.md. The
 event service is faked at the HTTP boundary, so the real client runs.
 """
 
+from datetime import date
+
 import pytest
 from booking_support import (
     COORDINATOR,
@@ -20,7 +22,7 @@ from booking_support import (
 from fastapi.testclient import TestClient
 
 from app.booking_repository import booking_repository, get_booking_repository
-from app.dependencies import require_authenticated, require_venue_staff
+from app.dependencies import get_today, require_authenticated, require_venue_staff
 from app.main import app
 from app.models import VenueStatus
 from app.repository import repository
@@ -117,14 +119,68 @@ def test_each_slot_alone_is_accepted(
     assert response.json()["slots"] == [slot]
 
 
-# AC1-P7 (partition): a request for dates in the past is accepted (A1)
-def test_past_dates_are_accepted(events: FakeEventService) -> None:
+# AC6-N1 (negative): a start date before today in Singapore is refused (422) and nothing is stored
+def test_a_start_date_in_the_past_is_refused(events: FakeEventService) -> None:
     venue = make_venue()
 
     response = submit(submit_body(venue.id, start_date="2020-01-10", end_date="2020-01-10"))
 
+    assert response.status_code == 422
+    assert stored_count() == 0
+
+
+# AC6-B1, AC6-B2 (boundary): today in Singapore is accepted, yesterday is refused
+@pytest.mark.parametrize(
+    ("start", "expected"),
+    [("2030-03-15", 201), ("2030-03-14", 422)],
+    ids=["AC6-B1", "AC6-B2"],
+)
+def test_the_start_date_boundary_is_today_in_singapore(
+    events: FakeEventService, start: str, expected: int
+) -> None:
+    venue = make_venue()
+    app.dependency_overrides[get_today] = lambda: date(2030, 3, 15)
+    try:
+        response = submit(submit_body(venue.id, start_date=start, end_date="2030-03-16"))
+    finally:
+        app.dependency_overrides.pop(get_today, None)
+
+    assert response.status_code == expected
+    assert stored_count() == (1 if expected == 201 else 0)
+
+
+# AC7-P1, AC7-P2, AC7-P3 (partition): Approved, Planning and Safety Review accept a request
+@pytest.mark.parametrize(
+    "event_status", ["Approved", "Planning", "Safety Review"], ids=["AC7-P1", "AC7-P2", "AC7-P3"]
+)
+def test_the_allowed_event_statuses_accept_a_request(
+    events: FakeEventService, event_status: str
+) -> None:
+    events.events[EVENT]["status"] = event_status
+
+    response = submit(submit_body(make_venue().id))
+
     assert response.status_code == 201
-    assert response.json()["status"] == "pending"
+
+
+# AC7-N1 to AC7-N10 (negative): every other status is refused (409) and nothing is stored
+@pytest.mark.parametrize(
+    "event_status",
+    [
+        "Draft", "Submitted", "Under Review", "Changes Requested", "Confirmed",
+        "Completed", "Cancelled", "Rejected", "Withdrawn", "Postponed",
+    ],
+    ids=[f"AC7-N{k}" for k in range(1, 11)],
+)
+def test_every_other_event_status_refuses_a_request(
+    events: FakeEventService, event_status: str
+) -> None:
+    events.events[EVENT]["status"] = event_status
+
+    response = submit(submit_body(make_venue().id))
+
+    assert response.status_code == 409
+    assert stored_count() == 0
 
 
 # AC1-P8 (partition): a request for a blocked venue is accepted (A1)
@@ -235,6 +291,26 @@ def test_snapshot_is_copied_from_the_event(events: FakeEventService) -> None:
     assert body["event_name"] == "Annual Gala"
     assert body["expected_attendance"] == 120
     assert body["requirements_note"] == "Stage and projector"
+
+
+# AC2-H3 (happy): the accessibility needs are part of the snapshot, copied from the event
+def test_the_accessibility_needs_are_copied_from_the_event(events: FakeEventService) -> None:
+    body = submit(submit_body(make_venue().id)).json()
+
+    assert body["accessibility_needs"] == "Step-free access"
+
+
+# AC2-N1 (negative): the caller cannot supply the accessibility snapshot, and a later edit of the
+# event does not rewrite it
+def test_the_accessibility_snapshot_is_not_caller_owned_or_rewritten(events: FakeEventService) -> None:
+    venue = make_venue()
+    refused = submit(submit_body(venue.id, accessibility_needs="Forged"))
+    created = submit(submit_body(venue.id)).json()
+    events.events[EVENT]["accessibility_needs"] = "Hearing loop"
+    reread = client.get(f"/booking-requests/{created['id']}", headers=AUTH).json()
+
+    assert refused.status_code == 422
+    assert reread["accessibility_needs"] == "Step-free access"
 
 
 # AC2-P2 (partition): an event with no name, attendance or requirements still yields a request

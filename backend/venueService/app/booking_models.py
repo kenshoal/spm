@@ -80,6 +80,8 @@ class BookingRequest(BaseModel):
     event_name: str | None = None
     expected_attendance: int | None = None
     requirements_note: str | None = None
+    # SCRUM-32 AC2: copied from the event when the request is made, never caller-supplied.
+    accessibility_needs: str | None = None
     start_date: date
     end_date: date
     start_minute: int | None = None

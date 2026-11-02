@@ -7,6 +7,7 @@ nothing; deciding it belongs to a later story.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -32,6 +33,7 @@ from app.booking_repository import (
 from app.dependencies import (
     Principal,
     bearer_token,
+    get_today,
     require_booking_reader,
     require_event_booking_reader,
     require_event_coordinator,
@@ -44,6 +46,10 @@ from app.supabase_repository import SupabaseRepositoryError
 from app.time_conflicts import TimedBooking, find_conflicts
 
 router = APIRouter(prefix="/booking-requests", tags=["booking requests"])
+
+# SCRUM-32 AC7: a booking can be requested only in these event statuses. Replacing a venue on
+# a Confirmed event uses SCRUM-63, which has its own route.
+SUBMITTABLE_EVENT_STATUSES = frozenset({"Approved", "Planning", "Safety Review"})
 
 BookingRepoDep = Annotated[BookingRequestStore, Depends(get_booking_repository)]
 EventClientDep = Annotated[EventRequestClient, Depends(get_event_client)]
@@ -110,6 +116,7 @@ def submit_booking_request(
     venues: RepoDep,
     bookings: BookingRepoDep,
     events: EventClientDep,
+    today: Annotated[date, Depends(get_today)],
 ) -> BookingRequestCreated:
     venue = venues.get(payload.venue_id)
     if venue is None:
@@ -119,6 +126,18 @@ def submit_booking_request(
     snapshot = events.snapshot_for_coordinator(
         event_request_id, token, principal.user_id
     )
+    # SCRUM-32 AC7 and AC6, refused before anything is stored. The database repeats both
+    # under the event lock, so a change in between is refused there.
+    if snapshot.status not in SUBMITTABLE_EVENT_STATUSES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "A venue booking can only be requested for an Approved, Planning or Safety Review event",
+        )
+    if payload.start_date < today:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "The start date cannot be before today (Singapore time)",
+        )
     try:
         created = bookings.create(
             BookingRequest(
@@ -128,6 +147,7 @@ def submit_booking_request(
                 event_name=snapshot.event_name,
                 expected_attendance=snapshot.expected_attendance,
                 requirements_note=snapshot.venue_requirements,
+                accessibility_needs=snapshot.accessibility_needs,
                 start_date=payload.start_date,
                 end_date=payload.end_date,
                 start_minute=payload.start_minute,
@@ -283,6 +303,7 @@ def request_replacement_venue(
                 event_name=snapshot.event_name,
                 expected_attendance=snapshot.expected_attendance,
                 requirements_note=snapshot.venue_requirements,
+                accessibility_needs=snapshot.accessibility_needs,
                 start_date=original.start_date,
                 end_date=original.end_date,
                 start_minute=original.start_minute,

@@ -359,6 +359,92 @@ BEGIN
     ASSERT v_row.filled_event, 'AC2-H3: a manual registration taking the last place must mark the event full';
 END $$;
 
+-- 0090 (H8, SCRUM-32 AC2, AC6, AC7): who may request a venue booking, and when
+DO $$
+DECLARE
+    v_user uuid := (SELECT id FROM auth.users ORDER BY created_at, id LIMIT 1);
+    v_who text := v_user::text;
+    v_today date := (now() AT TIME ZONE 'Asia/Singapore')::date;
+    v_event uuid; v_venue uuid; v_venue2 uuid; v_old uuid; v_new uuid;
+    v_row public.venue_booking_requests;
+    v_status text;
+BEGIN
+    INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+            supported_layouts, operating_slots)
+        VALUES ('VERIFY H8 venue', 'Test wing', 100, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+        RETURNING id INTO v_venue;
+    INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+            supported_layouts, operating_slots)
+        VALUES ('VERIFY H8 venue 2', 'Test wing', 100, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+        RETURNING id INTO v_venue2;
+    INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance, accessibility_needs)
+        VALUES (v_user, 'VERIFY H8 event', 'Planning', 20, 'Step-free access') RETURNING id INTO v_event;
+    INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+        VALUES (v_event, v_who, v_who);
+
+    -- AC7-P1..P3 (partition): Approved, Planning and Safety Review accept a request
+    FOREACH v_status IN ARRAY ARRAY['Approved', 'Planning', 'Safety Review'] LOOP
+        UPDATE public.event_requests SET status = v_status WHERE id = v_event;
+        v_row := public.create_event_venue_booking_request(jsonb_build_object(
+            'id', gen_random_uuid(), 'venue_id', v_venue, 'event_request_id', v_event, 'requested_by', v_user,
+            'start_date', v_today + 5, 'end_date', v_today + 5, 'start_minute', 600, 'end_minute', 720,
+            'status', 'pending'), (SELECT updated_at FROM public.event_requests WHERE id = v_event));
+        ASSERT v_row.status = 'pending', 'AC7-P: a request in ' || v_status || ' should be accepted';
+    END LOOP;
+
+    -- AC7-N1..N10 (negative): every other status is refused and stores nothing
+    FOREACH v_status IN ARRAY ARRAY['Draft', 'Submitted', 'Under Review', 'Changes Requested', 'Confirmed',
+            'Completed', 'Cancelled', 'Rejected', 'Withdrawn', 'Postponed'] LOOP
+        UPDATE public.event_requests SET status = v_status WHERE id = v_event;
+        BEGIN
+            PERFORM public.create_event_venue_booking_request(jsonb_build_object(
+                'id', gen_random_uuid(), 'venue_id', v_venue, 'event_request_id', v_event, 'requested_by', v_user,
+                'start_date', v_today + 6, 'end_date', v_today + 6, 'start_minute', 600, 'end_minute', 720,
+                'status', 'pending'), (SELECT updated_at FROM public.event_requests WHERE id = v_event));
+            RAISE EXCEPTION 'AC7-N: a request in % was accepted', v_status USING ERRCODE = 'P9901';
+        EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+    END LOOP;
+    ASSERT (SELECT count(*) FROM public.venue_booking_requests WHERE event_request_id = v_event
+            AND start_date = v_today + 6) = 0, 'AC7-N: a refused request must store nothing';
+    UPDATE public.event_requests SET status = 'Planning' WHERE id = v_event;
+
+    -- AC6-B1 (boundary): today in Singapore is accepted
+    v_row := public.create_event_venue_booking_request(jsonb_build_object(
+        'id', gen_random_uuid(), 'venue_id', v_venue, 'event_request_id', v_event, 'requested_by', v_user,
+        'start_date', v_today, 'end_date', v_today, 'start_minute', 600, 'end_minute', 720,
+        'status', 'pending'), (SELECT updated_at FROM public.event_requests WHERE id = v_event));
+    ASSERT v_row.start_date = v_today, 'AC6-B1: today should be accepted';
+    -- AC6-B2 (boundary): yesterday is refused
+    BEGIN
+        PERFORM public.create_event_venue_booking_request(jsonb_build_object(
+            'id', gen_random_uuid(), 'venue_id', v_venue, 'event_request_id', v_event, 'requested_by', v_user,
+            'start_date', v_today - 1, 'end_date', v_today + 1, 'start_minute', 600, 'end_minute', 720,
+            'status', 'pending'), (SELECT updated_at FROM public.event_requests WHERE id = v_event));
+        RAISE EXCEPTION 'AC6-B2: a start date in the past was accepted' USING ERRCODE = 'P9901';
+    EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+
+    -- AC2-H1 (happy): the accessibility needs are copied; AC2-N1: a later edit does not rewrite them
+    ASSERT v_row.accessibility_needs = 'Step-free access', 'AC2-H1: the accessibility snapshot is missing';
+    UPDATE public.event_requests SET accessibility_needs = 'Hearing loop' WHERE id = v_event;
+    ASSERT (SELECT accessibility_needs FROM public.venue_booking_requests WHERE id = v_row.id) = 'Step-free access',
+        'AC2-N1: an event edit rewrote the snapshot';
+
+    -- AC7-X1 (cross-cutting): a replacement still works for a Confirmed event and for a booking that
+    -- has already started, which the rules for a new request would refuse
+    INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id, start_date, end_date,
+            start_minute, end_minute, status, decided_by, decided_at)
+        VALUES (v_venue, v_user, v_event, v_today - 1, v_today + 3, 600, 660, 'approved', v_user, now())
+        RETURNING id INTO v_old;
+    PERFORM public.create_venue_block(v_venue, v_today, v_today, 600, 660, 'maintenance', 'VERIFY H8', v_user);
+    UPDATE public.event_requests SET status = 'Confirmed' WHERE id = v_event;
+    v_new := gen_random_uuid();
+    v_row := public.create_replacement_venue_booking_request(v_old, v_new, v_venue2, v_user,
+        (SELECT updated_at FROM public.event_requests WHERE id = v_event));
+    ASSERT v_row.id = v_new AND v_row.replaces_booking_id = v_old AND v_row.start_date = v_today - 1,
+        'AC7-X1: a replacement should work for a Confirmed event and a booking that has begun';
+    ASSERT v_row.accessibility_needs = 'Hearing loop', 'AC2-X1: a replacement request carries the accessibility snapshot too';
+END $$;
+
 DO $$ BEGIN RAISE NOTICE 'ALL HOTFIX 2 VERIFICATIONS PASSED'; END $$;
 
 ROLLBACK;
