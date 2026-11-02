@@ -265,6 +265,100 @@ BEGIN
     ASSERT v_row.total_owned_quantity = 0, 'AC2-P3: zero should be allowed with nothing reserved ahead';
 END $$;
 
+-- 0089 (H5, SCRUM-38 AC2): filled_event is true only for the save that takes the event to full.
+-- Needs the CI platform stub: it adds attendee accounts to auth.users (id, email) inside the transaction.
+DO $$
+DECLARE
+    v_org uuid := (SELECT id FROM auth.users ORDER BY created_at, id LIMIT 1);
+    v_coord text := (SELECT id FROM auth.users ORDER BY created_at, id OFFSET 1 LIMIT 1)::text;
+    u uuid[] := ARRAY[gen_random_uuid(), gen_random_uuid(), gen_random_uuid(),
+                      gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), gen_random_uuid()];
+    v_now timestamptz := now();
+    v_event uuid; v_venue uuid;
+    v_row public.event_registrations;
+    v_reg uuid;
+    v_entry uuid;
+    i integer;
+BEGIN
+    FOR i IN 1..7 LOOP
+        INSERT INTO auth.users (id, email) VALUES (u[i], 'verify-h2-' || i || '@test.local');
+    END LOOP;
+
+    -- AC2-H1 (happy): capacity 3. The first two saves do not fill the event; the third does.
+    INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance,
+            proposed_date_times, registration_opens_at, registration_closes_at, registration_capacity)
+        VALUES (v_org, 'VERIFY H2 full A', 'Confirmed', 20, ARRAY[v_now + interval '20 days'],
+                v_now - interval '1 day', v_now + interval '10 days', 3) RETURNING id INTO v_event;
+    INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+        VALUES (v_event, v_coord, v_coord);
+    v_row := public.register_for_event(v_event, u[1], v_now);
+    ASSERT NOT v_row.filled_event, 'AC2-H1: the first of three places must not mark the event full';
+    v_row := public.register_for_event(v_event, u[2], v_now);
+    ASSERT NOT v_row.filled_event, 'AC2-H1: the second of three places must not mark the event full';
+    v_row := public.register_for_event(v_event, u[3], v_now);
+    ASSERT v_row.filled_event, 'AC2-H1: the third of three places must mark the event full';
+    -- AC2-N1 (negative): a refused save marks nothing and stores nothing
+    BEGIN
+        PERFORM public.register_for_event(v_event, u[4], v_now);
+        RAISE EXCEPTION 'AC2-N1: a registration into a full event was accepted' USING ERRCODE = 'P9901';
+    EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+    ASSERT (SELECT count(*) FROM public.event_registrations WHERE event_request_id = v_event AND filled_event) = 1,
+        'AC2-N1: exactly one registration may carry the full mark';
+
+    -- AC2-H2 (happy): a pending offer counts as occupied. Capacity 3 is raised to 5 while one place is offered.
+    INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance,
+            proposed_date_times, registration_opens_at, registration_closes_at, registration_capacity)
+        VALUES (v_org, 'VERIFY H2 full B', 'Confirmed', 20, ARRAY[v_now + interval '20 days'],
+                v_now - interval '1 day', v_now + interval '10 days', 3) RETURNING id INTO v_event;
+    INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+        VALUES (v_event, v_coord, v_coord);
+    PERFORM public.register_for_event(v_event, u[1], v_now);
+    PERFORM public.register_for_event(v_event, u[2], v_now);
+    PERFORM public.register_for_event(v_event, u[3], v_now);
+    PERFORM public.join_waitlist(v_event, u[4], v_now);
+    v_reg := (SELECT id FROM public.event_registrations WHERE event_request_id = v_event AND attendee_id = u[1]);
+    PERFORM public.withdraw_registration(v_reg, u[1], v_now);   -- u4 is offered the place
+    ASSERT (SELECT status FROM public.event_waitlist_entries WHERE event_request_id = v_event AND attendee_id = u[4]) = 'Offered',
+        'AC2-H2 setup: the freed place should be offered';
+    PERFORM public.set_event_registration_settings(v_event, v_coord, v_now - interval '1 day',
+        v_now + interval '10 days', 5, v_now);
+    -- occupied is now u2, u3 and the offer to u4 = 3 of 5
+    v_row := public.register_for_event(v_event, u[5], v_now);
+    ASSERT NOT v_row.filled_event, 'AC2-H2: 3 occupied + 1 is 4 of 5, not full';
+    v_row := public.register_for_event(v_event, u[6], v_now);
+    ASSERT v_row.filled_event,
+        'AC2-H2: 4 occupied (one of them an offer) + 1 is 5 of 5, full, although only 4 rows are Registered';
+
+    -- AC2-N2 (negative): accepting the held offer does not mark the event full again
+    v_entry := (SELECT id FROM public.event_waitlist_entries WHERE event_request_id = v_event AND attendee_id = u[4]);
+    PERFORM public.accept_waitlist_offer(v_entry, u[4], v_now);
+    ASSERT NOT (SELECT filled_event FROM public.event_registrations WHERE event_request_id = v_event AND attendee_id = u[4]),
+        'AC2-N2: accepting an offer already held must not mark the event full';
+
+    -- AC2-N3 (negative): a VIP added to an event that is already full is not "became full" again
+    INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+            supported_layouts, operating_slots)
+        VALUES ('VERIFY H2 vip venue', 'Test wing', 50, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+        RETURNING id INTO v_venue;
+    INSERT INTO public.venue_booking_requests (venue_id, requested_by, event_request_id, start_date,
+            end_date, start_minute, end_minute, status, decided_by, decided_at)
+        VALUES (v_venue, v_org, v_event, (v_now + interval '20 days')::date, (v_now + interval '20 days')::date,
+                600, 720, 'approved', v_org, now());
+    v_row := public.coordinator_register_attendee(v_event, v_coord, 'verify-h2-7@test.local');
+    ASSERT NOT v_row.filled_event, 'AC2-N3: a VIP into an already full event must not announce full again';
+
+    -- AC2-H3 (happy): a manual registration that takes the last place does mark it
+    INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance,
+            proposed_date_times, registration_opens_at, registration_closes_at, registration_capacity)
+        VALUES (v_org, 'VERIFY H2 full C', 'Confirmed', 20, ARRAY[v_now + interval '20 days'],
+                v_now - interval '1 day', v_now + interval '10 days', 2) RETURNING id INTO v_event;
+    INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+        VALUES (v_event, v_coord, v_coord);
+    PERFORM public.register_for_event(v_event, u[1], v_now);
+    v_row := public.coordinator_register_attendee(v_event, v_coord, 'verify-h2-2@test.local');
+    ASSERT v_row.filled_event, 'AC2-H3: a manual registration taking the last place must mark the event full';
+END $$;
+
 DO $$ BEGIN RAISE NOTICE 'ALL HOTFIX 2 VERIFICATIONS PASSED'; END $$;
 
 ROLLBACK;

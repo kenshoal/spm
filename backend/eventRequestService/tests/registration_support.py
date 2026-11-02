@@ -132,6 +132,7 @@ class FakeRegistrationRepository:
             raise RegistrationRpcError("capacity not set", "P0004", "capacity not set")
         if self._stored_count(event_id) >= event["registration_capacity"]:
             raise RegistrationRpcError("event full", "P0004", "event full")
+        taken = self.places_taken(event_id)
         self._clock += 1
         row = {
             "id": str(uuid4()),
@@ -140,6 +141,9 @@ class FakeRegistrationRepository:
             "status": "Registered",
             "created_at": NOW + timedelta(seconds=self._clock),
             "registered_by": coordinator_id,
+            # Mirrors the database: only the save that takes the event to full.
+            "filled_event": taken < event["registration_capacity"]
+            and taken + 1 >= event["registration_capacity"],
         }
         self.registrations.append(row)
         return dict(row)
@@ -232,7 +236,8 @@ class FakeRegistrationRepository:
             raise RegistrationRpcError(
                 "already registered", "P0004", "already registered"
             )
-        if self._stored_count(event_id) >= capacity:
+        taken = self.places_taken(event_id)
+        if taken >= capacity:
             raise RegistrationRpcError("event full", "P0004", "event full")
         self._clock += 1
         row = {
@@ -242,6 +247,8 @@ class FakeRegistrationRepository:
             "status": "Registered",
             "created_at": NOW + timedelta(seconds=self._clock),
             "registered_by": None,
+            # Mirrors the database: Registered plus Offered places, decided with the save.
+            "filled_event": taken + 1 >= capacity,
         }
         self.registrations.append(row)
         return dict(row)
