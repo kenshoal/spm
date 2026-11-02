@@ -526,6 +526,7 @@ def test_registration_info_carries_the_venue_capacity() -> None:
     service = RegistrationService(SimpleNamespace(
         get_event_access=lambda event_id: event,
         list_for_event=lambda event_id: [],
+        places_taken=lambda event_id: 0,
         attendee_emails=lambda event_id: {},
         event_venue_capacity=lambda event_id: 120,
     ))
@@ -544,6 +545,7 @@ def test_registration_info_survives_a_venue_lookup_failure() -> None:
     service = RegistrationService(SimpleNamespace(
         get_event_access=lambda event_id: event,
         list_for_event=lambda event_id: [],
+        places_taken=lambda event_id: 0,
         attendee_emails=lambda event_id: {},
         event_venue_capacity=fail,
     ))

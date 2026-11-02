@@ -116,7 +116,10 @@ class RegistrationService:
             "registration_closes_at": event.get("registration_closes_at"),
             "registered": registered,
             "withdrawn": sum(1 for r in rows if r["status"] == "Withdrawn"),
-            "places_available": places_remaining(event, registered),
+            # SCRUM-34 AC5, SCRUM-24 AC8: a pending offer holds its place.
+            "places_available": places_remaining(
+                event, self.repository.places_taken(event_id)
+            ),
             "attended": attended,
             "absent": registered - attended,
             "registrations": rows,

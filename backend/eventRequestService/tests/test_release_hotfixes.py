@@ -377,6 +377,7 @@ def test_registration_info_adds_attendee_emails() -> None:
                 "registration_capacity": 5,
             },
             list_for_event=lambda event_id: [{"id": "r1", "status": "Registered"}],
+            places_taken=lambda event_id: 1,
             attendee_emails=lambda event_id: {"r1": "a@example.com"},
             event_venue_capacity=lambda event_id: None,
         )
@@ -400,6 +401,7 @@ def test_registration_info_survives_an_email_lookup_failure() -> None:
                 "registration_capacity": 5,
             },
             list_for_event=lambda event_id: [{"id": "r1", "status": "Registered"}],
+            places_taken=lambda event_id: 1,
             attendee_emails=fail,
             event_venue_capacity=lambda event_id: None,
         )
