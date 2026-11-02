@@ -34,7 +34,7 @@ test("assigns the chosen coordinator through the event request API", async () =>
   expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8003/event-requests/request%2F1/coordinator");
   expect(fetchMock.mock.calls[0][1]).toMatchObject({
     method: "POST",
-    body: JSON.stringify({ coordinator_id: "coord-1" }),
+    body: JSON.stringify({ coordinator_id: "coord-1", expected_coordinator_id: null }),
   });
   expect(state).toEqual({ assigned: true, message: "Coordinator assigned." });
   expect(navigation.revalidatePath).toHaveBeenCalledWith("/operations/assignments");
@@ -49,6 +49,31 @@ test("reports a reassignment when the request already had a coordinator", async 
   const state = await assignCoordinator("request-1", {}, form("coord-2", "coord-1"));
 
   expect(state).toEqual({ assigned: true, message: "Coordinator reassigned." });
+});
+
+// AC6-H1 (happy, SCRUM-62): a reassignment states the coordinator the Lead saw, so a stale screen is refused
+test("sends the coordinator shown on screen as the expected one", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201 });
+  vi.stubGlobal("fetch", fetchMock);
+
+  await assignCoordinator("request-1", {}, form("coord-2", "coord-1"));
+
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({
+    body: JSON.stringify({ coordinator_id: "coord-2", expected_coordinator_id: "coord-1" }),
+  });
+});
+
+// AC6-N1 (negative, SCRUM-62): the server's stale-view refusal is shown to the Lead
+test("shows the refusal when the coordinator changed after the page loaded", async () => {
+  const detail = "The Coordinator for this request changed after you opened it. Refresh and try again";
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: false, status: 409, json: async () => ({ detail }), text: async () => JSON.stringify({ detail }),
+  }));
+
+  const state = await assignCoordinator("request-1", {}, form("coord-3", "coord-1"));
+
+  expect(state.assigned).toBeUndefined();
+  expect(state.message).toContain("changed after you opened it");
 });
 
 // AC2-N6 (negative, SCRUM-14): an empty choice is caught before any request is sent

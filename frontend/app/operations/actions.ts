@@ -29,7 +29,7 @@ export async function assignCoordinator(
       apiUrl,
       `/event-requests/${encodeURIComponent(eventRequestId)}/coordinator`,
       "POST",
-      { coordinator_id: coordinatorId },
+      { coordinator_id: coordinatorId, expected_coordinator_id: currentCoordinatorId || null },
     );
   } catch {
     return { message: "The coordinator could not be assigned. Please try again." };
