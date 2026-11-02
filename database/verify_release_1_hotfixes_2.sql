@@ -148,6 +148,59 @@ BEGIN
         'AC9-H3: an approved date change must reopen the event, clear the end and save the date';
 END $$;
 
+-- 0087 (H2, SCRUM-24 AC2): a new offer is made only if its 72 hours end before registration closes
+DO $$
+DECLARE
+    v_a uuid := (SELECT id FROM auth.users ORDER BY created_at, id LIMIT 1);
+    v_b uuid := (SELECT id FROM auth.users ORDER BY created_at, id OFFSET 1 LIMIT 1);
+    v_c uuid := (SELECT id FROM auth.users ORDER BY created_at, id OFFSET 2 LIMIT 1);
+    v_coord text := (SELECT id FROM auth.users ORDER BY created_at, id OFFSET 3 LIMIT 1)::text;
+    v_event uuid; v_reg uuid; v_entry public.event_waitlist_entries;
+    v_now timestamptz := now();
+    v_status text;
+    v_hours integer;
+BEGIN
+    -- Three cases: registration closes 71, 72 and 73 hours from now. The 72 hours must end strictly before it.
+    FOREACH v_hours IN ARRAY ARRAY[71, 72, 73] LOOP
+        INSERT INTO public.event_requests (organiser_id, event_name, status, expected_attendance,
+                proposed_date_times, registration_opens_at, registration_closes_at, registration_capacity)
+            VALUES (v_a, 'VERIFY H2 waitlist ' || v_hours, 'Confirmed', 20,
+                    ARRAY[v_now + interval '20 days'], v_now - interval '1 day',
+                    v_now + make_interval(hours => v_hours), 1) RETURNING id INTO v_event;
+        INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
+            VALUES (v_event, v_coord, v_coord);
+        PERFORM public.register_for_event(v_event, v_a, v_now);
+        v_reg := (SELECT id FROM public.event_registrations WHERE event_request_id = v_event AND attendee_id = v_a);
+        PERFORM public.join_waitlist(v_event, v_b, v_now);
+
+        PERFORM public.withdraw_registration(v_reg, v_a, v_now);
+        v_status := (SELECT status FROM public.event_waitlist_entries WHERE event_request_id = v_event AND attendee_id = v_b);
+
+        IF v_hours <= 72 THEN
+            -- AC2-B1, AC2-B2 (boundary): 71h and exactly 72h to close, the 72h window does not end before it
+            ASSERT v_status = 'Waiting', 'AC2-B1/B2: no offer may reach registration close, hours=' || v_hours || ' got ' || v_status;
+            ASSERT (SELECT count(*) FROM public.waitlist_notification_outbox o
+                    JOIN public.event_waitlist_entries e ON e.id = o.entry_id
+                    WHERE e.event_request_id = v_event AND o.event_type = 'waitlist_offered') = 0,
+                'AC2-B1: no offer notice may be queued';
+            ASSERT (SELECT outcome FROM public.event_waitlist_places WHERE event_request_id = v_event) = 'Released',
+                'AC2-B1: the place goes to normal registration';
+            -- AC3-N1 (negative): the Coordinator's choice cannot start a window past the close either
+            BEGIN
+                -- a place must be open for the override; reopen one by hand for the check
+                INSERT INTO public.event_waitlist_places (event_request_id) VALUES (v_event);
+                v_entry := public.choose_waitlist_recipient(v_event,
+                    (SELECT id FROM public.event_waitlist_entries WHERE event_request_id = v_event AND attendee_id = v_b),
+                    v_coord, v_now);
+                RAISE EXCEPTION 'AC3-N1: an override ran past registration close' USING ERRCODE = 'P9901';
+            EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL; END;
+        ELSE
+            -- AC2-B3 (boundary): 73h to close, the window ends before it, so the offer is made
+            ASSERT v_status = 'Offered', 'AC2-B3: an offer inside the window must be made, got ' || v_status;
+        END IF;
+    END LOOP;
+END $$;
+
 DO $$ BEGIN RAISE NOTICE 'ALL HOTFIX 2 VERIFICATIONS PASSED'; END $$;
 
 ROLLBACK;

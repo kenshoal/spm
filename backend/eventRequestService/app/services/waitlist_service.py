@@ -25,6 +25,7 @@ from app.services.waitlist_rules import (
     NotOfferedError,
     NotWaitingError,
     OfferExpiredError,
+    OfferWindowClosedError,
     PlacesAvailableError,
     WaitlistEntryNotFoundError,
     check_join,
@@ -189,6 +190,8 @@ class WaitlistService:
                 return NotWaitingError()
             if error.reason == "no open place":
                 return NoOpenPlaceError()
+            if error.reason == "offer window":
+                return OfferWindowClosedError()
         return error
 
     @staticmethod
