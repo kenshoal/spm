@@ -6,7 +6,10 @@ reasons, event names or ids). Times are minutes after midnight in 15-minute
 steps inside the 07:00-24:00 operating window, as for bookings (SCRUM-65).
 
 Each date is a partition of the window: ``entries`` and ``free`` are ordered,
-never overlap, and together cover exactly 07:00-24:00. Ranges are half-open, so
+never overlap, and together cover exactly 07:00-24:00 for a venue that operates the
+whole day. A venue with shorter operating hours (SCRUM-30, SCRUM-31 AC4) has free time
+only inside them; time outside them is never free, and its bookings and blocks are
+still listed. Ranges are half-open, so
 a booking ending at 12:00 leaves 12:00 free. Where a block overlaps a booking
 the overlap is blocked and the booking is split around it, the same order the
 Venue Staff calendar uses (an active block, then an approved booking). An active,
@@ -180,7 +183,13 @@ def build_calendar(
         free = (
             []
             if unavailable
-            else _subtract([(OPEN_MINUTE, CLOSE_MINUTE)], _merge(blocked + booked + held))
+            else _subtract(
+                [(
+                    max(OPEN_MINUTE, venue.operating_start_minute),
+                    min(CLOSE_MINUTE, venue.operating_end_minute),
+                )],
+                _merge(blocked + booked + held),
+            )
         )
         days.append(
             CalendarDay(

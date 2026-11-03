@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { SuitabilityFormValues } from "@/lib/venue-suitability";
+import { timeRangeLabel } from "@/lib/venue-options";
 import { layoutLabel, prepTimeLabel, type VenueSearchResult } from "@/lib/venues";
 import { SuitabilityCheck } from "./suitability-check";
 
@@ -27,6 +28,7 @@ export function VenueResults({ venues, requirements = NO_REQUIREMENTS, month }: 
               <dt className="text-[#718078]">Layouts</dt><dd className="text-[#273832]">{venue.supported_layouts.map(layoutLabel).join(", ") || "None recorded"}</dd>
               <dt className="text-[#718078]">Facilities</dt><dd className="text-[#273832]">{venue.facilities.join(", ") || "None recorded"}</dd>
               <dt className="text-[#718078]">Accessibility</dt><dd className="text-[#273832]">{venue.accessibility_features.join(", ") || "None recorded"}</dd>
+              <dt className="text-[#718078]">Open</dt><dd className="text-[#273832]">{timeRangeLabel(venue.operating_start_minute, venue.operating_end_minute)} daily</dd>
               <dt className="text-[#718078]">Setup</dt><dd className="text-[#273832]">{prepTimeLabel(venue.setup_minutes)}</dd>
               <dt className="text-[#718078]">Turnaround</dt><dd className="text-[#273832]">{prepTimeLabel(venue.turnaround_minutes)}</dd>
             </dl>

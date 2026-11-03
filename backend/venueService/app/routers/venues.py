@@ -271,6 +271,18 @@ def update_venue(
     principal: VenueStaffDep,
     repo: RepoDep,
 ) -> Venue:
+    # SCRUM-30 AC6: naming one end must still leave start before end. Both ends named are
+    # checked by the model; one end is checked here against the stored other end.
+    if {"operating_start_minute", "operating_end_minute"} & payload.model_fields_set:
+        stored = repo.get(venue_id)
+        if stored is not None:
+            start = payload.operating_start_minute or stored.operating_start_minute
+            end = payload.operating_end_minute or stored.operating_end_minute
+            if start >= end:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "The operating start must be before the operating end",
+                )
     # SCRUM-20 AC6: setup and turnaround go through update_timing, which flags the
     # bookings a change affects; the other fields are a plain update.
     timing = payload.model_dump(

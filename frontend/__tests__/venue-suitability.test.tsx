@@ -201,7 +201,7 @@ test("shows Suitable with no mismatch list", () => {
 const venue: Venue = {
   id: "v1", name: "Riverside Hall", location: "East Wing", max_capacity: 120,
   facilities: ["Projector"], accessibility_features: [], supported_layouts: ["theatre"],
-  operating_slots: ["AM", "PM"], setup_minutes: 0, turnaround_minutes: 0,
+  operating_slots: ["AM", "PM"], setup_minutes: 0, turnaround_minutes: 0, operating_start_minute: 420, operating_end_minute: 1440,
   status: "available", created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
 };
 
@@ -221,4 +221,20 @@ test("pre-fills each result's check form from the search filters", () => {
   expect((within(card).getByLabelText("End time") as HTMLSelectElement).value).toBe("18:00");
   expect((within(card).getByLabelText("Required facilities") as HTMLInputElement).value).toBe("Projector");
   expect(within(card).getByRole("button", { name: "Check this venue" })).toBeDefined();
+});
+
+// SCRUM-30 AC5-N2 (negative): an operating-hours mismatch is named and explained, not shown as a bare code
+test("names an operating hours mismatch", () => {
+  render(
+    <SuitabilityVerdict
+      result={{
+        venue_id: "v1",
+        suitable: false,
+        mismatches: [{ attribute: "operating_hours", reason: "Venue operates 09:00 to 18:00, outside the requested 08:00 to 10:00." }],
+      }}
+    />,
+  );
+
+  expect(screen.getByText("Operating hours")).toBeDefined();
+  expect(screen.getByText(/Venue operates 09:00 to 18:00/)).toBeDefined();
 });

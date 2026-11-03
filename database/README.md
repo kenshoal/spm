@@ -111,6 +111,7 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0089_registration_filled_event.sql` | Hotfix 2 H5 (SCRUM-38 AC2): `event_registrations.filled_event`, set in the transaction by `register_for_event` and `coordinator_register_attendee`. Run after `0088`. |
 | `migrations/0090_booking_request_rules.sql` | Hotfix 2 H8 (SCRUM-32 AC2, AC6, AC7): booking requests only in Approved, Planning or Safety Review, no start date before today (Singapore), an accessibility snapshot; the creator moves to `private.insert_venue_booking_request` so a replacement (SCRUM-63) keeps working. Run after `0089`. |
 | `migrations/0091_accessibility_needs_flag_bookings.sql` | Hotfix 2 H9 (SCRUM-64 AC1, SCRUM-29 AC5, SCRUM-35 AC1, AC3): accessibility needs flag the venue bookings and are a supported change-request value. Run after `0090`. |
+| `migrations/0092_venue_operating_hours.sql` | Hotfix 2 H12 (SCRUM-30 AC1, AC2, AC6; SCRUM-12 AC3; SCRUM-31 AC4): `venues.operating_start_minute` and `operating_end_minute` (defaults 420 and 1440, 15-minute steps within 07:00 to 24:00, start before end). Run after `0091`. |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the

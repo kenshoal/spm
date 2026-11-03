@@ -555,6 +555,50 @@ BEGIN
         'AC3-H2: the accessibility value must be saved with the date change';
 END $$;
 
+-- 0092 (H12, SCRUM-30 AC1, AC2, AC6): a venue's daily operating hours
+DO $$
+DECLARE
+    v_id uuid;
+    v_hours integer[];
+BEGIN
+    -- AC1-P1 (partition): a venue created without hours operates the whole day
+    INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+            supported_layouts, operating_slots)
+        VALUES ('VERIFY H12 venue', 'Test wing', 100, '{}', '{theatre}', '{theatre}', '{AM,PM,NIGHT}')
+        RETURNING id INTO v_id;
+    ASSERT (SELECT operating_start_minute FROM public.venues WHERE id = v_id) = 420
+       AND (SELECT operating_end_minute FROM public.venues WHERE id = v_id) = 1440,
+        'AC1-P1: the default hours should be 07:00 to 24:00';
+
+    -- AC1-H1, AC1-B1, AC1-B2 (happy and boundary): valid ranges are accepted, including a single quarter hour at either edge
+    FOREACH v_hours SLICE 1 IN ARRAY ARRAY[ARRAY[540, 1080], ARRAY[420, 435], ARRAY[1425, 1440], ARRAY[420, 1440]] LOOP
+        UPDATE public.venues SET operating_start_minute = v_hours[1], operating_end_minute = v_hours[2] WHERE id = v_id;
+        ASSERT (SELECT operating_start_minute FROM public.venues WHERE id = v_id) = v_hours[1],
+            'AC1-H1: hours ' || v_hours[1] || '-' || v_hours[2] || ' should be accepted';
+    END LOOP;
+
+    -- AC6-N1..N6 (negative): an invalid range is refused and the stored hours do not change
+    UPDATE public.venues SET operating_start_minute = 540, operating_end_minute = 1080 WHERE id = v_id;
+    FOREACH v_hours SLICE 1 IN ARRAY ARRAY[ARRAY[405, 1080], ARRAY[540, 1455], ARRAY[545, 1080], ARRAY[540, 1085],
+            ARRAY[600, 600], ARRAY[900, 600]] LOOP
+        BEGIN
+            UPDATE public.venues SET operating_start_minute = v_hours[1], operating_end_minute = v_hours[2] WHERE id = v_id;
+            RAISE EXCEPTION 'AC6-N: hours %-% were accepted', v_hours[1], v_hours[2] USING ERRCODE = 'P9901';
+        EXCEPTION WHEN check_violation THEN NULL; END;
+    END LOOP;
+    ASSERT (SELECT operating_start_minute FROM public.venues WHERE id = v_id) = 540
+       AND (SELECT operating_end_minute FROM public.venues WHERE id = v_id) = 1080,
+        'AC6-N: a refused range must leave the stored hours alone';
+
+    -- AC6-N7 (negative): a venue cannot be created with an invalid range either
+    BEGIN
+        INSERT INTO public.venues (name, location, max_capacity, facilities, accessibility_features,
+                supported_layouts, operating_slots, operating_start_minute, operating_end_minute)
+            VALUES ('VERIFY H12 bad venue', 'Test wing', 10, '{}', '{theatre}', '{theatre}', '{AM}', 1000, 900);
+        RAISE EXCEPTION 'AC6-N7: an inverted range was accepted on insert' USING ERRCODE = 'P9901';
+    EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+
 DO $$ BEGIN RAISE NOTICE 'ALL HOTFIX 2 VERIFICATIONS PASSED'; END $$;
 
 ROLLBACK;
