@@ -8,10 +8,13 @@ rules raise. The early checks run in the function's order, so an attendee who
 is already registered is told that, not that the list is closed.
 """
 
+import logging
 from datetime import datetime
 from typing import Any
 
+from app.repositories.event_request_repository import SupabaseRepositoryError
 from app.repositories.registration_repository import RegistrationRpcError
+from app.services.notification_client import NotificationClient
 from app.services.registration_rules import (
     EventNotVisibleError,
     RegistrationNotOpenError,
@@ -25,6 +28,7 @@ from app.services.waitlist_rules import (
     NotOfferedError,
     NotWaitingError,
     OfferExpiredError,
+    OfferWindowClosedError,
     PlacesAvailableError,
     WaitlistEntryNotFoundError,
     check_join,
@@ -32,12 +36,17 @@ from app.services.waitlist_rules import (
 
 NOT_FOUND_ERRCODE = "P0002"
 REFUSED_ERRCODE = "P0004"
+logger = logging.getLogger(__name__)
+
 EVENT_COORDINATOR_ROLE = "event_coordinator"
 
 
 class WaitlistService:
-    def __init__(self, repository: Any) -> None:
+    def __init__(
+        self, repository: Any, notification_client: NotificationClient | None = None
+    ) -> None:
         self.repository = repository
+        self.notification_client = notification_client or NotificationClient(None)
 
     def join(
         self, event_id: str, attendee_id: str, now: datetime
@@ -109,7 +118,37 @@ class WaitlistService:
             ),
             None,
         )
+        self._notify_registration_confirmed(entry, registration)
         return {"entry": entry, "registration": registration}
+
+    def _notify_registration_confirmed(
+        self, entry: dict[str, Any], registration: dict[str, Any] | None
+    ) -> None:
+        """SCRUM-38 AC1: accepting an offered place registers the Attendee, so tell them.
+
+        "Full" is not announced: the offer already held this place, so the occupied
+        places did not change. Best-effort, after the commit.
+        """
+        if registration is None:
+            logger.warning(
+                "No registration found to confirm for waiting-list entry %s", entry.get("id")
+            )
+            return
+        try:
+            event = self.repository.get_event(entry["event_request_id"])
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not read event request %s to confirm an accepted offer",
+                entry["event_request_id"],
+                exc_info=True,
+            )
+            event = None
+        self.notification_client.notify_registration_confirmed(
+            event_request_id=entry["event_request_id"],
+            attendee_id=registration["attendee_id"],
+            event_name=event.get("event_name") if event else None,
+            registration_id=registration["id"],
+        )
 
     def withdraw(
         self, entry_id: str, attendee_id: str, now: datetime
@@ -189,6 +228,8 @@ class WaitlistService:
                 return NotWaitingError()
             if error.reason == "no open place":
                 return NoOpenPlaceError()
+            if error.reason == "offer window":
+                return OfferWindowClosedError()
         return error
 
     @staticmethod

@@ -74,6 +74,7 @@ class SupabaseCoordinatorAssignmentRepository:
                     "p_event_request_id": values["event_request_id"],
                     "p_coordinator_id": values["coordinator_id"],
                     "p_assigned_by": values["assigned_by"],
+                    "p_expected_coordinator_id": values["expected_coordinator_id"],
                 },
                 headers={"Accept": "application/vnd.pgrst.object+json"},
             )

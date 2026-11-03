@@ -178,7 +178,10 @@ def create_app(
         else None
     )
     application.state.waitlist_service = (
-        WaitlistService(registration_repository)
+        WaitlistService(
+            registration_repository,
+            NotificationClient.from_settings(get_notification_settings()),
+        )
         if registration_repository is not None
         else None
     )

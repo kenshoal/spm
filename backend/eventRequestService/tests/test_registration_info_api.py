@@ -220,6 +220,37 @@ def test_places_available_at_the_capacity_boundary(
     assert body["places_available"] == available
 
 
+class FakeRepositoryWithOffers(FakeRegistrationRepository):
+    """Registered rows plus a number of waiting-list places held by pending offers."""
+
+    offered = 0
+
+    def places_taken(self, event_id: str) -> int:
+        return self._stored_count(event_id) + self.offered
+
+
+# AC5-B1, AC5-B2, AC5-B3 (boundary): a pending offer holds a place, so available
+# places are capacity - Registered - Offered, and never go below zero
+@pytest.mark.parametrize(
+    ("registered", "offered", "available"),
+    [(3, 1, 1), (4, 1, 0), (4, 3, 0)],
+    ids=["AC5-B1", "AC5-B2", "AC5-B3"],
+)
+def test_pending_offers_reduce_the_available_places(
+    registered: int, offered: int, available: int
+) -> None:
+    repo = FakeRepositoryWithOffers()
+    repo.offered = offered
+    event_id = add_event(repo, registration_capacity=5)
+    fill(repo, event_id, registered)
+
+    with as_organiser(repo) as client:
+        body = client.get(info_path(event_id)).json()
+
+    assert body["registered"] == registered
+    assert body["places_available"] == available
+
+
 # AC4-N1 (negative): no session is refused before any lookup
 def test_no_session_is_unauthorised() -> None:
     with make_unauthenticated_client() as client:

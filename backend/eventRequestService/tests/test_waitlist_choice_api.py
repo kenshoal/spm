@@ -160,3 +160,25 @@ def test_choosing_without_an_open_place_is_refused() -> None:
     assert response.json()["code"] == "no_open_place"
     assert next(e for e in repo.entries if e["id"] == entry)["status"] == WAITING
     assert repo.outbox == []
+
+
+# AC2-N1 (negative): when the database refuses a choice because the 72 hours would run
+# past registration close or the event start, the Coordinator gets a clear 409 and the
+# offer in flight is untouched
+def test_a_choice_that_would_run_past_registration_close_is_refused() -> None:
+    from app.repositories.registration_repository import RegistrationRpcError
+
+    repo = FakeWaitlistRepository()
+    event_id, offered, entries = full_event_with_offer(repo, ATTENDEE_B)
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise RegistrationRpcError("offer window", "P0004", "offer window")
+
+    repo.choose_waitlist_recipient = refuse  # type: ignore[method-assign]
+    with coordinator_client(repo) as client:
+        response = client.post(choice_path(event_id, entries[ATTENDEE_B]))
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "offer_window_closed"
+    assert next(e for e in repo.entries if e["id"] == offered)["status"] == "Offered"
+    assert next(e for e in repo.entries if e["id"] == entries[ATTENDEE_B])["status"] == WAITING

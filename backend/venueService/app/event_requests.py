@@ -25,6 +25,7 @@ class EventSnapshot:
     venue_requirements: str | None
     updated_at: datetime
     status: str | None = None
+    accessibility_needs: str | None = None
 
 
 class EventRequestClient:
@@ -90,6 +91,7 @@ class EventRequestClient:
             venue_requirements=event.get("venue_requirements"),
             updated_at=updated_at,
             status=event.get("status"),
+            accessibility_needs=event.get("accessibility_needs"),
         )
 
 

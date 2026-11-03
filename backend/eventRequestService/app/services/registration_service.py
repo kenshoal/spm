@@ -116,7 +116,10 @@ class RegistrationService:
             "registration_closes_at": event.get("registration_closes_at"),
             "registered": registered,
             "withdrawn": sum(1 for r in rows if r["status"] == "Withdrawn"),
-            "places_available": places_remaining(event, registered),
+            # SCRUM-34 AC5, SCRUM-24 AC8: a pending offer holds its place.
+            "places_available": places_remaining(
+                event, self.repository.places_taken(event_id)
+            ),
             "attended": attended,
             "absent": registered - attended,
             "registrations": rows,
@@ -279,7 +282,10 @@ class RegistrationService:
         """SCRUM-38 AC1 and AC2, after any registration is saved, however it was made.
 
         A refused registration never reaches here, so it tells nobody. Best-effort:
-        a notice failure never undoes the registration. Returns the active count.
+        a notice failure never undoes the registration. "Full" is not recounted here:
+        the database decides, in the transaction that saved the registration, whether
+        this save took the event from below capacity to full (Registered plus Offered
+        places) and returns it as `filled_event`. Returns the places taken.
         """
         self.notification_client.notify_registration_confirmed(
             event_request_id=event["id"],
@@ -287,11 +293,9 @@ class RegistrationService:
             event_name=event.get("event_name"),
             registration_id=registration["id"],
         )
-        registered = self.repository.count_active(event["id"])
-        capacity = event.get("registration_capacity")
-        if capacity is not None and registered >= capacity:
+        if registration.get("filled_event") is True:
             self._notify_registration_full(event, registration["id"])
-        return registered
+        return self.repository.places_taken(event["id"])
 
     def _notify_registration_full(
         self, event: dict[str, Any], registration_id: str

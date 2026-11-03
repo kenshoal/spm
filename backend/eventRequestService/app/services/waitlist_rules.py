@@ -97,6 +97,14 @@ class NoOpenPlaceError(WaitlistRuleError):
     detail = "This event has no open place to assign"
 
 
+class OfferWindowClosedError(WaitlistRuleError):
+    code = "offer_window_closed"
+    detail = (
+        "An offer needs 72 hours before registration closes and before the event "
+        "starts, and there is not enough time left"
+    )
+
+
 def _as_datetime(value: datetime | str | None) -> datetime | None:
     if value is None or isinstance(value, datetime):
         return value

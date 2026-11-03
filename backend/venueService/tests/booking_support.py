@@ -45,12 +45,14 @@ class FakeEventService:
         expected_attendance: int | None = 120,
         venue_requirements: str | None = "Stage and projector",
         status: str = "Planning",
+        accessibility_needs: str | None = "Step-free access",
     ) -> None:
         self.events[event_id] = {
             "coordinator_id": coordinator_id,
             "event_name": event_name,
             "expected_attendance": expected_attendance,
             "venue_requirements": venue_requirements,
+            "accessibility_needs": accessibility_needs,
             "updated_at": "2026-10-22T00:00:00+00:00",
             "status": status,
         }

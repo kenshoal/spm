@@ -7,13 +7,14 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import ValidationError
 
 from app.clock import get_now
-from app.config import get_settings
+from app.config import get_notification_settings, get_settings
 from app.controllers.event_request_controller import (
     AuthenticatedCaller,
     get_authenticated_caller,
 )
 from app.controllers.registration_controller import AttendeeDependency
 from app.repositories.waitlist_repository import SupabaseWaitlistRepository
+from app.services.notification_client import NotificationClient
 from app.services.registration_service import EVENT_COORDINATOR_ROLE
 from app.services.waitlist_service import WaitlistService
 
@@ -37,7 +38,9 @@ def get_waitlist_service(request: Request) -> WaitlistService:
             detail="Supabase is not configured for eventRequestService",
         ) from error
 
-    service = WaitlistService(repository)
+    service = WaitlistService(
+        repository, NotificationClient.from_settings(get_notification_settings())
+    )
     request.app.state.waitlist_service = service
     return service
 

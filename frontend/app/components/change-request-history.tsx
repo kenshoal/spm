@@ -9,6 +9,7 @@ const labels: Record<string, string> = {
   venue_requirements: "Venue requirements",
   equipment_requirements: "Equipment requirements",
   registration_needs: "Registration needs",
+  accessibility_needs: "Accessibility needs",
 };
 
 export function ChangeRequestHistory({ requests }: { requests: EventChangeRequest[] }) {

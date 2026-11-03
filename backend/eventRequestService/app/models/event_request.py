@@ -191,6 +191,7 @@ class EventChangeRequestCreate(BaseModel):
     venue_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
     equipment_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
     registration_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
+    accessibility_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
 
     @model_validator(mode="after")
     def proposed_change_is_required(self) -> "EventChangeRequestCreate":

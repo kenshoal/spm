@@ -417,7 +417,7 @@ def test_postponement_notice_reaches_organiser_attendees_and_staff() -> None:
     repository = SimpleNamespace(
         postpone_by_coordinator=lambda *args: dict(EVENT_ROW),
         list_registered_attendee_ids=lambda event_id: ["a1", "o1"],
-        cancellation_staff_ids=lambda event_id, reason: ["s1", "a1"],
+        cancellation_staff_ids=lambda event_id: ["s1", "a1"],
     )
     spy = Spy()
     service = EventTransitionService(EventRequestService(repository, spy), spy)
@@ -432,7 +432,7 @@ def test_postponement_notice_reaches_organiser_attendees_and_staff() -> None:
 
 # AC22-N4 (negative): a failed staff lookup still tells the Organiser and the Attendees
 def test_postponement_notice_survives_a_staff_lookup_failure() -> None:
-    def fail(event_id: str, reason: str) -> list[str]:
+    def fail(event_id: str) -> list[str]:
         raise SupabaseRepositoryError("down")
 
     repository = SimpleNamespace(
@@ -465,8 +465,9 @@ def test_resumption_notice_carries_the_new_date() -> None:
     assert call["proposed_date_times"] == ["2030-02-01T02:00:00+00:00"]
 
 
-# AC22-N5 (negative): the staff lookup asks for the postponement's own releases
-def test_staff_lookup_filters_by_the_postponement_reason() -> None:
+# AC22-N5 (negative): the staff lookup that serves a cancellation serves a postponement too, and
+# asks about this event only (SCRUM-57 AC1, hotfix 2 H11: it no longer filters by a release reason)
+def test_staff_lookup_serves_a_postponement_and_is_scoped_to_the_event() -> None:
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -477,10 +478,10 @@ def test_staff_lookup_filters_by_the_postponement_reason() -> None:
         "https://example.supabase.co", "sb_secret_test", transport=httpx.MockTransport(handler)
     )
 
-    repository.cancellation_staff_ids("e1", "Event postponed")
+    repository.cancellation_staff_ids("e1")
 
-    assert any("reason=eq.Event+postponed" in str(r.url) or "reason=eq.Event%20postponed" in str(r.url)
-               for r in seen)
+    assert seen and all(r.url.params["event_request_id"] == "eq.e1" for r in seen)
+    assert all("reason" not in r.url.params for r in seen)
 
 
 # ---- Hotfix 23: a VIP above the registration capacity, up to the venue (Q&A #99) ---------
@@ -526,6 +527,7 @@ def test_registration_info_carries_the_venue_capacity() -> None:
     service = RegistrationService(SimpleNamespace(
         get_event_access=lambda event_id: event,
         list_for_event=lambda event_id: [],
+        places_taken=lambda event_id: 0,
         attendee_emails=lambda event_id: {},
         event_venue_capacity=lambda event_id: 120,
     ))
@@ -544,6 +546,7 @@ def test_registration_info_survives_a_venue_lookup_failure() -> None:
     service = RegistrationService(SimpleNamespace(
         get_event_access=lambda event_id: event,
         list_for_event=lambda event_id: [],
+        places_taken=lambda event_id: 0,
         attendee_emails=lambda event_id: {},
         event_venue_capacity=fail,
     ))

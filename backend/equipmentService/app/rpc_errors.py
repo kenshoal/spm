@@ -17,6 +17,17 @@ def rpc_error_to_http(exc: APIError) -> HTTPException:
     )
 
 
+def quantity_rpc_error_to_http(exc: APIError) -> HTTPException:
+    """Map update_equipment_quantity's errcodes (SCRUM-45 AC2): P0002 unknown id,
+    P0004 a total below the peak already reserved."""
+    if exc.code == CONFLICT_ERRCODE:
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The total is below the units already reserved",
+        )
+    return rpc_error_to_http(exc)
+
+
 def requirement_rpc_error_to_http(exc: APIError) -> HTTPException:
     """Map transition_equipment_requirement's errcodes (SCRUM-33 D4):
     P0002 unknown id, P0004 disallowed, stale or note-less transition."""

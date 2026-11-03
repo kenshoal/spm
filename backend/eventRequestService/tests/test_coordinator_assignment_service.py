@@ -32,7 +32,7 @@ def test_assign_notifies_the_assigned_coordinator() -> None:
 
     service.assign(
         event_request_id,
-        CoordinatorAssignRequest(coordinator_id="coord-1"),
+        CoordinatorAssignRequest(coordinator_id="coord-1", expected_coordinator_id=None),
         "ops-1",
     )
 
@@ -56,7 +56,7 @@ def test_assign_succeeds_without_a_notification_client_configured() -> None:
 
     result = service.assign(
         event_request_id,
-        CoordinatorAssignRequest(coordinator_id="coord-1"),
+        CoordinatorAssignRequest(coordinator_id="coord-1", expected_coordinator_id=None),
         "ops-1",
     )
 
@@ -92,12 +92,16 @@ def test_reassigned_request_stays_out_of_the_awaiting_queue() -> None:
     service = CoordinatorAssignmentService(
         assignments, EventRequestService(event_requests)
     )
+    previous = None
     for coordinator in ("coord-1", "coord-2"):
         service.assign(
             event_request_id,
-            CoordinatorAssignRequest(coordinator_id=coordinator),
+            CoordinatorAssignRequest(
+                coordinator_id=coordinator, expected_coordinator_id=previous
+            ),
             "ops-1",
         )
+        previous = coordinator
 
     assert service.list_awaiting_assignment() == []
 
@@ -145,8 +149,14 @@ def make_reassignable() -> tuple[CoordinatorAssignmentService, RecordingNotifica
 
 
 def assign(service: CoordinatorAssignmentService, event_request_id: str, coordinator_id: str) -> None:
+    latest = service.repository.latest_for_event_request(event_request_id)
     service.assign(
-        event_request_id, CoordinatorAssignRequest(coordinator_id=coordinator_id), "ops-1"
+        event_request_id,
+        CoordinatorAssignRequest(
+            coordinator_id=coordinator_id,
+            expected_coordinator_id=latest["coordinator_id"] if latest else None,
+        ),
+        "ops-1",
     )
 
 

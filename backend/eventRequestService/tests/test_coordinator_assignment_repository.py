@@ -44,6 +44,7 @@ def test_create_sends_expected_supabase_request() -> None:
             "event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
             "coordinator_id": "coord-1",
             "assigned_by": "ops-1",
+            "expected_coordinator_id": None,
         }
     )
 
@@ -55,15 +56,16 @@ def test_create_sends_expected_supabase_request() -> None:
             "p_event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
             "p_coordinator_id": "coord-1",
             "p_assigned_by": "ops-1",
+            "p_expected_coordinator_id": None,
         },
     }
     assert created["coordinator_id"] == "coord-1"
 
 
-# AC4-N6 (negative, SCRUM-28): the P0002/P0004/P0005 errcode contract survives the
+# AC4-N6 (negative, SCRUM-28): the P0002/P0004/P0005/P0006 errcode contract survives the
 # transport, so the service maps conflicts on codes, not message text
 # Purpose: Database rule failures retain their stable error code for HTTP mapping.
-@pytest.mark.parametrize("errcode", ["P0002", "P0004", "P0005"])
+@pytest.mark.parametrize("errcode", ["P0002", "P0004", "P0005", "P0006"])
 def test_create_preserves_assignment_rpc_error_code(errcode: str) -> None:
     repository = SupabaseCoordinatorAssignmentRepository(
         "https://project.supabase.co",
@@ -79,6 +81,7 @@ def test_create_preserves_assignment_rpc_error_code(errcode: str) -> None:
                 "event_request_id": "0f73ff70-9ec6-4bc2-b3de-617760cfd507",
                 "coordinator_id": "coord-1",
                 "assigned_by": "ops-1",
+                "expected_coordinator_id": None,
             }
         )
 

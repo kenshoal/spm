@@ -33,6 +33,12 @@ _IN_FLIGHT_STATUSES = (
     EventRequestStatus.PLANNING,
     EventRequestStatus.SAFETY_REVIEW,
     EventRequestStatus.CONFIRMED,
+    EventRequestStatus.POSTPONED,
+)
+
+
+_STALE_VIEW = (
+    "The Coordinator for this request changed after you opened it. Refresh and try again"
 )
 
 
@@ -84,17 +90,27 @@ class CoordinatorAssignmentService:
                 f"Cannot assign a Coordinator to a {event_request.status.value} request",
             )
 
+        # Early refusal for a stale view; the database repeats it under the row lock.
+        latest = self.repository.latest_for_event_request(event_request_id)
+        if (latest["coordinator_id"] if latest else None) != payload.expected_coordinator_id:
+            raise CoordinatorAssignmentNotAllowedError(event_request_id, _STALE_VIEW)
+
         try:
             row = self.repository.create(
                 {
                     "event_request_id": event_request_id,
                     "coordinator_id": payload.coordinator_id,
+                    "expected_coordinator_id": payload.expected_coordinator_id,
                     "assigned_by": assigned_by,
                 }
             )
         except CoordinatorAssignmentRpcError as error:
             if error.errcode == "P0002":
                 raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == "P0006":
+                raise CoordinatorAssignmentNotAllowedError(
+                    event_request_id, _STALE_VIEW
+                ) from error
             if error.errcode == "P0004":
                 raise CoordinatorAssignmentNotAllowedError(
                     event_request_id,

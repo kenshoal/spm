@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from typing import Annotated
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import Depends, Header, HTTPException, status
@@ -127,3 +129,13 @@ def require_venue_location_reader(
     if set(principal.roles).isdisjoint(VENUE_LOCATION_READERS):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
     return principal
+
+
+def singapore_today(now: datetime | None = None) -> date:
+    """The calendar date in Singapore (UTC+8), where the venues are (SCRUM-32 AC6)."""
+    return (now or datetime.now(UTC)).astimezone(ZoneInfo("Asia/Singapore")).date()
+
+
+def get_today() -> date:
+    """FastAPI dependency so tests can fix the date."""
+    return singapore_today()

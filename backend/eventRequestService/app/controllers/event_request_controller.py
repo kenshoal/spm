@@ -52,7 +52,8 @@ router = APIRouter(prefix="/event-requests", tags=["event requests"])
 EVENT_ORGANISER_ROLE = "event_organiser"
 EVENT_COORDINATOR_ROLE = "event_coordinator"
 _NON_DATE_CHANGE_FIELDS = {
-    "expected_attendance", "venue_requirements", "equipment_requirements", "registration_needs"
+    "expected_attendance", "venue_requirements", "equipment_requirements",
+    "registration_needs", "accessibility_needs",
 }
 
 _PUBLIC_STATUSES = {EventRequestStatus.CONFIRMED, EventRequestStatus.COMPLETED}

@@ -174,6 +174,7 @@ export interface EventChangeRequest {
       | "venue_requirements"
       | "equipment_requirements"
       | "registration_needs"
+      | "accessibility_needs"
     >
   >;
   base_event_updated_at: string;

@@ -17,7 +17,7 @@ test.each([
   ["event_operations_manager", ["/operations/assignments", "/notifications"]],
   ["venue_staff", ["/venues", "/booking-requests", "/venue-blocks", "/venues/search", "/arrangement-reviews", "/notifications"]],
   ["technical_support", ["/equipment", "/equipment/requests", "/arrangement-reviews", "/notifications"]],
-  ["safety_officer", ["/safety", "/notifications"]],
+  ["safety_officer", ["/venues/search", "/safety", "/notifications"]],
   ["attendee", ["/events", "/notifications"]],
 ])("%s is offered only its own links", (role, expected) => {
   expect(links([role])).toEqual(expected);

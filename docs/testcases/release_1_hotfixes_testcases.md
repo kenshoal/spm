@@ -1,6 +1,6 @@
 # Release 1 hotfixes: test cases and evidence
 
-Last reviewed: 1 November 2026
+Last reviewed: 3 November 2026 (hotfix 2 is the last section)
 
 Status: **built and verified on 1 November 2026 by Kennedy.** The scope is the 25 gaps found when the whole app was run against the Week 1 brief, the Week 4 and Week 7 documents and the GitHub discussions. Hotfixes 20 to 25 are customer rulings from the discussions that had an answer and were not built. Product Owner (Jaren) confirmation of the few open points in the last section is still needed.
 
@@ -83,3 +83,66 @@ An earlier version of this section listed partly accepted change requests (#104)
 **Found and fixed while verifying hotfixes 20 to 25:** a postponed (and a cancelled) event could still take a venue booking, because the booking function checked no event status; the CI platform stub had no `raw_app_meta_data` column, so manual registration could not run on it; forms cleared what the Coordinator had typed after a refusal, so the new ones keep it; the new coordinator forms added text boxes that two existing browser checks did not expect, so the postpone and organiser forms sit behind disclosures. Opening the app at `127.0.0.1` in the Next dev server blocks its client scripts (a dev-server setting, not the code); `localhost` works.
 
 **Found and fixed while verifying hotfixes 1 to 19:** the new venue-change trigger first used the lowest layout capacity and so missed a real capacity drop; the coordinator update returned the row from before the review trigger reopened the event; a client component imported a server-only module (unit tests mock it, only the running app failed); the cancel trigger cast a text coordinator id to a uuid.
+
+
+---
+
+# Hotfix 2: acceptance criteria that `dev` did not meet (3 November 2026)
+
+Status: **built and verified on 3 November 2026; the pull-request CI and the shared database are not yet run.** Scope: every acceptance criterion (AC) of the 48 stories as rewritten on 1 November 2026, compared with `dev` at `489f35b` (PRs #123 to #125), then the gaps that the Product Owner's decisions of 2 November (P1 to P15) and the hotfix 2 brief left to the hotfix. Hotfixes 1 to 25 above are unchanged. Hotfix 2 is tracked here and in the pull request, not as Jira tickets, as before.
+
+Test IDs follow `AC<n>-<technique><k>`, with `<n>` the AC of the story named in the row. SQL cases are in `database/verify_release_1_hotfixes_2.sql`, one block per migration. Every item was written test first; the failing run was seen before the change, and each SQL block was mutation-checked (a deliberate one-line fault must make it fail).
+
+## Items
+
+| # | Story and AC | Gap | Change | Tests |
+| --- | --- | --- | --- | --- |
+| H1 | SCRUM-45 AC2 | A quantity could be cut below the units already reserved | 0088: refused (`P0004`, 409) under the row lock, nothing written | SQL AC2-N1, B1 to B3, P1 to P3; `test_equipment.py` AC2-N4 |
+| H2 | SCRUM-24 AC2 | A waiting-list offer could run past registration close | 0087: `offer_open_place` and the Coordinator's choice need `now + 72h < registration_closes_at` (strict) as well as the start | SQL AC2-B1 to B3, AC3-N1; `test_waitlist_choice_api.py` AC2-N1 |
+| H3 | SCRUM-33 AC6 | Requirements were accepted in Draft, Submitted, Under Review, Changes Requested and Confirmed | Allow-list: Approved, Planning, Safety Review (409 otherwise) | `test_requirements_record.py` AC6-P1 to P3, AC6-N1 to N10 |
+| H4 | SCRUM-40 AC9, SCRUM-29 AC4 | A Confirmed event with a recorded final end could not be rescheduled (`P0004` from 0063) | 0086: the protection allows the reschedule; a trigger returns the event to Planning and clears the end, recorded as the system transition `event_change.no_longer_confirmed`; the coordination page warns when a Confirmed or Planning event has no end | SQL AC9-H1 to H3, N1, AC8-N1, N2; `final-end-warning.test.tsx` |
+| H5 | SCRUM-38 AC1, AC2 | Accepting an offer sent no confirmation; "full" was decided after the commit and counted Registered rows only | 0089: `filled_event` set in the transaction from Registered plus Offered; the service sends `registration_full` from it; `WaitlistService.accept` sends `registration_confirmed` | SQL AC2-H1 to H3, N1 to N3; `test_registration_became_full.py` (8) |
+| H6 | SCRUM-34 AC5 | Available places subtracted Registered only | Uses `places_taken` (Registered plus Offered), never below zero | `test_registration_info_api.py` AC5-B1 to B3 |
+| H7 | SCRUM-62 AC3, AC6; SCRUM-14 AC7 | Postponed was missing from the Lead's list; a reassignment from a stale screen won | 0085: `expected_coordinator_id` (required, null = nobody) checked under the event lock (`P0006`, 409); Withdrawn refused; Postponed listed | SQL AC6-H1, H2, N1, N2, AC7-N1, AC3-P1; `test_coordinator_assignment_controller.py`; `operations-actions.test.ts` |
+| H8 | SCRUM-32 AC2, AC6, AC7 | Requests accepted in other statuses; a past start date; no accessibility snapshot | 0090: Approved, Planning, Safety Review only; start date not before today in Singapore; `accessibility_needs` snapshot. A replacement (SCRUM-63) keeps its own rule through `private.insert_venue_booking_request` | SQL AC7-P, N, AC6-B1, B2, AC2-H1, N1, AC7-X1; `test_booking_requests_submit.py`; `test_singapore_today.py` |
+| H9 | SCRUM-64 AC1, SCRUM-29 AC3 and AC5, SCRUM-35 AC1 and AC3 | A change to the accessibility needs flagged nothing and could not be proposed | 0091: flags the venue bookings (not equipment); a supported change-request value through create, non-date and date approval; the Organiser's form, the decision panel and the history name it | SQL AC1-H1, H2, N1, N2, P1, AC3-H1, H2, N1; `test_event_change_approval.py`; two frontend files |
+| H10 | SCRUM-23 AC7, SCRUM-63 AC5 | Block notices and replacement decisions went to `requested_by` | `coordinator_lookup.py`: the latest assignment; an ordinary decision keeps `requested_by` | `test_current_coordinator_notices.py` (9) |
+| H11 | SCRUM-57 AC1 | Equipment staff came from the release's `created_by`; assigned Technical Support was never told | `cancellation_staff_ids` reads `decided_by`, the requirement's `updated_by` (null skipped) and the SCRUM-19 assignees, once each | `test_cancellation_staff.py` (7) |
+| (extra) | SCRUM-9 AC6, SCRUM-66 AC5 | Safety Officers could not open venue search | The page and the navigation offer it | `venue-search-page.test.tsx`; `role-access.test.ts` |
+
+## Rules chosen where the acceptance criteria left room
+
+- **0088 counts only reservations that have not yet been returned.** A reservation whose return date is past does not hold the total up, so lost stock can still be written off. The AC says "any day"; this is a reading the Product Owner should confirm.
+- **0090 does not apply the new rules to a replacement.** A replacement keeps the dates of the booking it replaces, which may have begun, and serves a Confirmed event, so it keeps 0081's rule (refused only where the event cannot use a venue at all).
+- **0086 reopens a Confirmed event when its dates change even if nothing is left to flag.** Otherwise the event would stay Confirmed with no final end.
+- **0087 is strict:** a window that ends exactly at registration close is refused, as the event-start check already was. The Coordinator's choice is a new offer, so it is checked too and refused before the holder in flight is revoked.
+- **0085 makes `expected_coordinator_id` required.** A client that omits it is refused (422), so the check cannot be skipped.
+- **H10 falls back to the requesting Coordinator only when the event has no assignment on record,** and sends nothing when the assignment store cannot be asked, so a former Coordinator is never told.
+- **The booking and equipment forms still offer Approved and Planning only.** The services accept Safety Review as the ACs say; the screens were not widened.
+
+## Not done here
+
+- **Per-venue operating hours** (SCRUM-12 AC3, SCRUM-30 AC1, AC4 to AC6, SCRUM-31 AC4): priority 3 in the brief, to follow if the rest is merged before the freeze; otherwise a known limitation.
+- **Display names** (SCRUM-34 AC3, SCRUM-48 AC7): a known limitation (P13); there is no name or profile source.
+- **The attendee email in the registration view** (SCRUM-34 AC4 says no email): hotfix 16 added it under Q&A #32, and without display names it is the only readable identity. It needs a Product Owner ruling and was not changed.
+- **SCRUM-28 AC1 lists eleven statuses;** the database has thirteen (Withdrawn, Postponed). The Jira text needs updating; the code is unchanged.
+- **Test and document gaps of the story owners** (P14), and the technical-support readiness of the safety check (P9).
+
+## Latest execution record (3 November 2026, branch `fix/release-1-hotfixes-2`, from `489f35b`)
+
+| Check | Command | Result | Environment |
+| --- | --- | --- | --- |
+| authService | `pytest -q`; `ruff check .` | 60 passed; clean | local |
+| equipmentService | `pytest -q`; `ruff check .` | 359 passed; clean | local |
+| eventRequestService | `pytest -q`; `ruff check .` | 1222 passed, 1 skipped; clean | local, fakes for Supabase |
+| notificationService | `pytest -q`; `ruff check .` | 85 passed; clean | local |
+| venueService | `pytest -q`; `ruff check .` | 820 passed, 10 skipped; clean | local |
+| frontend | `npm run lint`; `npm run typecheck`; `npm test`; `npm run build` | clean; clean; 785 passed in 83 files; builds | local, jsdom |
+| Playwright | `playwright test` with `channel: "chrome"` (the Chrome installed on the machine, through a temporary untracked config; Playwright's own browser is not installed and nothing was downloaded) | 59 passed | local; mock APIs in `e2e/support` |
+| Database | stub from `database/tests/ci_platform_stub.sql`, then all 97 migration files in order, then `verify_release_1_hotfixes.sql` and `verify_release_1_hotfixes_2.sql` | both print their PASSED notice | Docker, PostgreSQL 16, disposable |
+| Database regression | every `database/verify_*.sql` run on a fresh database through 0084 and on one through 0091, results compared | the only differences are the new verifier and `verify_atomic_coordinator_assignment.sql`, which now calls the four-argument function; two older verifiers were adapted (see below) | Docker, disposable |
+| Database mutation check | one-line faults in each migration (the stale check, the Withdrawn rule, the old final-end protection, the reopening trigger, closed events' dates and a direct end edit, the registration-close check and its override, the equality boundary, the quantity floor and its `<=` boundary, the three `filled_event` rules, the status list, the date check, the accessibility snapshot, the replacement flag, the trigger columns and body, either approval) | all caught; two weak spots were found and closed by adding cases (exact 72 hours; a direct single-column update) | Docker, disposable |
+
+**Not run:** the pull-request CI; the shared Supabase database (migrations 0085 to 0091 are not applied there); the verifiers that need CI's own bootstrap database (`verify_event_change_date_approval`, `verify_venue_replacement_requests`, `verify_venue_booking_requests`, which fail here with and without these changes); real email delivery.
+
+**Found and fixed while verifying:** my hotfix 9 verifier never moved the dates of a Confirmed event that had a final end, which is why H4 was missed; a first draft of 0088 counted two reservations that start the same day twice; negative quantities reached the new floor instead of the table's CHECK constraint; `verify_registration_withdrawal.sql` rewrote the dates of a Confirmed event as a fixture, which now reopens it, so it switches the reopening trigger off for those cases only when the trigger exists; `verify_versioned_venue_booking_creation.sql` used a Submitted event, which a booking request can no longer be made for; `verify_event_final_end.sql` expected a Confirmed event's dates to be frozen and now skips that one case only once 0086 exists.

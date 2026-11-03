@@ -524,7 +524,7 @@ class EventRequestService:
             fields = set(change.proposed_changes)
             if "proposed_date_times" not in fields or not fields <= {
                 "proposed_date_times", "expected_attendance", "venue_requirements",
-                "equipment_requirements", "registration_needs",
+                "equipment_requirements", "registration_needs", "accessibility_needs",
             }:
                 raise EventChangeDatePlanConflictError("unsupported_date_mapping")
             if event.updated_at.utcoffset() is None or change.base_event_updated_at.utcoffset() is None:
@@ -838,9 +838,7 @@ class EventRequestService:
             try:
                 recipient_ids += [
                     staff_id
-                    for staff_id in self.repository.cancellation_staff_ids(
-                        event_request.id, released_reason
-                    )
+                    for staff_id in self.repository.cancellation_staff_ids(event_request.id)
                     if staff_id not in recipient_ids
                 ]
             except SupabaseRepositoryError:

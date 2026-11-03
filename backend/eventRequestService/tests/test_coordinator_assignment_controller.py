@@ -57,7 +57,7 @@ def test_assign_coordinator_to_submitted_request() -> None:
         response = client.post(
             f"/event-requests/{event_request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
 
     assert response.status_code == 201
@@ -75,7 +75,7 @@ def test_assign_coordinator_does_not_change_event_request_status() -> None:
         client.post(
             f"/event-requests/{event_request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
 
     assert event_requests.rows[event_request_id]["status"] == "Submitted"
@@ -94,7 +94,7 @@ def test_assign_coordinator_refused_before_submission() -> None:
         response = client.post(
             f"/event-requests/{created['id']}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
 
     assert response.status_code == 409
@@ -111,7 +111,7 @@ def test_assign_coordinator_refused_once_terminal(status: str) -> None:
         response = client.post(
             f"/event-requests/{event_request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
 
     assert response.status_code == 409
@@ -124,7 +124,7 @@ def test_assign_coordinator_to_missing_request() -> None:
         response = client.post(
             "/event-requests/00000000-0000-0000-0000-000000000001/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
 
     assert response.status_code == 404
@@ -146,7 +146,7 @@ def test_atomic_assignment_status_rejection_returns_conflict() -> None:
         response = client.post(
             f"/event-requests/{event_request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
 
     assert response.status_code == 409
@@ -168,7 +168,7 @@ def test_atomic_assignment_target_role_rejection_returns_conflict() -> None:
         response = client.post(
             f"/event-requests/{event_request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "attendee-1"},
+            json={"coordinator_id": "attendee-1", "expected_coordinator_id": None},
         )
 
     assert response.status_code == 409
@@ -185,12 +185,12 @@ def test_reassignment_preserves_history_and_get_returns_latest() -> None:
         client.post(
             f"/event-requests/{event_request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
         client.post(
             f"/event-requests/{event_request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-2"},
+            json={"coordinator_id": "coord-2", "expected_coordinator_id": "coord-1"},
         )
         current = client.get(
             f"/event-requests/{event_request_id}/coordinator",
@@ -222,7 +222,7 @@ def test_requires_bearer_session() -> None:
     with TestClient(app) as client:
         assign = client.post(
             "/event-requests/00000000-0000-0000-0000-000000000001/coordinator",
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
         get = client.get(
             "/event-requests/00000000-0000-0000-0000-000000000001/coordinator"
@@ -264,7 +264,7 @@ def test_assign_coordinator_requires_operations_manager_role(
             response = client.post(
                 f"/event-requests/{event_request_id}/coordinator",
                 headers={"Authorization": "Bearer valid-token"},
-                json={"coordinator_id": "coord-1"},
+                json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
             )
     finally:
         get_settings.cache_clear()
@@ -304,7 +304,7 @@ def test_assign_coordinator_allows_event_operations_manager_role(
             response = client.post(
                 f"/event-requests/{event_request_id}/coordinator",
                 headers={"Authorization": "Bearer valid-token"},
-                json={"coordinator_id": "coord-1"},
+                json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
             )
     finally:
         get_settings.cache_clear()
@@ -335,7 +335,7 @@ def test_awaiting_assignment_excludes_requests_that_have_a_coordinator() -> None
         client.post(
             f"/event-requests/{assigned_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
         response = client.get("/event-requests/awaiting-assignment", headers=headers())
 
@@ -456,12 +456,14 @@ def test_current_assignments_list_the_latest_coordinator_per_request() -> None:
     with make_client(event_requests) as client:
         assigned_id = submit_event_request(event_requests)
         submit_event_request(event_requests)  # never assigned
+        previous = None
         for coordinator_id in ("coord-1", "coord-2"):
             client.post(
                 f"/event-requests/{assigned_id}/coordinator",
                 headers=headers(),
-                json={"coordinator_id": coordinator_id},
+                json={"coordinator_id": coordinator_id, "expected_coordinator_id": previous},
             )
+            previous = coordinator_id
         response = client.get("/event-requests/assignments", headers=headers())
 
     assert response.status_code == 200
@@ -479,7 +481,7 @@ def test_current_assignments_exclude_terminal_requests() -> None:
         client.post(
             f"/event-requests/{closed_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
         event_requests.rows[closed_id]["status"] = "Cancelled"
         response = client.get("/event-requests/assignments", headers=headers())
@@ -497,7 +499,7 @@ def test_current_assignments_include_requests_under_review() -> None:
         client.post(
             f"/event-requests/{request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
         event_requests.rows[request_id]["status"] = "Under Review"
         response = client.get("/event-requests/assignments", headers=headers())
@@ -552,10 +554,99 @@ def test_current_assignments_include_requests_in_safety_review() -> None:
         client.post(
             f"/event-requests/{request_id}/coordinator",
             headers=headers(),
-            json={"coordinator_id": "coord-1"},
+            json={"coordinator_id": "coord-1", "expected_coordinator_id": None},
         )
         event_requests.rows[request_id]["status"] = "Safety Review"
         response = client.get("/event-requests/assignments", headers=headers())
 
     assert response.status_code == 200
     assert [row["event_request"]["id"] for row in response.json()] == [request_id]
+
+
+def _assign(client: TestClient, event_request_id: str, coordinator_id: str, expected: str | None):
+    return client.post(
+        f"/event-requests/{event_request_id}/coordinator",
+        headers=headers(),
+        json={"coordinator_id": coordinator_id, "expected_coordinator_id": expected},
+    )
+
+
+# AC6-H1 (happy, SCRUM-62): a reassignment that names the Coordinator the Lead saw is saved
+def test_reassignment_from_a_current_view_is_saved() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        event_request_id = submit_event_request(event_requests)
+        _assign(client, event_request_id, "coord-1", None)
+        response = _assign(client, event_request_id, "coord-2", "coord-1")
+
+    assert response.status_code == 201
+    assert response.json()["coordinator_id"] == "coord-2"
+
+
+# AC6-N1 (negative, SCRUM-62): a reassignment from a stale view is refused (409) and the
+# current Coordinator stays
+def test_reassignment_from_a_stale_view_is_refused() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository(event_requests)
+    with make_client(event_requests, coordinators) as client:
+        event_request_id = submit_event_request(event_requests)
+        _assign(client, event_request_id, "coord-1", None)
+        _assign(client, event_request_id, "coord-2", "coord-1")
+        response = _assign(client, event_request_id, "coord-3", "coord-1")  # saw coord-1, now coord-2
+
+    assert response.status_code == 409
+    assert coordinators.latest_for_event_request(event_request_id)["coordinator_id"] == "coord-2"
+    assert len(coordinators.rows) == 2
+
+
+# AC6-N2 (negative, SCRUM-62): a first assignment from a view that showed nobody is
+# refused when someone was assigned meanwhile
+def test_first_assignment_is_refused_when_someone_was_assigned_meanwhile() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository(event_requests)
+    with make_client(event_requests, coordinators) as client:
+        event_request_id = submit_event_request(event_requests)
+        _assign(client, event_request_id, "coord-1", None)
+        response = _assign(client, event_request_id, "coord-2", None)
+
+    assert response.status_code == 409
+    assert len(coordinators.rows) == 1
+
+
+# AC6-N3 (negative, SCRUM-62): a request that does not state the view it was made from is refused
+def test_assignment_without_the_expected_coordinator_is_refused() -> None:
+    event_requests = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository(event_requests)
+    with make_client(event_requests, coordinators) as client:
+        event_request_id = submit_event_request(event_requests)
+        response = client.post(
+            f"/event-requests/{event_request_id}/coordinator",
+            headers=headers(),
+            json={"coordinator_id": "coord-1"},
+        )
+
+    assert response.status_code == 422
+    assert coordinators.rows == []
+
+
+# AC3-P4 (partition, SCRUM-62): a Postponed event is still active, so the Lead sees it
+def test_current_assignments_include_postponed_requests() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        request_id = submit_event_request(event_requests)
+        _assign(client, request_id, "coord-1", None)
+        event_requests.rows[request_id]["status"] = "Postponed"
+        response = client.get("/event-requests/assignments", headers=headers())
+
+    assert [row["event_request"]["id"] for row in response.json()] == [request_id]
+
+
+# AC7-N1 (negative, SCRUM-14): a Withdrawn request refuses assignment
+def test_assign_coordinator_refused_once_withdrawn() -> None:
+    event_requests = FakeEventRequestRepository()
+    with make_client(event_requests) as client:
+        event_request_id = submit_event_request(event_requests)
+        event_requests.rows[event_request_id]["status"] = "Withdrawn"
+        response = _assign(client, event_request_id, "coord-1", None)
+
+    assert response.status_code == 409

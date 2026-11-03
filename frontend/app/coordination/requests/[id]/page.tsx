@@ -27,6 +27,7 @@ import { ChangeOrganiserForm, PostponeEventForm, ResumeEventForm } from "./lifec
 import { WaitlistPanel } from "./waitlist-panel";
 import { ReviewDecisionPanel } from "./review-decision-panel";
 import { TransitionButton } from "./transition-buttons";
+import { FinalEndWarning } from "./final-end-warning";
 import { FinalEventEndForm } from "./final-event-end-form";
 import { ChangeRequestPanel } from "./change-request-panel";
 import { VenueBookingsLoading, VenueBookingsPanel } from "./venue-bookings-panel";
@@ -115,6 +116,7 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
     <div className="mx-auto max-w-4xl">
       <Link href="/coordination/requests" className="mb-5 inline-flex items-center gap-1 text-sm font-semibold text-[#0f6b5b] hover:underline"><ArrowIcon className="size-4 rotate-180" /> Back to assigned requests</Link>
       <RequestDetails request={request} coordinatorAssigned />
+      <FinalEndWarning status={request.status} finalEventEndAt={request.final_event_end_at} />
       {request.status === "Approved" || request.status === "Planning" ? (
         <FinalEventEndForm key={request.final_event_end_at ?? "unrecorded"} eventRequestId={request.id} finalEventEndAt={request.final_event_end_at} />
       ) : null}

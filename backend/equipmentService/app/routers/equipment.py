@@ -10,7 +10,7 @@ from supabase import Client
 from app.db import get_client
 from app.deps import EVENT_COORDINATOR_ROLE, TECHNICAL_SUPPORT_ROLE, User, require_role
 from app.models import OperationalStatus
-from app.rpc_errors import rpc_error_to_http
+from app.rpc_errors import quantity_rpc_error_to_http, rpc_error_to_http
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
@@ -121,5 +121,5 @@ def update_quantity(
             },
         ).execute()
     except APIError as exc:
-        raise rpc_error_to_http(exc) from exc
+        raise quantity_rpc_error_to_http(exc) from exc
     return EquipmentOut.model_validate(response.data)

@@ -44,7 +44,7 @@ BEGIN
     -- 1. Missing requests are distinguished from invalid states.
     BEGIN
         PERFORM public.assign_event_request_coordinator(
-            v_missing, v_coordinator::text, v_organiser::text
+            v_missing, v_coordinator::text, v_organiser::text, NULL
         );
         RAISE EXCEPTION 'verify 1: missing request should raise P0002';
     EXCEPTION WHEN SQLSTATE 'P0002' THEN NULL;
@@ -55,14 +55,14 @@ BEGIN
     -- 2. Draft and terminal requests cannot acquire assignments.
     BEGIN
         PERFORM public.assign_event_request_coordinator(
-            v_draft, v_coordinator::text, v_organiser::text
+            v_draft, v_coordinator::text, v_organiser::text, NULL
         );
         RAISE EXCEPTION 'verify 2: Draft should raise P0004';
     EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL;
     END;
     BEGIN
         PERFORM public.assign_event_request_coordinator(
-            v_terminal, v_coordinator::text, v_organiser::text
+            v_terminal, v_coordinator::text, v_organiser::text, NULL
         );
         RAISE EXCEPTION 'verify 2: Completed should raise P0004';
     EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL;
@@ -73,7 +73,7 @@ BEGIN
     -- 3. An arbitrary authenticated user ID cannot be assigned as coordinator.
     BEGIN
         PERFORM public.assign_event_request_coordinator(
-            v_submitted, v_non_coordinator::text, v_organiser::text
+            v_submitted, v_non_coordinator::text, v_organiser::text, NULL
         );
         RAISE EXCEPTION 'verify 3: non-coordinator should raise P0005';
     EXCEPTION WHEN SQLSTATE 'P0005' THEN NULL;
@@ -87,14 +87,15 @@ BEGIN
     -- AC4-H2 (happy, SCRUM-28): assignment and reassignment run through the locked RPC
     -- and preserve history
     -- 4. A valid coordinator can be assigned and then reassigned without history loss.
+    -- (Hotfix 2, 0085: every call states the Coordinator the caller saw, null when there was none.)
     v_assignment := public.assign_event_request_coordinator(
-        v_submitted, v_coordinator::text, v_organiser::text
+        v_submitted, v_coordinator::text, v_organiser::text, NULL
     );
     ASSERT v_assignment.coordinator_id = v_coordinator::text,
         'verify 4: returned assignment should identify the coordinator';
 
     v_assignment := public.assign_event_request_coordinator(
-        v_submitted, v_coordinator::text, v_organiser::text
+        v_submitted, v_coordinator::text, v_organiser::text, v_coordinator::text
     );
     SELECT count(*) INTO v_count
     FROM public.event_coordinator_assignments
@@ -105,7 +106,7 @@ BEGIN
     -- row (FOR UPDATE) that transitions take
     -- 5. Assignment and status transitions must lock the same request row.
     SELECT pg_get_functiondef(
-        'public.assign_event_request_coordinator(uuid, varchar, varchar)'::regprocedure
+        'public.assign_event_request_coordinator(uuid, varchar, varchar, varchar)'::regprocedure
     ) INTO v_definition;
     ASSERT position('FOR UPDATE' IN upper(v_definition)) > 0,
         'verify 5: assignment function must retain the event-request row lock';
@@ -115,17 +116,17 @@ BEGIN
     -- 6. The RPC is callable only by the backend service role.
     ASSERT NOT has_function_privilege(
         'anon',
-        'public.assign_event_request_coordinator(uuid, varchar, varchar)',
+        'public.assign_event_request_coordinator(uuid, varchar, varchar, varchar)',
         'EXECUTE'
     ), 'verify 6: anon must not execute the function';
     ASSERT NOT has_function_privilege(
         'authenticated',
-        'public.assign_event_request_coordinator(uuid, varchar, varchar)',
+        'public.assign_event_request_coordinator(uuid, varchar, varchar, varchar)',
         'EXECUTE'
     ), 'verify 6: authenticated must not execute the function';
     ASSERT has_function_privilege(
         'service_role',
-        'public.assign_event_request_coordinator(uuid, varchar, varchar)',
+        'public.assign_event_request_coordinator(uuid, varchar, varchar, varchar)',
         'EXECUTE'
     ), 'verify 6: service_role must execute the function';
 

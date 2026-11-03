@@ -21,6 +21,7 @@ const labels: Record<string, string> = {
   venue_requirements: "Venue requirements",
   equipment_requirements: "Equipment requirements",
   registration_needs: "Registration needs",
+  accessibility_needs: "Accessibility needs",
 };
 
 function valueText(key: string, value: unknown): string {
@@ -30,7 +31,7 @@ function valueText(key: string, value: unknown): string {
   return String(value);
 }
 
-const nonDateFields = new Set(["expected_attendance", "venue_requirements", "equipment_requirements", "registration_needs"]);
+const nonDateFields = new Set(["expected_attendance", "venue_requirements", "equipment_requirements", "registration_needs", "accessibility_needs"]);
 
 function supportsApproval(request: EventChangeRequest): boolean {
   const fields = Object.keys(request.proposed_changes);

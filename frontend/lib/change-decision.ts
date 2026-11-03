@@ -7,6 +7,7 @@ export const CHANGE_FIELD_LABELS: Record<string, string> = {
   venue_requirements: "Venue requirements",
   equipment_requirements: "Equipment requirements",
   registration_needs: "Registration needs",
+  accessibility_needs: "Accessibility needs",
 };
 
 export interface PartialDecision {
