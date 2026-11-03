@@ -14,6 +14,7 @@ import { RequestDetails } from "../../../components/request-details";
 import { ArrangementReviewPanel, ArrangementReviewLoading } from "../../../components/arrangement-review-panel";
 import { RegistrationReviews, RegistrationReviewsLoading } from "../../../components/registration-reviews";
 import { RegistrationInfoLoading, RegistrationInfoPanel } from "../../../components/registration-info";
+import { EQUIPMENT_RECORDING_STATUSES, VENUE_REQUEST_STATUSES } from "@/lib/arrangement-statuses";
 import { isEventDay } from "@/lib/registration-info";
 import { ReviewDecisionHistory } from "../../../components/review-decision-history";
 import { SafetyReviewsPanel } from "../../../components/safety-reviews-panel";
@@ -37,7 +38,6 @@ import { VenueHoldsLoading, VenueHoldsPanel } from "./venue-holds-panel";
 // not yet confirmed.
 const REGISTRATION_SETTINGS_STATUSES = new Set(["Approved", "Planning", "Safety Review", "Confirmed"]);
 const DETAILS_EDITABLE_STATUSES = new Set(["Under Review", "Approved", "Planning", "Confirmed"]);
-const BOOKABLE_STATUSES = new Set(["Approved", "Planning"]);
 const HOLDABLE_STATUSES = new Set(["Approved", "Planning", "Safety Review"]);
 // Hotfix 22 (Q&A #69, #121): from these the Coordinator can postpone; Postponed gets a new date.
 const POSTPONABLE_STATUSES = new Set(["Approved", "Planning", "Safety Review", "Confirmed"]);
@@ -138,9 +138,9 @@ async function CoordinatorRequestView({ id, currentUserId }: { id: string; curre
       {request.status === "Confirmed" ? <WaitlistPanel eventRequestId={request.id} /> : null}
       {DETAILS_EDITABLE_STATUSES.has(request.status) ? <EventDetailsForm request={request} /> : null}
       <Suspense fallback={<VenueBookingsLoading />}>
-        <VenueBookingsPanel eventRequestId={request.id} canRequest={BOOKABLE_STATUSES.has(request.status)} />
+        <VenueBookingsPanel eventRequestId={request.id} canRequest={VENUE_REQUEST_STATUSES.has(request.status)} />
       </Suspense>
-      <EquipmentRequirementsPanel eventRequestId={request.id} canRecord={BOOKABLE_STATUSES.has(request.status)} />
+      <EquipmentRequirementsPanel eventRequestId={request.id} canRecord={EQUIPMENT_RECORDING_STATUSES.has(request.status)} />
       <Suspense fallback={<VenueHoldsLoading />}>
         <VenueHoldsPanel eventRequestId={request.id} canPlace={HOLDABLE_STATUSES.has(request.status)} />
       </Suspense>
