@@ -15,10 +15,12 @@ const seededEmails = [
   "event_coordinator2@example.com",
   "event_operations_manager@example.com",
   "event_organiser@example.com",
+  "safety_officer@example.com",
   "technical_support@example.com",
   "venue_staff@example.com",
 ];
 
+// AC1-X1 (cross-cutting): every role in database/seed_test_accounts.sql that the demo needs, the Safety Officer included, can be signed in from the list
 test("lists every seeded test account and their shared password during development", () => {
   vi.stubEnv("NODE_ENV", "development");
   render(<TestAccounts />);
