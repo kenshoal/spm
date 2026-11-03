@@ -74,6 +74,7 @@ HoldRefusalCode = Literal[
     "active_block",
     "setup_outside_window",
     "turnaround_outside_window",
+    "outside_operating_hours",
     "booking_conflict",
     "hold_conflict",
 ]

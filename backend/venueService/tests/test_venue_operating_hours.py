@@ -7,14 +7,17 @@ steps within 07:00 to 24:00 (420 to 1440 minutes). Time outside them is never fr
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 
 import httpx
 import pytest
 from booking_support import (
     COORDINATOR,
+    EVENT,
+    OTHER_EVENT,
     STAFF,
+    FakeEventService,
     as_user,
     make_venue,
     seed_booking,
@@ -24,7 +27,9 @@ from fastapi.testclient import TestClient
 from app.block_models import BlockReason, VenueBlockCreate
 from app.block_repository import block_repository
 from app.booking_models import BookingRequestStatus
+from app.booking_repository import booking_repository
 from app.dependencies import require_venue_staff
+from app.hold_store import memory_hold_store
 from app.main import app
 from app.models import VenueCreate, VenueUpdate
 from app.repository import repository
@@ -343,3 +348,74 @@ def test_the_supabase_store_sends_the_hours() -> None:
     assert _json.loads(seen[1].content)["operating_end_minute"] == 1200
     assert "operating_start_minute" not in _json.loads(seen[1].content)
     assert (created.operating_start_minute, created.operating_end_minute) == (540, 1080)
+
+
+# ---- holds and approval refuse time outside the hours (SCRUM-30 AC4; review E1) -----------
+
+
+def place_hold(venue_id: str, start: int, end: int) -> httpx.Response:
+    events = FakeEventService()
+    events.add_event()
+    as_user(COORDINATOR, "event_coordinator", events=events)
+    return client.post(
+        f"/venues/{venue_id}/holds",
+        json={
+            "event_request_id": EVENT,
+            "start_date": "2030-03-04",
+            "end_date": "2030-03-04",
+            "start_minute": start,
+            "end_minute": end,
+            "expires_at": (datetime.now(UTC) + timedelta(hours=48)).isoformat(),
+        },
+    )
+
+
+# AC4-N2 (negative): a hold outside the hours is refused with outside_operating_hours and nothing is stored
+def test_a_hold_outside_the_hours_is_refused_with_its_code() -> None:
+    venue = open_venue(540, 1080)
+
+    response = place_hold(venue.id, 480, 600)
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["refusal_codes"] == ["outside_operating_hours"]
+    assert memory_hold_store.list_for_event(EVENT) == []
+
+
+# AC4-B5 (boundary): a hold that starts exactly when the venue opens and ends when it closes is placed
+def test_a_hold_across_exactly_the_hours_is_placed() -> None:
+    venue = open_venue(540, 1080)
+
+    assert place_hold(venue.id, 540, 1080).status_code == 201
+
+
+# AC4-N3 (negative): approving a request outside the hours is refused with the code, the request stays pending
+def test_approval_outside_the_hours_is_refused_with_its_code() -> None:
+    venue = open_venue(540, 1080)
+    request = seed_booking(
+        venue_id=venue.id, event_request_id=OTHER_EVENT, start_date=date(2030, 3, 4), end_date=date(2030, 3, 4),
+        start_minute=480, end_minute=600,
+    )
+    as_user(STAFF, "venue_staff")
+
+    response = client.post(f"/booking-requests/{request.id}/decision", json={"decision": "approved"})
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["refusal_codes"] == ["outside_operating_hours"]
+    assert booking_repository.get(request.id).status is BookingRequestStatus.PENDING
+    refusals = client.get(f"/booking-requests/{request.id}/refusals").json()
+    assert [r["refusal_codes"] for r in refusals] == [["outside_operating_hours"]]
+
+
+# AC4-H3 (happy): approving a request inside the hours still works
+def test_approval_inside_the_hours_is_approved() -> None:
+    venue = open_venue(540, 1080)
+    request = seed_booking(
+        venue_id=venue.id, event_request_id=OTHER_EVENT, start_date=date(2030, 3, 4), end_date=date(2030, 3, 4),
+        start_minute=540, end_minute=600,
+    )
+    as_user(STAFF, "venue_staff")
+
+    response = client.post(f"/booking-requests/{request.id}/decision", json={"decision": "approved"})
+
+    assert response.status_code == 200, response.text
+    assert booking_repository.get(request.id).status is BookingRequestStatus.APPROVED
