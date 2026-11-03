@@ -1,4 +1,6 @@
--- Run after 0016_venues.sql, 0018_venue_booking_requests.sql, 0041 and 0042.
+-- Run after 0016_venues.sql, 0018_venue_booking_requests.sql, 0041 and 0042; it also passes
+-- on the full schema, where the slot cases follow 0050 (slots derived from times) and the
+-- grant case follows 0056 (no direct INSERT).
 -- Case IDs match docs/testcases/scrum_32_testcases.md (AC1 to AC6) and
 -- docs/testcases/scrum_61_testcases.md (AC4-D1 to AC4-D8).
 -- Every mutation is rolled back, so this leaves no venue or request data
@@ -179,18 +181,22 @@ BEGIN
         );
     END LOOP;
 
-    -- AC1-N1: an empty slot list is refused.
-    PERFORM pg_temp.expect_request_failure('AC1-N1', '{"slots": []}', '23514');
+    -- AC1-N1: an empty slot list is refused. Since 0050 the slots convert to times
+    -- on insert, and an empty list has no range to convert (22023).
+    PERFORM pg_temp.expect_request_failure('AC1-N1', '{"slots": []}', '22023');
 
-    -- AC1-N2: a slot list containing NULL is refused.
-    PERFORM pg_temp.expect_request_failure(
-        'AC1-N2', '{"slots": ["AM", null]}', '23514'
-    );
-
-    -- AC1-N3: a duplicate slot is refused.
-    PERFORM pg_temp.expect_request_failure(
-        'AC1-N3', '{"slots": ["AM", "AM"]}', '23514'
-    );
+    -- AC1-N2, AC1-N3: since 0050 the stored slots are derived from the times, so a NULL
+    -- or a duplicate in the slots sent on insert cannot be stored. It collapses to the
+    -- slots the range touches; the time rules themselves are in
+    -- verify_venue_booking_times.sql.
+    v_id := pg_temp.new_request('{"slots": ["AM", null]}');
+    IF (SELECT slots FROM public.venue_booking_requests WHERE id = v_id) <> '{AM}' THEN
+        RAISE EXCEPTION 'AC1-N2: a NULL in the slots was stored';
+    END IF;
+    v_id := pg_temp.new_request('{"slots": ["AM", "AM"]}');
+    IF (SELECT slots FROM public.venue_booking_requests WHERE id = v_id) <> '{AM}' THEN
+        RAISE EXCEPTION 'AC1-N3: a duplicate slot was stored';
+    END IF;
 
     -- AC1-N4: an unknown slot value is refused.
     PERFORM pg_temp.expect_request_failure(
@@ -217,7 +223,8 @@ BEGIN
     PERFORM pg_temp.expect_request_failure(
         'AC1-N9', '{"end_date": null}', '23502'
     );
-    PERFORM pg_temp.expect_request_failure('AC1-N10', '{"slots": null}', '23502');
+    -- With no slots and no times there is nothing to convert (22023, not 23502 since 0050).
+    PERFORM pg_temp.expect_request_failure('AC1-N10', '{"slots": null}', '22023');
 
     -- AC1-X1: a venue that has requests cannot be deleted.
     PERFORM pg_temp.expect_failure(
@@ -574,12 +581,22 @@ BEGIN
         RAISE EXCEPTION 'AC6-X2: row-level security is not enabled';
     END IF;
 
-    -- AC6-X3: the service role can read, insert and update.
-    FOREACH privilege_name IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE'] LOOP
+    -- AC6-X3: the service role can read and update. Since 0056 it cannot INSERT or DELETE
+    -- directly; a request is created only by create_event_venue_booking_request, which
+    -- checks the event's version (verified in verify_versioned_venue_booking_creation.sql).
+    FOREACH privilege_name IN ARRAY ARRAY['SELECT', 'UPDATE'] LOOP
         IF NOT has_table_privilege(
             'service_role', 'public.venue_booking_requests', privilege_name
         ) THEN
             RAISE EXCEPTION 'AC6-X3: service_role lacks % on venue_booking_requests',
+                privilege_name;
+        END IF;
+    END LOOP;
+    FOREACH privilege_name IN ARRAY ARRAY['INSERT', 'DELETE'] LOOP
+        IF has_table_privilege(
+            'service_role', 'public.venue_booking_requests', privilege_name
+        ) THEN
+            RAISE EXCEPTION 'AC6-X3: service_role holds % on venue_booking_requests',
                 privilege_name;
         END IF;
     END LOOP;
