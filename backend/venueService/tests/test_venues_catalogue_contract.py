@@ -166,7 +166,7 @@ def test_other_roles_cannot_read_a_venue(role: str) -> None:
     assert client.get("/venues").status_code == 403
 
 
-# SCRUM-30 AC3-X1 (cross-cutting): an updated capacity changes who is found by search
+# SCRUM-30 AC3-X5 (cross-cutting): an updated capacity changes who is found by search
 def test_updated_capacity_is_reflected_in_search() -> None:
     venue = _create(max_capacity=50)
     assert client.get("/venues/search", params={"required_capacity": 120}).json() == []
