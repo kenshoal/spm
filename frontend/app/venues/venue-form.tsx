@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { layoutLabel, MAX_PREP_MINUTES, PREP_MINUTES_STEP, ROOM_LAYOUTS } from "@/lib/venue-options";
+import { END_TIMES, layoutLabel, MAX_PREP_MINUTES, PREP_MINUTES_STEP, ROOM_LAYOUTS, START_TIMES, timeLabel } from "@/lib/venue-options";
 import type { Venue } from "@/lib/venues";
 import { createVenue, updateVenue, type VenueFormState } from "./actions";
 
@@ -25,6 +25,8 @@ export function VenueForm({ venue }: { venue?: Venue }) {
   // invalid field (e.g. a non-numeric capacity) shows exactly what was typed
   // instead of silently reverting to the venue's stored value.
   const values = state.values;
+  // A <select> ignores a changed defaultValue once mounted, so the hours are keyed by what was
+  // echoed back: a refused submission then shows the times that were chosen, not the stored ones.
 
   return (
     <form action={formAction} noValidate className="space-y-6 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-8">
@@ -43,6 +45,17 @@ export function VenueForm({ venue }: { venue?: Venue }) {
         <label className={labelClass}>Setup time (minutes)<input name="setup_minutes" type="number" min={0} max={MAX_PREP_MINUTES} step={PREP_MINUTES_STEP} defaultValue={values ? values.setup_minutes : venue?.setup_minutes ?? 0} className={inputClass} /><FieldError message={errors.setup_minutes} /></label>
         <label className={labelClass}>Turnaround time (minutes)<input name="turnaround_minutes" type="number" min={0} max={MAX_PREP_MINUTES} step={PREP_MINUTES_STEP} defaultValue={values ? values.turnaround_minutes : venue?.turnaround_minutes ?? 0} className={inputClass} /><FieldError message={errors.turnaround_minutes} /></label>
         <p className="-mt-3 text-xs text-[#718078] sm:col-span-2">Time to prepare the venue before an event and reset it after, in steps of {PREP_MINUTES_STEP} minutes. Use 0 for none.</p>
+        <label className={labelClass}>Opening time
+          <select key={`opens-${values?.operating_start_minute ?? "stored"}`} name="operating_start_minute" defaultValue={values ? values.operating_start_minute : String(venue?.operating_start_minute ?? 420)} className={inputClass}>
+            {START_TIMES.map((minute) => <option key={minute} value={minute}>{timeLabel(minute)}</option>)}
+          </select>
+        </label>
+        <label className={labelClass}>Closing time
+          <select key={`closes-${values?.operating_end_minute ?? "stored"}`} name="operating_end_minute" defaultValue={values ? values.operating_end_minute : String(venue?.operating_end_minute ?? 1440)} className={inputClass}>
+            {END_TIMES.map((minute) => <option key={minute} value={minute}>{timeLabel(minute)}</option>)}
+          </select>
+        </label>
+        {errors.operating_hours ? <p role="alert" className="-mt-3 text-sm text-[#a23939] sm:col-span-2">{errors.operating_hours}</p> : <p className="-mt-3 text-xs text-[#718078] sm:col-span-2">The hours the venue is open each day. Search and the availability calendar offer no time outside them.</p>}
         <div className="sm:col-span-2"><label className={labelClass}>Facilities<input name="facilities" defaultValue={values ? values.facilities : venue?.facilities.join(", ")} placeholder="Projector, WiFi, Stage" className={inputClass} /></label><p className="mt-1 text-xs text-[#718078]">Separate items with commas.</p></div>
         <div className="sm:col-span-2"><label className={labelClass}>Accessibility features<input name="accessibility_features" defaultValue={values ? values.accessibility_features : venue?.accessibility_features.join(", ")} placeholder="Ramp access, Hearing loop" className={inputClass} /></label><p className="mt-1 text-xs text-[#718078]">Separate items with commas.</p></div>
       </div>

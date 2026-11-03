@@ -27,6 +27,8 @@ const hall: Venue = {
   operating_slots: ["AM", "PM"],
   setup_minutes: 0,
   turnaround_minutes: 0,
+  operating_start_minute: 420,
+  operating_end_minute: 1440,
   status: "available",
   created_at: "2026-09-13T03:00:00Z",
   updated_at: "2026-09-13T03:00:00Z",

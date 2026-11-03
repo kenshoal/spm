@@ -32,9 +32,19 @@ function invalidPrep(value) {
   return value !== undefined && !(Number.isInteger(value) && value >= 0 && value <= 1020 && value % 15 === 0);
 }
 
+// SCRUM-30: like venueService, the operating hours are 15-minute steps within 07:00-24:00, start before end.
+function invalidMinute(value) {
+  return value !== undefined && !(Number.isInteger(value) && value >= 420 && value <= 1440 && value % 15 === 0);
+}
+
+function invalidHours(start, end) {
+  return invalidMinute(start) || invalidMinute(end) || (start !== undefined && end !== undefined && start >= end);
+}
+
 function invalid(body) {
   return !body.name || !body.location || !Number.isInteger(body.max_capacity) || body.max_capacity <= 0
-    || invalidPrep(body.setup_minutes) || invalidPrep(body.turnaround_minutes);
+    || invalidPrep(body.setup_minutes) || invalidPrep(body.turnaround_minutes)
+    || invalidHours(body.operating_start_minute, body.operating_end_minute);
 }
 
 // SCRUM-65: bookings and blocks carry start_minute / end_minute; slots are the
@@ -90,7 +100,7 @@ function makeVenue(body) {
   const now = new Date().toISOString();
   return {
     facilities: [], accessibility_features: [], supported_layouts: [], operating_slots: ["AM", "PM", "NIGHT"],
-    setup_minutes: 0, turnaround_minutes: 0,
+    setup_minutes: 0, turnaround_minutes: 0, operating_start_minute: 420, operating_end_minute: 1440,
     ...body, id: body.id ?? randomUUID(), status: body.status ?? "available", created_at: now, updated_at: now,
   };
 }
@@ -479,6 +489,7 @@ createServer(async (request, response) => {
     if (!venue) return send(response, 404, { detail: "Venue not found" });
     const changes = await readJson(request);
     if (invalidPrep(changes.setup_minutes) || invalidPrep(changes.turnaround_minutes)) return send(response, 422, { detail: "Invalid venue" });
+    if (invalidHours(changes.operating_start_minute ?? venue.operating_start_minute, changes.operating_end_minute ?? venue.operating_end_minute)) return send(response, 422, { detail: "Invalid operating hours" });
     const updated = { ...venue, ...changes, updated_at: new Date().toISOString() };
     venues.set(venue.id, updated);
     return send(response, 200, updated);

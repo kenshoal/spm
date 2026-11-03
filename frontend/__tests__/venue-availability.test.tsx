@@ -30,7 +30,7 @@ afterEach(cleanup);
 
 const hall: Venue = {
   id: "v1", name: "Riverside Hall", location: "Level 2", max_capacity: 120, facilities: [], accessibility_features: [],
-  supported_layouts: ["theatre"], operating_slots: ["AM", "PM"], setup_minutes: 0, turnaround_minutes: 0, status: "available",
+  supported_layouts: ["theatre"], operating_slots: ["AM", "PM"], setup_minutes: 0, turnaround_minutes: 0, operating_start_minute: 420, operating_end_minute: 1440, status: "available",
   created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
 };
 const studio: Venue = { ...hall, id: "v2", name: "Orchard Studio" };

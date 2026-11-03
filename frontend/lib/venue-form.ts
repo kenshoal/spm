@@ -1,7 +1,10 @@
 import {
+  CLOSE_MINUTE,
   MAX_PREP_MINUTES,
+  OPEN_MINUTE,
   PREP_MINUTES_STEP,
   ROOM_LAYOUTS,
+  TIME_STEP,
   timeRangeFrom,
   type RoomLayout,
   type VenueStatus,
@@ -16,6 +19,8 @@ export interface VenuePayload {
   supported_layouts: RoomLayout[];
   setup_minutes: number | null;
   turnaround_minutes: number | null;
+  operating_start_minute: number | null;
+  operating_end_minute: number | null;
   status?: VenueStatus;
   layout_capacities: Partial<Record<RoomLayout, number>>;
 }
@@ -33,6 +38,8 @@ export interface VenueFormValues {
   supported_layouts: string[];
   setup_minutes: string;
   turnaround_minutes: string;
+  operating_start_minute: string;
+  operating_end_minute: string;
   status?: string;
   layout_capacities: Record<string, string>;
 }
@@ -64,6 +71,15 @@ function prepMinutes(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
   const minutes = Number(value);
   return minutes <= MAX_PREP_MINUTES && minutes % PREP_MINUTES_STEP === 0 ? minutes : null;
+}
+
+// An opening or closing time as minutes after midnight: blank means the edge of the day
+// (the whole 07:00 to 24:00 day), otherwise a whole multiple of 15 inside it, or null when invalid.
+function operatingMinute(value: string, blank: number): number | null {
+  if (!value) return blank;
+  if (!/^\d+$/.test(value)) return null;
+  const minutes = Number(value);
+  return minutes >= OPEN_MINUTE && minutes <= CLOSE_MINUTE && minutes % TIME_STEP === 0 ? minutes : null;
 }
 
 // Keeps submission order (tests assert on it) while filtering out values
@@ -98,6 +114,8 @@ export function readVenueFormValues(formData: FormData): VenueFormValues {
     ),
     setup_minutes: text(formData, "setup_minutes"),
     turnaround_minutes: text(formData, "turnaround_minutes"),
+    operating_start_minute: text(formData, "operating_start_minute"),
+    operating_end_minute: text(formData, "operating_end_minute"),
   };
   if (formData.has("status")) values.status = text(formData, "status");
   return values;
@@ -130,6 +148,8 @@ export function parseVenueForm(
     layout_capacities: layoutCapacities(formData),
     setup_minutes: prepMinutes(text(formData, "setup_minutes")),
     turnaround_minutes: prepMinutes(text(formData, "turnaround_minutes")),
+    operating_start_minute: operatingMinute(text(formData, "operating_start_minute"), OPEN_MINUTE),
+    operating_end_minute: operatingMinute(text(formData, "operating_end_minute"), CLOSE_MINUTE),
   };
   if (includeStatus) {
     payload.status = text(formData, "status") === "blocked" ? "blocked" : "available";
@@ -147,6 +167,10 @@ export function parseVenueForm(
   const prepError = `Enter minutes in steps of ${PREP_MINUTES_STEP}, from 0 to ${MAX_PREP_MINUTES}.`;
   if (payload.setup_minutes === null) errors.setup_minutes = prepError;
   if (payload.turnaround_minutes === null) errors.turnaround_minutes = prepError;
+  const { operating_start_minute: opens, operating_end_minute: closes } = payload;
+  if (opens === null || closes === null || opens >= closes) {
+    errors.operating_hours = "Choose an opening time before the closing time, from 07:00 to 24:00 in steps of 15 minutes.";
+  }
   return { payload, errors };
 }
 
