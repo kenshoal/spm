@@ -156,7 +156,7 @@ Performance, load and availability tests are added only when the Product Owner c
 - Coverage shows which lines ran, not whether a test would notice them being wrong. A suite can reach 100% coverage and still miss many faults. Treat uncovered lines in business rules as missing test cases.
 - For high-risk modules (status transitions, permission checks, calculations), run a mutation tool before marking the story Done. Each surviving mutant is either a missing test case (add it with a new ID) or an equivalent mutant (record why in the execution remarks).
 
-> **Tooling status: not yet installed.** Backend coverage needs `pytest-cov` (`pytest --cov --cov-report=term-missing`), frontend coverage needs `@vitest/coverage-v8` (`npx vitest run --coverage`), and mutation testing needs `mutmut` (Python) or Stryker (TypeScript). Adding these dependencies is a separate team change, not part of a story.
+> **Tooling status.** Coverage reports run in CI (backend `pytest --cov=app --cov-branch --cov-report=term-missing:skip-covered` after `pip install "pytest-cov>=6,<8"`; frontend `npm run test:coverage`, which uses `@vitest/coverage-v8`). They report only and set no threshold; the measured figures and open gaps are in `docs/testcases/coverage.md`. Mutation testing (`mutmut` for Python, Stryker for TypeScript) is **not installed**; adding it is a separate team change, not part of a story.
 
 ## 8. Evidence
 
