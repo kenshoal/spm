@@ -12,6 +12,12 @@ Migrations are applied manually through the Supabase dashboard (there is no CLI/
 
 Apply each file exactly once and never edit a file that has already been applied — new changes go in a new file.
 
+### Shared rollouts in practice
+
+- Recorded shared rollouts apply a reviewed bundle atomically through Supabase MCP `apply_migration`, with transaction-local timeouts, and check the result afterwards. See the records in [`docs/deployment/`](../docs/deployment/).
+- Supabase MCP declined `0051` because it contains `DROP FUNCTION` and `UPDATE`, so that file was run in the SQL Editor.
+- Filename order is not the exact order applied to the shared project, and some numbers are used by two files. Read the project's migration history and actual definitions before applying anything; do not infer what is installed from a file number.
+
 ## Migrations
 
 | File | Purpose |

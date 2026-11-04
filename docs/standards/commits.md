@@ -50,7 +50,7 @@ git config core.hooksPath .githooks
 
 ## 6. Pull requests
 
-Open pull requests into `dev`; `dev` is promoted to `main` by pull request. Backend and frontend CI run on pull requests and pushes to `dev` and `main`; the commit-message check runs on every push and pull request.
+Open pull requests into `dev`; `dev` is promoted to `main` by pull request. Frontend CI runs on pull requests and pushes to `dev` and `main`. Backend CI runs on the same events when backend, database or Compose files change, and can be started by hand on any branch. The commit-message check runs on every push and pull request.
 
 Each pull request contains:
 

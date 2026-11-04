@@ -171,7 +171,7 @@ Never write only "tests passed". Record:
 
 Classify each result as **Pass** (ran successfully on the current code), **Fail** (ran and missed the expected result), **Blocked** (could not run; name the missing dependency or permission) or **Not executed**. Earlier branch results, another developer's machine and a previous commit are not current evidence. Keep local, shared-database, browser and pull-request CI results separate; one does not substitute for another.
 
-**Regression.** Automated tests from earlier stories run in CI on every pull request. Manual cases for features the change touches are re-run before the story is marked Done and recorded as new execution records.
+**Regression.** Frontend tests from earlier stories run in CI on every pull request, and backend tests on every pull request that changes backend, database or Compose files. Only some database verifiers run in CI; run the rest by hand for the areas a change touches. Manual cases for features the change touches are re-run before the story is marked Done and recorded as new execution records.
 
 ## 9. Story test checklist
 

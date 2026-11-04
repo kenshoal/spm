@@ -1,4 +1,8 @@
-# spm
+# ConnectSphere (spm)
+
+ConnectSphere supports the planning, coordination, resource allocation, registration and completion of organisational events.
+
+**Repository:** <https://github.com/kenshoal/spm>
 
 ## Commit messages
 
@@ -20,7 +24,16 @@ Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `b
 
 ## CI checks
 
-Pull requests and pushes to `main` run frontend linting, type checking, a production build, unit tests, Chromium end-to-end tests, backend linting and tests, container builds, and dependency vulnerability audits. Dependabot checks Python packages, npm packages, and GitHub Actions weekly.
+GitHub Actions runs these workflows from `.github/workflows/`:
+
+| Workflow | Runs on | Checks |
+| --- | --- | --- |
+| Conventional Commits | Every push and pull request | Commit message format |
+| Frontend CI | Pull requests and pushes to `dev` and `main` | Linting, type checking, production build, unit tests, Chromium end-to-end tests |
+| Backend CI | Pull requests and pushes to `dev` and `main` that change backend, database or Compose files; can also be started by hand | Linting, tests and container builds for each service, plus database verifiers on disposable Postgres |
+| Security | Pull requests and pushes to `main`, and weekly | Dependency vulnerability audits |
+
+Dependabot checks Python packages, npm packages, and GitHub Actions weekly.
 
 Run the frontend checks locally from `frontend/`:
 
@@ -32,22 +45,31 @@ npm run test:e2e
 npm run build
 ```
 
-The purpose, layer and acceptance-criterion coverage of the SCRUM-8 tests are
-documented in
-[`docs/testcases/scrum_8_testcases.md`](docs/testcases/scrum_8_testcases.md).
-Authentication coverage for SCRUM-26 is documented in
-[`docs/testcases/scrum_26_testcases.md`](docs/testcases/scrum_26_testcases.md).
-Submission coverage for SCRUM-11 is documented in
-[`docs/testcases/scrum_11_testcases.md`](docs/testcases/scrum_11_testcases.md).
+Run the backend checks locally from `backend/<service>/`:
+
+```bash
+python -m pip install -e ".[dev]"
+ruff check .
+pytest
+```
+
+## Documentation
+
+| Topic | Location |
+| --- | --- |
+| Test cases and traceability, one file per story | [`docs/testcases/`](docs/testcases/) |
+| Testing, commit, security and Done standards | [`docs/standards/`](docs/standards/) |
+| Shared database rollout records | [`docs/deployment/`](docs/deployment/) |
+| Migrations and database verifiers | [`database/README.md`](database/README.md) |
 
 ## Services
 
 | Service | Technology | Local port | Purpose |
 | --- | --- | --- | --- |
-| `authService` | FastAPI | `8001` | Registration, login and session verification |
-| `equipmentService` | FastAPI + Supabase | `8002` | Equipment catalogue, quantities and status |
-| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event-request drafts, submission, status and coordinator assignment |
-| `venueService` | FastAPI | `8004` | Venue catalogue and search |
+| `authService` | FastAPI + Supabase | `8001` | Registration, login, session verification and roles |
+| `equipmentService` | FastAPI + Supabase | `8002` | Equipment catalogue, status, availability, requirements and reservations |
+| `eventRequestService` | FastAPI + Pydantic + Supabase | `8003` | Event lifecycle, coordinator assignment, review, changes, registration, waiting list and technical support |
+| `venueService` | FastAPI + Supabase | `8004` | Venue catalogue, search, suitability, availability, bookings, blocks and holds |
 | `notificationService` | FastAPI + Supabase | `8005` | Stores workflow events from other services as in-app notifications and serves each user's inbox (SCRUM-37), with optional email per notification type (SCRUM-57) |
 
 ### Run the project from the repository root
@@ -60,6 +82,8 @@ cp .env.example .env
 
 Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and the server-only
 `SUPABASE_SECRET_KEY` in that root `.env`. Never commit this file.
+
+Background features are set in the same file. `.env.example` lists them: automatic completion and registration-window notices are off by default, and the waiting-list timer is on.
 
 Build and start every backend microservice:
 
