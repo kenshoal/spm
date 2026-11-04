@@ -418,3 +418,28 @@ def test_a_closed_entry_is_inert() -> None:
     assert expiry_due(closed, TE + ONE_SECOND) is False
     assert warning_due(closed, T0 + timedelta(hours=48)) is False
     assert next_recipient([closed], PLACE_1, []) is None
+
+
+@pytest.mark.parametrize(
+    ("now", "refused"),
+    [
+        (CUTOFF - ONE_SECOND, False),
+        (CUTOFF, True),
+        (START + ONE_SECOND, True),
+    ],
+    ids=["AC1-B5", "AC1-B6", "AC1-B7"],
+)
+# AC1-B5..B7 (boundary, hotfix): joining closes at the cut-off (start - 72h), the
+# same instant the timer closes the list (AC10-B1..B2), even while registration
+# is still open; otherwise a join is accepted and closed on the next timer pass
+def test_joining_closes_at_the_cut_off(now: datetime, refused: bool) -> None:
+    from app.services.waitlist_rules import WaitlistClosedError
+
+    event = make_event(
+        proposed_date_times=[START], registration_closes_at=START + timedelta(days=2)
+    )
+    if refused:
+        with pytest.raises(WaitlistClosedError):
+            check_join(event, now, 2, False, None)
+    else:
+        check_join(event, now, 2, False, None)

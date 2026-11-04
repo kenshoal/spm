@@ -44,8 +44,22 @@ test.each([
   ["already_waitlisted", () => joinWaitlist("e1"), "You are already on the waiting list."],
   ["entry_not_found", () => acceptWaitlistOffer("w1"), "This offer is no longer available."],
   ["not_offered", () => acceptWaitlistOffer("w1"), "There is no offer to act on for this entry."],
+  ["waitlist_closed", () => joinWaitlist("e1"), "The waiting list for this event has closed."],
 ])("waiting-list refusal %s", async (code, run, message) => {
   respond(409, { code });
 
   expect(await run()).toEqual({ message });
+});
+
+// AC1-B5..B7 (UI, hotfix): the event page offers "Join the waiting list" only
+// before the cut-off (72 hours before the first session), when a join can stick
+test.each([
+  ["one second before the cut-off", "2030-02-07T09:59:59Z", true],
+  ["at the cut-off", "2030-02-07T10:00:00Z", false],
+  ["after the start", "2030-02-10T10:00:01Z", false],
+])("the waiting list is open %s", async (_name, at, open) => {
+  const { isWaitlistOpen } = await import("@/lib/attendee");
+  const event = { proposed_date_times: ["2030-02-11T10:00:00Z", "2030-02-10T10:00:00Z"] };
+
+  expect(isWaitlistOpen(event, Date.parse(at))).toBe(open);
 });
