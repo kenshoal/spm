@@ -22,9 +22,10 @@ const messages: Record<string, string> = {
   already_checked_in: "You have already been checked in, so you can no longer withdraw.",
   withdrawal_not_permitted: "This registration can no longer be withdrawn.",
   places_available: "There are places left, so you can register instead.",
-  already_on_waitlist: "You are already on the waiting list.",
+  already_waitlisted: "You are already on the waiting list.",
   offer_expired: "This offer has expired. The place went to the next person.",
-  offer_not_found: "This offer is no longer available.",
+  entry_not_found: "This offer is no longer available.",
+  not_offered: "There is no offer to act on for this entry.",
 };
 
 async function post(path: string): Promise<AttendeeActionState> {
@@ -40,7 +41,9 @@ async function post(path: string): Promise<AttendeeActionState> {
     const code = await response.json().then((body) => body?.code as string | undefined).catch(() => undefined);
     return { message: (code && messages[code]) || "That could not be done. Please try again." };
   }
-  revalidatePath("/events");
+  // "layout" also re-renders /events/[id], where join and register are clicked;
+  // a plain "/events" refreshes the list page only, leaving the old button.
+  revalidatePath("/events", "layout");
   return { done: true };
 }
 
