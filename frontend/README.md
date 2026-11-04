@@ -60,9 +60,11 @@ mocked browser checks do not prove shared Supabase delivery or real authenticati
 | --- | --- | --- |
 | Event Organiser | `/event-requests` | create, edit, submit and track requests |
 | Event Coordinator | `/coordination/requests` | assigned requests, status transitions, `/venues/search` |
-| Event Operations Manager | `/operations/assignments` | assign and reassign coordinators (SCRUM-14) |
+| Event Coordinator Lead | `/operations/assignments` | assign and reassign coordinators (SCRUM-14, SCRUM-62). The role id is still `event_operations_manager`; users see "Event Coordinator Lead" |
 | Venue Staff | `/venues` | venue catalogue (SCRUM-30), `/venues/search` (SCRUM-9), venue review queue |
 | Technical Support | `/equipment` | equipment catalogue (SCRUM-45), status (SCRUM-16) and equipment review queue |
+| Safety Officer | `/safety` | safety reviews of events in Safety Review (SCRUM-60) |
+| Attendee | `/events` | browse Confirmed events and register (SCRUM-21) |
 
 Venue search (`/venues/search`) is open to both Event Coordinators and Venue
 Staff. A page-level fetch failure shows an "unavailable" banner instead of a
@@ -70,7 +72,7 @@ blank page, and an expired session redirects to sign-in rather than erroring.
 
 Server-side environment variables: `AUTH_SERVICE_URL` (default `http://127.0.0.1:8001`),
 `EVENT_REQUEST_API_URL` (8003), `VENUE_API_URL` (8004), `EQUIPMENT_API_URL` (8002).
-Venues are held in memory by `venueService` and are lost when it restarts.
+`venueService` keeps venues in Supabase when `VENUE_STORAGE_BACKEND=supabase` (the Compose default) and in memory otherwise; in-memory venues are lost when it restarts.
 
 ## Getting Started
 
@@ -119,8 +121,8 @@ npm run build
 The Playwright suite starts isolated auth and event-request APIs on ports `8104`
 and `8103`, plus a frontend on `3100`. It exercises the browser workflow without
 changing the shared Supabase project. The mock API has organiser, coordinator,
-second-coordinator and operations-manager sessions; coordinator assignment is
-driven through the API because no Operations Manager frontend exists yet.
+second-coordinator and Event Coordinator Lead sessions. `e2e/assign-coordinator.spec.ts`
+assigns and reassigns a coordinator through the Lead's page.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
