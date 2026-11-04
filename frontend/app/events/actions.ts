@@ -23,6 +23,7 @@ const messages: Record<string, string> = {
   withdrawal_not_permitted: "This registration can no longer be withdrawn.",
   places_available: "There are places left, so you can register instead.",
   already_waitlisted: "You are already on the waiting list.",
+  waitlist_closed: "The waiting list for this event has closed.",
   offer_expired: "This offer has expired. The place went to the next person.",
   entry_not_found: "This offer is no longer available.",
   not_offered: "There is no offer to act on for this entry.",
