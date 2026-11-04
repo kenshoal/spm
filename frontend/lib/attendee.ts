@@ -63,6 +63,18 @@ export function isFull(event: Pick<PublicEvent, "places_remaining">): boolean {
   return event.places_remaining !== null && event.places_remaining <= 0;
 }
 
+// The waiting list closes 72 hours before the first session (SCRUM-24 AC10): from
+// then on a join is refused, so the page stops offering it. No date, no cut-off.
+const WAITLIST_CUTOFF_MS = 72 * 60 * 60 * 1000;
+
+export function isWaitlistOpen(
+  event: Pick<PublicEvent, "proposed_date_times">,
+  at: number = Date.now(),
+): boolean {
+  const starts = event.proposed_date_times.map(Date.parse).filter((start) => !Number.isNaN(start));
+  return starts.length === 0 || at < Math.min(...starts) - WAITLIST_CUTOFF_MS;
+}
+
 // Registration is open from its start up to, but not including, its end (SCRUM-21).
 export function isRegistrationOpen(
   event: Pick<PublicEvent, "registration_opens_at" | "registration_closes_at">,

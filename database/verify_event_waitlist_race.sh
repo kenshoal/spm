@@ -16,7 +16,7 @@ new_event() {
     INSERT INTO public.event_requests (organiser_id, event_name, status, proposed_date_times,
         registration_opens_at, registration_closes_at, registration_capacity)
     SELECT id, '$1', 'Draft', ARRAY[now() + interval '200 days'],
-        now() - interval '1 day', now() + interval '1 day', 1
+        now() - interval '1 day', now() + interval '100 days', 1
     FROM auth.users ORDER BY created_at LIMIT 1 RETURNING id;" | head -1
 }
 new_user() { "${PSQL[@]}" -c "INSERT INTO auth.users (id) VALUES (gen_random_uuid()) RETURNING id;" | head -1; }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, unstable_rethrow } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { getOpenEvent, isFull, isRegistrationOpen, listMyRegistrations, listMyWaitlist, type PublicEvent } from "@/lib/attendee";
+import { getOpenEvent, isFull, isRegistrationOpen, isWaitlistOpen, listMyRegistrations, listMyWaitlist, type PublicEvent } from "@/lib/attendee";
 import { formatBookingDates } from "@/lib/booking-dates";
 import { formatDateTime } from "@/lib/event-requests";
 import { timeRangeLabel } from "@/lib/venue-options";
@@ -55,6 +55,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
             <p role="status" className="rounded-xl bg-[#fff9eb] px-4 py-3 text-sm font-semibold text-[#6f4b12]">You are on the waiting list for this event.</p>
           ) : !open ? (
             <p role="status" className="text-sm text-[#718078]">Registration is not open right now.</p>
+          ) : isFull(event) && !isWaitlistOpen(event) ? (
+            <p role="status" className="text-sm text-[#718078]">This event is full and its waiting list has closed.</p>
           ) : isFull(event) ? (
             <ActionButton label="Join the waiting list" pendingLabel="Joining…" run={joinWaitlist.bind(null, id)} />
           ) : (

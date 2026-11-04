@@ -30,6 +30,7 @@ from app.services.waitlist_rules import (
     OfferExpiredError,
     OfferWindowClosedError,
     PlacesAvailableError,
+    WaitlistClosedError,
     WaitlistEntryNotFoundError,
     check_join,
 )
@@ -206,6 +207,8 @@ class WaitlistService:
                 return RegistrationNotOpenError()
             if error.reason == "places available":
                 return PlacesAvailableError()
+            if error.reason == "waitlist closed":
+                return WaitlistClosedError()
         return error
 
     @staticmethod

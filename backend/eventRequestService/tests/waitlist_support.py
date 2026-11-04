@@ -96,6 +96,9 @@ class FakeWaitlistRepository(FakeRegistrationRepository):
             raise RegistrationRpcError(
                 "registration not open", "P0004", "registration not open"
             )
+        starts = event.get("proposed_date_times") or []
+        if starts and now >= min(starts) - OFFER_WINDOW:  # 0093: the cut-off
+            raise RegistrationRpcError("waitlist closed", "P0004", "waitlist closed")
         if self.has_active(event_id, attendee_id):
             raise RegistrationRpcError(
                 "already registered", "P0004", "already registered"

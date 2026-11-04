@@ -55,6 +55,14 @@ class WaitlistEntryNotFoundError(WaitlistRuleError):
     detail = "Entry not found"
 
 
+class WaitlistClosedError(WaitlistRuleError):
+    """Past the cut-off (start - 72h) the list is closed (AC10), so a join is
+    refused instead of being accepted and closed on the next timer pass."""
+
+    code = "waitlist_closed"
+    detail = "The waiting list for this event has closed"
+
+
 class PlacesAvailableError(WaitlistRuleError):
     """The event still has free places, so joining the list is refused."""
 
@@ -129,12 +137,25 @@ def check_join(
         raise EventNotVisibleError
     if not is_window_open(event, now):
         raise RegistrationNotOpenError
+    if not is_waitlist_open(event, now):
+        raise WaitlistClosedError
     if is_registered:
         raise AlreadyRegisteredError
     if active_entry is not None:
         raise AlreadyWaitlistedError
     if places_taken < event["registration_capacity"]:
         raise PlacesAvailableError
+
+
+def is_waitlist_open(event: dict[str, Any], now: datetime) -> bool:
+    """Open until the cut-off, start - 72h (exclusive): the instant the timer
+    closes the list (AC10-B1..B2). An event with no date has no cut-off."""
+    starts = [
+        start
+        for start in (_as_datetime(value) for value in event.get("proposed_date_times") or [])
+        if start is not None
+    ]
+    return not starts or now < min(starts) - OFFER_WINDOW
 
 
 def check_accept(entry: dict[str, Any] | None, now: datetime) -> None:

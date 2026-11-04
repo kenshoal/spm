@@ -219,3 +219,27 @@ def test_a_pending_offer_leaves_no_place_visible() -> None:
     assert [
         (item["id"], item["places_remaining"]) for item in listed.json()
     ] == [(event_id, 0)]
+
+
+# AC1-N5 (negative, hotfix): past the cut-off (start - 72h) joining is refused with
+# its own code, even though registration is still open, and nothing is stored
+def test_joining_after_the_cut_off_is_refused() -> None:
+    from datetime import timedelta
+
+    from registration_support import NOW
+
+    repo = FakeWaitlistRepository()
+    event_id = add_event(
+        repo,
+        registration_capacity=2,
+        proposed_date_times=[NOW + timedelta(hours=48)],
+        registration_closes_at=NOW + timedelta(days=10),
+    )
+    fill(repo, event_id, 2)
+
+    with make_waitlist_client(repo) as client:
+        response = client.post(join_path(event_id))
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "waitlist_closed"
+    assert repo.entries == []
