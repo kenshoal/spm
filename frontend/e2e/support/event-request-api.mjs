@@ -6,6 +6,8 @@ const assignments = [];
 const reviewDecisions = [];
 const changeRequests = [];
 const statusHistory = [];
+// SCRUM40 AC5-X1: prepared end-save and completion projections only; native tests own clock/transaction rules.
+const finalEndResponses = new Map();
 // SCRUM-19 UI fixtures only; the real rules live in eventRequestService's own tests.
 const technicalSupportRequirements = new Map();
 const technicalSupportAssignments = new Map();
@@ -44,6 +46,12 @@ const SESSIONS = {
   "safety-session": { id: "playwright-safety", role: "safety_officer" },
 };
 const safetyReviews = [];
+const postponements = new Map();
+
+// Hotfixes 21, 22 and 24: the Coordinator's withdrawal, postponement, new date and organiser change.
+const WITHDRAW_SOURCES = new Set(["Submitted", "Under Review", "Changes Requested"]);
+const POSTPONE_SOURCES = new Set(["Approved", "Planning", "Safety Review", "Confirmed"]);
+const ORGANISERS_BY_EMAIL = { "new-organiser@example.test": "playwright-new-organiser" };
 
 const CANCEL_SOURCES = new Set([
   "Submitted",
@@ -52,10 +60,11 @@ const CANCEL_SOURCES = new Set([
   "Approved",
   "Planning",
   "Confirmed",
+  "Postponed",
 ]);
 
 const COORDINATOR_IDS = new Set(["playwright-coordinator", "other-coordinator", "reassign-coordinator"]);
-const TERMINAL = new Set(["Completed", "Cancelled", "Rejected"]);
+const TERMINAL = new Set(["Completed", "Cancelled", "Rejected", "Withdrawn"]);
 
 // SCRUM-39: organisers in one client organisation view each other's
 // non-Draft requests, mirroring EventRequestService.get_viewable.
@@ -148,13 +157,24 @@ createServer(async (request, response) => {
     send(response, 201, { prepared: true }); return;
   }
 
+  // SCRUM40 AC5-X1: install declared server projections without simulating rescheduling, eligibility or completion transactions.
+  if (url.pathname === "/__prepare_event_projection" && request.method === "POST") {
+    const prepared = await readJson(request);
+    const record = records.get(prepared.event_request_id);
+    if (!record) { send(response, 404, { detail: "Unknown prepared event" }); return; }
+    Object.assign(record, structuredClone(prepared.event));
+    if (prepared.history) statusHistory.push({ ...structuredClone(prepared.history), id: nextHistoryId++, event_request_id: record.id });
+    send(response, 201, { prepared: true }); return;
+  }
+
   // Test-only seed for statuses no implemented story writes yet (e.g.
   // Confirmed, which the venue/ops stories own on other branches).
   if (url.pathname === "/__seed" && request.method === "POST") {
     const body = await readJson(request);
-    const { coordinator_id, review_decision, arrangement_reviews, date_plan_bookings, registration_reviews, registration_acknowledgements, ...recordOverrides } = body;
+    const { coordinator_id, review_decision, arrangement_reviews, date_plan_bookings, registration_reviews, registration_acknowledgements, final_end_response, ...recordOverrides } = body;
     const record = recordFields({ ...recordOverrides, status: body.status ?? "Submitted" });
     records.set(record.id, record);
+    if (final_end_response) finalEndResponses.set(record.id, structuredClone(final_end_response));
     if (date_plan_bookings) datePlanBookings.set(record.id, structuredClone(date_plan_bookings));
     for (const row of registration_reviews ?? []) registrationReviews.set(row.id, { ...row, event_request_id: record.id });
     for (const row of registration_acknowledgements ?? []) registrationAcknowledgements.set(row.id, { ...row, event_request_id: record.id });
@@ -249,6 +269,16 @@ createServer(async (request, response) => {
   }
   if (request.method === "GET" && url.pathname === "/arrangement-reviews") {
     send(response, 200, [...arrangementReviews.values()].filter((row) => row.arrangement === url.searchParams.get("arrangement") && row.cleared_at === null));
+    return;
+  }
+  // Hotfixes 7 and 14: the coordinator's waiting list and the organiser's arrangements
+  // read as empty here; the real shapes are proved in the service tests.
+  if (request.method === "GET" && /^\/event-requests\/[^/]+\/waitlist$/.test(url.pathname)) {
+    send(response, 200, []);
+    return;
+  }
+  if (request.method === "GET" && /^\/event-requests\/[^/]+\/arrangements$/.test(url.pathname)) {
+    send(response, 200, { venues: [], equipment: [] });
     return;
   }
   const arrangementClearMatch = url.pathname.match(/^\/arrangement-reviews\/([^/]+)\/clear$/);
@@ -467,9 +497,11 @@ createServer(async (request, response) => {
     send(response, 405, { detail: "Method not allowed" });
     return;
   }
+  const finalEndMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/final-end$/);
   const historyMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/status-history$/);
   const coordinatorMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/coordinator$/);
-  const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|resume-review|cancellation|completion)$/);
+  const transitionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(review|resume-review|cancellation|completion|withdrawal)$/);
+  const lifecycleMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/(postponement|resumption|organiser)$/);
   const decisionMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decision$/);
   const decisionsMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/decisions$/);
   const clarificationMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/clarification-response$/);
@@ -480,7 +512,7 @@ createServer(async (request, response) => {
   const submitMatch = url.pathname.match(/^\/event-requests\/([^/]+)\/submit$/);
   const match = url.pathname.match(/^\/event-requests\/([^/]+)$/);
   const id = decodeURIComponent(
-    historyMatch?.[1] ?? coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? decisionMatch?.[1]
+    finalEndMatch?.[1] ?? historyMatch?.[1] ?? coordinatorMatch?.[1] ?? transitionMatch?.[1] ?? lifecycleMatch?.[1] ?? decisionMatch?.[1]
       ?? decisionsMatch?.[1] ?? clarificationMatch?.[1] ?? bookingPlanMatch?.[1] ?? datePlanMatch?.[1] ?? changeDecisionMatch?.[1]
       ?? changeRequestsMatch?.[1] ?? submitMatch?.[1] ?? match?.[1] ?? "",
   );
@@ -551,6 +583,18 @@ createServer(async (request, response) => {
   if (!id || !record) {
     send(response, 404, { detail: "Event request not found" });
     return;
+  }
+
+  // SCRUM40 AC1-H3: exact prepared setter response; no lifecycle/authority/clock algorithm is duplicated here.
+  if (finalEndMatch && request.method === "POST") {
+    const body = await readJson(request);
+    const prepared = finalEndResponses.get(id);
+    if (!prepared || Object.keys(body).length !== 1
+        || new Date(body.final_event_end_at).getTime() !== new Date(prepared.final_event_end_at).getTime()) {
+      send(response, 400, { detail: "Prepared final-end request did not match" }); return;
+    }
+    Object.assign(record, structuredClone(prepared));
+    send(response, 200, record); return;
   }
 
   if (historyMatch) {
@@ -668,6 +712,29 @@ createServer(async (request, response) => {
       send(response, 422, { detail: "Invalid change decision" });
       return;
     }
+    if (Array.isArray(body.accepted_fields)) {
+      // Hotfix 20 (Q&A #104): apply only the accepted fields; the rest are kept with their reasons.
+      const proposed = Object.keys(change.proposed_changes);
+      const accepted = body.accepted_fields;
+      const refused = proposed.filter((key) => !accepted.includes(key));
+      const reasons = body.rejected_reasons ?? {};
+      if (change.status !== "Pending" || accepted.length === 0 || refused.length === 0
+          || !accepted.every((key) => proposed.includes(key))
+          || refused.some((key) => !String(reasons[key] ?? "").trim())) {
+        send(response, 422, { detail: "Choose fields to accept and refuse, with a reason for each refused field." });
+        return;
+      }
+      const applied = Object.fromEntries(accepted.map((key) => [key, change.proposed_changes[key]]));
+      records.set(id, { ...record, ...applied, updated_at: new Date().toISOString() });
+      change.rejected_changes = Object.fromEntries(refused.map((key) => [key, { value: change.proposed_changes[key], reason: reasons[key].trim() }]));
+      change.proposed_changes = applied;
+      change.status = "Partially Approved";
+      change.coordinator_id = user.id;
+      change.decision_reason = body.reason?.trim() || null;
+      change.decided_at = new Date().toISOString();
+      send(response, 200, change);
+      return;
+    }
     const prepared = bookingPlanOutcomes.get(change.id);
     if (prepared && body.decision === "Approved") {
       if (JSON.stringify(body.booking_plan) !== JSON.stringify(prepared.expected_booking_plan)) {
@@ -738,6 +805,7 @@ createServer(async (request, response) => {
           && decision.decision_status === "Changes Requested"
           && decision.organiser_response)) ||
       (action === "completion" && record.status === "Confirmed") ||
+      (action === "withdrawal" && WITHDRAW_SOURCES.has(record.status)) ||
       (action === "cancellation" && CANCEL_SOURCES.has(record.status));
     if (!allowed) {
       send(response, 409, { detail: "Transition not allowed from the current status" });
@@ -745,11 +813,47 @@ createServer(async (request, response) => {
     }
     const updated = {
       ...record,
-      status: action === "review" || action === "resume-review" ? "Under Review" : action === "completion" ? "Completed" : "Cancelled",
+      status: action === "review" || action === "resume-review" ? "Under Review" : action === "completion" ? "Completed" : action === "withdrawal" ? "Withdrawn" : "Cancelled",
       updated_at: new Date().toISOString(),
     };
     records.set(id, updated);
     recordHistory(updated, record.status, user, `coordinator.${action.replaceAll("-", "_")}`);
+    send(response, 200, updated);
+    return;
+  }
+
+  if (request.method === "POST" && lifecycleMatch) {
+    if (!record || user.role !== "event_coordinator" || latestAssignmentFor(id)?.coordinator_id !== user.id) {
+      send(response, 403, { detail: "Only the assigned Coordinator can change this request" });
+      return;
+    }
+    const body = await readJson(request);
+    const action = lifecycleMatch[2];
+    let updated;
+    if (action === "postponement") {
+      if (!POSTPONE_SOURCES.has(record.status)) { send(response, 409, { detail: "Transition not allowed" }); return; }
+      if (!String(body.reason ?? "").trim()) { send(response, 422, { detail: "A reason is required" }); return; }
+      updated = { ...record, status: "Postponed" };
+      postponements.set(id, body.reason.trim());
+    } else if (action === "resumption") {
+      if (record.status !== "Postponed") { send(response, 409, { detail: "Transition not allowed" }); return; }
+      const dates = Array.isArray(body.proposed_date_times) ? body.proposed_date_times : [];
+      if (dates.length === 0 || dates.some((value) => Date.parse(value) <= Date.now())) {
+        send(response, 422, { detail: "A new date in the future is required" }); return;
+      }
+      updated = { ...record, status: "Planning", proposed_date_times: dates };
+    } else {
+      if (TERMINAL.has(record.status) || record.status === "Draft") { send(response, 409, { detail: "Not allowed" }); return; }
+      const newOrganiser = ORGANISERS_BY_EMAIL[String(body.organiser_email ?? "").toLowerCase()];
+      if (!newOrganiser) { send(response, 422, { detail: "No Event Organiser account has that email address." }); return; }
+      if (!String(body.reason ?? "").trim() || newOrganiser === record.organiser_id) {
+        send(response, 422, { detail: "Give a reason, and choose someone other than the current Event Organiser." }); return;
+      }
+      updated = { ...record, organiser_id: newOrganiser };
+    }
+    updated.updated_at = new Date().toISOString();
+    records.set(id, updated);
+    recordHistory(updated, record.status, user, `coordinator.${action}`);
     send(response, 200, updated);
     return;
   }

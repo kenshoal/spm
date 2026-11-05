@@ -17,12 +17,14 @@ from app.suitability_models import (
 def check_suitability(venue: Venue, request: SuitabilityRequest) -> SuitabilityResult:
     mismatches: list[SuitabilityMismatch] = []
 
-    if request.expected_attendance > venue.max_capacity:
+    # Q&A #112: judged by the chosen layout's own capacity when it has one.
+    capacity = venue.capacity_for(request.required_layout)
+    if request.expected_attendance > capacity:
         mismatches.append(
             SuitabilityMismatch(
                 attribute="capacity",
                 reason=(
-                    f"Venue capacity ({venue.max_capacity}) is below the expected "
+                    f"Venue capacity ({capacity}) is below the expected "
                     f"attendance ({request.expected_attendance})."
                 ),
             )
@@ -67,6 +69,24 @@ def check_suitability(venue: Venue, request: SuitabilityRequest) -> SuitabilityR
             )
         )
 
+    # SCRUM-30 AC5, SCRUM-12 AC3: a requested time must lie inside the venue's operating hours.
+    start, end = request.required_start_minute, request.required_end_minute
+    if start is not None and end is not None and not venue.is_open_for(start, end):
+        mismatches.append(
+            SuitabilityMismatch(
+                attribute="operating_hours",
+                reason=(
+                    f"Venue operates {_clock(venue.operating_start_minute)} to "
+                    f"{_clock(venue.operating_end_minute)}, outside the requested "
+                    f"{_clock(start)} to {_clock(end)}."
+                ),
+            )
+        )
+
     return SuitabilityResult(
         venue_id=venue.id, suitable=not mismatches, mismatches=mismatches
     )
+
+
+def _clock(minute: int) -> str:
+    return f"{minute // 60:02d}:{minute % 60:02d}"

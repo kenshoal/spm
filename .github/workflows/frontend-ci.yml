@@ -40,7 +40,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm test
+      # The same tests as `npm test`, plus a coverage summary (report only, no threshold).
+      - run: npm run test:coverage
 
   e2e-tests:
     name: End-to-end tests

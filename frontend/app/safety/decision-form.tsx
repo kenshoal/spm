@@ -13,8 +13,9 @@ export interface ArrangementOption {
 const initialState: SafetyDecisionState = {};
 const labelClass = "block text-sm font-semibold text-[#34463f]";
 
-// One form, two submit buttons: the clicked button's value is the decision.
-// Approval ignores the reason and targets. Reject is parked (SCRUM-60 AC5).
+// One form, three submit buttons: the clicked button's value is the decision.
+// Approval ignores the reason and targets; rejecting returns the event to
+// planning, as asking for changes does (Q&A #130).
 export function SafetyDecisionForm({
   eventRequestId,
   arrangements,
@@ -33,7 +34,7 @@ export function SafetyDecisionForm({
       <button type="submit" name="decision" value="approved" disabled={isPending || Boolean(approveBlockedReason)} className="min-h-11 rounded-xl bg-[#0f6b5b] px-5 text-sm font-bold text-white hover:bg-[#0b5b4d] disabled:opacity-60">
         Approve
       </button>
-      <label className={labelClass}>What needs to change
+      <label className={labelClass}>What needs to change, or why it is rejected
         <textarea name="reason" rows={2} defaultValue={state.reason} className="mt-2 w-full rounded-xl border border-[#cfd9d4] bg-white px-4 py-3 text-sm text-[#273832] outline-none focus:border-[#0f6b5b] focus:ring-3 focus:ring-[#dff1eb]" />
         {errors.reason ? <span className="mt-1 block text-sm font-normal text-[#a23939]">{errors.reason}</span> : null}
       </label>
@@ -50,9 +51,14 @@ export function SafetyDecisionForm({
           </div>
         </fieldset>
       ) : null}
+<div className="flex flex-wrap gap-3">
       <button type="submit" name="decision" value="changes_requested" disabled={isPending} className="min-h-11 rounded-xl border border-[#80520d] px-5 text-sm font-bold text-[#80520d] hover:bg-[#fff8ec] disabled:opacity-60">
         Ask for changes
       </button>
+      <button type="submit" name="decision" value="rejected" disabled={isPending} className="min-h-11 rounded-xl border border-[#80520d] px-5 text-sm font-bold text-[#80520d] hover:bg-[#fff8ec] disabled:opacity-60">
+        Reject safety arrangement
+      </button>
+</div>
       {errors.decision ? <p className="text-sm text-[#a23939]">{errors.decision}</p> : null}
       {state.message ? <p role="alert" className="rounded-xl bg-[#fff4f3] px-4 py-3 text-sm text-[#8e3d35]">{state.message}</p> : null}
     </form>

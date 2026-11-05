@@ -20,6 +20,7 @@ vi.mock("@/app/coordination/actions", () => ({
   cancelEventRequest: vi.fn().mockResolvedValue({}),
   completeEventRequest: vi.fn().mockResolvedValue({}),
   resumeEventRequestReview: vi.fn().mockResolvedValue({}),
+  withdrawEventRequest: vi.fn().mockResolvedValue({}),
   decideEventRequest: vi.fn().mockResolvedValue({}),
 }));
 
@@ -56,9 +57,10 @@ function makeRequest(status: EventRequestStatus): EventRequest {
 // AC6-P2 (partition, SCRUM-60): Safety Review offers cancellation only, never confirm or complete.
 test("offers only the actions each status allows", () => {
   expect(coordinatorActions("Draft")).toEqual(["cancellation"]);
-  expect(coordinatorActions("Submitted")).toEqual(["review", "cancellation"]);
-  expect(coordinatorActions("Under Review")).toEqual(["cancellation"]);
-  expect(coordinatorActions("Changes Requested")).toEqual(["cancellation"]);
+  // Hotfix 21 (Q&A #103): a request still under review can also be withdrawn.
+  expect(coordinatorActions("Submitted")).toEqual(["review", "withdrawal", "cancellation"]);
+  expect(coordinatorActions("Under Review")).toEqual(["withdrawal", "cancellation"]);
+  expect(coordinatorActions("Changes Requested")).toEqual(["withdrawal", "cancellation"]);
   expect(coordinatorActions("Approved")).toEqual(["planning", "cancellation"]);
   expect(coordinatorActions("Planning")).toEqual(["safety-review", "cancellation"]);
   expect(coordinatorActions("Safety Review")).toEqual(["cancellation"]);
@@ -66,6 +68,9 @@ test("offers only the actions each status allows", () => {
   expect(coordinatorActions("Completed")).toEqual([]);
   expect(coordinatorActions("Cancelled")).toEqual([]);
   expect(coordinatorActions("Rejected")).toEqual([]);
+  expect(coordinatorActions("Withdrawn")).toEqual([]);
+  // Hotfix 22: a postponed event is waiting for a date, and can still be cancelled.
+  expect(coordinatorActions("Postponed")).toEqual(["cancellation"]);
   for (const status of EVENT_REQUEST_STATUSES) {
     expect(coordinatorActions(status)).toBeDefined();
   }

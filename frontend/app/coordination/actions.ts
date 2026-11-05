@@ -3,11 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAccessToken, requireRole } from "@/lib/auth";
+import { parsePartialDecision } from "@/lib/change-decision";
+import { parseFinalEndInput } from "@/lib/event-final-end";
 import { getEventChangeBookingPlan, getEventChangeDatePlan, type EventChangeBookingConflict, type EventChangeBookingPlan, type EventChangeDatePlan } from "@/lib/event-requests";
 
 export interface TransitionState {
   message?: string;
   errors?: { reason?: string };
+  // Hotfix 20: field name -> what is missing from that field's reason.
+  fieldErrors?: Record<string, string>;
   // SCRUM-58 AC3: what still blocks sending for safety review, one line each.
   outstanding?: string[];
   bookingConflicts?: EventChangeBookingConflict[];
@@ -20,7 +24,7 @@ const apiUrl = process.env.EVENT_REQUEST_API_URL ?? "http://127.0.0.1:8003";
 
 async function transition(
   eventRequestId: string,
-  path: "review" | "planning" | "safety-review" | "resume-review" | "cancellation" | "completion",
+  path: "review" | "planning" | "safety-review" | "resume-review" | "withdrawal" | "cancellation" | "completion",
 ): Promise<TransitionState> {
   await requireRole("event_coordinator");
   const token = await requireAccessToken();
@@ -110,6 +114,16 @@ export async function resumeEventRequestReview(
   void previousState;
   void formData;
   return transition(eventRequestId, "resume-review");
+}
+
+export async function withdrawEventRequest(
+  eventRequestId: string,
+  previousState: TransitionState,
+  formData: FormData,
+): Promise<TransitionState> {
+  void previousState;
+  void formData;
+  return transition(eventRequestId, "withdrawal");
 }
 
 export async function cancelEventRequest(
@@ -250,6 +264,57 @@ export async function decideEventChangeRequest(
 }
 
 
+/** Hotfix 20 (Q&A #104): accept some fields and refuse the others, each with a reason. */
+export async function decideEventChangeRequestPartly(
+  eventRequestId: string,
+  changeRequestId: string,
+  proposedFields: string[],
+  previousState: TransitionState,
+  formData: FormData,
+): Promise<TransitionState> {
+  void previousState;
+  await requireRole("event_coordinator");
+  const parsed = parsePartialDecision(formData, proposedFields);
+  if (!parsed.decision) return { message: parsed.message, fieldErrors: parsed.errors };
+  const note = String(formData.get("reason") ?? "").trim();
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/change-requests/${encodeURIComponent(changeRequestId)}/decision`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ decision: "Approved", reason: note || null, ...parsed.decision }),
+      },
+    );
+  } catch {
+    return { message: "The change decision could not be recorded. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    if (response.status === 409) {
+      const body = await response.json().catch(() => null);
+      if (body?.detail?.code === "BOOKING_CONFLICT") {
+        return { message: "Accepting the new dates would clash with a venue booking. Decide the dates on their own." };
+      }
+    }
+    return {
+      message: response.status === 403
+        ? "Only the coordinator currently assigned to this request can decide the change."
+        : response.status === 409
+          ? "This change is already decided or the event plan has changed. Refresh before deciding."
+          : response.status === 422
+            ? "Check the accepted fields and that every refused field has a reason. Dates need a complete booking plan."
+            : "The change decision could not be recorded. Please try again.",
+    };
+  }
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  revalidatePath("/event-requests");
+  return {};
+}
+
 export interface PreviewDateChangeState {
   plan?: EventChangeDatePlan;
   message?: string;
@@ -328,4 +393,129 @@ export async function loadEventChangeBookingPlan(
     unstable_rethrow(error);
     return { message: "Booking plan unavailable. Refresh the proposal and try again." };
   }
+}
+
+export interface ManualRegistrationState {
+  message?: string;
+  registered?: boolean;
+}
+
+export async function registerAttendee(
+  eventRequestId: string,
+  previousState: ManualRegistrationState,
+  formData: FormData,
+): Promise<ManualRegistrationState> {
+  void previousState;
+  const email = String(formData.get("attendee_email") ?? "").trim();
+  if (!email) return { message: "Enter the attendee's email." };
+  await requireRole("event_coordinator");
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/registrations`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ attendee_email: email }),
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    return { message: "Registrations unavailable. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    const code = await response.json().then((body) => body?.code).catch(() => undefined);
+    return { message: MANUAL_REGISTRATION_MESSAGES[code] ?? "Registrations unavailable. Please try again." };
+  }
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  return { registered: true };
+}
+
+const MANUAL_REGISTRATION_MESSAGES: Record<string, string> = {
+  attendee_not_found: "No attendee account has that email. Ask the organiser to check it.",
+  event_not_found: "You are no longer assigned to this event, or it is no longer confirmed. Refresh the page.",
+  already_registered: "This attendee is already registered for this event.",
+  event_full: "This event is full.",
+  capacity_not_set: "This event has no registration capacity set yet.",
+};
+
+export interface CheckInState {
+  message?: string;
+  checkedIn?: boolean;
+}
+
+export async function checkInAttendee(
+  eventRequestId: string,
+  registrationId: string,
+  previousState: CheckInState,
+  formData: FormData,
+): Promise<CheckInState> {
+  void previousState;
+  void formData;
+  await requireRole("event_coordinator");
+  const token = await requireAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/registrations/${encodeURIComponent(registrationId)}/check-in`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    return { message: "Check-in unavailable. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) {
+    const code = await response.json().then((body) => body?.code).catch(() => undefined);
+    return { message: CHECK_IN_MESSAGES[code] ?? "Check-in unavailable. Please try again." };
+  }
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  return { checkedIn: true };
+}
+
+const CHECK_IN_MESSAGES: Record<string, string> = {
+  not_event_day: "Check-in is only open on the event's days.",
+  already_checked_in: "This attendee is already checked in. Refresh the page.",
+  registration_not_found: "This attendee is no longer registered for this event. Refresh the page.",
+  event_not_found: "You are no longer assigned to this event, or it is no longer confirmed. Refresh the page.",
+};
+
+export interface FinalEndState {
+  message?: string;
+  saved?: true;
+}
+
+export async function setEventFinalEnd(
+  eventRequestId: string,
+  previousState: FinalEndState,
+  formData: FormData,
+): Promise<FinalEndState> {
+  void previousState;
+  await requireRole("event_coordinator");
+  const token = await requireAccessToken();
+  const finalEnd = parseFinalEndInput(formData.get("final_event_end_at"));
+  if (!finalEnd) return { message: "Enter a valid final event end in Singapore time." };
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/event-requests/${encodeURIComponent(eventRequestId)}/final-end`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ final_event_end_at: finalEnd }),
+    });
+  } catch {
+    return { message: "The final event end could not be saved. Please try again." };
+  }
+  if (response.status === 401) redirect("/auth");
+  if (!response.ok) return {
+    message: response.status === 403
+      ? "Only the currently assigned coordinator can record the final event end."
+      : response.status === 409
+        ? "The final event end can only be saved while Approved or Planning. Refresh to check the event."
+        : "The final event end could not be saved. Please try again.",
+  };
+  revalidatePath(`/coordination/requests/${eventRequestId}`);
+  revalidatePath(`/event-requests/${eventRequestId}/edit`);
+  revalidatePath("/coordination/requests");
+  revalidatePath("/event-requests");
+  return { saved: true };
 }

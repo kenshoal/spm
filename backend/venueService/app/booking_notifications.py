@@ -33,11 +33,19 @@ class BookingNotifier:
     def __init__(self, url: str | None) -> None:
         self._url = url
 
-    def send(self, event: dict[str, Any]) -> None:
+    def send(self, event: dict[str, Any]) -> bool:
+        """Send one event; True only if notificationService accepted it."""
         if self._url is None:
-            return
+            return False
         try:
-            response = httpx.post(self._url, json=event, timeout=5)
+            response = httpx.post(
+                self._url,
+                json=event,
+                headers={
+                    "X-Internal-Token": os.environ.get("NOTIFICATION_INTERNAL_TOKEN", "")
+                },
+                timeout=5,
+            )
             response.raise_for_status()
         except httpx.HTTPError:
             # Log ids only: the receiver URL or response could hold secrets.
@@ -47,13 +55,24 @@ class BookingNotifier:
                 event.get("event_type"),
                 event.get("payload", {}).get("booking_request_id"),
             )
+            return False
+        return True
 
-    def notify_decision(self, booking: BookingRequest, venue_name: str | None) -> None:
-        """Send one event for an approved or rejected request."""
+    def notify_decision(
+        self,
+        booking: BookingRequest,
+        venue_name: str | None,
+        recipient_id: str | None = None,
+    ) -> None:
+        """Send one event for an approved or rejected request.
+
+        The Coordinator who made the request is told, except for a replacement booking
+        (SCRUM-63 AC5), whose decision goes to the event's current Coordinator.
+        """
         self.send(
             {
                 "event_type": f"venue_booking_{booking.status.value}",
-                "recipient_id": booking.requested_by,
+                "recipient_id": recipient_id or booking.requested_by,
                 "event_id": f"booking-decision:{booking.id}",
                 "payload": _decision_payload(booking, venue_name),
             }
@@ -97,14 +116,18 @@ def _decision_payload(booking: BookingRequest, venue_name: str | None) -> dict[s
 
 
 def block_affects_booking_event(
-    block: VenueBlock, booking: BookingRequest, venue_name: str | None
+    block: VenueBlock,
+    booking: BookingRequest,
+    venue_name: str | None,
+    recipient_id: str | None = None,
 ) -> dict[str, Any]:
-    """The SCRUM-23 AC3 event for one booking a new block overlaps."""
+    """The SCRUM-23 AC3 event for one booking a new block overlaps (to the current
+    Coordinator of its event, SCRUM-23 AC7)."""
     pair = hashlib.sha256(f"{block.id}:{booking.id}".encode()).hexdigest()[:48]
     block_data = block.model_dump(mode="json")
     return {
         "event_type": "venue_block_affects_booking",
-        "recipient_id": booking.requested_by,
+        "recipient_id": recipient_id or booking.requested_by,
         # Within notificationService's 64-character limit; one per block and booking.
         "event_id": f"block-impact:{pair}",
         "payload": {

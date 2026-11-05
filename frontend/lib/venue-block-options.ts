@@ -3,7 +3,7 @@
 // can import them, following lib/venue-options.ts.
 import type { Slot } from "./venue-options";
 
-export const BLOCK_REASONS = ["maintenance", "renovation", "safety", "internal_use"] as const;
+export const BLOCK_REASONS = ["maintenance", "equipment_failure", "renovation", "safety", "internal_use", "other"] as const;
 export type BlockReason = (typeof BLOCK_REASONS)[number];
 
 // Matches venueService's VenueBlockCreate.reason_detail limit.

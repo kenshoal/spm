@@ -100,7 +100,8 @@ BEGIN
     FOR v_bad IN
         SELECT * FROM (VALUES
             ('AC1-X2 non-officer', v_other, 'approved', NULL::text, '[]'::jsonb, 'P0003'),
-            ('AC6-X3 rejected', v_officer, 'rejected', 'No.', '[]'::jsonb, '22023'),
+            ('AC6-X3 unknown decision', v_officer, 'maybe', 'No.', '[]'::jsonb, '22023'),
+            ('AC3-N1 rejection without a reason', v_officer, 'rejected', '  ', '[]'::jsonb, '22023'),
             ('AC6-X3 blank reason', v_officer, 'changes_requested', '  ', '[]'::jsonb, '22023'),
             ('AC6-X3 targets not array', v_officer, 'changes_requested', 'x', '{}'::jsonb, '22023'),
             ('AC6-X3 bad target kind', v_officer, 'changes_requested', 'x',

@@ -27,6 +27,8 @@ const hall: Venue = {
   operating_slots: ["AM", "PM"],
   setup_minutes: 0,
   turnaround_minutes: 0,
+  operating_start_minute: 420,
+  operating_end_minute: 1440,
   status: "available",
   created_at: "2026-09-13T03:00:00Z",
   updated_at: "2026-09-13T03:00:00Z",
@@ -129,7 +131,7 @@ test("offers every block field with the viewed venue preselected", async () => {
   expect(within(form).getByLabelText("End time")).toBeDefined();
   expect(within(form).queryByRole("checkbox")).toBeNull();
   const reason = within(form).getByLabelText("Reason") as HTMLSelectElement;
-  expect([...reason.options].map((o) => o.textContent)).toEqual(["Choose a reason", "Maintenance", "Renovation", "Safety", "Internal use"]);
+  expect([...reason.options].map((o) => o.textContent)).toEqual(["Choose a reason", "Maintenance", "Equipment failure", "Renovation", "Safety", "Internal use", "Other"]);
   expect(within(form).getByLabelText(/Detail/)).toBeDefined();
   expect(within(form).getByRole("button", { name: "Block venue" })).toBeDefined();
 });

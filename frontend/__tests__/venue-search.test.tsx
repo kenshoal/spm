@@ -7,6 +7,7 @@ import type { Venue } from "@/lib/venues";
 
 afterEach(cleanup);
 
+// SCRUM-9 AC1-H1 (happy): every filter is sent to the search, lists as repeated parameters
 // Purpose: SCRUM-9 AC1 — every filter is sent, lists as repeated parameters.
 test("builds a query from every filter", () => {
   const { query, errors } = buildVenueSearch({
@@ -29,11 +30,13 @@ test("builds a query from every filter", () => {
 });
 
 // Purpose: An untouched form does not search.
+// SCRUM-9 AC1-P1 (partition): an untouched form sends no query
 test("returns no query when nothing is filled in", () => {
   expect(buildVenueSearch({})).toEqual({ query: null, errors: {} });
 });
 
 // Purpose: Review focus 4 — a non-positive or non-integer capacity is reported, not sent.
+// SCRUM-9 AC1-N1 (negative): a non-positive or non-integer capacity is reported, not sent
 test.each(["0", "abc", "2.5", "-1"])("rejects capacity %j", (value) => {
   expect(buildVenueSearch({ required_capacity: value })).toEqual({
     query: null,
@@ -42,6 +45,7 @@ test.each(["0", "abc", "2.5", "-1"])("rejects capacity %j", (value) => {
 });
 
 // Purpose: Values outside the backend enums are dropped instead of causing a 422.
+// SCRUM-9 AC1-P7 (partition): a layout outside the enum is dropped instead of causing a 422
 test("drops unknown slot and layout values", () => {
   expect(buildVenueSearch({ layout: "ballroom", location: "East" }).query).toBe("location=East");
 });
@@ -58,6 +62,7 @@ test.each([
 
 // Purpose: A date that matches YYYY-MM-DD but isn't a real calendar date
 // (e.g. February 30) is dropped instead of causing a 422 from the venue service.
+// SCRUM-9 AC1-N2 (negative): a date that is not a real calendar day is dropped, not sent
 test("drops a date that is not a real calendar date", () => {
   expect(buildVenueSearch({ date: "2026-02-30", location: "East" }).query).toBe("location=East");
 });
@@ -65,10 +70,11 @@ test("drops a date that is not a real calendar date", () => {
 const venue: Venue = {
   id: "v1", name: "Riverside Hall", location: "East Wing", max_capacity: 120,
   facilities: ["Projector"], accessibility_features: ["Ramp access"], supported_layouts: ["theatre"],
-  operating_slots: ["AM", "PM"], setup_minutes: 30, turnaround_minutes: 45,
+  operating_slots: ["AM", "PM"], setup_minutes: 30, turnaround_minutes: 45, operating_start_minute: 420, operating_end_minute: 1440,
   status: "available", created_at: "2026-09-13T03:00:00Z", updated_at: "2026-09-13T03:00:00Z",
 };
 
+// SCRUM-9 AC2-H2 (happy): each result shows the attributes a coordinator shortlists by
 // Purpose: SCRUM-9 AC2 — each result shows the attributes a coordinator shortlists by.
 test("shows key attributes for each result", () => {
   render(<VenueResults venues={[venue]} />);
@@ -82,6 +88,7 @@ test("shows key attributes for each result", () => {
 });
 
 // Purpose: No matches is stated plainly so the coordinator can loosen filters.
+// SCRUM-9 AC2-N1 (negative): no match is stated plainly so the coordinator can loosen filters
 test("explains when no venue matches", () => {
   render(<VenueResults venues={[]} />);
 
@@ -99,9 +106,17 @@ test("shows setup and turnaround time for each result", () => {
 
 // AC4-H2 (happy): SCRUM-59 a time that was never set reads "None"
 test("shows None when a venue has no setup or turnaround time", () => {
-  render(<VenueResults venues={[{ ...venue, setup_minutes: 0, turnaround_minutes: 0 }]} />);
+  render(<VenueResults venues={[{ ...venue, setup_minutes: 0, turnaround_minutes: 0, operating_start_minute: 420, operating_end_minute: 1440 }]} />);
 
   const attributes = screen.getByRole("article", { name: "Riverside Hall" }).querySelector("dl") as HTMLElement;
   expect(within(attributes).getByText("Setup").nextElementSibling?.textContent).toBe("None");
   expect(within(attributes).getByText("Turnaround").nextElementSibling?.textContent).toBe("None");
+});
+
+// SCRUM-30 AC4-H3 (happy): each result shows the hours the venue is open
+test("shows the venue's operating hours on each result", () => {
+  render(<VenueResults venues={[{ ...venue, operating_start_minute: 540, operating_end_minute: 1080 }]} />);
+
+  const attributes = screen.getByRole("article", { name: "Riverside Hall" }).querySelector("dl") as HTMLElement;
+  expect(within(attributes).getByText("09:00–18:00 daily")).toBeDefined();
 });

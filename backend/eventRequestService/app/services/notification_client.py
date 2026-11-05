@@ -1,4 +1,6 @@
 import logging
+import os
+from datetime import UTC, datetime
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
@@ -7,6 +9,11 @@ import httpx
 from app.config import NotificationSettings
 
 logger = logging.getLogger(__name__)
+
+
+def internal_headers() -> dict[str, str]:
+    """The shared secret notificationService requires of its senders (hotfix 17)."""
+    return {"X-Internal-Token": os.environ.get("NOTIFICATION_INTERNAL_TOKEN", "")}
 
 
 class NotificationClient:
@@ -75,6 +82,7 @@ class NotificationClient:
                         "assigned_by": assigned_by,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -121,6 +129,7 @@ class NotificationClient:
                         "assigned_by": assigned_by,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -156,6 +165,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -201,6 +211,334 @@ class NotificationClient:
             payload={"event_request_id": event_request_id},
         )
 
+    def notify_registration_confirmed(
+        self,
+        *,
+        event_request_id: str,
+        attendee_id: str,
+        event_name: str | None,
+        registration_id: str,
+    ) -> None:
+        """Tell an Attendee their registration is saved (SCRUM-38 AC1)."""
+        self._notify_of_registration(
+            "registration_confirmed",
+            recipient_id=attendee_id,
+            registration_id=registration_id,
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "registration_id": registration_id,
+                "status": "Registered",
+            },
+        )
+
+    def notify_registration_withdrawn(
+        self,
+        *,
+        event_request_id: str,
+        attendee_id: str,
+        event_name: str | None,
+        registration_id: str,
+    ) -> None:
+        """Tell an Attendee their withdrawal is saved (SCRUM-22 AC5)."""
+        self._notify_of_registration(
+            "registration_withdrawn",
+            recipient_id=attendee_id,
+            registration_id=registration_id,
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "registration_id": registration_id,
+                "status": "Withdrawn",
+            },
+        )
+
+    def notify_registration_full(
+        self,
+        *,
+        event_request_id: str,
+        recipient_id: str,
+        event_name: str | None,
+        registration_id: str,
+        capacity: int,
+    ) -> None:
+        """Tell an Organiser or Coordinator the last place was taken (SCRUM-38 AC2)."""
+        self._notify_of_registration(
+            "registration_full",
+            recipient_id=recipient_id,
+            registration_id=registration_id,
+            per_recipient_key=True,
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "registration_id": registration_id,
+                "capacity": capacity,
+            },
+        )
+
+    def notify_event_cancelled(
+        self, *, event_request_id: str, event_name: str | None, attendee_ids: list[str]
+    ) -> None:
+        """Tell each registered Attendee the event is cancelled (SCRUM-38 AC4)."""
+        for attendee_id in attendee_ids:
+            self._post_notice(
+                "event_cancelled",
+                recipient_id=attendee_id,
+                key=f"event-cancelled:{event_request_id}:{attendee_id}",
+                payload={"event_request_id": event_request_id, "event_name": event_name},
+            )
+
+    def notify_event_cancellation_recorded(
+        self, *, event_request_id: str, event_name: str | None, recipient_ids: list[str]
+    ) -> None:
+        """Tell the Organiser and Coordinator the cancellation is recorded (SCRUM-57 AC1)."""
+        for recipient_id in recipient_ids:
+            self._post_notice(
+                "event_cancellation_recorded",
+                recipient_id=recipient_id,
+                key=f"event-cancellation-recorded:{event_request_id}:{recipient_id}",
+                payload={"event_request_id": event_request_id, "event_name": event_name},
+            )
+
+    def notify_event_no_longer_confirmed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        organiser_id: str,
+        version: str,
+    ) -> None:
+        """Tell the Organiser an applied change took the event back to planning (#105)."""
+        self._post_notice(
+            "event_no_longer_confirmed",
+            recipient_id=organiser_id,
+            key=f"event-no-longer-confirmed:{event_request_id}:{version}",
+            payload={"event_request_id": event_request_id, "event_name": event_name},
+        )
+
+    def notify_event_request_withdrawn(
+        self, *, event_request_id: str, event_name: str | None, organiser_id: str
+    ) -> None:
+        """Tell the Organiser the Coordinator recorded the withdrawal (Q&A #103)."""
+        self._post_notice(
+            "event_request_withdrawn",
+            recipient_id=organiser_id,
+            key=f"event-request-withdrawn:{event_request_id}",
+            payload={"event_request_id": event_request_id, "event_name": event_name},
+        )
+
+    def notify_event_organiser_changed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        change_key: str,
+        recipient_id: str,
+        became_organiser: bool,
+    ) -> None:
+        """Tell the previous and the new Organiser that the event changed hands (Q&A #59)."""
+        self._post_notice(
+            "event_organiser_changed",
+            recipient_id=recipient_id,
+            key=f"event-organiser-changed:{change_key}:{recipient_id}",
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "became_organiser": became_organiser,
+            },
+        )
+
+    def notify_event_postponed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        postponement_key: str,
+        recipient_ids: list[str],
+        reason: str,
+    ) -> None:
+        """Tell the Organiser, the registered Attendees and the staff whose bookings were
+        released that the event is postponed and a new date will follow (Q&A #69)."""
+        for recipient_id in recipient_ids:
+            self._post_notice(
+                "event_postponed",
+                recipient_id=recipient_id,
+                key=f"event-postponed:{postponement_key}:{recipient_id}",
+                payload={
+                    "event_request_id": event_request_id,
+                    "event_name": event_name,
+                    "reason": reason,
+                },
+            )
+
+    def notify_event_resumed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        resume_key: str,
+        recipient_ids: list[str],
+        proposed_date_times: list[str],
+    ) -> None:
+        """Tell the same people the postponed event has a new date."""
+        for recipient_id in recipient_ids:
+            self._post_notice(
+                "event_resumed",
+                recipient_id=recipient_id,
+                key=f"event-resumed:{resume_key}:{recipient_id}",
+                payload={
+                    "event_request_id": event_request_id,
+                    "event_name": event_name,
+                    "proposed_date_times": proposed_date_times,
+                },
+            )
+
+    def notify_event_change_partly_approved(
+        self,
+        *,
+        event_request_id: str,
+        change_request_id: str,
+        organiser_id: str,
+        accepted_fields: list[str],
+        refused: dict[str, str],
+        reason: str | None,
+    ) -> None:
+        """Tell the Organiser which fields were applied and why the others were not (#104)."""
+        self._post_notice(
+            "event_change_partly_approved",
+            recipient_id=organiser_id,
+            key=f"event-change-partly-approved:{change_request_id}",
+            payload={
+                "event_request_id": event_request_id,
+                "change_request_id": change_request_id,
+                "accepted_fields": accepted_fields,
+                "refused": refused,
+                "reason": reason,
+            },
+        )
+
+    def notify_event_changed(
+        self,
+        *,
+        event_request_id: str,
+        event_name: str | None,
+        change_request_id: str,
+        proposed_date_times: list[str],
+        attendee_ids: list[str],
+    ) -> None:
+        """Tell each registered Attendee the event's dates changed (SCRUM-38 AC4)."""
+        for attendee_id in attendee_ids:
+            self._post_notice(
+                "event_changed",
+                recipient_id=attendee_id,
+                key=f"event-changed:{change_request_id}:{attendee_id}",
+                payload={
+                    "event_request_id": event_request_id,
+                    "event_name": event_name,
+                    "change_request_id": change_request_id,
+                    "proposed_date_times": proposed_date_times,
+                },
+            )
+
+    def notify_registration_window(
+        self,
+        *,
+        kind: str,
+        event_request_id: str,
+        event_name: str | None,
+        boundary_at: datetime,
+        recipient_id: str,
+    ) -> None:
+        """Tell an Organiser or Coordinator registration opened or closed (SCRUM-38 AC3).
+
+        The key holds the boundary time, so repeating a pass sends the same key
+        (stored once) and a moved window sends a new one.
+        """
+        moment = boundary_at.astimezone(UTC).isoformat()
+        self._post_notice(
+            f"registration_{kind}",
+            recipient_id=recipient_id,
+            key=f"registration-{kind}:{event_request_id}:{moment}:{recipient_id}",
+            payload={
+                "event_request_id": event_request_id,
+                "event_name": event_name,
+                "boundary_at": moment,
+            },
+        )
+
+    def _post_notice(
+        self, event_type: str, *, recipient_id: str, key: str, payload: dict[str, Any]
+    ) -> None:
+        """One best-effort notice with a stable key; a failure is logged, never raised."""
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": event_type,
+                    "recipient_id": recipient_id,
+                    "event_id": str(uuid5(NAMESPACE_URL, key)),
+                    "payload": payload,
+                },
+                headers=internal_headers(),
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify %s of %s (%s)",
+                recipient_id,
+                event_type,
+                payload.get("event_request_id"),
+                exc_info=True,
+            )
+
+    def _notify_of_registration(
+        self,
+        event_type: str,
+        *,
+        recipient_id: str,
+        registration_id: str,
+        payload: dict[str, Any],
+        per_recipient_key: bool = False,
+    ) -> None:
+        """Best-effort registration notice, sent once after the registration saved.
+
+        The key is per registration and type (and per recipient when one
+        registration notifies several people), so a repeat is stored once while a
+        place freed and filled again notifies again.
+        """
+        if self._url is None:
+            return
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": event_type,
+                    "recipient_id": recipient_id,
+                    "event_id": str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"{event_type.replace('_', '-')}:{registration_id}"
+                            + (f":{recipient_id}" if per_recipient_key else ""),
+                        )
+                    ),
+                    "payload": payload,
+                },
+                headers=internal_headers(),
+                timeout=5,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            logger.warning(
+                "Failed to notify %s of %s for registration %s",
+                recipient_id,
+                event_type,
+                registration_id,
+                exc_info=True,
+            )
+
     def _notify_organiser_of_outcome(
         self,
         event_type: str,
@@ -230,6 +568,7 @@ class NotificationClient:
                     ),
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -268,6 +607,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
@@ -303,6 +643,7 @@ class NotificationClient:
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:
@@ -322,19 +663,36 @@ class NotificationClient:
         """Tell the assigned Coordinator what the Safety Officer wants changed
         (SCRUM-60 AC4b). Sent once after the decision commits, like the
         clarification notice; the reason also stays readable on the request."""
+        self._notify_safety_outcome(
+            "safety_changes_requested", event_request_id, coordinator_id, reason
+        )
+
+    def notify_safety_rejected(
+        self, *, event_request_id: str, coordinator_id: str, reason: str
+    ) -> None:
+        """Tell the assigned Coordinator the safety arrangement was rejected and
+        must be revised and resubmitted (Q&A #130)."""
+        self._notify_safety_outcome(
+            "safety_rejected", event_request_id, coordinator_id, reason
+        )
+
+    def _notify_safety_outcome(
+        self, event_type: str, event_request_id: str, coordinator_id: str, reason: str
+    ) -> None:
         if self._url is None:
             return
         try:
             response = httpx.post(
                 self._url,
                 json={
-                    "event_type": "safety_changes_requested",
+                    "event_type": event_type,
                     "recipient_id": coordinator_id,
                     "payload": {
                         "event_request_id": event_request_id,
                         "reason": reason,
                     },
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -366,6 +724,7 @@ class NotificationClient:
                     "event_id": event_id,
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             response.raise_for_status()
@@ -374,6 +733,52 @@ class NotificationClient:
                 "Failed to send submission confirmation %s to organiser %s",
                 event_id,
                 organiser_id,
+                exc_info=True,
+            )
+            return False
+        return True
+
+    def notify_waitlist_notice(
+        self,
+        *,
+        event_type: str,
+        recipient_id: str,
+        idempotency_key: str,
+        payload: dict[str, Any],
+    ) -> bool:
+        """Deliver one durable waiting-list notice (SCRUM-24 AC5).
+
+        The database already stored the notice with its idempotency key, so a
+        retry repeats the key and notificationService stores it once. Only a
+        202 counts as delivered, so the relay keeps the notice pending
+        otherwise and nothing is lost.
+        """
+        if self._url is None:
+            return False
+        try:
+            response = httpx.post(
+                self._url,
+                json={
+                    "event_type": event_type,
+                    "recipient_id": recipient_id,
+                    "event_id": str(uuid5(NAMESPACE_URL, idempotency_key)),
+                    "payload": payload,
+                },
+                headers=internal_headers(),
+                timeout=5,
+            )
+            if response.status_code != 202:
+                logger.warning(
+                    "Waiting-list notice %s was not accepted for %s",
+                    idempotency_key,
+                    recipient_id,
+                )
+                return False
+        except httpx.HTTPError:
+            logger.warning(
+                "Waiting-list notice %s could not reach recipient %s",
+                idempotency_key,
+                recipient_id,
                 exc_info=True,
             )
             return False
@@ -394,6 +799,7 @@ class NotificationClient:
                     "event_id": event_id,
                     "payload": payload,
                 },
+                headers=internal_headers(),
                 timeout=5,
             )
             if response.status_code != 202:

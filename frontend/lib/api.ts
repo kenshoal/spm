@@ -23,7 +23,7 @@ export async function getJson<T>(baseUrl: string, path: string): Promise<T | nul
 export async function sendJson(
   baseUrl: string,
   path: string,
-  method: "POST" | "PATCH",
+  method: "POST" | "PATCH" | "PUT",
   body: unknown,
 ): Promise<Response> {
   const token = await requireAccessToken();

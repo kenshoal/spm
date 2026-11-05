@@ -470,6 +470,25 @@ def test_update_quantity_not_found(
     assert response.json()["detail"] == "Equipment not found"
 
 
+# AC2-N4 (negative): a total below the units already reserved is refused as a conflict (409)
+# with a reason the member can act on
+def test_update_quantity_below_reserved_is_a_conflict(
+    client: TestClient, fake_client, auth_staff
+) -> None:
+    fake_client.rpc_error = APIError(
+        {"message": "below reserved", "code": "P0004"}
+    )
+
+    response = client.patch(
+        f"/equipment/{EQUIPMENT_ID}/quantity",
+        headers=bearer(),
+        json={"total_owned_quantity": 2},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "The total is below the units already reserved"
+
+
 # AC2-N3 (negative): a generic RPC failure is a 500, not a crash
 def test_update_quantity_rpc_failure(
     client: TestClient, fake_client, auth_staff

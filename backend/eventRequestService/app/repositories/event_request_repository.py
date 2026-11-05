@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Protocol
 
 import httpx
@@ -6,6 +7,18 @@ from app.config import Settings
 
 
 class EventRequestRepository(Protocol):
+    def list_confirmed_for_auto_completion(
+        self, *, after_id: str | None, limit: int
+    ) -> list[dict[str, Any]]: ...
+
+    def complete_overdue_event_request(
+        self, event_request_id: str, as_of: datetime
+    ) -> bool: ...
+
+    def set_final_end(
+        self, event_request_id: str, coordinator_id: str, final_event_end_at: datetime
+    ) -> dict[str, Any]: ...
+
     def list_registration_reviews(self, event_request_id: str) -> list[dict[str, Any]]: ...
 
     def acknowledge_registration_review(
@@ -45,6 +58,30 @@ class EventRequestRepository(Protocol):
     ) -> dict[str, Any] | None: ...
 
     def get_by_id(self, event_request_id: str) -> dict[str, Any] | None: ...
+
+    def update_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        expected_updated_at: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any]: ...
+
+    def get_event_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]: ...
+
+    def cancellation_staff_ids(self, event_request_id: str) -> list[str]: ...
+
+    def postpone_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, reason: str
+    ) -> dict[str, Any]: ...
+
+    def resume_postponed(
+        self, event_request_id: str, coordinator_id: str, new_date_times: list[str]
+    ) -> dict[str, Any]: ...
+
+    def change_organiser(
+        self, event_request_id: str, coordinator_id: str, organiser_email: str, reason: str
+    ) -> dict[str, Any]: ...
 
     def get_by_ids(
         self, event_request_ids: list[str]
@@ -106,8 +143,16 @@ class EventRequestRepository(Protocol):
 
     def latest_coordinator_id(self, event_request_id: str) -> str | None: ...
 
+    def list_registered_attendee_ids(self, event_request_id: str) -> list[str]: ...
+
     def approve_date_change_request(
         self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        reason: str | None, booking_plan: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]: ...
+
+    def partially_approve_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        accepted_fields: list[str], rejected_reasons: dict[str, str],
         reason: str | None, booking_plan: list[dict[str, Any]] | None,
     ) -> dict[str, Any]: ...
 
@@ -567,6 +612,22 @@ class SupabaseEventRequestRepository:
             "p_booking_plan": booking_plan,
         })
 
+    def partially_approve_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        accepted_fields: list[str], rejected_reasons: dict[str, str],
+        reason: str | None, booking_plan: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        """Hotfix 20: narrow the request to the accepted fields, then approve it."""
+        return self._call_rpc("partially_approve_event_change_request", {
+            "p_event_request_id": event_request_id,
+            "p_change_request_id": change_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_accepted_fields": accepted_fields,
+            "p_rejections": rejected_reasons,
+            "p_reason": reason,
+            "p_booking_plan": booking_plan,
+        })
+
     def decide_change_request(
         self,
         event_request_id: str,
@@ -650,6 +711,164 @@ class SupabaseEventRequestRepository:
             },
         )
         return rows[0]["coordinator_id"] if rows else None
+
+    def list_registered_attendee_ids(self, event_request_id: str) -> list[str]:
+        """Attendees with an active registration, for event-wide notices (SCRUM-38)."""
+        rows = self._request_table(
+            "GET",
+            "/event_registrations",
+            params={
+                "event_request_id": f"eq.{event_request_id}",
+                "status": "eq.Registered",
+                "order": "created_at.asc",
+                "select": "attendee_id",
+            },
+        )
+        return [row["attendee_id"] for row in rows]
+
+    def update_by_coordinator(
+        self,
+        event_request_id: str,
+        coordinator_id: str,
+        expected_updated_at: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "update_event_by_coordinator",
+            {
+                "p_event_request_id": event_request_id,
+                "p_coordinator_id": coordinator_id,
+                "p_expected_updated_at": expected_updated_at,
+                "p_changes": changes,
+            },
+        )
+
+    def _read_rows(self, path: str, params: dict[str, str]) -> list[dict[str, Any]]:
+        try:
+            response = self._client.get(path, params=params)
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the event request operation"
+            ) from error
+        return response.json()
+
+    def get_event_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]:
+        """What is booked and reserved for an event (hotfix 14)."""
+        bookings = self._read_rows(
+            "/venue_booking_requests",
+            {
+                "select": "start_date,end_date,start_minute,end_minute,venues(name,location)",
+                "event_request_id": f"eq.{event_request_id}",
+                "status": "eq.approved",
+                "order": "start_date.asc,start_minute.asc",
+            },
+        )
+        requirements = self._read_rows(
+            "/equipment_requirements",
+            {
+                "select": "id,equipment_type,quantity",
+                "event_request_id": f"eq.{event_request_id}",
+                "order": "recorded_at.asc,id.asc",
+            },
+        )
+        reservations = self._read_rows(
+            "/equipment_reservations",
+            {
+                "select": "requirement_id,quantity",
+                "event_request_id": f"eq.{event_request_id}",
+            },
+        )
+        reserved: dict[str, int] = {}
+        for row in reservations:
+            reserved[row["requirement_id"]] = (
+                reserved.get(row["requirement_id"], 0) + row["quantity"]
+            )
+        return {
+            "venues": [
+                {
+                    "name": (row.get("venues") or {}).get("name"),
+                    "location": (row.get("venues") or {}).get("location"),
+                    "start_date": row["start_date"],
+                    "end_date": row["end_date"],
+                    "start_minute": row["start_minute"],
+                    "end_minute": row["end_minute"],
+                }
+                for row in bookings
+            ],
+            "equipment": [
+                {
+                    "equipment_type": row["equipment_type"],
+                    "quantity": row["quantity"],
+                    "reserved": reserved.get(row["id"], 0),
+                }
+                for row in requirements
+            ],
+        }
+
+    def postpone_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, reason: str
+    ) -> dict[str, Any]:
+        """Hotfix 22: Postponed, releasing bookings, holds and reservations."""
+        return self._call_rpc("postpone_event_by_coordinator", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_reason": reason,
+        })
+
+    def resume_postponed(
+        self, event_request_id: str, coordinator_id: str, new_date_times: list[str]
+    ) -> dict[str, Any]:
+        """Hotfix 22: Postponed -> Planning on the new date(s)."""
+        return self._call_rpc("resume_postponed_event", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_new_date_times": new_date_times,
+        })
+
+    def change_organiser(
+        self, event_request_id: str, coordinator_id: str, organiser_email: str, reason: str
+    ) -> dict[str, Any]:
+        """Hotfix 24: the assigned Coordinator hands the event to another Organiser."""
+        return self._call_rpc("change_event_organiser", {
+            "p_event_request_id": event_request_id,
+            "p_coordinator_id": coordinator_id,
+            "p_new_organiser_email": organiser_email,
+            "p_reason": reason,
+        })
+
+    def cancellation_staff_ids(self, event_request_id: str) -> list[str]:
+        """Staff to tell when an event is cancelled or postponed (SCRUM-57 AC1): the Venue
+        Staff member in decided_by of each booking it released, the Technical Support Staff
+        member in updated_by of each equipment requirement (a requirement still requested has
+        none) and each Technical Support Staff member assigned through SCRUM-19. Each once."""
+        bookings = self._read_rows(
+            "/venue_booking_requests",
+            {
+                "select": "decided_by",
+                "event_request_id": f"eq.{event_request_id}",
+                "status": "eq.cancelled",
+                "decided_by": "not.is.null",
+            },
+        )
+        requirements = self._read_rows(
+            "/equipment_requirements",
+            {
+                "select": "updated_by",
+                "event_request_id": f"eq.{event_request_id}",
+                "updated_by": "not.is.null",
+            },
+        )
+        assigned = self._read_rows(
+            "/technical_support_assignments",
+            {"select": "staff_id", "event_request_id": f"eq.{event_request_id}"},
+        )
+        staff = (
+            {row["decided_by"] for row in bookings}
+            | {row["updated_by"] for row in requirements}
+            | {row["staff_id"] for row in assigned}
+        )
+        return sorted(person for person in staff if person)
 
     def _call_rpc(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -791,6 +1010,49 @@ class SupabaseEventRequestRepository:
                 "Supabase could not complete the event request operation"
             ) from error
         return response.json()
+
+    def set_final_end(
+        self, event_request_id: str, coordinator_id: str, final_event_end_at: datetime
+    ) -> dict[str, Any]:
+        return self._call_rpc(
+            "set_event_request_final_end",
+            {
+                "p_event_request_id": event_request_id,
+                "p_coordinator_id": coordinator_id,
+                "p_final_event_end_at": final_event_end_at.isoformat(),
+            },
+        )
+
+    def list_confirmed_for_auto_completion(
+        self, *, after_id: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        params = {
+            "select": "id,final_event_end_at",
+            "status": "eq.Confirmed",
+            "order": "id.asc",
+            "limit": str(limit),
+        }
+        if after_id is not None:
+            params["id"] = f"gt.{after_id}"
+        return self._request("GET", params=params)
+
+    def complete_overdue_event_request(
+        self, event_request_id: str, as_of: datetime
+    ) -> bool:
+        try:
+            response = self._client.post(
+                "/rpc/complete_overdue_event_request",
+                json={"p_event_request_id": event_request_id, "p_as_of": as_of.isoformat()},
+            )
+            response.raise_for_status()
+            changed = response.json()
+        except httpx.HTTPStatusError as error:
+            raise self._rpc_rejection(error.response) from error
+        except (httpx.HTTPError, ValueError) as error:
+            raise SupabaseRepositoryError("Automatic completion unavailable") from error
+        if not isinstance(changed, bool):
+            raise SupabaseRepositoryError("Automatic completion returned an invalid result")
+        return changed
 
     def close(self) -> None:
         self._client.close()

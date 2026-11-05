@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from reservations_support import (
     C1,
     E1,
@@ -777,3 +778,73 @@ def test_safety_officer_cannot_reserve(
 
     assert response.status_code == 403
     assert_nothing_stored(store, before)
+
+
+# Hotfix 11 (Q&A #114): releasing a reservation frees its units. The rows and the
+# locks are the database function's, proved by verify_release_1_hotfixes.sql.
+class ReleaseClient:
+    def __init__(self, data: Any = None, error: APIError | None = None) -> None:
+        self.data, self.error, self.calls = data, error, []
+
+    def rpc(self, name: str, params: dict[str, Any]) -> "ReleaseClient":
+        self.calls.append((name, params))
+        return self
+
+    def execute(self) -> Any:
+        if self.error is not None:
+            raise self.error
+        return type("Response", (), {"data": self.data})()
+
+
+RELEASED = {
+    "reservation_id": "00000000-0000-4000-8000-000000000001",
+    "event_request_id": "00000000-0000-4000-8000-000000000002",
+    "requirement_id": "00000000-0000-4000-8000-000000000003",
+    "quantity": 2,
+    "released_by": "00000000-0000-4000-8000-000000000004",
+    "released_at": "2026-11-01T00:00:00Z",
+    "reason": "Broken",
+}
+
+
+def release(api: TestClient, client: ReleaseClient, **kwargs: Any) -> Any:
+    app.dependency_overrides[get_client] = lambda: client
+    return api.post(
+        f"{URL}/{RELEASED['reservation_id']}/release",
+        headers=kwargs.get("headers", AUTH),
+        json=kwargs.get("json", {"reason": "  Broken  "}),
+    )
+
+
+# AC11-H1 (happy): a release calls the database function with the caller and trimmed reason
+def test_release_calls_the_database_function(api: TestClient) -> None:
+    client = ReleaseClient(data=RELEASED)
+
+    response = release(api, client)
+
+    assert response.status_code == 200
+    assert response.json()["reason"] == "Broken"
+    assert client.calls[0][0] == "release_equipment_reservation"
+    assert client.calls[0][1]["p_reason"] == "Broken"
+    assert client.calls[0][1]["p_reservation_id"] == RELEASED["reservation_id"]
+
+
+# AC11-N1 (negative): a reservation that does not exist is reported as such
+def test_release_of_a_missing_reservation_is_404(api: TestClient) -> None:
+    assert release(api, ReleaseClient(error=api_error("P0002"))).status_code == 404
+
+
+# AC11-N2 (negative): a blank reason never reaches the database
+def test_release_needs_a_reason(api: TestClient) -> None:
+    client = ReleaseClient(data=RELEASED)
+
+    assert release(api, client, json={"reason": "  "}).status_code == 422
+    assert client.calls == []
+
+
+# AC11-N3 (negative): anyone not signed in is refused and nothing happens
+def test_release_needs_authentication(api: TestClient) -> None:
+    client = ReleaseClient(data=RELEASED)
+
+    assert release(api, client, headers={}).status_code == 401
+    assert client.calls == []

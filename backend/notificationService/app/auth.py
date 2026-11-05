@@ -1,8 +1,10 @@
+import hmac
+import os
 from typing import Annotated
 from uuid import UUID
 
 import httpx2
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import ValidationError
 
@@ -15,6 +17,24 @@ bearer_scheme = HTTPBearer(
     auto_error=False,
     description="The access_token from authService's POST /auth/login.",
 )
+
+
+INTERNAL_TOKEN_HEADER = "X-Internal-Token"
+
+
+def require_internal_caller(
+    x_internal_token: Annotated[str | None, Header()] = None,
+) -> None:
+    """Only ConnectSphere's own services may send notification events.
+
+    They hold a shared secret from the environment. With none configured every
+    sender is refused, so a missing setting cannot leave the endpoint open.
+    """
+    expected = os.environ.get("NOTIFICATION_INTERNAL_TOKEN", "")
+    if not expected or not hmac.compare_digest(
+        (x_internal_token or "").encode(), expected.encode()
+    ):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Internal token required")
 
 
 def get_current_user_id(

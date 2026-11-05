@@ -43,7 +43,7 @@ BEGIN
         (v_reassigned, v_coord, 'verify'),
         (v_reassigned, v_other, 'verify-reassignment');
 
-    -- 1. Unknown requests are refused without creating history.
+    -- 1. SCRUM-17 AC2-N4 (negative): unknown requests are refused without creating history.
     BEGIN
         PERFORM public.decide_event_request_by_coordinator(
             v_missing, v_coord, 'Approved', NULL
@@ -52,7 +52,8 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0002' THEN NULL;
     END;
 
-    -- 2. An unrelated coordinator cannot decide the request.
+    -- 2. SCRUM-17 AC2-N1, AC2-N2 (negative): an unrelated or reassigned-away coordinator
+    -- is refused and writes nothing.
     BEGIN
         PERFORM public.decide_event_request_by_coordinator(
             v_approve, v_other, 'Approved', NULL
@@ -78,7 +79,8 @@ BEGIN
         WHERE event_request_id = v_reassigned
     ), 'verify 2: reassignment refusal must create no decision';
 
-    -- 3. Returned and rejected requests require a meaningful reason.
+    -- 3. SCRUM-17 AC3-N1 (negative): returned and rejected decisions require a meaningful
+    -- reason and refused calls write no history.
     BEGIN
         PERFORM public.decide_event_request_by_coordinator(
             v_changes, v_coord, 'Changes Requested', '   '
@@ -99,13 +101,13 @@ BEGIN
     WHERE event_request_id IN (v_approve, v_changes, v_reject);
     ASSERT v_count = 0, 'verify 1-3: refused decisions must create no history';
 
-    -- 4. Approval changes status and records an outcome in one call.
+    -- 4. SCRUM-17 AC2-P1 (partition): approval changes status and records an outcome in one call.
     v_row := public.decide_event_request_by_coordinator(
         v_approve, v_coord, 'Approved', 'Ready for planning'
     );
     ASSERT v_row.status = 'Approved', 'verify 4: request should be Approved';
 
-    -- 5. A clarification request retains its reason.
+    -- 5. SCRUM-17 AC2-P2, AC3 (partition): a clarification request is stored with its reason retained.
     v_row := public.decide_event_request_by_coordinator(
         v_changes, v_coord, 'Changes Requested', 'Clarify equipment needs'
     );
@@ -118,7 +120,8 @@ BEGIN
           AND reason = 'Clarify equipment needs'
     ), 'verify 5: clarification reason should be retained';
 
-    -- 6. Only the owner can answer; answering does not mutate request status.
+    -- 6. SCRUM-17 AC4-H1, AC4-N1 (happy): only the owner can answer; an unrelated organiser is
+    -- refused and answering does not mutate request status.
     BEGIN
         PERFORM public.respond_to_event_request_clarification(
             v_changes, v_missing, 'should not be stored'
@@ -140,7 +143,7 @@ BEGIN
           AND responded_at IS NOT NULL
     ), 'verify 6: organiser response should be retained';
 
-    -- 7. Only the assigned coordinator can resume after a response exists.
+    -- 7. SCRUM-17 AC4-H2 (happy): only the assigned coordinator can resume after a response exists.
     BEGIN
         PERFORM public.resume_event_request_review_by_coordinator(
             v_changes, v_other
@@ -154,7 +157,7 @@ BEGIN
     ASSERT v_row.status = 'Under Review',
         'verify 7: responded request should return to Under Review';
 
-    -- 8. A later approval appends history without replacing the clarification.
+    -- 8. SCRUM-17 AC3-H1 (happy): a later approval appends history without replacing the clarification.
     v_row := public.decide_event_request_by_coordinator(
         v_changes, v_coord, 'Approved', NULL
     );
@@ -173,13 +176,13 @@ BEGIN
           AND organiser_response = 'A wireless microphone is required'
     ), 'verify 8: approval must not overwrite the clarification exchange';
 
-    -- 9. Rejection changes status and retains its reason.
+    -- 9. SCRUM-17 AC2-P3 (partition): rejection changes status and retains its reason.
     v_row := public.decide_event_request_by_coordinator(
         v_reject, v_coord, 'Rejected', 'Outside programme scope'
     );
     ASSERT v_row.status = 'Rejected', 'verify 9: request should be Rejected';
 
-    -- 10. Repeated or stale decisions cannot add a second history row.
+    -- 10. SCRUM-17 AC2-P4 (partition): repeated or stale decisions cannot add a second history row.
     BEGIN
         PERFORM public.decide_event_request_by_coordinator(
             v_approve, v_coord, 'Rejected', 'stale decision'
@@ -192,7 +195,8 @@ BEGIN
     WHERE event_request_id = v_approve;
     ASSERT v_count = 1, 'verify 10: stale action must not create history';
 
-    -- 11. Direct client roles cannot read the history table or execute the RPCs.
+    -- 11. SCRUM-17 AC3-X3 (cross-cutting): direct client roles cannot read the history table or
+    -- execute the RPCs; service_role can.
     ASSERT NOT has_table_privilege(
         'anon', 'public.event_request_review_decisions', 'SELECT'
     ), 'verify 8: anon must not read decision history';

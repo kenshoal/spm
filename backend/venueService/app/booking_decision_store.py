@@ -32,6 +32,7 @@ from app.booking_decisions import (
 from app.booking_models import BookingRequest, BookingRequestStatus
 from app.booking_repository import booking_repository
 from app.config import get_settings
+from app.hold_store import memory_hold_store
 from app.models import _now
 from app.repository import repository
 from app.supabase_repository import SupabaseRepositoryError, _is_uuid
@@ -43,7 +44,9 @@ RefusalCode = Literal[
     "active_block",
     "setup_outside_window",
     "turnaround_outside_window",
+    "outside_operating_hours",
     "booking_conflict",
+    "hold_conflict",
 ]
 
 
@@ -56,6 +59,7 @@ class BookingRefusal(BaseModel):
     refusal_codes: list[RefusalCode]
     conflicting_block_ids: list[str] = Field(default_factory=list)
     conflicting_booking_ids: list[str] = Field(default_factory=list)
+    conflicting_hold_ids: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -67,6 +71,7 @@ class DecisionOutcome(BaseModel):
     refusal_codes: list[RefusalCode] = Field(default_factory=list)
     conflicting_block_ids: list[str] = Field(default_factory=list)
     conflicting_booking_ids: list[str] = Field(default_factory=list)
+    conflicting_hold_ids: list[str] = Field(default_factory=list)
 
 
 class BookingNotFoundError(Exception):
@@ -129,6 +134,7 @@ class MemoryBookingDecisionStore:
                     for other in approved
                     if other.id != booking.id
                 ],
+                holds=memory_hold_store.protecting(booking.venue_id, booking.event_request_id),
             )
             if not assessment.allowed:
                 refusal = BookingRefusal(
@@ -141,6 +147,7 @@ class MemoryBookingDecisionStore:
                         else set()
                     ),
                     conflicting_booking_ids=assessment.conflicting_booking_ids,
+                    conflicting_hold_ids=assessment.conflicting_hold_ids,
                 )
                 self._refusals.append(refusal)
                 return DecisionOutcome(
@@ -149,12 +156,23 @@ class MemoryBookingDecisionStore:
                     refusal_codes=refusal.refusal_codes,
                     conflicting_block_ids=refusal.conflicting_block_ids,
                     conflicting_booking_ids=refusal.conflicting_booking_ids,
+                    conflicting_hold_ids=refusal.conflicting_hold_ids,
                 )
             booking.status = BookingRequestStatus(assessment.target_status)
             booking.decision_reason = assessment.reason
             booking.suggested_alternative = assessment.suggested_alternative
             booking.decided_by = decided_by
             booking.decided_at = _now()
+            if booking.status is BookingRequestStatus.APPROVED and booking.replaces_booking_id:
+                # SCRUM-63 AC5: an approved replacement cancels the booking it replaces
+                # (if that is still approved) and clears its flag, as 0068 does.
+                replaced = booking_repository.get(booking.replaces_booking_id)
+                if replaced is not None and replaced.status is BookingRequestStatus.APPROVED:
+                    replaced.status = BookingRequestStatus.CANCELLED
+                    replaced.cancelled_by = decided_by
+                    replaced.cancelled_at = _now()
+                booking_repository.clear_flag(booking.replaces_booking_id)
+            memory_hold_store.close_for_decision(booking, decided_by)
             return DecisionOutcome(booking=booking.model_copy())
 
     def list_refusals(self, booking_id: str) -> list[BookingRefusal]:
@@ -230,6 +248,7 @@ class SupabaseBookingDecisionStore:
                 refusal_codes=body.get("refusal_codes", []),
                 conflicting_block_ids=body.get("conflicting_block_ids", []),
                 conflicting_booking_ids=body.get("conflicting_booking_ids", []),
+                conflicting_hold_ids=body.get("conflicting_hold_ids", []),
             )
         return DecisionOutcome(booking=booking)
 

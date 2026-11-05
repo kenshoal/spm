@@ -1,4 +1,7 @@
 import { getJson } from "./api";
+import { CHANGE_FIELD_LABELS } from "./change-decision";
+import { formatDateTime } from "./event-requests";
+import { formatSingaporeDateTime } from "./singapore-time";
 import { timeRangeLabel } from "./venue-options";
 import { reasonLabel, type BlockReason } from "./venue-block-options";
 import { skillLabel } from "./technical-support-options";
@@ -74,6 +77,56 @@ export function describeNotification(notification: AppNotification, roles: reado
         ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
       };
     }
+    case "event_change_partly_approved": {
+      // Hotfix 20 (Q&A #104): to the Organiser, what was applied and what was not.
+      const refused = notification.payload.refused;
+      const entries = refused && typeof refused === "object" ? Object.entries(refused as Record<string, unknown>) : [];
+      const accepted = Array.isArray(notification.payload.accepted_fields) ? notification.payload.accepted_fields.length : 0;
+      return {
+        message: `Your event change request was partly approved: ${accepted} ${accepted === 1 ? "change was" : "changes were"} applied and ${entries.length} ${entries.length === 1 ? "was" : "were"} not.`,
+        href: id && `/event-requests/${id}/edit`,
+        ...(entries.length > 0 ? { detail: entries.map(([field, reason]) => `${CHANGE_FIELD_LABELS[field] ?? field}: ${String(reason)}`).join(" · ") } : {}),
+      };
+    }
+    case "event_request_withdrawn": {
+      // Hotfix 21 (Q&A #103): to the Organiser, the Coordinator recorded the withdrawal.
+      const name = notification.payload.event_name;
+      return {
+        message: `${typeof name === "string" && name.trim() ? name.trim() : "Your event request"} was withdrawn, as you asked.`,
+        href: id && `/event-requests/${id}/edit`,
+      };
+    }
+    case "event_postponed":
+    case "event_resumed": {
+      // Hotfix 22 (Q&A #69, #121): to the Organiser, Attendees and staff.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : "An event";
+      const reason = notification.payload.reason;
+      const dates = notification.payload.proposed_date_times;
+      const href = roles.includes("event_organiser") && id
+        ? `/event-requests/${id}/edit`
+        : roles.includes("attendee") && id ? `/events/${id}` : null;
+      return notification.event_type === "event_postponed"
+        ? {
+            message: `${event} has been postponed. A new date will be announced.`,
+            href,
+            ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
+          }
+        : {
+            message: `${event} has a new date.`,
+            href,
+            ...(Array.isArray(dates) && dates.length > 0 ? { detail: dates.map((d) => formatSingaporeDateTime(String(d))).join(", ") } : {}),
+          };
+    }
+    case "event_organiser_changed": {
+      // Hotfix 24 (Q&A #59, #61): to the new and the previous Organiser.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : "an event";
+      const became = notification.payload.became_organiser === true;
+      return became
+        ? { message: `You are now the Event Organiser for ${event}.`, href: id && `/event-requests/${id}/edit` }
+        : { message: `You are no longer the Event Organiser for ${event}. A coordinator handed it to someone else.`, href: null };
+    }
     case "event_request_approved":
     case "event_request_rejected": {
       // SCRUM-36 AC1: the Organiser's outcome; a rejection carries the reason.
@@ -83,6 +136,73 @@ export function describeNotification(notification: AppNotification, roles: reado
         message: `Your event request was ${approved ? "approved" : "rejected"}.`,
         href: id && `/event-requests/${id}/edit`,
         ...(typeof reason === "string" && reason.trim() ? { detail: reason.trim() } : {}),
+      };
+    }
+    case "registration_confirmed": {
+      // SCRUM-38 AC1: to the Attendee. There is no Attendee event page yet, so no link.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `You're registered for ${name.trim()}.` : "Your registration is confirmed.",
+        href: null,
+      };
+    }
+    case "registration_withdrawn": {
+      // SCRUM-22 AC5: to the Attendee. There is no Attendee event page yet, so no link.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `You've withdrawn from ${name.trim()}.` : "Your registration has been withdrawn.",
+        href: null,
+      };
+    }
+    case "registration_full": {
+      // SCRUM-38 AC2: to the Organiser and the Coordinator, each linked to the page they can open.
+      const name = notification.payload.event_name;
+      const capacity = notification.payload.capacity;
+      return {
+        message: typeof name === "string" && name.trim() ? `Registration for ${name.trim()} is full.` : "Registration for your event is full.",
+        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : !roles.includes("event_organiser") ? null : `/event-requests/${id}/edit`),
+        ...(typeof capacity === "number" ? { detail: `All ${capacity} places are taken.` } : {}),
+      };
+    }
+    case "registration_opened":
+    case "registration_closed": {
+      // SCRUM-38 AC3: to the Organiser and the Coordinator, each linked to the page they can open.
+      const name = notification.payload.event_name;
+      const at = notification.payload.boundary_at;
+      const verb = notification.event_type === "registration_opened" ? "opened" : "closed";
+      return {
+        message: typeof name === "string" && name.trim() ? `Registration for ${name.trim()} has ${verb}.` : `Registration for your event has ${verb}.`,
+        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : `/event-requests/${id}/edit`),
+        ...(typeof at === "string" && at ? { detail: formatDateTime(at) } : {}),
+      };
+    }
+    case "event_cancelled": {
+      // SCRUM-38 AC4: to registered Attendees. No Attendee event page yet, so no link.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `${name.trim()} has been cancelled.` : "An event you registered for has been cancelled.",
+        href: null,
+      };
+    }
+    case "event_cancellation_recorded": {
+      // SCRUM-57 AC1: to the Organiser and the Coordinator, each linked to the page they can open.
+      const name = notification.payload.event_name;
+      return {
+        message: typeof name === "string" && name.trim() ? `${name.trim()} has been cancelled.` : "Your event has been cancelled.",
+        href: id && (roles.includes("event_coordinator") ? `/coordination/requests/${id}` : `/event-requests/${id}/edit`),
+      };
+    }
+    case "event_changed": {
+      // SCRUM-38 AC4: the dates of an event the Attendee registered for changed.
+      const name = notification.payload.event_name;
+      const dates = notification.payload.proposed_date_times;
+      const shown = Array.isArray(dates)
+        ? dates.filter((value): value is string => typeof value === "string").map(formatDateTime)
+        : [];
+      return {
+        message: typeof name === "string" && name.trim() ? `The dates of ${name.trim()} have changed.` : "The dates of an event you registered for have changed.",
+        href: null,
+        ...(shown.length ? { detail: `New dates: ${shown.join("; ")}` } : {}),
       };
     }
     case "event_confirmed":
@@ -146,6 +266,32 @@ export function describeNotification(notification: AppNotification, roles: reado
         ...(detail ? { detail } : {}),
       };
     }
+    case "venue_hold_expiring":
+    case "venue_hold_expired": {
+      // SCRUM-18: sent to the event's coordinator about their tentative hold.
+      const text = (key: string) => {
+        const value = notification.payload[key];
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+      };
+      const venue = text("venue_name") ?? "A venue";
+      const event = text("event_name");
+      const expires = text("expires_at");
+      const where = [
+        text("start_date") && text("end_date") && `${text("start_date")} to ${text("end_date")}`,
+        whenText(notification.payload, "start_minute", "end_minute", "slots"),
+      ].filter(Boolean);
+      const expiring = notification.event_type === "venue_hold_expiring";
+      return {
+        message: expiring
+          ? `Your hold on ${venue}${event ? ` for ${event}` : ""} expires soon.`
+          : `Your hold on ${venue}${event ? ` for ${event}` : ""} has expired and the time is free again.`,
+        href: id && `/coordination/requests/${id}`,
+        detail: [
+          ...where,
+          expiring && expires ? `Expires ${formatDateTime(expires)}. Request the booking or release the hold.` : null,
+        ].filter(Boolean).join(" · "),
+      };
+    }
     case "venue_block_affects_booking": {
       // SCRUM-23 AC3: a new block overlaps the Coordinator's approved booking.
       const text = (key: string) => {
@@ -181,6 +327,93 @@ export function describeNotification(notification: AppNotification, roles: reado
       return {
         message: `You've been assigned as ${typeof skill === "string" ? skillLabel(skill) : "technical"} support${eventText ? ` for ${eventText}` : ""}.`,
         href: null,
+      };
+    }
+    case "waitlist_offered":
+    case "waitlist_offer_expiring": {
+      // SCRUM-24 AC5: to the Attendee. There is no Attendee event page yet,
+      // so no link; an offer and its warning show the acceptance deadline.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      const expiring = notification.event_type === "waitlist_offer_expiring";
+      const expires = notification.payload.expires_at;
+      return {
+        message: event
+          ? expiring
+            ? `Your place offer for ${event} expires soon.`
+            : `You're offered a place at ${event}.`
+          : expiring
+            ? "Your place offer expires soon."
+            : "You're offered a place at an event.",
+        href: null,
+        ...(typeof expires === "string" && expires
+          ? { detail: `Accept by ${formatDateTime(expires)}.` }
+          : {}),
+      };
+    }
+    case "waitlist_offer_expired": {
+      // SCRUM-24 AC5: the Attendee is back in the queue (D3).
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      return {
+        message: event
+          ? `Your place offer for ${event} expired; you're back in the queue.`
+          : "Your place offer expired; you're back in the queue.",
+        href: null,
+      };
+    }
+    case "waitlist_offer_revoked": {
+      // SCRUM-24 AC5: a Coordinator chose someone else for that place (D9);
+      // the holder keeps their position.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      return {
+        message: event
+          ? `The place offer for ${event} went to someone else; you keep your place in the queue.`
+          : "The place offer went to someone else; you keep your place in the queue.",
+        href: null,
+      };
+    }
+    case "waitlist_closed": {
+      // SCRUM-24 D11/D12: past the cut-off the list closes and a freed place
+      // opens to normal registration.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      return {
+        message: event
+          ? `The waiting list for ${event} has closed.`
+          : "The waiting list for your event has closed.",
+        href: null,
+        ...(event ? { detail: "Any place that frees up will open to registration." } : {}),
+      };
+    }
+    case "waitlist_event_cancelled": {
+      // SCRUM-24 D13: the event's cancellation releases every waiting-list place.
+      const name = notification.payload.event_name;
+      const event = typeof name === "string" && name.trim() ? name.trim() : null;
+      return {
+        message: event
+          ? `${event} has been cancelled, so you're off its waiting list.`
+          : "An event you were waiting for has been cancelled, so you're off its waiting list.",
+        href: null,
+      };
+    }
+    case "event_no_longer_confirmed": {
+      // To the Organiser: an applied change took the event back to planning (Q&A #105).
+      const name = notification.payload.event_name;
+      return {
+        message: `${typeof name === "string" && name.trim() ? name.trim() : "Your event"} is no longer confirmed. A change means its arrangements are being reviewed again.`,
+        href: id ? `/event-requests/${id}/edit` : null,
+      };
+    }
+    case "safety_changes_requested":
+    case "safety_rejected": {
+      // To the coordinator; the event is back in planning (SCRUM-60, Q&A #130).
+      const reason = notification.payload.reason;
+      const why = typeof reason === "string" && reason.trim() ? ` ${reason.trim()}` : "";
+      return {
+        message: `${notification.event_type === "safety_rejected" ? "The Safety Officer rejected the safety arrangement" : "The Safety Officer asked for changes"}. Revise the arrangements and resubmit.${why}`,
+        href: id ? `/coordination/requests/${id}` : null,
       };
     }
     default:

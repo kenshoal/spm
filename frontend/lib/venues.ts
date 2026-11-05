@@ -12,12 +12,22 @@ export interface Venue {
   facilities: string[];
   accessibility_features: string[];
   supported_layouts: RoomLayout[];
+  layout_capacities?: Partial<Record<RoomLayout, number>>;
   operating_slots: Slot[];
   setup_minutes: number;
   turnaround_minutes: number;
+  // SCRUM-30 AC1: the venue's daily operating hours, minutes after midnight (07:00 to 24:00).
+  operating_start_minute: number;
+  operating_end_minute: number;
   status: VenueStatus;
   created_at: string;
   updated_at: string;
+}
+
+// A search match; tentatively_held marks a venue free at the searched time except
+// for tentative holds (SCRUM-18).
+export interface VenueSearchResult extends Venue {
+  tentatively_held?: boolean;
 }
 
 export const venueApiUrl = process.env.VENUE_API_URL ?? "http://127.0.0.1:8004";
@@ -30,6 +40,6 @@ export async function getVenue(id: string): Promise<Venue | null> {
   return getJson<Venue>(venueApiUrl, `/venues/${encodeURIComponent(id)}`);
 }
 
-export async function searchVenues(query: string): Promise<Venue[]> {
-  return (await getJson<Venue[]>(venueApiUrl, `/venues/search?${query}`)) ?? [];
+export async function searchVenues(query: string): Promise<VenueSearchResult[]> {
+  return (await getJson<VenueSearchResult[]>(venueApiUrl, `/venues/search?${query}`)) ?? [];
 }

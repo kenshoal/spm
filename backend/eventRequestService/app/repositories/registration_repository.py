@@ -1,6 +1,6 @@
 """Registration persistence through Supabase's Data API (SCRUM-21)."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import httpx
@@ -13,6 +13,8 @@ EVENT_COLUMNS = (
     "id,status,event_name,purpose,description,proposed_date_times,"
     "registration_opens_at,registration_closes_at,registration_capacity"
 )
+# The Data API's default max-rows; list_for_event pages past it.
+PAGE_SIZE = 1000
 
 REGISTRATION_COLUMNS = "id,event_request_id,attendee_id,status,created_at,withdrawn_at"
 
@@ -39,24 +41,58 @@ class RegistrationRepository(Protocol):
 
     def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]: ...
 
+    def get_organiser_id(self, event_id: str) -> str | None: ...
+
+    def latest_coordinator_id(self, event_id: str) -> str | None: ...
+
     def list_confirmed_events(self) -> list[dict[str, Any]]: ...
 
     def count_active(self, event_id: str) -> int: ...
 
     def count_active_for_events(self, event_ids: list[str]) -> dict[str, int]: ...
 
+    def places_taken(self, event_id: str) -> int: ...
+
     def has_active(self, event_id: str, attendee_id: str) -> bool: ...
 
     def list_for_attendee(self, attendee_id: str) -> list[dict[str, Any]]: ...
 
+    def get_event_access(self, event_id: str) -> dict[str, Any] | None: ...
+
+    def list_event_venues(self, event_ids: list[str]) -> dict[str, list[dict[str, Any]]]: ...
+
+    def attendee_emails(self, event_id: str) -> dict[str, str]: ...
+
+    def event_venue_capacity(self, event_id: str) -> int | None: ...
+
+    def set_registration_settings(
+        self,
+        event_id: str,
+        coordinator_id: str,
+        opens_at: datetime,
+        closes_at: datetime,
+        capacity: int,
+        now: datetime,
+    ) -> dict[str, Any]: ...
+
+    def list_for_event(self, event_id: str) -> list[dict[str, Any]]: ...
+
     def register(
         self, event_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
+    def coordinator_register(
+        self, event_id: str, coordinator_id: str, attendee_email: str
     ) -> dict[str, Any]: ...
 
     def get_registration(self, registration_id: str) -> dict[str, Any] | None: ...
 
     def withdraw(
         self, registration_id: str, attendee_id: str, now: datetime
+    ) -> dict[str, Any]: ...
+
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
     ) -> dict[str, Any]: ...
 
 
@@ -91,6 +127,52 @@ class SupabaseRegistrationRepository:
         )
         return rows[0] if rows else None
 
+    def list_window_boundaries(
+        self, *, since: datetime, until: datetime, after_id: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        """Confirmed events whose opening or closing time falls in [since, until].
+
+        One page, oldest id first. Only what the notice needs is selected
+        (SCRUM-38 AC3), never the internal planning columns.
+        """
+        def stamp(moment: datetime) -> str:
+            return moment.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+        low, high = stamp(since), stamp(until)
+        params = {
+            "select": "id,event_name,organiser_id,registration_opens_at,registration_closes_at",
+            "status": "eq.Confirmed",
+            "or": (
+                f"(and(registration_opens_at.gte.{low},registration_opens_at.lte.{high}),"
+                f"and(registration_closes_at.gte.{low},registration_closes_at.lte.{high}))"
+            ),
+            "order": "id.asc",
+            "limit": str(limit),
+        }
+        if after_id is not None:
+            params["id"] = f"gt.{after_id}"
+        return self._get("/event_requests", params)
+
+    def get_organiser_id(self, event_id: str) -> str | None:
+        """Who to tell about the event (SCRUM-38); fetched alone, never publicly."""
+        rows = self._get(
+            "/event_requests", {"select": "organiser_id", "id": f"eq.{event_id}"}
+        )
+        return rows[0]["organiser_id"] if rows else None
+
+    def latest_coordinator_id(self, event_id: str) -> str | None:
+        """The newest assignment row names the current Coordinator (as SCRUM-60)."""
+        rows = self._get(
+            "/event_coordinator_assignments",
+            {
+                "event_request_id": f"eq.{event_id}",
+                "order": "id.desc",
+                "limit": "1",
+                "select": "coordinator_id",
+            },
+        )
+        return rows[0]["coordinator_id"] if rows else None
+
     def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]:
         if not event_ids:
             return []
@@ -120,15 +202,29 @@ class SupabaseRegistrationRepository:
             counts[event_id] = self._count_active(event_id)
         return counts
 
+    def places_taken(self, event_id: str) -> int:
+        """D6 (SCRUM-24): pending offers hold capacity like registrations.
+
+        One exact-count request per table per event, as above.
+        """
+        return self._count_active(event_id) + self._count_offered(event_id)
+
     def _count_active(self, event_id: str) -> int:
+        return self._exact_count(
+            "/event_registrations",
+            {"status": "eq.Registered", "event_request_id": f"eq.{event_id}"},
+        )
+
+    def _count_offered(self, event_id: str) -> int:
+        return self._exact_count(
+            "/event_waitlist_entries",
+            {"status": "eq.Offered", "event_request_id": f"eq.{event_id}"},
+        )
+
+    def _exact_count(self, path: str, filters: dict[str, str]) -> int:
         try:
             response = self._client.head(
-                "/event_registrations",
-                params={
-                    "status": "eq.Registered",
-                    "event_request_id": f"eq.{event_id}",
-                },
-                headers={"Prefer": "count=exact"},
+                path, params=filters, headers={"Prefer": "count=exact"}
             )
             response.raise_for_status()
         except httpx.HTTPError as error:
@@ -161,6 +257,125 @@ class SupabaseRegistrationRepository:
                 "attendee_id": f"eq.{attendee_id}",
                 "order": "created_at.desc",
             },
+        )
+
+    def get_event_access(self, event_id: str) -> dict[str, Any] | None:
+        """Who may manage the event and its capacity (SCRUM-34)."""
+        rows = self._get(
+            "/event_requests",
+            {
+                "select": (
+                    "id,organiser_id,registration_capacity,"
+                    "registration_opens_at,registration_closes_at"
+                ),
+                "id": f"eq.{event_id}",
+            },
+        )
+        return rows[0] if rows else None
+
+    def list_for_event(self, event_id: str) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        while True:
+            page = self._get(
+                "/event_registrations",
+                {
+                    "select": (
+                        "id,attendee_id,status,created_at,registered_by,"
+                        "attended_at,checked_in_by"
+                    ),
+                    "event_request_id": f"eq.{event_id}",
+                    "order": "created_at.asc,id.asc",
+                    "limit": str(PAGE_SIZE),
+                    "offset": str(len(rows)),
+                },
+            )
+            rows.extend(page)
+            if len(page) < PAGE_SIZE:
+                return rows
+
+    def list_event_venues(self, event_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Each event's approved bookings with their venue, for attendees (hotfix 5)."""
+        if not event_ids:
+            return {}
+        rows = self._get(
+            "/venue_booking_requests",
+            {
+                "select": (
+                    "event_request_id,start_date,end_date,start_minute,end_minute,"
+                    "venues(name,location)"
+                ),
+                "event_request_id": f"in.({','.join(event_ids)})",
+                "status": "eq.approved",
+                "order": "start_date.asc,start_minute.asc",
+            },
+        )
+        venues: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            venue = row.get("venues") or {}
+            venues.setdefault(row["event_request_id"], []).append(
+                {
+                    "name": venue.get("name"),
+                    "location": venue.get("location"),
+                    "start_date": row["start_date"],
+                    "end_date": row["end_date"],
+                    "start_minute": row["start_minute"],
+                    "end_minute": row["end_minute"],
+                }
+            )
+        return venues
+
+    def event_venue_capacity(self, event_id: str) -> int | None:
+        """The seats of the event's approved venues, each venue counted once (hotfix 23).
+
+        A Coordinator may add a VIP above the registration capacity up to this number
+        (Q&A #99); None when no venue is booked, so there is no room above the capacity."""
+        rows = self._get(
+            "/venue_booking_requests",
+            {
+                "select": "venue_id,venues(max_capacity)",
+                "event_request_id": f"eq.{event_id}",
+                "status": "eq.approved",
+            },
+        )
+        by_venue = {
+            row["venue_id"]: (row.get("venues") or {}).get("max_capacity") or 0 for row in rows
+        }
+        return sum(by_venue.values()) if by_venue else None
+
+    def attendee_emails(self, event_id: str) -> dict[str, str]:
+        """Registration id to attendee email for one event (hotfix 16, 0076)."""
+        try:
+            response = self._client.post(
+                "/rpc/event_registration_attendee_emails",
+                json={"p_event_request_id": event_id},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise SupabaseRepositoryError(
+                "Supabase could not complete the attendee email lookup"
+            ) from error
+        return {row["registration_id"]: row["attendee_email"] for row in response.json()}
+
+    def set_registration_settings(
+        self,
+        event_id: str,
+        coordinator_id: str,
+        opens_at: datetime,
+        closes_at: datetime,
+        capacity: int,
+        now: datetime,
+    ) -> dict[str, Any]:
+        return self._rpc(
+            "set_event_registration_settings",
+            {
+                "p_event_request_id": event_id,
+                "p_coordinator_id": coordinator_id,
+                "p_opens_at": opens_at.isoformat(),
+                "p_closes_at": closes_at.isoformat(),
+                "p_capacity": capacity,
+                "p_now": now.isoformat(),
+            },
+            action="registration settings",
         )
 
     def register(
@@ -196,6 +411,35 @@ class SupabaseRegistrationRepository:
             action="withdrawal",
         )
 
+    def coordinator_register(
+        self, event_id: str, coordinator_id: str, attendee_email: str
+    ) -> dict[str, Any]:
+        """SCRUM-41: `coordinator_register_attendee` rechecks everything under a lock."""
+        return self._rpc(
+            "coordinator_register_attendee",
+            {
+                "p_event_request_id": event_id,
+                "p_coordinator_id": coordinator_id,
+                "p_attendee_email": attendee_email,
+            },
+            action="registration",
+        )
+
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """SCRUM-25: `check_in_attendee` rechecks everything under a lock."""
+        return self._rpc(
+            "check_in_attendee",
+            {
+                "p_event_request_id": event_id,
+                "p_registration_id": registration_id,
+                "p_coordinator_id": coordinator_id,
+                "p_now": now.isoformat(),
+            },
+            action="check-in",
+        )
+
     def _rpc(
         self, function: str, payload: dict[str, str], action: str
     ) -> dict[str, Any]:
@@ -209,13 +453,17 @@ class SupabaseRegistrationRepository:
             raise SupabaseRepositoryError(
                 f"Supabase could not complete the {action}"
             ) from error
-        if response.status_code >= 500:
-            raise SupabaseRepositoryError(f"Supabase could not complete the {action}")
         if response.is_error:
             try:
                 body = response.json()
             except ValueError:
                 body = {}
+            if not isinstance(body, dict):
+                body = {}
+            # PostgREST answers a RAISE with our P0002/P0004 SQLSTATEs as HTTP 500,
+            # so a P0 code means the function refused, not that Supabase is down.
+            if response.status_code >= 500 and not str(body.get("code", "")).startswith("P0"):
+                raise SupabaseRepositoryError(f"Supabase could not complete the {action}")
             raise RegistrationRpcError(
                 f"Supabase rejected the {action}",
                 errcode=body.get("code"),

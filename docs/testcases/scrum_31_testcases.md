@@ -1,6 +1,6 @@
 # SCRUM-31 Test Cases: View Venue Availability
 
-Last reviewed: 19 October 2026
+Last reviewed: 20 October 2026
 
 Status: **approved by the story owner (Kennedy) on 19 October 2026**, including assumptions A1 to A6 as proposed (A1, tentative holds not applicable, and A2, the roles, still to be confirmed with the Product Owner). Q1 and Q2 are left open: Technical Support stays excluded, and the page is reached from venue search only. Nothing has been built yet; results are recorded below as work proceeds.
 
@@ -93,11 +93,15 @@ Read-only: no table is written and no migration is needed. A slot's state is der
 | AC4-P2 | AC4 | A venue blocked in the catalogue shows its operating slots as unavailable | Partition | Venue status `blocked`, operating AM and PM | Read | none | AM and PM `unavailable`; NIGHT `not_offered` | none | API |
 | AC4-P3 | AC4 | An active block on a slot the venue does not operate still shows (A6) | Partition | Venue operating AM; block on NIGHT | Read | none | NIGHT `blocked` | none | API |
 | AC1-U1 | AC1, AC3 | The table lists each date with its three slots, each state in words | Happy | A calendar with open, booked, blocked, unavailable and not offered cells | Render | none | One row per date; the state is written out, not colour only; the table has a caption naming the venue and month | none | Component |
-| AC1-U2 | AC1 | Month links go to the previous and next month, across year ends | Boundary | December 2026 and January 2027 | Render | none | December's next link is `2027-01`; January's previous is `2026-12` | none | Component |
+| AC1-U2 | AC1 | Month links go to the previous and next month, across year ends and at the calendar's ends | Boundary | December 2026 and January 2027; `0001-01`; `9999-12` | Render | none | December's next link is `2027-01`; January's previous is `2026-12`; there is no Previous link at `0001-01` and no Next link at `9999-12` | none | Component |
 | AC1-U3 | AC1 | An unknown venue says so | Negative | The API answers 404 | Render the page | unknown id | "Venue not found"; no calendar | none | Component |
 | AC1-U4 | AC1 | A failed load shows an error, never an all-open calendar | Negative | The API fails | Render the page | none | An alert; no cells | none | Component |
 | AC1-U5 | AC1 | Only coordinators, venue staff and safety officers can open the page | Cross-cutting | Each role | Open the page | each role | Allowed roles see it; others go to `/unauthorised` | Calendar not fetched for others | Component |
 | AC1-U6 | AC1 | Each venue search result links to its availability | Happy | Search results shown | Render a result card | none | A "View availability" link to the page for that venue | none | Component |
+| AC1-N11 | AC1 | Year 0000 is refused with 422, as a month that is not a calendar month (review comment on PR #68) | Negative | As AC1-H1 | Read with `0000-01` | `0000-01` | 422 | none | API |
+| AC1-B4, AC1-B5 | AC1 | The first and last month the calendar can show both work (review comment on PR #68) | Boundary | As AC1-H1 | Read `0001-01` and `9999-12` | `0001-01`, `9999-12` | 200 with 31 dates each | none | API |
+| AC1-U7 | AC1 | A month the API would refuse (year 0000) falls back to the current month and never reports "Venue not found" (review comment) | Negative | A venue exists | Open the page with `month=0000-01` | `0000-01` | The current month's calendar is requested and shown | No "Venue not found" | Component |
+| AC1-U8 | AC1 | The search-result link carries the month of the date that was searched (review comment) | Happy | Search results shown for a date | Render a result card | searched date 2026-11-14; no date; an invalid date | link has `month=2026-11`; no `month` without a date; none for an invalid date | none | Component |
 | AC1-E1 | AC1, AC2 | In a browser a coordinator finds a venue, opens its availability, sees a booked and a blocked slot, and moves to the next month | Happy | Venue with one approved booking and one block; coordinator signed in | Search, click View availability, read the cells, click Next month | none | Booked and Blocked cells visible; the next month loads | none | E2E |
 
 ### Latest execution record
@@ -107,11 +111,13 @@ Results from 19 October 2026 on Kennedy's machine against branch `feat/scrum-31-
 | ID | Automation status | Actual result | Execution status | Remarks and evidence |
 | --- | --- | --- | --- | --- |
 | AC1-H1, AC1-P1, AC1-P2, AC1-B1 to AC1-B3, AC1-N1 to AC1-N10, AC1-X1, AC1-X2 | Red then Green | Red: 404 on the missing route (and one body-shape assertion). Green: as expected | Pass (local) | `tests/test_venue_calendar.py` |
-| AC2-H1, AC2-B1, AC2-B2, AC2-H2, AC2-P1 to AC2-P5, AC2-X1, AC2-X2 | Red then Green | As expected. AC2-X2 passed vacuously before the route existed, so it was changed to assert a 200 first | Pass (local) | `tests/test_venue_calendar.py` |
-| AC3-H1, AC3-H2, AC3-X1 | Red then Green | As expected | Pass (local) | `test_blocked_wins_over_booked`, `test_cancelled_booking_frees_its_slots`, `test_calendar_agrees_with_venue_search` (4 venues, 10 dates, 3 slots each) |
-| AC4-P1 to AC4-P3 | Red then Green | As expected | Pass (local) | `tests/test_venue_calendar.py` |
+| AC2-H1, AC2-B1, AC2-B2, AC2-H2, AC2-P1 to AC2-P5, AC2-X1, AC2-X2 | Red then Green | As expected. AC2-X2 passed vacuously before the route existed, so it was changed to assert a 200 first | Pass (local) | `tests/test_venue_calendar.py`. SCRUM-69's conversion (27 Oct) moved the calendar to times and relabelled every test there with SCRUM-69's case IDs, so no SCRUM-31 label was added (one label per test). This row's scenarios are now proven by the tests labelled AC2-H1 `test_approved_booking_shows_as_booked`, AC2-H2 `test_active_block_shows_as_blocked`, AC2-P1 `test_lifted_block_does_not_show`, AC2-P5 `test_multi_day_booking_applies_its_times_to_every_date` and AC2-X1 `test_booking_spanning_two_months_shows_in_both` (SCRUM-69's IDs, same sources and precedence) |
+| AC3-H1, AC3-H2, AC3-X1 | Red then Green | As expected | Pass (local) | `test_blocked_wins_over_booked`, `test_cancelled_booking_frees_its_slots`, `test_calendar_agrees_with_venue_search` (4 venues, 10 dates, 3 slots each). SCRUM-69's conversion renamed and relabelled these (SCRUM-69's IDs; no SCRUM-31 label added, one label per test): AC3-H1 → `test_blocked_wins_over_booked_and_splits_the_booking` (labelled AC2-H3), AC3-H2 → `test_cancelled_booking_frees_its_time` (labelled AC2-H5), AC3-X1 → `test_calendar_agrees_with_venue_search_at_every_step` (labelled AC6-X1, now at every 15-minute step) |
+| AC4-P1 to AC4-P3 | Red then Green | As expected | Pass (local) | `tests/test_venue_calendar.py`. SCRUM-69's conversion (27 Oct) changed this row group: AC4-P2's catalogue part is proven by `test_catalogue_status_sets_the_unavailable_flag` (labelled AC3-P1/AC3-P2, SCRUM-69's IDs); AC4-P3's nearest current proof is `test_block_on_an_unavailable_venue_still_shows` (labelled AC3-P3: a block on a catalogue-blocked venue still shows — the slot-model case, a block on a slot the venue does not operate, cannot exist now that every venue runs 07:00–24:00). AC4-P1's `not_offered` state was dropped by SCRUM-69 (its AC5: PO decision, 20 Oct — every venue operates 07:00 to 24:00), and `test_response_has_no_slot_vocabulary` (labelled AC5-X1) asserts the word never appears, so the slot-model row has no current equivalent |
 | AC2-X3 | Red then Green | Red: the store method did not exist. Green: as expected. A window-edge case was added after reviewing the plan | Pass (local, mocked Data API for Supabase) | `tests/test_booking_store_calendar.py`, `tests/test_supabase_booking_repository.py` |
 | AC1-H1, AC1-P1, AC1-B1, AC1-B2, AC1-N1, AC1-N6 to AC1-N10, AC1-X1, AC1-X2, AC2-H1, AC2-H2, AC2-P2, AC3-H2, AC3-X1, AC4 | Written after the code | 34 of 34 checks passed, 1 skipped (script output reported by Kennedy, not captured here) | Pass (real stack, 19 October 2026); AC1-P2 **Not executed** live | `scrum31_live_check.py` against the real authService, eventRequestService and venueService with the shared development database. See "Real-stack check" below |
+| AC1-N11, AC1-B4, AC1-B5 (review fixes) | Guards written before a refactor (passed before and after) | As expected | Pass (local) | `tests/test_venue_calendar.py`. They pin the behaviour while the month pattern was simplified; removing the year-0000 check makes AC1-N11 fail |
+| AC1-U2 (ends), AC1-U7, AC1-U8 (review fixes) | Red then Green | Red: the page requested year 0000, the links at the calendar's ends were wrong, the search link ignored the date. Green: as expected | Pass (local) | `frontend/__tests__/venue-availability.test.tsx` (now 20 test cases) |
 | AC1-U1 to AC1-U6 | Red then Green | Red: the new modules did not exist (import error). Green: as expected | Pass (local) | `frontend/__tests__/venue-availability.test.tsx` (10 test cases): the table, month links across year ends, the venue picker, unknown venue, failed loads, the role gate and its refusal, and the search-result link |
 | AC1-E1, AC1-U5 (browser) | Written after the code (not Red first) | As expected, after fixing two faults in my own test (a "4 Mar" locator that also matched 14 and 24 Mar, then a word boundary that failed on the row's joined text) | Pass (local, Chrome, mock venue API) | `frontend/e2e/venue-availability.spec.ts`: from a search result a coordinator opens the calendar, sees Booked and Blocked in words, no block reason, and moves to the next month; an organiser is sent to `/unauthorised` |
 
@@ -158,7 +164,21 @@ The browser tests run against the **mock** venue API in `e2e/support/venue-api.m
 
 Not covered live: the safety officer role, clicking through from a venue search result against the real service, the Not offered, Booked and Unavailable cells on screen, and the failure paths (venue service down). Those are covered only by the local tests.
 
+**After the PR #68 review comments (20 October 2026).** `dev` was merged into the branch (`f02a956`, clean, 27 commits from other people) and everything re-run on the merged tree.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Backend lint and tests | `ruff check .` and `pytest -q` from `backend/venueService` | clean; 499 passed, 10 skipped |
+| Frontend | `npm run lint`, `npm run typecheck`, `npm test` | clean, clean, 408 passed (39 files) |
+| Browser tests, full suite | `npx playwright test` through a temporary config selecting the installed Google Chrome | 45 passed, including the 2 for this story; the journey now goes from a search with a date straight to that month |
+
+Six more faults were injected for the review fixes and each made a test fail: no refusal of year 0000 on the API, the frontend accepting year 0000, Previous at year 1 going to year 0, Next at 9999-12 going to year 10000, the searched date not validated, and the search link ignoring the month.
+
 **Mutation check (manual, 19 October 2026).** Eleven one-line faults were injected one at a time and each made at least one test fail: booked winning over blocked, pending bookings counted as booked, the month's last date dropped, non-operating slots shown as open, a catalogue-blocked venue shown as open, lifted blocks counted, any signed-in user allowed, the window's start and end edges made exclusive, slots in the wrong order, and the Supabase query ignoring the status. Two attempts at the "any signed-in user" fault first broke an import and were discarded; the third, using the real dependency, was killed by the three role-refusal tests.
+
+### Changes after review
+
+PR #68 received review comments on 20 October 2026. Accepted and built, tests first: the month check on the page and the month links at the calendar's ends (AC1-U2, AC1-U7, AC1-N11, AC1-B4, AC1-B5), the search-result link keeping the searched month (AC1-U8), a simpler month pattern on the API (the year-0000 refusal is now an explicit check, AC1-N11), and removal of an unused sort in the approved-bookings read. Not changed: fetching every block of a venue and filtering in memory, because blocks per venue are few, `build_calendar` already ignores lifted and non-overlapping ones, and a windowed block query would add a Supabase method for no practical gain; recorded as a possible follow-up. The comment on tentative holds is a request to confirm assumption A1 with the Product Owner, which is still open.
 
 ## Disclosures
 

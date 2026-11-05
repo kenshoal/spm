@@ -13,6 +13,9 @@ export const EVENT_REQUEST_STATUSES = [
   "Completed",
   "Cancelled",
   "Rejected",
+  // Hotfixes 21 and 22 (Q&A #103, #69, #121).
+  "Withdrawn",
+  "Postponed",
 ] as const;
 
 export type EventRequestStatus = (typeof EVENT_REQUEST_STATUSES)[number];
@@ -39,6 +42,7 @@ export const STATUS_GROUPS: Record<
     "Planning",
     "Safety Review",
     "Confirmed",
+    "Postponed",
   ],
   completed: ["Completed"],
 };
@@ -48,6 +52,7 @@ export const COORDINATOR_TERMINAL_STATUSES = [
   "Completed",
   "Cancelled",
   "Rejected",
+  "Withdrawn",
 ] as const;
 
 export function isTerminalStatus(status: EventRequestStatus): boolean {
@@ -59,6 +64,7 @@ export function statusBadgeClass(status: EventRequestStatus): string {
   if (status === "Cancelled" || status === "Rejected") {
     return "bg-[#fdecea] text-[#8c3a2b]";
   }
+  if (status === "Withdrawn") return "bg-[#e9edf5] text-[#35466b]";
   if (status === "Completed") return "bg-[#e3f2ea] text-[#145c40]";
   if (status === "Draft") return "bg-[#eef4f1] text-[#315047]";
   return "bg-[#fff3dc] text-[#80520d]";
@@ -68,6 +74,7 @@ export type CoordinatorTransition =
   | "review"
   | "planning"
   | "safety-review"
+  | "withdrawal"
   | "cancellation"
   | "completion";
 
@@ -79,6 +86,10 @@ export function coordinatorActions(
   if (isTerminalStatus(status)) return [];
   const actions: CoordinatorTransition[] = [];
   if (status === "Submitted") actions.push("review");
+  // Hotfix 21 (Q&A #103): while it is under review the Coordinator can record a withdrawal.
+  if (status === "Submitted" || status === "Under Review" || status === "Changes Requested") {
+    actions.push("withdrawal");
+  }
   if (status === "Approved") actions.push("planning");
   if (status === "Planning") actions.push("safety-review");
   if (status === "Confirmed") actions.push("completion");
@@ -101,6 +112,7 @@ export interface EventRequest {
   registration_needs: string | null;
   created_at: string;
   updated_at: string;
+  final_event_end_at?: string | null;
 }
 
 export interface CoordinatorAssignment {
@@ -122,7 +134,7 @@ export interface EventReviewDecision {
   responded_at: string | null;
 }
 
-export type EventChangeRequestStatus = "Pending" | "Approved" | "Rejected";
+export type EventChangeRequestStatus = "Pending" | "Approved" | "Rejected" | "Partially Approved";
 
 export interface EventChangeBookingPlanItem {
   booking_id: string;
@@ -162,6 +174,7 @@ export interface EventChangeRequest {
       | "venue_requirements"
       | "equipment_requirements"
       | "registration_needs"
+      | "accessibility_needs"
     >
   >;
   base_event_updated_at: string;
@@ -170,6 +183,8 @@ export interface EventChangeRequest {
   created_at: string;
   decided_at: string | null;
   applied_booking_plan?: EventChangeBookingPlanItem[] | null;
+  /** Hotfix 20: the fields the Coordinator did not accept, with the value asked for and why. */
+  rejected_changes?: Record<string, { value: unknown; reason: string }> | null;
 }
 
 /** A read-only snapshot; these candidates are not availability or approval. */

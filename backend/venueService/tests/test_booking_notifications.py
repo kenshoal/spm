@@ -150,12 +150,16 @@ def test_unconfigured_notifier_sends_nothing(monkeypatch):
     BookingNotifier(None).send({"event_type": "venue_booking_approved", "recipient_id": "x", "payload": {}})
 
 
-# AC4-H3 (happy): a configured notifier POSTs the event to the receiver with a timeout
+# AC4-H3, AC17-H1 (happy): a configured notifier POSTs the event, with the internal
+# token notificationService requires, to the receiver with a timeout
 def test_configured_notifier_posts_the_event(monkeypatch):
     calls = []
+    seen_headers = {}
+    monkeypatch.setenv("NOTIFICATION_INTERNAL_TOKEN", "secret")
 
-    def record(url, json, timeout):
+    def record(url, json, headers, timeout):
         calls.append((url, json, timeout))
+        seen_headers.update(headers)
         return httpx.Response(202, request=httpx.Request("POST", url))
 
     monkeypatch.setattr("app.booking_notifications.httpx.post", record)
@@ -164,11 +168,12 @@ def test_configured_notifier_posts_the_event(monkeypatch):
     BookingNotifier("http://notification-service:8000/notifications/events").send(event)
 
     assert calls == [("http://notification-service:8000/notifications/events", event, 5)]
+    assert seen_headers == {"X-Internal-Token": "secret"}
 
 
 # AC4-N4 (negative): a receiver error is logged, not raised
 def test_receiver_error_is_logged_not_raised(monkeypatch, caplog):
-    def reject(url, json, timeout):
+    def reject(url, json, headers, timeout):
         return httpx.Response(500, request=httpx.Request("POST", url))
 
     monkeypatch.setattr("app.booking_notifications.httpx.post", reject)

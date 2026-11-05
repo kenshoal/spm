@@ -327,6 +327,7 @@ export async function createEventChangeRequest(
     "venue_requirements",
     "equipment_requirements",
     "registration_needs",
+    "accessibility_needs",
   ]) {
     const value = String(formData.get(field) ?? "").trim();
     if (value) payload[field] = value;

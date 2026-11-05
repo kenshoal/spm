@@ -4,6 +4,8 @@ import { RejectChangeForm } from "./reject-change-form";
 import { ApproveChangeForm } from "./approve-change-form";
 import { PreviewDateChangeForm } from "./preview-date-change-form";
 import { DateChangeApprovalForm } from "./date-change-approval-form";
+import { PartialChangeForm } from "./partial-change-form";
+import { RefusedChanges } from "../../../components/refused-changes";
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat("en-SG", {
@@ -19,6 +21,7 @@ const labels: Record<string, string> = {
   venue_requirements: "Venue requirements",
   equipment_requirements: "Equipment requirements",
   registration_needs: "Registration needs",
+  accessibility_needs: "Accessibility needs",
 };
 
 function valueText(key: string, value: unknown): string {
@@ -28,7 +31,7 @@ function valueText(key: string, value: unknown): string {
   return String(value);
 }
 
-const nonDateFields = new Set(["expected_attendance", "venue_requirements", "equipment_requirements", "registration_needs"]);
+const nonDateFields = new Set(["expected_attendance", "venue_requirements", "equipment_requirements", "registration_needs", "accessibility_needs"]);
 
 function supportsApproval(request: EventChangeRequest): boolean {
   const fields = Object.keys(request.proposed_changes);
@@ -40,7 +43,7 @@ export function ChangeRequestPanel({ requests, eventStatus }: {
   requests: EventChangeRequest[];
   eventStatus?: EventRequestStatus;
 }) {
-  const canDecide = eventStatus === "Approved" || eventStatus === "Planning";
+  const canDecide = eventStatus === "Confirmed" || eventStatus === "Approved" || eventStatus === "Planning";
   if (requests.length === 0) return null;
   return (
     <section aria-labelledby="change-requests-title" className="mt-5 rounded-2xl border border-[#dce4e0] bg-white p-6 sm:p-7">
@@ -58,7 +61,8 @@ export function ChangeRequestPanel({ requests, eventStatus }: {
                 <div key={key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3"><dt className="font-semibold text-[#526159]">{labels[key] ?? key}</dt><dd>{valueText(key, value)}</dd></div>
               ))}
             </dl>
-            {request.status === "Approved" ? <AppliedBookingPlan plan={request.applied_booking_plan} /> : null}
+            {request.status === "Approved" || request.status === "Partially Approved" ? <AppliedBookingPlan plan={request.applied_booking_plan} /> : null}
+            <RefusedChanges request={request} />
             {request.decision_reason ? <p className="mt-3 text-sm"><strong>Decision reason:</strong> {request.decision_reason}</p> : null}
             {request.status !== "Pending" && request.coordinator_id ? (
               <p className="mt-2 break-words text-sm"><strong>{request.status} by coordinator:</strong> {request.coordinator_id}</p>
@@ -74,6 +78,9 @@ export function ChangeRequestPanel({ requests, eventStatus }: {
             ) : null}
             {canDecide && request.status === "Pending" && Object.keys(request.proposed_changes).length === 1 && "proposed_date_times" in request.proposed_changes ? (
               <PreviewDateChangeForm eventRequestId={request.event_request_id} changeRequestId={request.id} />
+            ) : null}
+            {canDecide && request.status === "Pending" && Object.keys(request.proposed_changes).length > 1 ? (
+              <PartialChangeForm eventRequestId={request.event_request_id} changeRequestId={request.id} fields={Object.keys(request.proposed_changes)} />
             ) : null}
             {canDecide && request.status === "Pending" ? (
               <RejectChangeForm eventRequestId={request.event_request_id} changeRequestId={request.id} />

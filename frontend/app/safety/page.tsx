@@ -20,6 +20,7 @@ import { timeRangeLabel } from "@/lib/venue-options";
 const DECIDED_MESSAGES: Record<string, string> = {
   approved: "Event approved. It is now Confirmed.",
   changes_requested: "Changes requested. The event is back in Planning and its coordinator has been notified.",
+  rejected: "Safety arrangement rejected. The event is back in Planning and its coordinator has been notified.",
 };
 
 interface BookingCheck {

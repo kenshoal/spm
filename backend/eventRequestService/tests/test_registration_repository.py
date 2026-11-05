@@ -92,6 +92,32 @@ def test_register_server_error_is_a_repository_error(status_code: int) -> None:
     assert not isinstance(caught.value, RegistrationRpcError)
 
 
+@pytest.mark.parametrize(
+    ("call", "code", "message"),
+    [
+        (lambda repo: repo.register("e1", "a1", NOW), "P0004", "event full"),
+        (lambda repo: repo.coordinator_register("e1", "c1", "x@test.local"),
+         "P0004", "already registered"),
+        (lambda repo: repo.check_in("e1", "r1", "c1", NOW), "P0004", "not event day"),
+        (lambda repo: repo.withdraw("r1", "a1", NOW), "P0004", "already checked in"),
+        (lambda repo: repo.coordinator_register("e1", "c1", "x@test.local"),
+         "P0002", "attendee not found"),
+    ],
+)
+# AC4-N2 (negative): real PostgREST answers a RAISE with SQLSTATE P0002/P0004 as HTTP 500;
+# it is still the function's refusal, not an outage (found in the SCRUM-41 live check)
+def test_postgrest_500_for_a_function_refusal_is_a_refusal(call, code, message) -> None:  # type: ignore[no-untyped-def]
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            500, json={"code": code, "details": None, "hint": None, "message": message}
+        )
+
+    with pytest.raises(RegistrationRpcError) as raised:
+        call(make_repository(handler))
+
+    assert (raised.value.errcode, raised.value.reason) == (code, message)
+
+
 # AC5-N3 (negative): a network failure is a repository error
 def test_register_network_failure_is_a_repository_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -188,3 +214,118 @@ def test_has_active_queries_event_and_attendee() -> None:
     assert seen[0].url.params["attendee_id"] == "eq.a1"
     assert seen[0].url.params["status"] == "eq.Registered"
     assert seen[0].url.params["limit"] == "1"
+
+
+# AC3-X1 (cross-cutting): every registration is read, past the Data API's 1,000-row cap
+def test_list_for_event_pages_past_the_row_cap() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        size = 1000 if request.url.params["offset"] == "0" else 1
+        return httpx.Response(200, json=[{"id": str(i)} for i in range(size)])
+
+    rows = make_repository(handler).list_for_event("e1")
+
+    assert len(rows) == 1001
+    assert [r.url.params["offset"] for r in seen] == ["0", "1000"]
+    assert seen[0].url.params["event_request_id"] == "eq.e1"
+    assert seen[0].url.params["select"] == (
+        "id,attendee_id,status,created_at,registered_by,attended_at,checked_in_by"
+    )
+
+
+# AC1-H1 (happy): coordinator_register calls the SCRUM-41 function with event, coordinator and email
+def test_coordinator_register_calls_the_database_function() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"id": "r1", "registered_by": "c1"})
+
+    row = make_repository(handler).coordinator_register("e1", "c1", "vip@test.local")
+
+    assert row == {"id": "r1", "registered_by": "c1"}
+    assert seen[0].url.path == "/rest/v1/rpc/coordinator_register_attendee"
+    assert json.loads(seen[0].content) == {
+        "p_event_request_id": "e1",
+        "p_coordinator_id": "c1",
+        "p_attendee_email": "vip@test.local",
+    }
+
+
+# AC1-N1 (negative): a refusal carries the function's errcode and reason
+def test_coordinator_register_refusal_carries_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"code": "P0002", "message": "attendee not found"})
+
+    with pytest.raises(RegistrationRpcError) as raised:
+        make_repository(handler).coordinator_register("e1", "c1", "x@test.local")
+
+    assert (raised.value.errcode, raised.value.reason) == ("P0002", "attendee not found")
+
+
+# AC1-H1 (happy): check_in calls the SCRUM-25 function with the event, registration, coordinator and clock
+def test_check_in_calls_the_database_function() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"id": "r1", "checked_in_by": "c1"})
+
+    make_repository(handler).check_in("e1", "r1", "c1", NOW)
+
+    assert seen[0].url.path == "/rest/v1/rpc/check_in_attendee"
+    assert json.loads(seen[0].content) == {
+        "p_event_request_id": "e1",
+        "p_registration_id": "r1",
+        "p_coordinator_id": "c1",
+        "p_now": NOW.isoformat(),
+    }
+
+
+# SCRUM-38 AC2-X1 (cross-cutting): the Organiser is fetched by its own query, one
+# column of one event, so the public event columns stay free of internal ones.
+def test_organiser_lookup_selects_only_the_organiser() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[{"organiser_id": "org-1"}])
+
+    assert make_repository(handler).get_organiser_id("e1") == "org-1"
+    assert seen[0].url.path == "/rest/v1/event_requests"
+    assert seen[0].url.params["select"] == "organiser_id"
+    assert seen[0].url.params["id"] == "eq.e1"
+    assert "organiser_id" not in EVENT_COLUMNS
+
+
+# SCRUM-38 AC2-P1 (partition): an unknown event has no Organiser.
+def test_organiser_lookup_of_an_unknown_event_is_none() -> None:
+    repo = make_repository(lambda request: httpx.Response(200, json=[]))
+
+    assert repo.get_organiser_id("missing") is None
+
+
+# SCRUM-38 AC2-H4 (happy): the Coordinator is the newest assignment row for the event.
+def test_coordinator_lookup_reads_the_latest_assignment() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[{"coordinator_id": "coord-2"}])
+
+    assert make_repository(handler).latest_coordinator_id("e1") == "coord-2"
+    params = seen[0].url.params
+    assert seen[0].url.path == "/rest/v1/event_coordinator_assignments"
+    assert params["event_request_id"] == "eq.e1"
+    assert params["order"] == "id.desc"
+    assert params["limit"] == "1"
+    assert params["select"] == "coordinator_id"
+
+
+# SCRUM-38 AC2-P1 (partition): an event with no assignment has no Coordinator.
+def test_coordinator_lookup_without_assignment_is_none() -> None:
+    repo = make_repository(lambda request: httpx.Response(200, json=[]))
+
+    assert repo.latest_coordinator_id("e1") is None

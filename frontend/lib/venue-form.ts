@@ -1,7 +1,10 @@
 import {
+  CLOSE_MINUTE,
   MAX_PREP_MINUTES,
+  OPEN_MINUTE,
   PREP_MINUTES_STEP,
   ROOM_LAYOUTS,
+  TIME_STEP,
   timeRangeFrom,
   type RoomLayout,
   type VenueStatus,
@@ -16,7 +19,10 @@ export interface VenuePayload {
   supported_layouts: RoomLayout[];
   setup_minutes: number | null;
   turnaround_minutes: number | null;
+  operating_start_minute: number | null;
+  operating_end_minute: number | null;
   status?: VenueStatus;
+  layout_capacities: Partial<Record<RoomLayout, number>>;
 }
 
 // Raw text as typed/checked on the form — no parsing, no filtering against
@@ -32,7 +38,10 @@ export interface VenueFormValues {
   supported_layouts: string[];
   setup_minutes: string;
   turnaround_minutes: string;
+  operating_start_minute: string;
+  operating_end_minute: string;
   status?: string;
+  layout_capacities: Record<string, string>;
 }
 
 // Comma-separated free text → trimmed, non-empty values, de-duplicated
@@ -64,6 +73,15 @@ function prepMinutes(value: string): number | null {
   return minutes <= MAX_PREP_MINUTES && minutes % PREP_MINUTES_STEP === 0 ? minutes : null;
 }
 
+// An opening or closing time as minutes after midnight: blank means the edge of the day
+// (the whole 07:00 to 24:00 day), otherwise a whole multiple of 15 inside it, or null when invalid.
+function operatingMinute(value: string, blank: number): number | null {
+  if (!value) return blank;
+  if (!/^\d+$/.test(value)) return null;
+  const minutes = Number(value);
+  return minutes >= OPEN_MINUTE && minutes <= CLOSE_MINUTE && minutes % TIME_STEP === 0 ? minutes : null;
+}
+
 // Keeps submission order (tests assert on it) while filtering out values
 // outside the backend enum and de-duplicating repeats.
 function pick<T extends string>(formData: FormData, field: string, allowed: readonly T[]): T[] {
@@ -91,11 +109,27 @@ export function readVenueFormValues(formData: FormData): VenueFormValues {
     facilities: text(formData, "facilities"),
     accessibility_features: text(formData, "accessibility_features"),
     supported_layouts: formData.getAll("supported_layouts").map(String),
+    layout_capacities: Object.fromEntries(
+      ROOM_LAYOUTS.map((layout) => [layout, text(formData, `layout_capacity_${layout}`)]),
+    ),
     setup_minutes: text(formData, "setup_minutes"),
     turnaround_minutes: text(formData, "turnaround_minutes"),
+    operating_start_minute: text(formData, "operating_start_minute"),
+    operating_end_minute: text(formData, "operating_end_minute"),
   };
   if (formData.has("status")) values.status = text(formData, "status");
   return values;
+}
+
+// Hotfix 12 (Q&A #112): blank means the layout uses the maximum capacity. Anything
+// that is not a positive whole number stays out, and the field error below says so.
+function layoutCapacities(formData: FormData): Partial<Record<RoomLayout, number>> {
+  const capacities: Partial<Record<RoomLayout, number>> = {};
+  for (const layout of ROOM_LAYOUTS) {
+    const value = text(formData, `layout_capacity_${layout}`);
+    if (/^\d+$/.test(value) && Number(value) > 0) capacities[layout] = Number(value);
+  }
+  return capacities;
 }
 
 export function parseVenueForm(
@@ -111,8 +145,11 @@ export function parseVenueForm(
     facilities: splitList(text(formData, "facilities")),
     accessibility_features: splitList(text(formData, "accessibility_features")),
     supported_layouts: pick(formData, "supported_layouts", ROOM_LAYOUTS),
+    layout_capacities: layoutCapacities(formData),
     setup_minutes: prepMinutes(text(formData, "setup_minutes")),
     turnaround_minutes: prepMinutes(text(formData, "turnaround_minutes")),
+    operating_start_minute: operatingMinute(text(formData, "operating_start_minute"), OPEN_MINUTE),
+    operating_end_minute: operatingMinute(text(formData, "operating_end_minute"), CLOSE_MINUTE),
   };
   if (includeStatus) {
     payload.status = text(formData, "status") === "blocked" ? "blocked" : "available";
@@ -122,9 +159,18 @@ export function parseVenueForm(
   if (!payload.name) errors.name = "Enter the venue name.";
   if (!payload.location) errors.location = "Enter the venue location.";
   if (capacity === null || capacity <= 0) errors.max_capacity = "Enter a whole number greater than zero.";
+  const badLayoutCapacity = ROOM_LAYOUTS.some((layout) => {
+    const value = text(formData, `layout_capacity_${layout}`);
+    return value !== "" && !(/^\d+$/.test(value) && Number(value) > 0);
+  });
+  if (badLayoutCapacity) errors.layout_capacities = "Enter a whole number greater than zero, or leave it blank.";
   const prepError = `Enter minutes in steps of ${PREP_MINUTES_STEP}, from 0 to ${MAX_PREP_MINUTES}.`;
   if (payload.setup_minutes === null) errors.setup_minutes = prepError;
   if (payload.turnaround_minutes === null) errors.turnaround_minutes = prepError;
+  const { operating_start_minute: opens, operating_end_minute: closes } = payload;
+  if (opens === null || closes === null || opens >= closes) {
+    errors.operating_hours = "Choose an opening time before the closing time, from 07:00 to 24:00 in steps of 15 minutes.";
+  }
   return { payload, errors };
 }
 

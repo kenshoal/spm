@@ -2,6 +2,7 @@ import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/auth";
+import { timeRangeLabel } from "@/lib/venue-options";
 import { layoutLabel, listVenues, prepTimeLabel } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../components/app-shell";
 
@@ -27,6 +28,7 @@ async function VenueData() {
             </div>
             <p className="mt-1 text-sm text-[#68776f]">{venue.location} · up to {venue.max_capacity} people</p>
             <p className="mt-1 text-xs text-[#718078]">Layouts: {venue.supported_layouts.map(layoutLabel).join(", ") || "none recorded"} · Facilities: {venue.facilities.join(", ") || "none recorded"} · Accessibility: {venue.accessibility_features.join(", ") || "none recorded"}</p>
+            <p className="mt-1 text-xs text-[#718078]">Open {timeRangeLabel(venue.operating_start_minute, venue.operating_end_minute)} daily</p>
             <p className="mt-1 text-xs text-[#718078]">Setup: {prepTimeLabel(venue.setup_minutes)} · Turnaround: {prepTimeLabel(venue.turnaround_minutes)}</p>
           </div>
           <Link href={`/venues/${venue.id}/edit`} className="text-sm font-semibold text-[#0f6b5b] hover:underline">Edit {venue.name}</Link>

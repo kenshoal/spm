@@ -17,6 +17,17 @@ def rpc_error_to_http(exc: APIError) -> HTTPException:
     )
 
 
+def quantity_rpc_error_to_http(exc: APIError) -> HTTPException:
+    """Map update_equipment_quantity's errcodes (SCRUM-45 AC2): P0002 unknown id,
+    P0004 a total below the peak already reserved."""
+    if exc.code == CONFLICT_ERRCODE:
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The total is below the units already reserved",
+        )
+    return rpc_error_to_http(exc)
+
+
 def requirement_rpc_error_to_http(exc: APIError) -> HTTPException:
     """Map transition_equipment_requirement's errcodes (SCRUM-33 D4):
     P0002 unknown id, P0004 disallowed, stale or note-less transition."""
@@ -28,6 +39,27 @@ def requirement_rpc_error_to_http(exc: APIError) -> HTTPException:
     if exc.code == CONFLICT_ERRCODE:
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Transition not allowed"
+        )
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Database operation failed",
+    )
+
+
+def essential_rpc_error_to_http(exc: APIError) -> HTTPException:
+    """Map set_requirement_essential's errcodes (hotfix 25): P0002 unknown requirement,
+    P0003 not the assigned coordinator (as a missing one), P0004 closed event, 22023 no note."""
+    if exc.code in (NOT_FOUND_ERRCODE, "P0003"):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Equipment requirement not found",
+        )
+    if exc.code == CONFLICT_ERRCODE:
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Event is closed")
+    if exc.code == TYPE_MISMATCH_ERRCODE:
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A note is required to mark a requirement not essential",
         )
     return HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

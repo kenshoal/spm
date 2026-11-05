@@ -113,7 +113,7 @@ BEGIN
  END LOOP;
 
  -- AC4-N4 (negative): a still-Pending proposal cannot be decided after its event leaves Approved/Planning.
- FOREACH current_status IN ARRAY ARRAY['Submitted','Safety Review','Confirmed','Cancelled'] LOOP
+ FOREACH current_status IN ARRAY ARRAY['Submitted','Safety Review','Completed','Cancelled'] LOOP
    UPDATE public.event_requests SET status=current_status WHERE id=e2;
    before_state:=pg_temp.scrum35_state();
    BEGIN

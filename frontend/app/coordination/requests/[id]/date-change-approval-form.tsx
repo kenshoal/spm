@@ -14,6 +14,7 @@ const conflictLabels: Record<string, string> = {
   setup_outside_window: "Setup falls outside booking hours",
   turnaround_outside_window: "Turnaround falls outside booking hours",
   booking_conflict: "Overlaps another booking in the complete plan or at this venue",
+  hold_conflict: "Overlaps a tentative hold at this venue",
 };
 
 /** The complete snapshot is advisory; SQL rechecks membership and every conflict. */

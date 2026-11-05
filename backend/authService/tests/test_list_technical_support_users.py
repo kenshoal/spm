@@ -14,7 +14,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.integrations import get_supabase_client
+from app.integrations import get_supabase_client, get_supabase_verifier_client
 from app.main import app, get_admin_client
 
 
@@ -22,6 +22,7 @@ from app.main import app, get_admin_client
 def supabase() -> Iterator[Mock]:
     supabase = Mock()
     app.dependency_overrides[get_supabase_client] = lambda: supabase
+    app.dependency_overrides[get_supabase_verifier_client] = lambda: supabase
     yield supabase
     app.dependency_overrides.clear()
 

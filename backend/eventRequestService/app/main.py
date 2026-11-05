@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.config import get_notification_settings
+from app.config import get_notification_settings, get_periodic_task_settings
 from app.controllers.arrangement_review_controller import (
     router as arrangement_review_router,
 )
@@ -16,10 +16,17 @@ from app.controllers.event_request_controller import router as event_request_rou
 from app.controllers.event_transition_controller import (
     router as event_transition_router,
 )
+from app.controllers.registration_controller import (
+    management_router as registration_info_router,
+)
 from app.controllers.registration_controller import router as registration_router
 from app.controllers.technical_support_controller import (
     router as technical_support_router,
 )
+from app.controllers.waitlist_controller import (
+    coordination_router as waitlist_coordination_router,
+)
+from app.controllers.waitlist_controller import router as waitlist_router
 from app.models.event_request import HealthResponse
 from app.repositories import EventRequestRepository, SupabaseRepositoryError
 from app.repositories.coordinator_assignment_repository import (
@@ -31,6 +38,7 @@ from app.services.arrangement_review_notification_relay import (
     ArrangementReviewNotificationRelay,
     build_arrangement_review_notification_relay,
 )
+from app.services.auto_completion import build_auto_completion_service
 from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentNotAllowedError,
     CoordinatorAssignmentNotFoundError,
@@ -40,6 +48,7 @@ from app.services.event_request_service import (
     ClarificationResponseNotAllowedError,
     EventChangeRequestConflictError,
     EventChangeRequestForbiddenError,
+    EventDetailsConflictError,
     EventRequestForbiddenError,
     EventRequestNotDraftError,
     EventRequestNotFoundError,
@@ -49,14 +58,17 @@ from app.services.event_request_service import (
 from app.services.event_transition_service import (
     DecisionReasonRequiredError,
     EventTransitionService,
+    OrganiserChangeRefusedError,
     SafetyApprovalBlockedError,
     SafetyDecisionInvalidError,
     SafetyReviewNotReadyError,
     TransitionForbiddenError,
+    TransitionInputInvalidError,
     TransitionNotAllowedError,
 )
 from app.services.notification_client import NotificationClient
 from app.services.outbox_relay import OutboxRelay, build_outbox_relay
+from app.services.periodic_task_runner import PeriodicTaskRunner
 from app.services.registration_rules import (
     AlreadyWithdrawnError,
     EventFullError,
@@ -66,13 +78,50 @@ from app.services.registration_rules import (
     WithdrawalNotPermittedError,
 )
 from app.services.registration_service import (
+    AlreadyCheckedInError,
     AlreadyRegisteredError,
+    AttendeeAlreadyRegisteredError,
+    AttendeeNotFoundError,
+    CapacityBelowTakenError,
+    CapacityNotSetError,
+    NotEventDayError,
     RegistrationService,
+    RegistrationSettingsInvalidError,
+    RegistrationSettingsNotAllowedError,
+)
+from app.services.registration_window_notifier import (
+    build_registration_window_notifier,
 )
 from app.services.technical_support_service import (
     TechnicalSupportError,
     TechnicalSupportService,
 )
+from app.services.waitlist_rules import WaitlistRuleError
+from app.services.waitlist_service import WaitlistService
+from app.services.waitlist_timer import build_waitlist_timer
+
+
+def build_periodic_task_runner() -> PeriodicTaskRunner | None:
+    settings = get_periodic_task_settings()
+    handlers = {}
+    # Each story controls only its own registration. SCRUM-38 can add a separate
+    # configured handler here even when automatic completion is disabled.
+    if settings.auto_completion_enabled:
+        completion = build_auto_completion_service()
+        handlers["auto_completion"] = completion.run_once
+    # SCRUM-38 AC3: its own switch, so it runs with or without completion.
+    if settings.registration_window_notices_enabled:
+        handlers["registration_window_notices"] = (
+            build_registration_window_notifier().run_once
+        )
+    # SCRUM-24: the waiting-list timer and its outbox relay, on their own switch.
+    if settings.waitlist_timers_enabled:
+        handlers["waitlist_timers"] = build_waitlist_timer().run_once
+    if not handlers:
+        return None
+    return PeriodicTaskRunner(
+        handlers, interval_seconds=settings.periodic_task_interval_seconds
+    )
 
 
 def create_app(
@@ -83,12 +132,13 @@ def create_app(
     registration_repository: RegistrationRepository | None = None,
     technical_support_repository: TechnicalSupportRepository | None = None,
     technical_support_notification_client: NotificationClient | None = None,
+    periodic_task_runner: PeriodicTaskRunner | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         relay_tasks = [
             asyncio.create_task(relay.run_forever())
-            for relay in (outbox_relay, arrangement_review_relay)
+            for relay in (outbox_relay, arrangement_review_relay, periodic_task_runner)
             if relay is not None
         ]
         try:
@@ -119,7 +169,19 @@ def create_app(
     application.state.event_request_service = event_request_service
     application.state.coordinator_assignment_service = coordinator_assignment_service
     application.state.registration_service = (
-        RegistrationService(registration_repository)
+        RegistrationService(
+            registration_repository,
+            coordinator_repository,
+            NotificationClient.from_settings(get_notification_settings()),
+        )
+        if registration_repository is not None
+        else None
+    )
+    application.state.waitlist_service = (
+        WaitlistService(
+            registration_repository,
+            NotificationClient.from_settings(get_notification_settings()),
+        )
         if registration_repository is not None
         else None
     )
@@ -151,6 +213,9 @@ def create_app(
     application.include_router(event_request_router)
     application.include_router(arrangement_review_router)
     application.include_router(registration_router)
+    application.include_router(registration_info_router)
+    application.include_router(waitlist_router)
+    application.include_router(waitlist_coordination_router)
 
     @application.exception_handler(EventRequestNotFoundError)
     async def event_request_not_found(
@@ -278,6 +343,21 @@ def create_app(
             content={"detail": str(error), "outstanding": error.outstanding},
         )
 
+    @application.exception_handler(OrganiserChangeRefusedError)
+    async def organiser_change_refused(
+        request: Request, error: OrganiserChangeRefusedError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=error.status_code, content={"detail": str(error)})
+
+    @application.exception_handler(TransitionInputInvalidError)
+    async def transition_input_invalid(
+        request: Request, error: TransitionInputInvalidError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(error)},
+        )
+
     @application.exception_handler(SafetyDecisionInvalidError)
     async def safety_decision_invalid(
         request: Request, error: SafetyDecisionInvalidError
@@ -294,6 +374,54 @@ def create_app(
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={"detail": "Event not found", "code": "event_not_found"},
+        )
+
+    @application.exception_handler(EventDetailsConflictError)
+    async def event_details_conflict(
+        request: Request, error: EventDetailsConflictError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This event changed or cannot be edited now. Refresh and try again.",
+                "code": "event_details_conflict",
+            },
+        )
+
+    @application.exception_handler(CapacityBelowTakenError)
+    async def capacity_below_taken(
+        request: Request, error: CapacityBelowTakenError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Capacity cannot be below the places already taken",
+                "code": "capacity_below_taken",
+            },
+        )
+
+    @application.exception_handler(RegistrationSettingsNotAllowedError)
+    async def registration_settings_not_allowed(
+        request: Request, error: RegistrationSettingsNotAllowedError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Registration settings cannot change at this stage",
+                "code": "registration_settings_not_allowed",
+            },
+        )
+
+    @application.exception_handler(RegistrationSettingsInvalidError)
+    async def registration_settings_invalid(
+        request: Request, error: RegistrationSettingsInvalidError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "detail": "Registration settings are invalid",
+                "code": "registration_settings_invalid",
+            },
         )
 
     @application.exception_handler(RegistrationNotOpenError)
@@ -327,6 +455,52 @@ def create_app(
             },
         )
 
+    @application.exception_handler(AttendeeAlreadyRegisteredError)
+    async def attendee_already_registered(
+        request: Request, error: AttendeeAlreadyRegisteredError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This attendee is already registered for this event",
+                "code": "already_registered",
+            },
+        )
+
+    @application.exception_handler(AttendeeNotFoundError)
+    async def attendee_not_found(
+        request: Request, error: AttendeeNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "detail": "No attendee account has that email",
+                "code": "attendee_not_found",
+            },
+        )
+
+    @application.exception_handler(CapacityNotSetError)
+    async def capacity_not_set(
+        request: Request, error: CapacityNotSetError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This event has no registration capacity set",
+                "code": "capacity_not_set",
+            },
+        )
+
+    @application.exception_handler(NotEventDayError)
+    async def not_event_day(request: Request, error: NotEventDayError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "Check-in is only open on the event's days",
+                "code": "not_event_day",
+            },
+        )
+
     @application.exception_handler(RegistrationNotFoundError)
     async def registration_not_found(
         request: Request, error: RegistrationNotFoundError
@@ -336,6 +510,18 @@ def create_app(
             content={
                 "detail": "Registration not found",
                 "code": "registration_not_found",
+            },
+        )
+
+    @application.exception_handler(AlreadyCheckedInError)
+    async def already_checked_in(
+        request: Request, error: AlreadyCheckedInError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "This attendee is already checked in",
+                "code": "already_checked_in",
             },
         )
 
@@ -376,6 +562,17 @@ def create_app(
             },
         )
 
+    # The same trick for the SCRUM-24 waiting-list refusals (D10): one 409 per
+    # rule error, each carrying its own code.
+    @application.exception_handler(WaitlistRuleError)
+    async def waitlist_refused(
+        request: Request, error: WaitlistRuleError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=error.status,
+            content={"detail": error.detail, "code": error.code},
+        )
+
     @application.exception_handler(SupabaseRepositoryError)
     async def supabase_unavailable(
         request: Request, error: SupabaseRepositoryError
@@ -397,4 +594,5 @@ def create_app(
 app = create_app(
     outbox_relay=build_outbox_relay(),
     arrangement_review_relay=build_arrangement_review_notification_relay(),
+    periodic_task_runner=build_periodic_task_runner(),
 )

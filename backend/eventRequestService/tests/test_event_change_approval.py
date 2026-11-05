@@ -61,3 +61,33 @@ def test_current_coordinator_approves_nondate_change_and_owner_reads_saved_outco
         assert owner.status_code == 200
         assert owner.json() == [saved]
         assert events.rows == after
+
+
+# AC1-P3, AC3-P2 (partition): accessibility needs are a supported value (SCRUM-35 AC1): an organiser can
+# propose them alone, the Coordinator can approve them, and the event stores the new text
+def test_an_accessibility_only_proposal_can_be_made_and_approved():
+    changes = {"accessibility_needs": "Step-free access and a hearing loop"}
+    client, events, event_id = eligible_fixture("Planning")
+    with client:
+        pending = create_nondate_pending(client, event_id, **changes)
+        assert pending["proposed_changes"] == changes
+        response = approve(client, event_id, pending["id"])
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "Approved"
+    assert events.rows[event_id]["accessibility_needs"] == "Step-free access and a hearing loop"
+
+
+# AC1-N3 (negative): a blank accessibility proposal is refused like any other blank value
+def test_a_blank_accessibility_proposal_is_refused():
+    client, events, event_id = eligible_fixture("Planning")
+    before = deepcopy(events.rows)
+    with client:
+        response = client.post(
+            f"/event-requests/{event_id}/change-requests",
+            headers=headers("organiser-1"),
+            json={"explanation": "No longer needed", "accessibility_needs": "   "},
+        )
+
+    assert response.status_code == 422
+    assert events.rows == before

@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.models.arrangement_review import ArrangementReviewResponse
 from app.models.event_request import (
     AttendeeEventResponse,
+    EventArrangementsResponse,
     EventChangeBookingContext,
     EventChangeDatePlanResponse,
     EventChangeDecision,
@@ -17,6 +18,8 @@ from app.models.event_request import (
     EventChangeRequestResponse,
     EventChangeRequestStatus,
     EventClarificationResponse,
+    EventDetailsUpdate,
+    EventFinalEndUpdate,
     EventRequestCreate,
     EventRequestResponse,
     EventRequestStatus,
@@ -26,7 +29,11 @@ from app.models.event_request import (
     EventStatusHistoryResponse,
 )
 from app.models.registration_review import RegistrationReviewResponse
-from app.repositories import SupabaseEventRequestRepository, SupabaseRepositoryError
+from app.repositories import (
+    EventRequestRpcError,
+    SupabaseEventRequestRepository,
+    SupabaseRepositoryError,
+)
 from app.services.coordinator_assignment_service import (
     CoordinatorAssignmentNotFoundError,
 )
@@ -35,6 +42,7 @@ from app.services.event_request_service import (
     EventChangeBookingConflictError,
     EventChangeBookingPlanError,
     EventChangeDatePlanConflictError,
+    EventChangeSelectionError,
     EventRequestNotFoundError,
     EventRequestService,
 )
@@ -44,7 +52,8 @@ router = APIRouter(prefix="/event-requests", tags=["event requests"])
 EVENT_ORGANISER_ROLE = "event_organiser"
 EVENT_COORDINATOR_ROLE = "event_coordinator"
 _NON_DATE_CHANGE_FIELDS = {
-    "expected_attendance", "venue_requirements", "equipment_requirements", "registration_needs"
+    "expected_attendance", "venue_requirements", "equipment_requirements",
+    "registration_needs", "accessibility_needs",
 }
 
 _PUBLIC_STATUSES = {EventRequestStatus.CONFIRMED, EventRequestStatus.COMPLETED}
@@ -530,6 +539,21 @@ def decide_change_request(
     if change is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Change request not found")
     has_dates = "proposed_date_times" in change.proposed_changes
+    if payload.accepted_fields is not None:
+        # Hotfix 20 (Q&A #104): accept some fields, refuse the others with reasons.
+        if payload.booking_plan is not None and "proposed_date_times" not in payload.accepted_fields:
+            raise HTTPException(422, "Booking plan is only supported when the dates are accepted")
+        try:
+            return service.partially_approve_change_request(
+                request_id, str(change_request_id), coordinator_id, payload,
+            )
+        except EventChangeBookingConflictError as error:
+            raise HTTPException(409, detail={
+                "code": "BOOKING_CONFLICT", "message": str(error),
+                "bookings": [booking.model_dump(mode="json") for booking in error.bookings],
+            }) from error
+        except EventChangeSelectionError as error:
+            raise HTTPException(422, str(error)) from error
     if payload.booking_plan is not None and not has_dates:
         raise HTTPException(422, "Booking plan is only supported for date approval")
     if (
@@ -578,6 +602,29 @@ def update_event_request(
     return service.update(str(event_request_id), organiser_id, payload)
 
 
+@router.patch("/{event_request_id}/details", response_model=EventRequestResponse)
+def update_event_details(
+    event_request_id: UUID,
+    payload: EventDetailsUpdate,
+    coordinator_id: CoordinatorDependency,
+    service: ServiceDependency,
+) -> EventRequestResponse:
+    """Hotfix 8 (SCRUM-29, Q&A #102): the assigned Coordinator's edit."""
+    return service.update_by_coordinator(str(event_request_id), coordinator_id, payload)
+
+
+@router.get("/{event_request_id}/arrangements", response_model=EventArrangementsResponse)
+def get_event_arrangements(
+    event_request_id: UUID,
+    caller: CallerDependency,
+    request: Request,
+    service: ServiceDependency,
+) -> dict:
+    """Hotfix 14: anyone who may read the event may see what is booked for it."""
+    get_event_request(event_request_id, caller, request, service)
+    return service.get_arrangements(str(event_request_id))
+
+
 @router.post("/{event_request_id}/submit", response_model=EventRequestResponse)
 def submit_draft_event_request(
     event_request_id: UUID,
@@ -611,3 +658,35 @@ def delete_event_request(
 ) -> Response:
     service.delete(str(event_request_id), organiser_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{event_request_id}/final-end", response_model=EventRequestResponse)
+def set_event_final_end(
+    event_request_id: UUID,
+    payload: EventFinalEndUpdate,
+    coordinator_id: CoordinatorDependency,
+    service: ServiceDependency,
+    request: Request,
+) -> EventRequestResponse:
+    """Record only an explicit coordinator end; never infer it from bookings."""
+    request_id = str(event_request_id)
+    try:
+        assignment = _coordinator_assignment_service(request).get_current(request_id)
+        if assignment.coordinator_id != coordinator_id:
+            raise HTTPException(403, "Only the assigned coordinator can record the final end")
+        return service.set_final_end(request_id, coordinator_id, payload)
+    except CoordinatorAssignmentNotFoundError as error:
+        raise HTTPException(404, "Event request not found") from error
+    except EventRequestRpcError as error:
+        if error.errcode == "P0002":
+            raise HTTPException(404, "Event request not found") from error
+        if error.errcode == "P0003":
+            raise HTTPException(403, "Only the assigned coordinator can record the final end") from error
+        if error.errcode == "P0004":
+            raise HTTPException(409, {
+                "code": "final_end_unavailable",
+                "message": "The final event end can only be recorded while Approved or Planning.",
+            }) from error
+        raise HTTPException(502, "Final event end unavailable") from error
+    except (SupabaseRepositoryError, ValidationError) as error:
+        raise HTTPException(502, "Final event end unavailable") from error

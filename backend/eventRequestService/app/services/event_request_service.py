@@ -18,6 +18,8 @@ from app.models.event_request import (
     EventChangeRequestResponse,
     EventChangeRequestStatus,
     EventClarificationResponse,
+    EventDetailsUpdate,
+    EventFinalEndUpdate,
     EventRequestCreate,
     EventRequestResponse,
     EventRequestStatus,
@@ -109,6 +111,14 @@ class EventChangeBookingPlanError(Exception):
     """Invalid complete range input; never forward a raw database message."""
 
 
+class EventChangeSelectionError(Exception):
+    """Hotfix 20: the accepted fields, a missing reason or the booking plan are invalid."""
+
+
+class EventDetailsConflictError(Exception):
+    """The event changed since it was loaded, or its status does not allow edits."""
+
+
 class EventRequestTransitionConflictError(Exception):
     """The row wasn't in from_status when the transition was attempted —
     a concurrent change, since callers check status before transitioning."""
@@ -119,6 +129,15 @@ class EventRequestTransitionConflictError(Exception):
             f"transitioning to {to_status!r}"
         )
         self.event_request_id = event_request_id
+
+
+# Where a change request can be raised and decided, including after confirmation
+# (hotfix 9, Week 1 brief, Q&A #8).
+CHANGEABLE_STATUSES = {
+    EventRequestStatus.APPROVED,
+    EventRequestStatus.PLANNING,
+    EventRequestStatus.CONFIRMED,
+}
 
 
 class EventRequestService:
@@ -326,6 +345,16 @@ class EventRequestService:
             )
         return self._row_to_response(row)
 
+    def set_final_end(
+        self, event_request_id: str, coordinator_id: str, payload: EventFinalEndUpdate
+    ) -> EventRequestResponse:
+        """The native setter rechecks state and assignment under the event lock."""
+        row = self.repository.set_final_end(
+            event_request_id, coordinator_id,
+            payload.final_event_end_at.astimezone(UTC),
+        )
+        return self._row_to_response(row)
+
     def advance_by_coordinator(
         self,
         event_request_id: str,
@@ -434,7 +463,7 @@ class EventRequestService:
             if change.id != change_request_id or change.event_request_id != event_request_id:
                 return None
             if (
-                event.status not in {EventRequestStatus.APPROVED, EventRequestStatus.PLANNING}
+                event.status not in CHANGEABLE_STATUSES
                 or change.status != EventChangeRequestStatus.PENDING
             ):
                 raise EventChangeDatePlanConflictError("date_plan_unavailable")
@@ -490,12 +519,12 @@ class EventRequestService:
             change = EventChangeRequestResponse.model_validate(row)
             if change.id != change_request_id or change.event_request_id != event_request_id:
                 return None
-            if event.status not in {EventRequestStatus.APPROVED, EventRequestStatus.PLANNING} or change.status != EventChangeRequestStatus.PENDING:
+            if event.status not in CHANGEABLE_STATUSES or change.status != EventChangeRequestStatus.PENDING:
                 raise EventChangeDatePlanConflictError("date_plan_unavailable")
             fields = set(change.proposed_changes)
             if "proposed_date_times" not in fields or not fields <= {
                 "proposed_date_times", "expected_attendance", "venue_requirements",
-                "equipment_requirements", "registration_needs",
+                "equipment_requirements", "registration_needs", "accessibility_needs",
             }:
                 raise EventChangeDatePlanConflictError("unsupported_date_mapping")
             if event.updated_at.utcoffset() is None or change.base_event_updated_at.utcoffset() is None:
@@ -530,6 +559,89 @@ class EventRequestService:
         except (SupabaseRepositoryError, ValidationError, ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
             raise SupabaseRepositoryError("Date change plan unavailable") from error
 
+    def _status_before_change(self, event_request_id: str) -> str | None:
+        """Best effort: only used to notice an event leaving Confirmed."""
+        try:
+            row = self.repository.get_by_id(event_request_id)
+        except SupabaseRepositoryError:
+            return None
+        return row.get("status") if row else None
+
+    def _notify_if_no_longer_confirmed(
+        self, event_request_id: str, status_before: str | None
+    ) -> None:
+        """A saved change that flagged arrangements returned a Confirmed event to
+        Planning (0071), so the Organiser is told (Q&A #105). Never fails the change."""
+        if status_before != EventRequestStatus.CONFIRMED.value:
+            return
+        try:
+            row = self.repository.get_by_id(event_request_id)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not reread event request %s to see if it left Confirmed",
+                event_request_id,
+                exc_info=True,
+            )
+            return
+        if row is None or row.get("status") != EventRequestStatus.PLANNING.value:
+            return
+        self.notification_client.notify_event_no_longer_confirmed(
+            event_request_id=event_request_id,
+            event_name=row.get("event_name"),
+            organiser_id=row["organiser_id"],
+            version=str(row.get("updated_at")),
+        )
+
+    def update_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, payload: EventDetailsUpdate
+    ) -> EventRequestResponse:
+        """Hotfix 8: the database checks assignment, status and version under the
+        event lock, and its triggers flag arrangements for significant changes."""
+        changes = payload.model_dump(
+            mode="json", exclude_unset=True, exclude={"expected_updated_at"}
+        )
+        before = None
+        try:
+            before = self.repository.get_by_id(event_request_id)
+        except SupabaseRepositoryError:
+            logger.warning("Could not read event request %s first", event_request_id, exc_info=True)
+        status_before = before.get("status") if before else None
+        try:
+            row = self.repository.update_by_coordinator(
+                event_request_id,
+                coordinator_id,
+                payload.expected_updated_at.isoformat(),
+                changes,
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == "P0002":
+                raise EventRequestNotFoundError(event_request_id) from error
+            if error.errcode == "P0003":
+                raise EventRequestForbiddenError(event_request_id) from error
+            if error.errcode == "P0004":
+                raise EventDetailsConflictError(event_request_id) from error
+            raise
+        response = self._row_to_response(row)
+        self._notify_if_no_longer_confirmed(event_request_id, status_before)
+        if (
+            before is not None
+            and "proposed_date_times" in changes
+            and row.get("proposed_date_times") != before.get("proposed_date_times")
+        ):
+            attendee_ids = self._registered_attendee_ids(event_request_id)
+            if attendee_ids:
+                self.notification_client.notify_event_changed(
+                    event_request_id=event_request_id,
+                    event_name=row.get("event_name"),
+                    change_request_id=f"coordinator-edit:{row.get('updated_at')}",
+                    proposed_date_times=changes["proposed_date_times"],
+                    attendee_ids=attendee_ids,
+                )
+        return response
+
+    def get_arrangements(self, event_request_id: str) -> dict[str, list[dict[str, Any]]]:
+        return self.repository.get_event_arrangements(event_request_id)
+
     def decide_change_request(
         self,
         event_request_id: str,
@@ -541,6 +653,7 @@ class EventRequestService:
 
         Database functions own current-state checks and atomic plan application.
         """
+        status_before = self._status_before_change(event_request_id)
         try:
             row = self.repository.decide_change_request(
                 event_request_id,
@@ -551,9 +664,11 @@ class EventRequestService:
             )
         except EventRequestRpcError as error:
             self._raise_change_request_error(error, event_request_id)
-        return self._saved_change_decision(
+        saved = self._saved_change_decision(
             row, event_request_id, change_request_id, coordinator_id, payload,
         )
+        self._notify_if_no_longer_confirmed(event_request_id, status_before)
+        return saved
 
     def approve_date_change_request(
         self, event_request_id: str, change_request_id: str, coordinator_id: str,
@@ -563,6 +678,7 @@ class EventRequestService:
         plan = None if payload.booking_plan is None else [
             booking.model_dump(mode="json") for booking in payload.booking_plan
         ]
+        status_before = self._status_before_change(event_request_id)
         try:
             row = self.repository.approve_date_change_request(
                 event_request_id, change_request_id, coordinator_id, payload.reason, plan,
@@ -584,9 +700,237 @@ class EventRequestService:
             self._raise_change_request_error(error, event_request_id)
         except SupabaseRepositoryError as error:
             raise SupabaseRepositoryError("Event change decision unavailable") from error
-        return self._saved_change_decision(
+        saved = self._saved_change_decision(
             row, event_request_id, change_request_id, coordinator_id, payload,
             require_booking_plan=True,
+        )
+        self._notify_if_no_longer_confirmed(event_request_id, status_before)
+        return saved
+
+    def partially_approve_change_request(
+        self, event_request_id: str, change_request_id: str, coordinator_id: str,
+        payload: EventChangeDecision,
+    ) -> EventChangeRequestResponse:
+        """Hotfix 20 (Q&A #104): apply the accepted fields, refuse the rest with reasons.
+
+        The database narrows the request and runs the ordinary approval in one
+        transaction, so a refusal leaves the request exactly as it was."""
+        plan = None if payload.booking_plan is None else [
+            booking.model_dump(mode="json") for booking in payload.booking_plan
+        ]
+        status_before = self._status_before_change(event_request_id)
+        try:
+            row = self.repository.partially_approve_change_request(
+                event_request_id, change_request_id, coordinator_id,
+                list(payload.accepted_fields or []), dict(payload.rejected_reasons or {}),
+                payload.reason, plan,
+            )
+        except EventRequestRpcError as error:
+            if error.errcode == "P0005":
+                try:
+                    facts = json.loads(error.details)
+                    if not isinstance(facts, list) or not facts:
+                        raise ValueError("Missing conflict facts")
+                    bookings = [EventChangeBookingConflict.model_validate(item) for item in facts]
+                except (ValueError, TypeError, ValidationError) as invalid:
+                    raise SupabaseRepositoryError("Event change decision unavailable") from invalid
+                raise EventChangeBookingConflictError(bookings) from error
+            if error.errcode == "22023":
+                raise EventChangeSelectionError(
+                    "Choose at least one field to accept and at least one to refuse, give a "
+                    "reason for every refused field, and give a complete booking plan when the "
+                    "dates are accepted."
+                ) from error
+            if error.errcode not in {"P0002", "P0003", "P0004"}:
+                raise SupabaseRepositoryError("Event change decision unavailable") from error
+            self._raise_change_request_error(error, event_request_id)
+        try:
+            change = EventChangeRequestResponse.model_validate(row)
+        except ValidationError as error:
+            raise SupabaseRepositoryError("Event change decision unavailable") from error
+        if (
+            change.status != EventChangeRequestStatus.PARTIALLY_APPROVED
+            or change.id != change_request_id
+            or change.event_request_id != event_request_id
+            or change.decided_at is None
+        ):
+            raise SupabaseRepositoryError("Event change decision unavailable")
+        try:
+            self.notification_client.notify_event_change_partly_approved(
+                event_request_id=change.event_request_id,
+                change_request_id=change.id,
+                organiser_id=change.organiser_id,
+                accepted_fields=sorted(change.proposed_changes),
+                refused={
+                    field: str((detail or {}).get("reason", ""))
+                    for field, detail in (change.rejected_changes or {}).items()
+                },
+                reason=change.decision_reason,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to notify organiser of partly approved change %s",
+                change.id, exc_info=True,
+            )
+        try:
+            self._notify_attendees_of_date_change(change)
+        except Exception:
+            logger.warning(
+                "Failed to notify attendees of partly approved change %s",
+                change.id, exc_info=True,
+            )
+        self._notify_if_no_longer_confirmed(event_request_id, status_before)
+        return change
+
+    def _registered_attendee_ids(self, event_request_id: str) -> list[str]:
+        """Who to tell about an event-wide change. Never raises: the change that
+        triggered the notice is already saved."""
+        try:
+            return self.repository.list_registered_attendee_ids(event_request_id)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not list the attendees of event request %s to notify them",
+                event_request_id,
+                exc_info=True,
+            )
+            return []
+
+    def change_organiser(
+        self, event_request_id: str, coordinator_id: str, organiser_email: str, reason: str
+    ) -> tuple[str | None, EventRequestResponse]:
+        """Hotfix 24: returns the previous Organiser's id (read just before) and the event."""
+        try:
+            previous = self.repository.get_by_id(event_request_id)
+        except SupabaseRepositoryError:
+            previous = None
+        row = self.repository.change_organiser(
+            event_request_id, coordinator_id, organiser_email, reason
+        )
+        return (previous or {}).get("organiser_id"), self._row_to_response(row)
+
+    def postpone_by_coordinator(
+        self, event_request_id: str, coordinator_id: str, reason: str
+    ) -> EventRequestResponse:
+        """Hotfix 22 (Q&A #69, #121): release the arrangements and keep the record."""
+        return self._row_to_response(
+            self.repository.postpone_by_coordinator(event_request_id, coordinator_id, reason)
+        )
+
+    def resume_postponed(
+        self, event_request_id: str, coordinator_id: str, new_date_times: list[str]
+    ) -> EventRequestResponse:
+        return self._row_to_response(
+            self.repository.resume_postponed(event_request_id, coordinator_id, new_date_times)
+        )
+
+    def _people_told_about_postponement(
+        self, event_request: EventRequestResponse, *, released_reason: str | None
+    ) -> list[str]:
+        """The Organiser, every registered Attendee and (after a postponement) the staff
+        whose bookings were released. Never raises: the change is already saved."""
+        recipient_ids = [event_request.organiser_id]
+        recipient_ids += [
+            attendee_id
+            for attendee_id in self._registered_attendee_ids(event_request.id)
+            if attendee_id not in recipient_ids
+        ]
+        if released_reason is not None:
+            try:
+                recipient_ids += [
+                    staff_id
+                    for staff_id in self.repository.cancellation_staff_ids(event_request.id)
+                    if staff_id not in recipient_ids
+                ]
+            except SupabaseRepositoryError:
+                logger.warning(
+                    "Could not find the staff of event request %s to tell them it was postponed",
+                    event_request.id,
+                    exc_info=True,
+                )
+        return recipient_ids
+
+    def notify_of_postponement(self, event_request: EventRequestResponse, reason: str) -> None:
+        self.notification_client.notify_event_postponed(
+            event_request_id=event_request.id,
+            event_name=event_request.event_name,
+            postponement_key=f"{event_request.id}:{event_request.updated_at.isoformat()}",
+            recipient_ids=self._people_told_about_postponement(
+                event_request, released_reason="Event postponed"
+            ),
+            reason=reason,
+        )
+
+    def notify_of_resumption(self, event_request: EventRequestResponse) -> None:
+        self.notification_client.notify_event_resumed(
+            event_request_id=event_request.id,
+            event_name=event_request.event_name,
+            resume_key=f"{event_request.id}:{event_request.updated_at.isoformat()}",
+            recipient_ids=self._people_told_about_postponement(event_request, released_reason=None),
+            proposed_date_times=[d.isoformat() for d in event_request.proposed_date_times],
+        )
+
+    def notify_owners_of_cancellation(self, event_request: EventRequestResponse) -> None:
+        """SCRUM-57 AC1: a saved cancellation reaches the Organiser and the Coordinator."""
+        recipient_ids = [event_request.organiser_id]
+        try:
+            # SCRUM-57 AC1b: and the staff responsible for what the cancellation released.
+            recipient_ids += [
+                staff_id
+                for staff_id in self.repository.cancellation_staff_ids(event_request.id)
+                if staff_id not in recipient_ids
+            ]
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not find the staff of event request %s to tell them it was cancelled",
+                event_request.id,
+                exc_info=True,
+            )
+        try:
+            coordinator_id = self.repository.latest_coordinator_id(event_request.id)
+        except SupabaseRepositoryError:
+            # The cancellation is already saved; tell the Organiser anyway.
+            logger.warning(
+                "Could not find the coordinator of event request %s to tell them "
+                "it was cancelled",
+                event_request.id,
+                exc_info=True,
+            )
+            coordinator_id = None
+        if coordinator_id is not None and coordinator_id not in recipient_ids:
+            recipient_ids.append(coordinator_id)
+        self.notification_client.notify_event_cancellation_recorded(
+            event_request_id=event_request.id,
+            event_name=event_request.event_name,
+            recipient_ids=recipient_ids,
+        )
+
+    def notify_attendees_of_cancellation(self, event_request: EventRequestResponse) -> None:
+        """SCRUM-38 AC4: a saved cancellation reaches every registered Attendee."""
+        attendee_ids = self._registered_attendee_ids(event_request.id)
+        if attendee_ids:
+            self.notification_client.notify_event_cancelled(
+                event_request_id=event_request.id,
+                event_name=event_request.event_name,
+                attendee_ids=attendee_ids,
+            )
+
+    def _notify_attendees_of_date_change(self, change: EventChangeRequestResponse) -> None:
+        """SCRUM-38 AC4: an approved change to the dates reaches every registered
+        Attendee. Attendees see only the dates of a change, so any other approved
+        change (attendance, venue, equipment) tells them nothing."""
+        new_dates = change.proposed_changes.get("proposed_date_times")
+        if not new_dates:
+            return
+        attendee_ids = self._registered_attendee_ids(change.event_request_id)
+        if not attendee_ids:
+            return
+        event = self.repository.get_by_id(change.event_request_id) or {}
+        self.notification_client.notify_event_changed(
+            event_request_id=change.event_request_id,
+            event_name=event.get("event_name"),
+            change_request_id=change.id,
+            proposed_date_times=new_dates,
+            attendee_ids=attendee_ids,
         )
 
     def _saved_change_decision(
@@ -625,6 +969,13 @@ class EventRequestService:
                 # stored transaction. Even an unexpected sender bug cannot undo it.
                 logger.warning(
                     "Failed to notify organiser of approved change %s",
+                    change.id, exc_info=True,
+                )
+            try:
+                self._notify_attendees_of_date_change(change)
+            except Exception:
+                logger.warning(
+                    "Failed to notify attendees of approved change %s",
                     change.id, exc_info=True,
                 )
         elif (

@@ -24,7 +24,7 @@ def test_snapshot_reads_assignment_then_event_with_callers_token() -> None:
     ]
     assert all(r.headers["authorization"] == "Bearer abc" for r in events.requests)
     assert all("apikey" not in r.headers for r in events.requests)
-    assert snapshot.status == "Under Review"
+    assert snapshot.status == "Planning"
     assert snapshot.event_name == "Annual Gala"
     assert snapshot.proposed_date_times == GALA_DATES
 

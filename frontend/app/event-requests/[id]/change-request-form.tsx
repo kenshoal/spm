@@ -37,6 +37,7 @@ export function ChangeRequestForm({ eventRequestId }: { eventRequestId: string }
           ["venue_requirements", "Proposed venue requirements"],
           ["equipment_requirements", "Proposed equipment requirements"],
           ["registration_needs", "Proposed registration needs"],
+          ["accessibility_needs", "Proposed accessibility needs"],
         ].map(([name, label]) => (
           <label key={name} className="sm:col-span-2 text-sm font-semibold text-[#34463f]">{label}
             <textarea name={name} maxLength={2000} rows={3} className="mt-2 w-full rounded-xl border border-[#cfd9d4] px-4 py-3" />

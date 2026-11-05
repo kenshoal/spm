@@ -20,11 +20,14 @@ const venue: Venue = {
   operating_slots: ["AM", "PM"],
   setup_minutes: 30,
   turnaround_minutes: 45,
+  operating_start_minute: 420,
+  operating_end_minute: 1440,
   status: "available",
   created_at: "2026-09-13T03:00:00Z",
   updated_at: "2026-09-14T03:00:00Z",
 };
 
+// SCRUM-30 AC1-H3 (happy): the create form offers every catalogue attribute and no status field
 // Purpose: SCRUM-30 AC1 — a new venue form asks for every catalogue attribute.
 test("new venue form offers every attribute and no status", () => {
   render(<VenueForm />);
@@ -40,6 +43,7 @@ test("new venue form offers every attribute and no status", () => {
   expect(screen.getByRole("button", { name: "Add venue" })).toBeDefined();
 });
 
+// SCRUM-30 AC2-H2 (happy): the edit form starts from the venue's current attributes
 // Purpose: SCRUM-30 AC2 — editing starts from the venue's current attributes.
 test("edit form is prefilled with the current attributes", () => {
   render(<VenueForm venue={venue} />);
@@ -61,6 +65,7 @@ test("edit form is prefilled with the current attributes", () => {
 // Uses "-3" rather than "abc": a number input sanitizes non-numeric text to "" in
 // the DOM regardless of which value set it, so only a syntactically-numeric-but-
 // invalid string can distinguish "echoed the typed text" from "fell back to venue".
+// SCRUM-30 AC1-N6 (negative): an invalid capacity echoed after a failed edit overrides the stored value
 test("an invalid capacity echoed after a failed edit submission overrides the stored value", async () => {
   vi.mocked(updateVenue).mockResolvedValue({
     message: "Check the highlighted fields.",
@@ -72,8 +77,11 @@ test("an invalid capacity echoed after a failed edit submission overrides the st
       facilities: venue.facilities.join(", "),
       accessibility_features: venue.accessibility_features.join(", "),
       supported_layouts: venue.supported_layouts,
+      layout_capacities: {},
       setup_minutes: String(venue.setup_minutes),
       turnaround_minutes: String(venue.turnaround_minutes),
+      operating_start_minute: String(venue.operating_start_minute),
+      operating_end_minute: String(venue.operating_end_minute),
       status: venue.status,
     },
   });
@@ -110,4 +118,49 @@ test("edit form is prefilled with the setup and turnaround minutes", () => {
 
   expect((screen.getByLabelText("Setup time (minutes)") as HTMLInputElement).value).toBe("30");
   expect((screen.getByLabelText("Turnaround time (minutes)") as HTMLInputElement).value).toBe("45");
+});
+
+// SCRUM-30 AC1-H7 (happy): a new venue form offers an opening and a closing time, starting at the whole day
+test("new venue form offers opening and closing times on 15-minute steps from 07:00 to 24:00", () => {
+  render(<VenueForm />);
+
+  const opening = screen.getByLabelText("Opening time") as HTMLSelectElement;
+  const closing = screen.getByLabelText("Closing time") as HTMLSelectElement;
+  expect(opening.value).toBe("420");
+  expect(closing.value).toBe("1440");
+  const openingTimes = Array.from(opening.options).map((option) => option.textContent);
+  const closingTimes = Array.from(closing.options).map((option) => option.textContent);
+  expect(openingTimes[0]).toBe("07:00");
+  expect(openingTimes.at(-1)).toBe("23:45");
+  expect(closingTimes[0]).toBe("07:15");
+  expect(closingTimes.at(-1)).toBe("24:00");
+  expect(openingTimes).toHaveLength(68);
+});
+
+// SCRUM-30 AC2-H2 (happy): the edit form shows the venue's own hours
+test("edit venue form shows the stored operating hours", () => {
+  render(<VenueForm venue={{ ...venue, operating_start_minute: 540, operating_end_minute: 1080 }} />);
+
+  expect((screen.getByLabelText("Opening time") as HTMLSelectElement).value).toBe("540");
+  expect((screen.getByLabelText("Closing time") as HTMLSelectElement).value).toBe("1080");
+});
+
+// SCRUM-30 AC6-N8 (negative): a refusal of the hours is shown and what was chosen is kept
+test("a refused range is shown and the chosen times are kept", async () => {
+  vi.mocked(updateVenue).mockResolvedValue({
+    message: "Check the highlighted fields.",
+    errors: { operating_hours: "Choose an opening time before the closing time, from 07:00 to 24:00 in steps of 15 minutes." },
+    values: {
+      name: venue.name, location: venue.location, max_capacity: "120", facilities: "", accessibility_features: "",
+      supported_layouts: [], layout_capacities: {}, setup_minutes: "0", turnaround_minutes: "0",
+      operating_start_minute: "900", operating_end_minute: "600", status: "available",
+    },
+  });
+
+  render(<VenueForm venue={venue} />);
+  fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await waitFor(() => expect(screen.getByText(/opening time before the closing time/i)).toBeDefined());
+  expect((screen.getByLabelText("Opening time") as HTMLSelectElement).value).toBe("900");
+  expect((screen.getByLabelText("Closing time") as HTMLSelectElement).value).toBe("600");
 });

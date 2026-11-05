@@ -26,6 +26,8 @@ const STATUS_DESCRIPTIONS: Record<EventRequestStatus, string> = {
   Completed: "This event has finished and reached the final stage.",
   Cancelled: "This request has been cancelled.",
   Rejected: "This request was rejected after review.",
+  Withdrawn: "This request was withdrawn at the organiser's request while it was under review.",
+  Postponed: "This event is postponed. Its bookings were released and a new date will be set.",
 };
 
 function milestoneState(status: EventRequestStatus, milestone: Milestone): MilestoneState {
@@ -36,6 +38,12 @@ function milestoneState(status: EventRequestStatus, milestone: Milestone): Miles
   }
   if (status === "Cancelled") {
     return milestone === "Draft" || milestone === "Submitted" ? "done" : "upcoming";
+  }
+  if (status === "Withdrawn") {
+    return MILESTONES.indexOf(milestone) <= MILESTONES.indexOf("Under Review") ? "done" : "upcoming";
+  }
+  if (status === "Postponed") {
+    return MILESTONES.indexOf(milestone) <= MILESTONES.indexOf("Approved") ? "done" : "upcoming";
   }
   const reachedStatus = status === "Changes Requested" ? "Under Review" : status;
   const reachedIndex = MILESTONES.indexOf(reachedStatus as Milestone);
@@ -75,9 +83,14 @@ export function StatusProgress({
           A clarification response is required before review can continue. The submitted request remains read-only.
         </div>
       ) : null}
-      {status === "Cancelled" || status === "Rejected" ? (
+      {status === "Cancelled" || status === "Rejected" || status === "Withdrawn" ? (
         <div role="status" className="mt-5 rounded-xl border border-[#f2cfca] bg-[#fdf3f1] px-4 py-3 text-sm text-[#8c3a2b]">
           This request ended as {status.toLowerCase()}; the later stages shown below were not reached.
+        </div>
+      ) : null}
+      {status === "Postponed" ? (
+        <div role="status" className="mt-5 rounded-xl border border-[#ead7ae] bg-[#fff9eb] px-4 py-3 text-sm text-[#6f4b12]">
+          The event record is kept while it waits for a new date. Planning and confirmation start again once the date is set.
         </div>
       ) : null}
 

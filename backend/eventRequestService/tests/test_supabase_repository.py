@@ -108,7 +108,8 @@ def test_decide_change_request_posts_expected_rpc_payload() -> None:
     assert row == expected
 
 
-# Purpose: Verifies draft creation uses the server-only key and organiser identity.
+# SCRUM-8 AC1-H2, AC6 (happy): draft creation is a single server-key POST that
+# stores the Draft status in event_requests — no assignment or notification call.
 def test_create_sends_expected_supabase_request() -> None:
     captured: dict[str, object] = {}
 
@@ -148,6 +149,8 @@ def test_create_sends_expected_supabase_request() -> None:
 
 
 # Purpose: Confirms retrieval filters by both request ID and organiser ID.
+# SCRUM-29 AC1-P2 (partition): a view is scoped to the request id and the
+# owning organiser, so an authorised user reads only an event they have access to.
 def test_get_scopes_query_to_organiser() -> None:
     captured_query: dict[str, str] = {}
 
@@ -168,6 +171,8 @@ def test_get_scopes_query_to_organiser() -> None:
 
 
 # Purpose: Prevents a draft update from escaping the owner and Draft-status filters.
+# SCRUM-29 AC1-P1 (partition): an edit is one PATCH scoped to the request id,
+# the owning organiser and the editable status — it cannot escape those filters.
 def test_update_scopes_query_to_owner_and_draft_status() -> None:
     captured: dict[str, object] = {}
 
@@ -196,7 +201,9 @@ def test_update_scopes_query_to_owner_and_draft_status() -> None:
     assert captured["body"] == {"event_name": "Updated"}
 
 
-# Purpose: Makes submission a single owner-scoped Draft-to-Submitted database update.
+# SCRUM-11 AC1-P1, AC5, AC6 (partition): submission is one PATCH scoped to id,
+# owner and Draft status, writing only the new values plus Submitted — no other
+# table is touched, so submission creates no assignment.
 def test_submit_atomically_scopes_and_changes_status() -> None:
     captured: dict[str, object] = {}
 
@@ -687,3 +694,33 @@ def test_latest_coordinator_id_reads_newest_assignment() -> None:
         "select": "coordinator_id",
     }
 
+
+
+# SCRUM-38 AC4-X1 (cross-cutting): the attendee lookup asks for only the attendee ids of
+# one event's active registrations, oldest first, and returns them as a plain list.
+def test_list_registered_attendee_ids_queries_active_registrations_of_one_event() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200, json=[{"attendee_id": "attendee-1"}, {"attendee_id": "attendee-2"}]
+        )
+
+    repository = SupabaseEventRequestRepository(
+        "https://project.supabase.co",
+        "sb_secret_test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert repository.list_registered_attendee_ids("event-1") == [
+        "attendee-1",
+        "attendee-2",
+    ]
+    assert seen[0].url.path == "/rest/v1/event_registrations"
+    assert dict(seen[0].url.params) == {
+        "event_request_id": "eq.event-1",
+        "status": "eq.Registered",
+        "order": "created_at.asc",
+        "select": "attendee_id",
+    }

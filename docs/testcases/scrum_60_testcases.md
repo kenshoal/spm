@@ -120,6 +120,8 @@ Agreed with Heng Rui (SCRUM-64, messages 2137, 2151, 2168, 2175, 2194) and Tate 
 
 **Local evidence, 18 October 2026 (increment 3, branch `feat/scrum-60-safety-check`):** Red first for every new API and unit case (missing route: 422/403; missing modules). Green: `backend/eventRequestService` 388 passed; `backend/venueService` 453 passed (`tzdata` installed into the local venv for Windows); `backend/equipmentService` 333 passed; `ruff check .` clean in all three. `frontend`: `vitest` 364 passed, typecheck, lint and `npm run build` clean; `npx playwright test` 41 passed (2 new), against the mock APIs in `frontend/e2e/support`, not the real services.
 
+**Label locations (appendix sweep reference, 1 November 2026):** these matrix rows already carry their label comments, referenced here instead of stacking new ones. AC3-H1 (increment 2): `backend/eventRequestService/tests/test_safety_review.py`, label `# AC3-H1 (happy): approval confirms the event and records who decided.` above `test_safety_officer_approves_event` (file named in the increment-2 execution record). AC2-N3 (increment 3): `backend/equipmentService/tests/test_reservations_api.py`, label `# AC2-N3 (negative, SCRUM-60): reading is all the Safety Officer can do; reserving stays Technical Support's.` above `test_safety_officer_cannot_reserve`. AC2-X1 (increment 3): `frontend/__tests__/safety.test.tsx`, label `// AC2-X1 (cross-cutting): only active blocks that overlap the booking's dates and times (SCRUM-65) are restrictions` above `shows only active blocks overlapping the booking`.
+
 ## Latest execution record
 
 | ID | Automation status | Actual result | Execution status | Build or commit | Executed by and date | Remarks and evidence |

@@ -48,9 +48,13 @@ def override(authorization: str | None = Header(default=None)) -> AuthenticatedC
 class SpyNotificationClient:
     def __init__(self) -> None:
         self.safety_changes: list[dict[str, Any]] = []
+        self.safety_rejections: list[dict[str, Any]] = []
 
     def notify_safety_changes_requested(self, **kwargs: Any) -> None:
         self.safety_changes.append(kwargs)
+
+    def notify_safety_rejected(self, **kwargs: Any) -> None:
+        self.safety_rejections.append(kwargs)
 
     # The Organiser's "confirmed" notice is SCRUM-36's; ignored here.
     def notify_event_confirmed(self, **kwargs: Any) -> None:
@@ -287,11 +291,42 @@ def test_repeated_decision_is_refused() -> None:
     assert len(events.safety_review_rows) == 1
 
 
-# AC6-N2 (negative): Reject is parked until the customer answers.
-def test_reject_is_not_offered() -> None:
-    client, events, event_request_id, _ = safety_fixture()
+# AC3-H1 (happy, hotfix 3, Q&A #130): a rejection returns the event to planning, not cancelled
+def test_reject_returns_the_event_to_planning() -> None:
+    client, events, event_request_id, notifier = safety_fixture()
 
     response = decide(client, event_request_id, {"decision": "rejected", "reason": REASON})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "Planning"
+    row = events.safety_review_rows[-1]
+    assert row["decision"] == "rejected"
+    assert row["reason"] == REASON
+    assert notifier.safety_rejections == [
+        {
+            "event_request_id": event_request_id,
+            "coordinator_id": COORDINATOR,
+            "reason": REASON,
+        }
+    ]
+    assert notifier.safety_changes == []
+
+
+# AC3-N1 (negative, hotfix 3): a rejection needs a reason and changes nothing without one
+def test_reject_without_a_reason_is_refused() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+
+    response = decide(client, event_request_id, {"decision": "rejected", "reason": "  "})
+
+    assert response.status_code == 422
+    assert_unchanged(events, event_request_id)
+
+
+# AC3-N2 (negative, hotfix 3): an unknown decision is still refused
+def test_unknown_decision_is_refused() -> None:
+    client, events, event_request_id, _ = safety_fixture()
+
+    response = decide(client, event_request_id, {"decision": "maybe", "reason": REASON})
 
     assert response.status_code == 422
     assert_unchanged(events, event_request_id)

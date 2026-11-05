@@ -130,3 +130,36 @@ Environment: cloud workspace, Python 3.13, `uv`; disposable local PostgreSQL 16.
 Mutation checks (the tests failed for each): `now >= start` → `>`; `min` → `max` of the dates; ownership filter removed; early `check_withdrawal` removed; event row not locked (the race script failed with `event full`). Not run: `count_active` counting Withdrawn rows (covered by AC3-H1 asserting places remaining).
 
 Not yet done: AC1-H3, AC2-N8, AC2-N9 (blocked on `0060` / `0061`), shared-database rollout of `0062`, the Withdraw button.
+
+## Follow-up: withdrawal notice (AC5, added 26 October 2026)
+
+Not in the Jira ACs. SCRUM-38 AC1 split it out ("the confirmation of a withdrawal is SCRUM-22's `registration_withdrawn`", `docs/testcases/scrum_38_testcases.md`), and Yang agreed to build it. Built on the SCRUM-38 branch (`feat/scrum-38-registration-notices`) because it reuses that branch's `NotificationClient` registration helper and the `RegistrationService` constructor wiring. Merge SCRUM-38 first.
+
+**AC5:** Given an Attendee's withdrawal is saved, when it completes, then the Attendee receives `registration_withdrawn` (event name, status `Withdrawn`) through the same `POST /notifications/events` call, once per registration. A refused withdrawal, or one the database refuses after the early check, tells nobody. A notification failure never undoes the withdrawal.
+
+Decisions: the key is per registration and type (`registration-withdrawn:<registration id>`), so a repeat is stored once and a later registration, once withdrawn, notifies again. Recipient is the Attendee only. No link in the inbox line, because the frontend has no Attendee event page yet.
+
+| ID | AC | Scenario | Technique | Expected | Layer |
+| --- | --- | --- | --- | --- | --- |
+| AC5-H1 | AC5 | Withdrawing tells the Attendee after the withdrawal is saved | Happy | 200; one `registration_withdrawn` with event id, attendee, name, registration id | API + service |
+| AC5-N1 | AC5 | Refused withdrawal (not owner, unknown, already withdrawn, started, not Confirmed) | Negative | 404 / 409; nothing sent | API + service |
+| AC5-N2 | AC5 | Notification service unreachable | Negative | 200 Withdrawn; row stays Withdrawn | API + client |
+| AC5-H2 | AC5 | Client posts the agreed shape with a stable key | Happy | `event_type`, `recipient_id`, `event_id` = uuid5 of `registration-withdrawn:<id>`, payload with status Withdrawn | Client |
+| AC5-B1 | AC5 | Two registrations by one attendee | Boundary | Different keys | Client |
+| AC5-N3 | AC5 | Notification service answers 500 | Negative | Swallowed, not raised | Client |
+| AC5-N4 | AC5 | No notification URL configured | Negative | Nothing posted | Client |
+| AC5-N5 | AC5 | Database refuses after the early check passed | Negative | 409; row Registered; nothing sent | API + service |
+| AC5-H3 | AC5 | Inbox line names the event, no link | Happy | "You've withdrawn from Community Dinner."; `href` null | UI (unit) |
+| AC5-N6 | AC5 | Inbox line when the event has no name | Negative | "Your registration has been withdrawn." | UI (unit) |
+
+Results (26 October 2026, cloud sandbox, Python 3.13 / Node 22; local only, not CI or a browser). Base `dcf4672` (the SCRUM-38 branch):
+
+| Check | Result |
+| --- | --- |
+| `pytest -q` in eventRequestService, before | 950 passed, 1 skipped |
+| New tests red first | 5 failed (AC5-H1, H2, B1, N3, N4) before the code |
+| `pytest -q` after | 962 passed, 1 skipped (12 new) |
+| `ruff check .` | All checks passed |
+| `npm test` in frontend, after | 67 files, 525 tests passed; the 2 new tests failed first with the generic fallback line |
+| `npm run lint`, `npm run typecheck` | clean |
+| Mutation checks | notice removed, and notice sent before the write: each fails a test |

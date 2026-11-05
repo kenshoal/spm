@@ -4,6 +4,7 @@ import type { SafetyReview } from "@/lib/safety";
 const DECISION_LABELS: Record<SafetyReview["decision"], string> = {
   approved: "Approved",
   changes_requested: "Changes requested",
+  rejected: "Rejected",
 };
 
 // The Safety Officer's decisions on an event, newest first (SCRUM-60 AC4a), as

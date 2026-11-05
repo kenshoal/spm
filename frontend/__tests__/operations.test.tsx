@@ -34,6 +34,7 @@ function makeRequest(id: string, name: string): EventRequest {
   };
 }
 
+// AC1-H2 (happy, SCRUM-14): each awaiting request is listed with a way to assign it
 // Purpose: SCRUM-14 AC1 — each awaiting request is listed with a way to assign it.
 test("lists awaiting requests with an assign control each", () => {
   render(<AwaitingList requests={[makeRequest("r1", "Gala Dinner")]} coordinators={coordinators} />);
@@ -43,6 +44,7 @@ test("lists awaiting requests with an assign control each", () => {
   expect(within(card).getByRole("button", { name: "Assign" })).toBeDefined();
 });
 
+// AC1-B1 (boundary, SCRUM-14): an empty queue explains itself instead of looking broken
 // Purpose: An empty queue explains itself instead of looking broken.
 test("shows an empty state when nothing awaits assignment", () => {
   render(<AwaitingList requests={[]} coordinators={coordinators} />);
@@ -50,6 +52,7 @@ test("shows an empty state when nothing awaits assignment", () => {
   expect(screen.getByText("Nothing is waiting for a coordinator.")).toBeDefined();
 });
 
+// AC3-H2 (happy, SCRUM-14): an assigned request shows who is responsible
 // Purpose: SCRUM-14 AC3 — an assigned request shows who is responsible.
 test("shows the current coordinator of an assigned request", () => {
   render(
@@ -67,6 +70,7 @@ test("shows the current coordinator of an assigned request", () => {
   expect(within(card).getByRole("button", { name: "Reassign" })).toBeDefined();
 });
 
+// AC6-H3 (happy, SCRUM-14): reassignment never offers the coordinator already responsible
 // Purpose: SCRUM-14 AC6 — reassignment never offers the coordinator already responsible.
 test("omits the current coordinator from the reassign choices", () => {
   render(<AssignCoordinatorForm eventRequestId="r2" coordinators={coordinators} currentCoordinatorId="coord-1" />);
@@ -75,6 +79,7 @@ test("omits the current coordinator from the reassign choices", () => {
   expect(options.map((option) => option.textContent)).toEqual(["Choose a coordinator", "blair@example.com"]);
 });
 
+// AC2-B1 (boundary, SCRUM-14): with nobody to choose, the form explains why
 // Purpose: With no one to choose, the form explains why instead of offering an empty picker.
 test("explains when no coordinator is available", () => {
   render(<AssignCoordinatorForm eventRequestId="r1" coordinators={[]} />);
@@ -83,6 +88,7 @@ test("explains when no coordinator is available", () => {
   expect(screen.getByText("No Event Coordinator is available to assign.")).toBeDefined();
 });
 
+// AC6-B3 (boundary, SCRUM-14): reassignment with no alternative coordinator explains itself
 // Purpose: When the current coordinator is the only one on file, reassignment
 // has no one else to offer, so the form says so instead of showing an empty picker.
 test("explains when no other coordinator is available to reassign to", () => {
@@ -98,6 +104,7 @@ test("explains when no other coordinator is available to reassign to", () => {
   expect(screen.getByText("No other Event Coordinator is available.")).toBeDefined();
 });
 
+// AC6-H4 (happy, SCRUM-14): the reassign form reports who is being replaced
 // Purpose: SCRUM-14 AC6 — the reassign form tells the action who is being replaced.
 test("sends the current coordinator as a hidden field when reassigning", () => {
   const { container } = render(
@@ -113,6 +120,7 @@ test("sends the current coordinator as a hidden field when reassigning", () => {
   expect((hidden as HTMLInputElement).value).toBe("coord-1");
 });
 
+// AC6-B4 (boundary, SCRUM-14): a fresh assignment sends no hidden prior coordinator
 // Purpose: A fresh assignment has no prior coordinator to report, so no hidden field is sent.
 test("omits the hidden current-coordinator field for a fresh assignment", () => {
   const { container } = render(

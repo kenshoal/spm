@@ -53,6 +53,7 @@ BEGIN
     VALUES (v_organiser, 'Draft', 'VERIFY draft')
     RETURNING id INTO v_draft;
 
+    -- AC3-N1 (negative, SCRUM-28): an unknown request id is refused (P0002)
     -- 1. P0002: unknown request id
     BEGIN
         PERFORM advance_event_request_by_coordinator(v_missing, v_coord_a, 'Under Review');
@@ -60,6 +61,8 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0002' THEN NULL;
     END;
 
+    -- AC3-N2 (negative, SCRUM-28): an unassigned request (and a Draft, which never
+    -- carries one) is refused (P0003)
     -- 2. P0003: no assignment yet (also covers Drafts, which never have one)
     BEGIN
         PERFORM advance_event_request_by_coordinator(v_review, v_coord_a, 'Under Review');
@@ -75,6 +78,8 @@ BEGIN
     INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
     VALUES (v_review, v_coord_a, 'verify'), (v_complete, v_coord_a, 'verify');
 
+    -- AC3-N3, AC5 (negative, SCRUM-28): a coordinator who is not the latest assignee
+    -- is refused (P0003)
     -- 3. P0003: a coordinator who is not the assigned one
     BEGIN
         PERFORM advance_event_request_by_coordinator(v_review, v_coord_b, 'Under Review');
@@ -82,6 +87,8 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0003' THEN NULL;
     END;
 
+    -- AC2-N4, AC3 (negative, SCRUM-28): Submitted -> Approved is not this boundary's
+    -- move (P0004); approval belongs to SCRUM-17
     -- 4. P0004: a transition this function does not own (approval)
     BEGIN
         PERFORM advance_event_request_by_coordinator(v_review, v_coord_a, 'Approved');
@@ -89,6 +96,7 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL;
     END;
 
+    -- AC2-N5, AC3 (negative, SCRUM-28): completion is refused before Confirmed (P0004)
     -- 5. P0004: completion before Confirmed
     BEGIN
         PERFORM advance_event_request_by_coordinator(v_review, v_coord_a, 'Completed');
@@ -99,10 +107,12 @@ BEGIN
     SELECT status INTO v_status FROM public.event_requests WHERE id = v_review;
     ASSERT v_status = 'Submitted', 'verify 1-5: refused calls must not change the status';
 
+    -- AC3-H1, AC2 (happy, SCRUM-28): Submitted -> Under Review succeeds under the row lock
     -- 6. Submitted -> Under Review by the assigned coordinator
     v_row := advance_event_request_by_coordinator(v_review, v_coord_a, 'Under Review');
     ASSERT v_row.status = 'Under Review', 'verify 6: returned row should be Under Review';
 
+    -- AC3-N6, AC7 (negative, SCRUM-28): repeated review is refused (P0004)
     -- 7. Repeated review is refused and leaves the status unchanged
     BEGIN
         PERFORM advance_event_request_by_coordinator(v_review, v_coord_a, 'Under Review');
@@ -110,6 +120,7 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL;
     END;
 
+    -- AC3-N7, AC5 (negative, SCRUM-28): a reassigned-away coordinator is refused (P0003)
     -- 8. Reassignment: only the latest-assigned coordinator may act
     INSERT INTO public.event_coordinator_assignments (event_request_id, coordinator_id, assigned_by)
     VALUES (v_review, v_coord_b, 'verify');
@@ -119,10 +130,12 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0003' THEN NULL;
     END;
 
+    -- AC3-P1, AC2 (partition, SCRUM-28): any non-terminal status may be cancelled
     -- 9. Non-terminal -> Cancelled by the current coordinator
     v_row := advance_event_request_by_coordinator(v_review, v_coord_b, 'Cancelled');
     ASSERT v_row.status = 'Cancelled', 'verify 9: returned row should be Cancelled';
 
+    -- AC3-N8, AC7 (negative, SCRUM-28): Cancelled is terminal (P0004)
     -- 10. Cancelled is terminal
     BEGIN
         PERFORM advance_event_request_by_coordinator(v_review, v_coord_b, 'Cancelled');
@@ -130,11 +143,13 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL;
     END;
 
+    -- AC3-P2, AC2 (partition, SCRUM-28): Confirmed -> Completed through the RPC
     -- 11. Confirmed -> Completed (Confirmed seeded directly; owned by other stories)
     UPDATE public.event_requests SET status = 'Confirmed' WHERE id = v_complete;
     v_row := advance_event_request_by_coordinator(v_complete, v_coord_a, 'Completed');
     ASSERT v_row.status = 'Completed', 'verify 11: returned row should be Completed';
 
+    -- AC3-N9, AC7 (negative, SCRUM-28): Completed is terminal for both actions (P0004)
     -- 12. Completed is terminal for both cancel and complete
     BEGIN
         PERFORM advance_event_request_by_coordinator(v_complete, v_coord_a, 'Cancelled');
@@ -147,6 +162,7 @@ BEGIN
     EXCEPTION WHEN SQLSTATE 'P0004' THEN NULL;
     END;
 
+    -- AC3-X1 (cross-cutting, SCRUM-28): only the server role executes the transition RPC
     -- 13. EXECUTE is server-only (0006 pattern)
     ASSERT NOT has_function_privilege('anon',
         'advance_event_request_by_coordinator(uuid, varchar, varchar)', 'EXECUTE'),

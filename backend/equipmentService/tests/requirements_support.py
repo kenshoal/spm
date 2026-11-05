@@ -65,6 +65,8 @@ def requirement_row(**overrides: Any) -> dict[str, Any]:
         "recorded_at": "2026-10-06T09:00:00+08:00",
         "updated_by": None,
         "updated_at": None,
+        "essential": True,
+        "essential_note": None,
     }
     row.update(overrides)
     return row
@@ -210,7 +212,7 @@ class FakeEventService:
         self.event: dict[str, Any] = {
             "id": E1,
             "organiser_id": ORGANISER,
-            "status": "Under Review",
+            "status": "Planning",
             "event_name": "Annual Gala",
             "proposed_date_times": list(GALA_DATES),
             "equipment_requirements": "Organiser note: projector",

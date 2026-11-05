@@ -6,16 +6,34 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import ValidationError
 
 from app.clock import get_now
-from app.config import get_settings
+from app.config import get_notification_settings, get_settings
 from app.controllers.event_request_controller import (
     AuthenticatedCaller,
     get_authenticated_caller,
 )
-from app.models.registration import PublicEventResponse, RegistrationResponse
+from app.models.registration import (
+    CheckInResponse,
+    ManualRegistrationCreate,
+    ManualRegistrationResponse,
+    PublicEventResponse,
+    RegistrationInfoResponse,
+    RegistrationResponse,
+    RegistrationSettingsResponse,
+    RegistrationSettingsUpdate,
+)
+from app.repositories.coordinator_assignment_repository import (
+    SupabaseCoordinatorAssignmentRepository,
+)
 from app.repositories.registration_repository import SupabaseRegistrationRepository
-from app.services.registration_service import RegistrationService
+from app.services.notification_client import NotificationClient
+from app.services.registration_service import (
+    EVENT_COORDINATOR_ROLE,
+    EVENT_ORGANISER_ROLE,
+    RegistrationService,
+)
 
 router = APIRouter(prefix="/attendee", tags=["attendee registration"])
+management_router = APIRouter(prefix="/event-requests", tags=["registration info"])
 ATTENDEE_ROLE = "attendee"
 
 
@@ -27,13 +45,20 @@ def get_registration_service(request: Request) -> RegistrationService:
 
     try:
         repository = SupabaseRegistrationRepository.from_settings(get_settings())
+        coordinators = SupabaseCoordinatorAssignmentRepository.from_settings(
+            get_settings()
+        )
     except ValidationError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Supabase is not configured for eventRequestService",
         ) from error
 
-    service = RegistrationService(repository)
+    service = RegistrationService(
+        repository,
+        coordinators,
+        NotificationClient.from_settings(get_notification_settings()),
+    )
     request.app.state.registration_service = service
     return service
 
@@ -102,3 +127,75 @@ def withdraw_registration(
     now: NowDependency,
 ) -> dict:
     return service.withdraw(str(registration_id), attendee_id, now)
+
+
+@management_router.get(
+    "/{event_request_id}/registrations", response_model=RegistrationInfoResponse
+)
+def get_registration_info(
+    event_request_id: UUID,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+) -> dict:
+    if set(caller.roles).isdisjoint({EVENT_ORGANISER_ROLE, EVENT_COORDINATOR_ROLE}):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return service.registration_info(str(event_request_id), caller.id, caller.roles)
+
+
+@management_router.put(
+    "/{event_request_id}/registration-settings",
+    response_model=RegistrationSettingsResponse,
+)
+def set_registration_settings(
+    event_request_id: UUID,
+    payload: RegistrationSettingsUpdate,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+    now: NowDependency,
+) -> dict:
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return service.set_registration_settings(
+        str(event_request_id),
+        caller.id,
+        payload.registration_opens_at,
+        payload.registration_closes_at,
+        payload.registration_capacity,
+        now,
+    )
+
+
+@management_router.post(
+    "/{event_request_id}/registrations",
+    response_model=ManualRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register_attendee(
+    event_request_id: UUID,
+    payload: ManualRegistrationCreate,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+) -> dict:
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return service.register_attendee(
+        str(event_request_id), caller.id, payload.attendee_email
+    )
+
+
+@management_router.post(
+    "/{event_request_id}/registrations/{registration_id}/check-in",
+    response_model=CheckInResponse,
+)
+def check_in_attendee(
+    event_request_id: UUID,
+    registration_id: UUID,
+    caller: Annotated[AuthenticatedCaller, Depends(get_authenticated_caller)],
+    service: ServiceDependency,
+    now: NowDependency,
+) -> dict:
+    if EVENT_COORDINATOR_ROLE not in caller.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Insufficient permissions")
+    return service.check_in(
+        str(event_request_id), str(registration_id), caller.id, now
+    )

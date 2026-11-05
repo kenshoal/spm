@@ -20,6 +20,8 @@ class BlockReason(str, Enum):
     RENOVATION = "renovation"
     SAFETY = "safety"
     INTERNAL_USE = "internal_use"
+    EQUIPMENT_FAILURE = "equipment_failure"
+    OTHER = "other"
 
 
 class BlockStatus(str, Enum):

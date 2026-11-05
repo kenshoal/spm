@@ -12,7 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from postgrest.exceptions import APIError
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from supabase import Client
 
 from app.availability import norm
@@ -25,12 +25,13 @@ from app.deps import (
     require_role,
 )
 from app.event_requests_client import EventRequestClient, get_event_request_client
-from app.rpc_errors import requirement_rpc_error_to_http
+from app.rpc_errors import essential_rpc_error_to_http, requirement_rpc_error_to_http
 
 router = APIRouter(prefix="/equipment-requirements", tags=["equipment requirements"])
 
-# Event statuses that refuse new requirements (AC7). Everything else is open.
-CLOSED_EVENT_STATUSES = frozenset({"Cancelled", "Completed", "Rejected"})
+# Event statuses that accept new requirements (SCRUM-33 AC6). Every other status,
+# including ones added later, is refused.
+RECORDABLE_EVENT_STATUSES = frozenset({"Approved", "Planning", "Safety Review"})
 
 RequirementStatus = Literal["requested", "in_progress", "arranged"]
 
@@ -57,6 +58,10 @@ class RequirementOut(BaseModel):
     recorded_at: str
     updated_by: UUID | None
     updated_at: str | None
+    # Hotfix 25 (Q&A #80, #106): a requirement is essential unless the Coordinator, with
+    # Technical Support, agreed it is not. A not-essential one does not block confirmation.
+    essential: bool = True
+    essential_note: str | None = None
 
 
 class RequirementCreate(BaseModel):
@@ -90,6 +95,26 @@ class ArrangementUpdate(BaseModel):
     expected_status: RequirementStatus
     status: RequirementStatus
     support_note: str | None = Field(default=None, max_length=2000)
+
+
+class EssentialUpdate(BaseModel):
+    """Hotfix 25: the Coordinator marks a requirement essential or not, with a note."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    essential: bool
+    note: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def _blank_note_is_none(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None and value.strip() else None
+
+    @model_validator(mode="after")
+    def _not_essential_needs_a_note(self) -> "EssentialUpdate":
+        if not self.essential and self.note is None:
+            raise ValueError("a note is required to mark a requirement not essential")
+        return self
 
 
 def _token(authorization: str | None) -> str:
@@ -134,7 +159,7 @@ def record_requirement(
     snapshot = events.snapshot_for_coordinator(
         str(payload.event_request_id), _token(authorization), user.id
     )
-    if snapshot.status in CLOSED_EVENT_STATUSES:
+    if snapshot.status not in RECORDABLE_EVENT_STATUSES:
         raise HTTPException(status.HTTP_409_CONFLICT, "Event is closed")
     equipment_type = _match_catalogue_type(client, payload.equipment_type)
     try:
@@ -274,4 +299,52 @@ def update_arrangement(
         ).execute()
     except APIError as error:
         raise requirement_rpc_error_to_http(error) from error
+    return RequirementOut.model_validate(response.data)
+
+
+@router.patch("/{requirement_id}/essential", response_model=RequirementOut)
+def update_essential(
+    requirement_id: UUID,
+    payload: EssentialUpdate,
+    user: CoordinatorDep,
+    client: ClientDep,
+    events: EventDep,
+    authorization: Annotated[str | None, Header()] = None,
+) -> RequirementOut:
+    """The assigned Coordinator marks a requirement essential or not (Q&A #80, #106).
+
+    A not-essential requirement may stay unreserved without stopping the event going
+    to its safety review and being confirmed. The database function rechecks the
+    assignment and the event's status under the requirement's row lock."""
+    found = (
+        client.table("equipment_requirements")
+        .select("event_request_id")
+        .eq("id", str(requirement_id))
+        .limit(1)
+        .execute()
+    )
+    if not found.data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipment requirement not found")
+    try:
+        events.assert_assigned(
+            str(found.data[0]["event_request_id"]), _token(authorization), user.id
+        )
+    except HTTPException as error:
+        if error.status_code == status.HTTP_404_NOT_FOUND:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "Equipment requirement not found"
+            ) from error
+        raise
+    try:
+        response = client.rpc(
+            "set_requirement_essential",
+            {
+                "p_requirement_id": str(requirement_id),
+                "p_coordinator_id": user.id,
+                "p_essential": payload.essential,
+                "p_note": payload.note,
+            },
+        ).execute()
+    except APIError as error:
+        raise essential_rpc_error_to_http(error) from error
     return RequirementOut.model_validate(response.data)

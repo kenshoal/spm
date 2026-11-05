@@ -14,7 +14,7 @@ export interface SafetyTarget {
 }
 
 export interface SafetyDecisionPayload {
-  decision: "approved" | "changes_requested";
+  decision: "approved" | "changes_requested" | "rejected";
   reason?: string;
   targets: SafetyTarget[];
 }
@@ -22,7 +22,7 @@ export interface SafetyDecisionPayload {
 export interface SafetyReview {
   id: string;
   event_request_id: string;
-  decision: "approved" | "changes_requested";
+  decision: "approved" | "changes_requested" | "rejected";
   reason: string | null;
   targets: SafetyTarget[];
   decided_by: string;
@@ -65,8 +65,8 @@ export function parseSafetyDecisionForm(formData: FormData): {
       : {};
     return { payload: { decision, targets: [] }, errors };
   }
-  if (decision !== "changes_requested") {
-    return { payload: { decision: "approved", targets: [] }, errors: { decision: "Choose approve or ask for changes." } };
+  if (decision !== "changes_requested" && decision !== "rejected") {
+    return { payload: { decision: "approved", targets: [] }, errors: { decision: "Choose approve, ask for changes or reject." } };
   }
   const reason = String(formData.get("reason") ?? "").trim();
   const targets = formData
@@ -75,7 +75,7 @@ export function parseSafetyDecisionForm(formData: FormData): {
     .filter(([arrangement, id]) => ARRANGEMENTS.includes(arrangement) && Boolean(id))
     .map(([arrangement, id]) => ({ arrangement: arrangement as SafetyArrangement, id }));
   const errors: Record<string, string> = {};
-  if (!reason) errors.reason = "Say what needs to change.";
+  if (!reason) errors.reason = decision === "rejected" ? "Say why the safety arrangement is rejected." : "Say what needs to change.";
   else if (reason.length > MAX_REASON) errors.reason = "Keep the reason to 2000 characters or fewer.";
   return { payload: { decision, reason, targets }, errors };
 }

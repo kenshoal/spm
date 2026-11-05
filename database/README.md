@@ -80,6 +80,40 @@ Apply each file exactly once and never edit a file that has already been applied
 | `migrations/0058_event_registration_reviews.sql` | SCRUM-35: separate `event_registration_reviews` retains one actual significant event-version cause for date, attendance or registration-requirements changes on nonterminal submitted-or-later events. Private trigger inserts atomically; no backfill or auto-clear. Service-only exact-ID acknowledgement locks event then review and rechecks the current coordinator; service table access stays SELECT-only, browsers denied. Appends outstanding registration facts to the existing shared readiness helper without changing ordinary venue/equipment predicates or either gate caller. Replaces the narrow non-date approval function to also accept registration requirements text, preserving the equipment branch. No attendee, capacity, window, lifecycle or new notification-domain change. **Applied to shared development on 22 October 2026, version `20261022114717`.** Run the fault-injection verifier only on an owned disposable target with `verify_event_registration_reviews.sql`. |
 | `migrations/0059_event_change_date_approval.sql` | SCRUM-35 atomic date/mixed approval: locks sorted venues → event → proposal → the complete pending/approved booking batch, rechecks membership/assignment/version and validates automatic or explicit ranges through the existing conflict guard, active blocks and candidate-pair checks. Stores nullable accepted booking-plan evidence, applies event changes and required review work atomically. Date changes also flag linked past equipment reservations; non-date selection is unchanged. Depends on 0056 and 0058; 0057 is unused. **Applied to shared development on 22 October 2026, version `20261022114717`.** See the current setup and deployment record below. |
 | `migrations/0062_withdraw_registration.sql` | SCRUM-22: widens `event_registrations.status` to `Registered` / `Withdrawn`, adds `withdrawn_at` (CHECK keeps the two in step) and `withdraw_registration(registration, attendee, now)`, which locks the event row (the lock `register_for_event` takes) then the registration row, and allows a withdrawal only for the owner while the event is Confirmed and `now` is before its earliest `proposed_date_times`. Errcodes `P0002` not found / not owner; `P0004` `already withdrawn` or `withdrawal not permitted`. `service_role` only. 0060 and 0061 are reserved by the unmerged SCRUM-41 and SCRUM-25 branches. Verify with `verify_registration_withdrawal.sql` and, for the two-session races, `verify_registration_withdrawal_race.sh` (disposable database only; it leaves two Cancelled events behind). **Not applied to shared development yet.** Run on a disposable local PostgreSQL 16 built by `database/tests/bootstrap_event_status_history.py` + `0026` + `0048` + `0062` |
+| `migrations/0064_venue_block_booking_reviews.sql` | SCRUM-63 AC1/AC2: `venue_block` added to `arrangement_reviews_trigger_type_check`, and `public.create_venue_block` (same arguments and return type as `0051`) now also flags, in the same transaction, each approved booking at the venue that has not ended (Singapore date), shares a date with the block and overlaps it in time (half-open), and whose event is not Draft, Completed, Cancelled or Rejected. Each flag is an `arrangement_reviews` row (`arrangement` `venue_booking`, `trigger_type` `venue_block`, `trigger_id` = the block's id, `ON CONFLICT DO NOTHING`); `0037`'s trigger queues `arrangement_needs_review` for it and `0038` delivers it with no `change_request_id`. Pending, rejected and cancelled bookings, other venues and bookings with no event are skipped and the block is still saved. The function is now `SECURITY DEFINER` (`arrangement_reviews` is SELECT-only for `service_role`) and stays executable by `service_role` only. Run once, after `0059`, and only once the readers that accept `venue_block` are deployed (eventRequestService response model, frontend cause label). Verify with `verify_venue_block_booking_reviews.sql`. **Not yet applied to shared development.** |
+| `migrations/0066_venue_holds.sql` | SCRUM-18: tentative venue holds (Week 7 Change #4). `venue_holds` (venue, event, dates, 15-minute times, `expires_at`, status `active` / `released` / `converted` / `expired`, linked booking request, notice markers; RLS on; `service_role` reads it and may update only `status`, `closed_at` and `closed_by`, because `decide_venue_booking_request` runs as its caller and closes holds). A hold protects its time only while `status = 'active' AND expires_at > now()` and its event is not Cancelled or Rejected (read with the hold, no trigger; PO decision, 30 October 2026). `place_venue_hold` (current coordinator, event Approved / Planning / Safety Review, expiry in the next 7 days; refuses with booking approval's codes plus `hold_conflict`), `release_venue_hold` and `convert_venue_hold` (current coordinator only; convert creates a pending request through `0056`, linked to the hold), `sweep_venue_holds(as_of)` (marks expired holds and lists due "expiring" / "expired" notices for the current coordinator) and `mark_venue_hold_notice`; all `service_role` only. Replaces `private.check_booking_candidate` (`0054`) so active holds also conflict (`conflicting_hold_ids`; a hold never blocks its own event: the guard skips holds of any event owning a booking in `p_exclude_ids`), which covers approval and SCRUM-35 reschedules (`0059`), and `decide_venue_booking_request` so a refusal records `conflicting_hold_ids` and a decision ends the linked hold (`converted` / `released`) unless it has already expired, which the sweep then marks `expired` with its notice. Locks the venue, then the hold, then the event. Run once, after `0065`. Verify with `verify_venue_holds.sql`; two-connection checks in `tests/test_venue_hold_concurrency.py` (disposable only); CI job `scrum18-database-verify`. **Applied to shared development on 31 October 2026 through the SQL Editor**, from `dev` `d522315` (with the `b1d76ee` grant): the pre-check found 0066 and 0068 not applied and `0054` and `0056` present; afterwards `verify_venue_holds.sql`, the guard and decision verifiers, a rolled-back run of the hold and decision calls as `service_role` and a read-only grant check passed |
+| `migrations/0068_venue_replacement_requests.sql` | SCRUM-63 AC4/AC5 (run after `0066`; its `decide_venue_booking_request` keeps 0066's hold handling): `venue_booking_requests.replaces_booking_id` (self-reference, not the row itself) with a partial unique index so a booking has at most one pending or approved replacement; server-only `public.create_replacement_venue_booking_request(replaces, new_id, venue, requested_by, expected_event_updated_at)` (`SECURITY DEFINER`) checks the booking exists, is approved, has an open `venue_block` flag (0064) and is not at the chosen venue, stores the request through `0056`'s versioned creator (same event, dates and times; coordinator and event-version checks), then locks the replaced booking last and checks it again. Errors: `P0002` not found, `P0003` not the event's coordinator, `P0004` not approved / not flagged / event changed, `22023` same venue, `23505` a replacement is already active. `decide_venue_booking_request` (0054) is unchanged except that approving a replacement cancels the replaced booking (if still approved, by the approver) and clears its `venue_block` flags with `clear_arrangement_review`, in the same transaction; a rejected or cancelled replacement changes neither. Run once, after `0064`. Verify with `verify_venue_replacement_requests.sql`. **Not yet applied to shared development.** |
+| `migrations/0062_withdraw_registration.sql` | SCRUM-22: widens `event_registrations.status` to `Registered` / `Withdrawn`, adds `withdrawn_at` (CHECK keeps the two in step) and `withdraw_registration(registration, attendee, now)`, which locks the event row (the lock `register_for_event` takes) then the registration row, and allows a withdrawal only for the owner while the event is Confirmed and `now` is before its earliest `proposed_date_times`. Errcodes `P0002` not found / not owner; `P0004` `already withdrawn` or `withdrawal not permitted`. `service_role` only. 0060 and 0061 are reserved by the unmerged SCRUM-41 and SCRUM-25 branches. Verify with `verify_registration_withdrawal.sql` and, for the two-session races, `verify_registration_withdrawal_race.sh` (disposable database only; it leaves two Cancelled events behind). **Applied to shared development on 24 October 2026, version `20261024085549`**, before 0063 as the unchanged merged-reader prerequisite; no rows were withdrawn during installation. Run on a disposable local PostgreSQL 16 built by `database/tests/bootstrap_event_status_history.py` + `0026` + `0048` + `0062` |
+| `migrations/0063_event_auto_completion.sql` | SCRUM-40: nullable finite final end, coordinator-only Approved/Planning setter, immutable Confirmed/terminal end and actual-reschedule invalidation, plus strictly-after-168-hours Confirmed-only system completion through existing atomic history. Service-only INVOKER RPCs and direct-browser end-field protection preserving ordinary Draft RLS; no backfill, new end requirement for confirmation or related-domain writes. **Applied to shared development on 24 October 2026, version `20261024085549`**, after 0062; matching local API/UI and the real worker flow are verified on one labelled Confirmed target, worker enabled at a 60-second interval; real coordinator and organiser read-only browser views passed; human review and merge remain pending. The opt-in shared timer and manual pass are in eventRequestService. |
+| `migrations/0061_event_attendance.sql` | SCRUM-25: `event_registrations.attended_at` and `checked_in_by`; `check_in_attendee` lets the event's latest coordinator check a Registered row in on an event day (Asia/Singapore), refusing `not event day` and `already checked in` (P0004) and anything else as `P0002`. Status stays `Registered`, so a check-in keeps its place. `service_role` only. Run after `0062`. Verify with `verify_event_attendance.sql`. Applied to shared development on 30 October 2026 (Supabase MCP, migration `event_attendance`); the live function body matches the file (md5) |
+| `migrations/0067_withdraw_after_check_in.sql` | SCRUM-25 (review of PR #103): replaces `withdraw_registration` from `0062` (not edited) with one more refusal, `already checked in` (P0004), read from the locked row, so a checked-in attendee can't withdraw and free a place during the event. Everything else is unchanged. Run after `0061` and `0062`. Verify with `verify_event_attendance.sql` (AC3-N1). A later replacement of `withdraw_registration` (for example SCRUM-24's waiting-list promotion) must keep this check. Applied to shared development on 30 October 2026 (Supabase MCP, migration `withdraw_after_check_in`); the live function body matches the file (md5) |
+| `migrations/0068_event_waitlist.sql` | SCRUM-24: the event waiting list. Four tables — `event_waitlist_entries` (Waiting/Offered/Accepted/Withdrawn/Closed with status-consistent offer fields, one active entry per attendee per event, FIFO order by `queued_at, seq`), `event_waitlist_places` (one row per freed place, released or accepted), `event_waitlist_place_offers` (per-place D7 history: only a `Lapsed` place is never re-offered; a revoked holder may take the same place again) and `waitlist_notification_outbox` (one unique key per notice, delivered after commit by the service relay) — all RLS-on with no browser access. Private helpers (`private.places_taken`, `private.offer_open_place`, `private.open_place`, the D13 cancel trigger) are executable by nobody but the owner; the public functions (`join_waitlist`, `accept_waitlist_offer`, `withdraw_from_waitlist`, `choose_waitlist_recipient`, `process_waitlist_timers`) are `SECURITY DEFINER` with an empty search path, lock the event row first and are `service_role` only. Replaces `register_for_event` (0048), `coordinator_register_attendee` (0060) and `withdraw_registration` (0062) with the same signatures: the three capacity checks now count `Registered` rows plus `Offered` entries (D6) through the one shared helper, and a withdrawal promotes the next attendee in the same transaction, after its `UPDATE`. New offers stop at the cut-off `start - 72h` (strict, #116/D8); the timer expires strictly after 72h (D1), requeues to the back (D3), closes the list at the cut-off (D11), releases post-cut-off places to registration (D12) and warns once at 48h (D2); cancelling the event closes every entry with one notice each (D13 trigger). Verify with `verify_event_waitlist.sql` (rolled back) and, for the two-session races, `verify_event_waitlist_race.sh` (disposable database only; it leaves Cancelled events behind because status history is immutable). **Not yet applied to shared development.** Green on a disposable local PostgreSQL 16 (`database/tests/bootstrap_event_status_history.py` + migrations through 0065) on 27 October 2026, together with the 0048/0060/0062 verifiers as the D6 regression | Numbered `0068` after `0065`–`0067` landed on `dev`; its `withdraw_registration` replaces `0067`'s and keeps the `already checked in` refusal.
+| `migrations/0069_safety_review_rejection.sql` | Hotfix 3 (Week 7 change 6, Q&A #130): adds `rejected` to `safety_reviews.decision`; `decide_safety_review` treats it as asking for changes (reason required, chosen arrangements flagged, back to Planning, all or nothing) but records it distinctly. |
+| `migrations/0070_event_registration_settings.sql` | Hotfix 4 (Q&A #30, #42, #127): `set_event_registration_settings` lets the event's assigned Coordinator set the registration start, end and capacity (locks the event row as registering does; refuses a capacity below the places taken; offers each new place to the waiting list in FIFO order). Run after `0068`. |
+| `migrations/0071_changes_after_confirmation.sql` | Hotfix 9 (Week 1 brief, Q&A #8, #105): change requests can be raised, rejected and approved while an event is Confirmed (only the status gate of `create_event_change_request`, `reject_event_change_request`, `approve_non_date_event_change_request` and `approve_date_event_change_request` changes). A trigger returns a Confirmed event to Planning, recorded as a system transition, when an `event_change` review is raised on it. Run after `0059` and `0069`. |
+| `migrations/0072_release_equipment_reservations.sql` | Hotfix 11 (Q&A #114): `release_equipment_reservation` moves a reservation into `equipment_reservation_releases` (who, when, why), clears its open reviews and sends its requirement back to `in_progress`. Every availability, readiness and review reader stops counting it at once. Run after `0071`. |
+| `migrations/0073_cancel_releases_arrangements.sql` | Hotfix 10 (Week 1 brief, Q&A #60): cancelling an event cancels its pending and approved bookings and releases its equipment reservations in the same transaction (reason `Event cancelled`). Run after `0072`. |
+| `migrations/0074_venue_layout_capacities.sql` | Hotfix 12 (Q&A #112): `venues.layout_capacities` (layout to capacity; a layout without an entry uses `max_capacity`). Run once. |
+| `migrations/0075_venue_change_reviews.sql` | Hotfix 13 (Q&A #120, #122): `venue_change` added to the review trigger types, and a trigger on `venues` flags live approved bookings when a venue becomes blocked, its maximum capacity falls below an event's expected attendance, or a layout, facility or accessibility feature is removed. Never changes a booking or an event. Run after `0074`, and only once the readers that accept `venue_change` are deployed. |
+| `migrations/0076_registration_attendee_emails.sql` | Hotfix 16 (SCRUM-25, Q&A #32): `event_registration_attendee_emails` and `event_waitlist_attendee_emails`, so staff can tell who a registration or waiting-list place belongs to. Run once. |
+| `migrations/0077_coordinator_event_update.sql` | Hotfix 8 (SCRUM-29, Q&A #102): `update_event_by_coordinator` lets the assigned Coordinator update event details under the event lock, refusing a stale version; the existing review trigger flags arrangements for significant changes. Run after `0071`. |
+| `migrations/0078_block_reasons_equipment_failure_other.sql` | Hotfix 19 (Week 7 change 2): adds `equipment_failure` and `other` to `block_reason`, which listed only maintenance, renovation, safety and internal use. |
+| `migrations/0079_partial_change_approval.sql` | Hotfix 20 (Q&A #104): `partially_approve_event_change_request` accepts some fields of a change request and refuses the rest with reasons; `event_change_requests.rejected_changes` and the `Partially Approved` status. Run after `0071`. |
+| `migrations/0080_withdrawn_and_postponed_statuses.sql` | Hotfixes 21 and 22 (Q&A #103, #69, #121): adds the `Withdrawn` and `Postponed` event statuses; `advance_event_request_by_coordinator` accepts a withdrawal (Submitted, Under Review, Changes Requested) and cancelling a postponed event. |
+| `migrations/0081_postpone_and_resume_event.sql` | Hotfix 22: `postpone_event_by_coordinator` and `resume_postponed_event`, the `event_postponements` table, and a trigger that releases a postponed event's bookings, holds and reservations. Also refuses venue bookings for events that cannot use one. Run after `0080`. |
+| `migrations/0082_manual_registration_above_capacity.sql` | Hotfix 23 (Q&A #99): `coordinator_register_attendee` adds a VIP above the registration capacity up to the seats of the event's approved venues. |
+| `migrations/0083_change_event_organiser.sql` | Hotfix 24 (Q&A #59, #61): `change_event_organiser` and the `event_organiser_changes` audit table. Run after `0080`. |
+| `migrations/0084_essential_equipment_requirements.sql` | Hotfix 25 (Q&A #80, #106): `equipment_requirements.essential` and `set_requirement_essential`; the shared readiness check leaves out a requirement marked not essential. |
+| `migrations/0085_assignment_stale_view_guard.sql` | Hotfix 2 H7 (SCRUM-62 AC6, SCRUM-14 AC7): `assign_event_request_coordinator` takes the Coordinator the Lead saw and refuses a stale view (`P0006`); also refuses Withdrawn. The three-argument function is dropped. Run after `0084`. |
+| `migrations/0086_reschedule_confirmed_event.sql` | Hotfix 2 H4 (SCRUM-40 AC9, SCRUM-29 AC4): a Confirmed event with a recorded final end can be rescheduled; a new trigger returns it to Planning when its dates change. Run after `0085`. |
+| `migrations/0087_waitlist_offer_before_registration_close.sql` | Hotfix 2 H2 (SCRUM-24 AC2): a new waiting-list offer must end its 72 hours before registration closes; replaces `offer_open_place` and `choose_waitlist_recipient`. Run after `0086`. |
+| `migrations/0088_equipment_quantity_floor.sql` | Hotfix 2 H1 (SCRUM-45 AC2): `update_equipment_quantity` refuses a total below the peak reserved on any day still ahead (`P0004`). Run after `0087`. |
+| `migrations/0089_registration_filled_event.sql` | Hotfix 2 H5 (SCRUM-38 AC2): `event_registrations.filled_event`, set in the transaction by `register_for_event` and `coordinator_register_attendee`. Run after `0088`. |
+| `migrations/0090_booking_request_rules.sql` | Hotfix 2 H8 (SCRUM-32 AC2, AC6, AC7): booking requests only in Approved, Planning or Safety Review, no start date before today (Singapore), an accessibility snapshot; the creator moves to `private.insert_venue_booking_request` so a replacement (SCRUM-63) keeps working. Run after `0089`. |
+| `migrations/0091_accessibility_needs_flag_bookings.sql` | Hotfix 2 H9 (SCRUM-64 AC1, SCRUM-29 AC5, SCRUM-35 AC1, AC3): accessibility needs flag the venue bookings and are a supported change-request value. Run after `0090`. |
+| `migrations/0092_venue_operating_hours.sql` | Hotfix 2 H12 (SCRUM-30 AC1, AC2, AC6; SCRUM-12 AC3; SCRUM-31 AC4): `venues.operating_start_minute` and `operating_end_minute` (defaults 420 and 1440, 15-minute steps within 07:00 to 24:00, start before end). Run after `0091`. |
+| `migrations/0093_waitlist_join_cutoff.sql` | SCRUM-24 hotfix (AC1-B5…B7, AC1-N5): replaces `join_waitlist` from `0068` (not edited) with one more refusal, `waitlist closed` (P0004), from the cut-off, start − 72h, the instant the timer closes the list (AC10). Before it, a join on an event whose registration ran past the cut-off was accepted and closed on the next timer pass. Safe to re-run. Verify with `verify_waitlist_join_cutoff.sql`. Run after `0092`. |
+| `migrations/0094_restore_withdrawal_waitlist_handover.sql` | SCRUM-24 hotfix (AC2-H1): re-creates `withdraw_registration` exactly as `0068` has it — `0067`'s `already checked in` refusal plus the hand-over to the waiting list. On shared development `0067` (30 Oct) was applied after the waiting list and replaced the function without the hand-over, so withdrawals freed places but offered them to nobody. Places freed in that state are not re-offered. Safe to re-run. Verify with `verify_withdrawal_waitlist_handover.sql`. Run after `0093`. |
 
 Verify `0020` after applying it: run
 [`verify_equipment_reservations.sql`](verify_equipment_reservations.sql) in the
@@ -210,6 +244,17 @@ and a reschedule caller holding the venue lock waits for an in-flight approval
 and then the guard reports it. It commits fixtures, so run it only on a
 disposable local database (`--dsn` must be loopback).
 
+SCRUM-18 venue holds are verified by
+[`verify_venue_holds.sql`](verify_venue_holds.sql). Run it once before `0066`,
+when it should stop at the missing `venue_holds` (the Red result), and again
+after, when it should print `ALL SCRUM-18 VENUE HOLD VERIFICATIONS PASSED`. It
+covers placing (coordinator, event status, 7-day expiry, times), conflicts with
+holds, approvals and the shared guard, the exact expiry boundary, notices and
+their record, release, and conversion with approval and rejection, plus
+server-only access. It rolls back all rows. Two-connection checks are in
+[`tests/test_venue_hold_concurrency.py`](tests/test_venue_hold_concurrency.py)
+(disposable database only; fixtures are committed).
+
 The SCRUM-20 AC6 timing change is verified by
 [`verify_venue_timing_change_reviews.sql`](verify_venue_timing_change_reviews.sql).
 Run it once before `0055`, when it should stop at the missing
@@ -260,6 +305,71 @@ SCRUM-35 event amendments are verified by
 requests, atomic approval, rejection without event mutation, stale approval,
 reassignment and server-only table/function access. It requires one Supabase
 Auth user and rolls back all verification data.
+
+## Automatic completion (SCRUM-40)
+
+`0063_event_auto_completion.sql` adds the authoritative coordinator-recorded
+end and native completion boundary. A narrow INVOKER trigger also denies browser
+INSERT of a nonnull end or a distinct end UPDATE, while retaining existing owner
+Draft RLS and ordinary edits. Number 0063 was allocated after published
+0060–0062 reservations. The matching merged API selects registration `withdrawn_at`,
+so unchanged merged 0062 must precede 0063 in this runtime-compatible setup;
+0060/0061 remain unrelated allocations. This prerequisite is not SCRUM-40 ownership
+of withdrawal behaviour. The exact 0062→0063 bundle was applied to shared SPMG9T4
+on 24 October as `20261024085549`
+(`scrum40_guarded_completion_with_merged_withdrawal_prerequisite`). All 15 original
+business-table counts/fingerprints were preserved; pre-existing final ends stayed
+NULL and withdrawal count stayed zero at installation. The matching local API/UI
+and actual worker subsequently completed one authorised labelled Confirmed event
+with one system history entry; Planning and repeat controls plus 25 protected-state
+groups passed. Worker configuration is true/60; coordinator and organiser views
+passed after real sign-in/reload, including automatic system history and owner
+read-only end display. Human review and merge remain pending. Do not reapply
+the bundle on that shared target. See the
+[API/runtime contract](../backend/eventRequestService/README.md#automatic-completion-and-final-end-scrum-40-local-preparation)
+and [reviewable rollout plan](../docs/deployment/scrum_40_auto_completion_rollout.md).
+
+From the repository root, with PostgreSQL running and a newly created empty
+database in an owned disposable loopback cluster:
+
+```sh
+(
+  set -eu
+  : "${SCRUM40_TEST_DSN:?Supply the empty owned loopback scrum48_* database URL}"
+  python3 -I database/tests/bootstrap_event_change_approval.py \
+    --dsn "$SCRUM40_TEST_DSN" --disposable
+  psql -X -v ON_ERROR_STOP=1 -1 -d "$SCRUM40_TEST_DSN" \
+    -f database/migrations/0062_withdraw_registration.sql \
+    -f database/migrations/0063_event_auto_completion.sql
+  for verifier in \
+    verify_event_auto_completion.sql \
+    verify_event_final_end.sql \
+    verify_event_final_end_browser_boundary.sql \
+    verify_registration_withdrawal.sql \
+    verify_event_change_rejection.sql \
+    verify_event_change_approval.sql \
+    verify_event_registration_reviews.sql \
+    verify_event_change_date_approval.sql
+  do
+    psql -X -v ON_ERROR_STOP=1 -d "$SCRUM40_TEST_DSN" -f "database/$verifier"
+  done
+  python3 database/tests/test_event_auto_completion_concurrency.py \
+    --dsn "$SCRUM40_TEST_DSN" --disposable
+)
+```
+
+This is the independent `scrum40-database-verify` CI recipe, including the existing
+withdrawal verifier for the merged reader/schema prerequisite. The reused guarded
+bootstrap applies genuine prerequisites through 0059 with labelled Auth doubles
+and the existing narrow local platform-ACL fixture. It never changes shared
+grants. The browser-field verifier supplies transactional local Auth claim doubles
+to exercise genuine owner Draft policies; it is not real JWT verification and
+restores those doubles on rollback. The SQL oracles roll back and include local
+fault injection. The race
+harness commits labelled fixtures and witnesses actual blocking in both winner
+orders; run it only on an owned disposable target and remove that cluster after
+verification. Never run this setup, fault triggers or committed race fixtures on
+shared Supabase. A local pass is not remote CI or live-auth delivery evidence.
 
 ## Change-request rejection (SCRUM-35)
 
@@ -475,13 +585,17 @@ database, then run the same setup and checks as the independent native CI job:
     verify_event_registration_reviews.sql \
     verify_event_change_date_approval.sql \
     verify_arrangement_review_flags.sql \
-    verify_venue_timing_change_reviews.sql
+    verify_venue_timing_change_reviews.sql \
+    verify_venue_block_booking_reviews.sql \
+    verify_venue_replacement_requests.sql
   do
     psql -X -v ON_ERROR_STOP=1 -d "$SCRUM35_TEST_DSN" -f "database/$verifier"
   done
   python3 database/tests/test_event_change_approval_concurrency.py \
     --dsn "$SCRUM35_TEST_DSN" --disposable
   python3 database/tests/test_date_change_concurrency.py \
+    --dsn "$SCRUM35_TEST_DSN" --disposable
+  python3 database/tests/test_venue_replacement_concurrency.py \
     --dsn "$SCRUM35_TEST_DSN" --disposable
 )
 ```

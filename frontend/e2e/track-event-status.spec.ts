@@ -17,6 +17,8 @@ function funRunCard(page: Page) {
 test.describe.serial("SCRUM-28 status tracking", () => {
   let eventId: string;
 
+  // AC6-X1, AC2, AC5 (cross-cutting, SCRUM-28): the submitted-to-review journey shows the
+  // right status to each role, and an unrelated coordinator sees nothing
   // Purpose: Covers the critical handoff journey — an organiser-submitted
   // request becomes visible to the assigned coordinator, who starts review;
   // the organiser sees the tracked status; an unrelated coordinator sees
@@ -113,6 +115,8 @@ test.describe.serial("SCRUM-28 status tracking", () => {
     await expect(page.getByText("Request not found")).toBeVisible();
   });
 
+  // AC6-X2, AC2 (cross-cutting, SCRUM-28): cancellation closes the event everywhere and
+  // completion files a Confirmed event under Completed for the organiser
   // Purpose: Covers the coordinator transitions — cancelling an in-flight
   // request closes it everywhere, and completing a confirmed event files it
   // under Completed for the organiser.

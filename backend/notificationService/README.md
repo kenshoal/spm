@@ -4,15 +4,44 @@ Receives workflow events from the other services and turns them into
 notifications for the people responsible for an event (SCRUM-37).
 
 **Current state:** events are stored as in-app notifications and each user can
-read their own inbox. Email delivery, per-type channel settings and the
-relevance rule are still to be built.
+read their own inbox. A notification can also be emailed, depending on a
+per-type channel setting (SCRUM-57). The relevance rule is still to be built.
 
-Requires migration
-[`database/migrations/0017_notifications.sql`](../../database/migrations/0017_notifications.sql).
+Requires migrations
+[`0017_notifications.sql`](../../database/migrations/0017_notifications.sql) and
+[`0065_notification_channel_settings.sql`](../../database/migrations/0065_notification_channel_settings.sql).
+
+## Channels and email
+
+Each event type is delivered `in_app` (inbox only), `email` (email only) or
+`both`. A type with no row in `notification_channel_settings` is `in_app`, so
+nothing is emailed until a row is added. There is no screen or endpoint for it;
+change it in the database:
+
+```sql
+INSERT INTO public.notification_channel_settings (event_type, channel)
+VALUES ('clarification_requested', 'both')
+ON CONFLICT (event_type)
+DO UPDATE SET channel = EXCLUDED.channel, updated_at = now();
+```
+
+- The email goes to the address on the recipient's Supabase Auth account, and
+  only to them. A recipient id that is not a user id, or a user with no email,
+  gets no email.
+- An `email`-only notification is still stored once (that is what stops a
+  retried event sending a second email) but is left out of the inbox.
+- **A failed email never fails the caller.** If the setting, the address or the
+  mail server cannot be reached, the problem is logged and the endpoint still
+  answers `202`. The mail server wait is capped at 10 seconds.
+- Email needs `SMTP_HOST` (see `.env.example`). With it empty the service starts
+  and stores notifications as before, and each email attempt logs
+  `SMTP host is not set`.
+- The email text is generic (the event type and a link to `INBOX_URL`); the
+  readable wording lives in the frontend.
 
 ## Sending an event
 
-`POST /notifications/events` → `202 Accepted` with `{"status": "accepted"}`.
+`POST /notifications/events` → `202 Accepted` with `{"status": "accepted"}`. Internal: the sender must send `X-Internal-Token` matching `NOTIFICATION_INTERNAL_TOKEN`, otherwise `401` and nothing is stored.
 
 ```json
 {

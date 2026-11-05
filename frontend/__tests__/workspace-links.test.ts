@@ -14,6 +14,7 @@ test("links each role to its own workspace", () => {
   ]);
   expect(workspaceLinks(["technical_support"])).toEqual([
     { href: "/equipment", label: "Equipment" },
+    { href: "/equipment/requests", label: "Equipment requests" },
     { href: "/arrangement-reviews", label: "Arrangement reviews" },
     notifications,
   ]);
@@ -25,7 +26,8 @@ test("links each role to its own workspace", () => {
     { href: "/arrangement-reviews", label: "Arrangement reviews" },
     notifications,
   ]);
-  expect(workspaceLinks(["attendee"])).toEqual([]);
+  // Hotfix 5: attendees have their own workspace now.
+  expect(workspaceLinks(["attendee"])).toEqual([{ href: "/events", label: "Events" }, notifications]);
 });
 
 // AC6-X2 (cross-cutting): SCRUM-37 — every user with a workspace can reach their notifications,

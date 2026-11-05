@@ -27,6 +27,11 @@ from app.booking_notifications import (
     get_booking_notifier,
 )
 from app.booking_repository import BookingRequestStore, get_booking_repository
+from app.coordinator_lookup import (
+    CoordinatorLookup,
+    get_coordinator_lookup,
+    notice_recipient,
+)
 from app.dependencies import (
     Principal,
     require_block_reader,
@@ -34,11 +39,13 @@ from app.dependencies import (
     require_venue_staff,
     require_venue_viewer,
 )
+from app.hold_store import VenueHoldStore, get_hold_store
 from app.models import (
     RoomLayout,
     Venue,
     VenueCreate,
     VenueLocation,
+    VenueSearchResult,
     VenueStatus,
     VenueUpdate,
 )
@@ -55,6 +62,7 @@ VenueViewerDep = Annotated[Principal, Depends(require_venue_viewer)]
 VenueLocationReaderDep = Annotated[Principal, Depends(require_venue_location_reader)]
 BlockRepoDep = Annotated[BlockStore, Depends(get_block_repository)]
 BookingRepoDep = Annotated[BookingRequestStore, Depends(get_booking_repository)]
+HoldStoreDep = Annotated[VenueHoldStore, Depends(get_hold_store)]
 
 
 @router.get("/{venue_id}/blocks", response_model=list[VenueBlock])
@@ -91,8 +99,9 @@ def create_venue_block(
     bookings: BookingRepoDep,
     notifier: Annotated[BookingNotifier, Depends(get_booking_notifier)],
     today: Annotated[date, Depends(current_venue_date)],
+    coordinators: Annotated[CoordinatorLookup, Depends(get_coordinator_lookup)],
 ) -> VenueBlock:
-    """Store a dated block, then alert the Coordinators of affected bookings.
+    """Store a dated block, then alert the current Coordinators of affected bookings.
 
     An approved booking that shares a date with the block, overlaps it in time
     and has not ended is affected (SCRUM-23 AC3, SCRUM-65). The block is saved regardless; notifying
@@ -119,7 +128,10 @@ def create_venue_block(
                 booking.end_minute,
             )
         ):
-            notifier.send(block_affects_booking_event(block, booking, venue.name))
+            recipient = notice_recipient(booking, coordinators)
+            if recipient is not None:
+                notifier.send(block_affects_booking_event(block, booking, venue.name, recipient))
+            bookings.mark_needs_new_venue(booking.id)
     return block
 
 
@@ -153,12 +165,13 @@ def list_venue_locations(
     ]
 
 
-@router.get("/search", response_model=list[Venue])
+@router.get("/search", response_model=list[VenueSearchResult])
 def search_venues(
     principal: VenueViewerDep,
     repo: RepoDep,
     blocks: BlockRepoDep,
     bookings: BookingRepoDep,
+    holds: HoldStoreDep,
     required_capacity: Annotated[int | None, Query(gt=0)] = None,
     location: Annotated[str | None, Query()] = None,
     on_date: Annotated[date | None, Query(alias="date")] = None,
@@ -167,13 +180,14 @@ def search_venues(
     layout: Annotated[RoomLayout | None, Query()] = None,
     facility: Annotated[list[str] | None, Query()] = None,
     accessibility: Annotated[list[str] | None, Query()] = None,
-) -> list[Venue]:
+) -> list[VenueSearchResult]:
     """Return venues matching every supplied filter.
 
     With a date and a start and end time (minutes after midnight, SCRUM-65),
     exclude venues blocked or booked at an overlapping time. With only a date,
     require some free time within 07:00-24:00 that day. Without a date, no
-    dated availability claim is made, so times need a date.
+    dated availability claim is made, so times need a date. A venue free but for
+    active tentative holds is returned with ``tentatively_held`` (SCRUM-18).
     """
 
     del principal
@@ -187,11 +201,11 @@ def search_venues(
         if on_date is not None
         else []
     )
-    results: list[Venue] = []
+    results: list[VenueSearchResult] = []
     for venue in repo.list():
         if venue.status is not VenueStatus.AVAILABLE:
             continue
-        if required_capacity is not None and venue.max_capacity < required_capacity:
+        if required_capacity is not None and venue.capacity_for(layout) < required_capacity:
             continue
         if location is not None and location.lower() not in venue.location.lower():
             continue
@@ -205,12 +219,16 @@ def search_venues(
             {a.lower() for a in venue.accessibility_features}
         ):
             continue
-        if on_date is not None and not is_free(
-            venue, on_date, start_minute, end_minute,
-            blocks.list_for_venue(venue.id), approved,
-        ):
-            continue
-        results.append(venue)
+        held = False
+        if on_date is not None:
+            venue_blocks = blocks.list_for_venue(venue.id)
+            if not is_free(venue, on_date, start_minute, end_minute, venue_blocks, approved):
+                continue
+            held = not is_free(
+                venue, on_date, start_minute, end_minute, venue_blocks, approved,
+                holds.list_for_venue(venue.id, on_date, on_date),
+            )
+        results.append(VenueSearchResult(**venue.model_dump(), tentatively_held=held))
     return results
 
 
@@ -253,6 +271,18 @@ def update_venue(
     principal: VenueStaffDep,
     repo: RepoDep,
 ) -> Venue:
+    # SCRUM-30 AC6: naming one end must still leave start before end. Both ends named are
+    # checked by the model; one end is checked here against the stored other end.
+    if {"operating_start_minute", "operating_end_minute"} & payload.model_fields_set:
+        stored = repo.get(venue_id)
+        if stored is not None:
+            start = payload.operating_start_minute or stored.operating_start_minute
+            end = payload.operating_end_minute or stored.operating_end_minute
+            if start >= end:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "The operating start must be before the operating end",
+                )
     # SCRUM-20 AC6: setup and turnaround go through update_timing, which flags the
     # bookings a change affects; the other fields are a plain update.
     timing = payload.model_dump(

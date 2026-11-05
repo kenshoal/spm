@@ -60,6 +60,16 @@ class BookingRequestCreate(BaseModel):
         return self
 
 
+class BookingReplacementCreate(BaseModel):
+    """What a Coordinator sends to replace a flagged booking: only the new venue.
+
+    The event, dates and times are the replaced booking's own (SCRUM-63 A3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    venue_id: str = Field(min_length=1)
+
+
 class BookingRequest(BaseModel):
     """A stored booking request."""
 
@@ -70,6 +80,8 @@ class BookingRequest(BaseModel):
     event_name: str | None = None
     expected_attendance: int | None = None
     requirements_note: str | None = None
+    # SCRUM-32 AC2: copied from the event when the request is made, never caller-supplied.
+    accessibility_needs: str | None = None
     start_date: date
     end_date: date
     start_minute: int | None = None
@@ -84,6 +96,8 @@ class BookingRequest(BaseModel):
     decided_at: datetime | None = None
     cancelled_by: str | None = None
     cancelled_at: datetime | None = None
+    # SCRUM-63: the flagged booking this request replaces (0068).
+    replaces_booking_id: str | None = None
     created_at: datetime = Field(default_factory=_now)
 
     @model_validator(mode="after")
@@ -92,3 +106,21 @@ class BookingRequest(BaseModel):
             self.start_minute, self.end_minute = slots_to_range(self.slots)
         self.slots = touched_slots(self.start_minute, self.end_minute)
         return self
+
+
+class BookingConflict(BaseModel):
+    """An approved booking a new request overlaps, as dates and times only (SCRUM-67).
+
+    Never the other event's name, ids or users."""
+
+    start_date: date
+    end_date: date
+    start_minute: int
+    end_minute: int
+
+
+class BookingRequestCreated(BookingRequest):
+    """A stored request plus the approved bookings it clashes with, setup and
+    turnaround included. A warning only: approval is the hard check (SCRUM-20)."""
+
+    conflicts: list[BookingConflict] = Field(default_factory=list)

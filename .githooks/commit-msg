@@ -7,8 +7,9 @@ subject=$(sed -n '1p' "$commit_message_file" | tr -d '\r')
 # followed by a non-empty description.
 pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([[:alnum:]_.-]+\))?!?: .+'
 github_merge_pattern='^Merge pull request #[0-9]+ from [^[:space:]]+$'
+git_merge_pattern="^Merge (remote-tracking )?branch '[^']+'( of [^[:space:]]+)? into [^[:space:]]+$"
 
-if printf '%s\n' "$subject" | grep -Eq "$pattern|$github_merge_pattern"; then
+if printf '%s\n' "$subject" | grep -Eq "$pattern|$github_merge_pattern|$git_merge_pattern"; then
     exit 0
 fi
 
@@ -24,7 +25,7 @@ Examples:
   feat!: remove the legacy endpoint
 
 Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
-GitHub-generated pull request merge commits are also allowed.
+GitHub pull request merges and git's default merge messages are also allowed.
 EOF
 
 exit 1

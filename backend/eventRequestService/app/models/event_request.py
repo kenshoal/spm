@@ -9,6 +9,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -33,6 +34,10 @@ class EventRequestStatus(str, Enum):
     COMPLETED = "Completed"
     CANCELLED = "Cancelled"
     REJECTED = "Rejected"
+    # Hotfixes 21 and 22: the Coordinator records a withdrawal (Q&A #103) and an event
+    # can be postponed with no new date (Q&A #69, #121).
+    WITHDRAWN = "Withdrawn"
+    POSTPONED = "Postponed"
 
 
 class EventRequestFields(BaseModel):
@@ -171,6 +176,8 @@ class EventChangeRequestStatus(str, Enum):
     PENDING = "Pending"
     APPROVED = "Approved"
     REJECTED = "Rejected"
+    # Hotfix 20 (Q&A #104): some fields accepted, the others refused with reasons.
+    PARTIALLY_APPROVED = "Partially Approved"
 
 
 class EventChangeRequestCreate(BaseModel):
@@ -184,6 +191,7 @@ class EventChangeRequestCreate(BaseModel):
     venue_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
     equipment_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
     registration_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
+    accessibility_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
 
     @model_validator(mode="after")
     def proposed_change_is_required(self) -> "EventChangeRequestCreate":
@@ -220,12 +228,44 @@ class EventChangeBookingConflict(BaseModel):
     """Only authorised, schema-checked conflict facts may cross the API boundary."""
 
     booking_id: UUID
+    # hold_conflict: an active tentative hold (SCRUM-18, 0066) covers the new time.
     refusal_codes: list[Literal[
         "venue_unavailable", "active_block", "setup_outside_window",
-        "turnaround_outside_window", "booking_conflict",
+        "turnaround_outside_window", "booking_conflict", "hold_conflict",
     ]] = Field(min_length=1)
     conflicting_booking_ids: list[UUID]
     conflicting_block_ids: list[UUID]
+
+
+class EventPostponement(BaseModel):
+    """Hotfix 22: why the event is postponed. The new date comes later (ResumeEvent)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str = Field(min_length=1, max_length=2_000)
+
+
+class EventOrganiserChange(BaseModel):
+    """Hotfix 24 (Q&A #59, #61): the Coordinator hands an event to another Organiser."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    organiser_email: str = Field(min_length=3, max_length=320)
+    reason: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("organiser_email")
+    @classmethod
+    def looks_like_an_email(cls, value: str) -> str:
+        local, _, domain = value.partition("@")
+        if not local or "." not in domain or " " in value:
+            raise ValueError("organiser_email must be an email address")
+        return value
+
+
+class EventResumption(BaseModel):
+    """Hotfix 22: the new date(s) a postponed event is planned for."""
+
+    proposed_date_times: list[AwareDatetime] = Field(min_length=1)
 
 
 class EventChangeDecision(BaseModel):
@@ -234,6 +274,21 @@ class EventChangeDecision(BaseModel):
     decision: EventChangeRequestStatus
     reason: str | None = Field(default=None, max_length=2_000)
     booking_plan: list[EventChangeBookingPlanItem] | None = None
+    # Hotfix 20 (Q&A #104): accept only these fields and refuse the rest, each with a
+    # reason. Valid only with an Approved decision; the database checks the fields.
+    accepted_fields: list[str] | None = Field(default=None, min_length=1)
+    rejected_reasons: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def partial_fields_need_an_approval(self) -> "EventChangeDecision":
+        if self.accepted_fields is None and self.rejected_reasons is not None:
+            raise ValueError("rejected_reasons needs accepted_fields")
+        if (
+            self.accepted_fields is not None
+            and self.decision != EventChangeRequestStatus.APPROVED
+        ):
+            raise ValueError("accepted_fields only applies to an Approved decision")
+        return self
 
     @field_validator("decision")
     @classmethod
@@ -267,12 +322,19 @@ class EventChangeDecision(BaseModel):
         return self
 
 
+class EventFinalEndUpdate(BaseModel):
+    """Only the assigned coordinator records the authoritative final end."""
+
+    final_event_end_at: AwareDatetime
+
+
 class EventRequestResponse(EventRequestFields):
     id: str
     organiser_id: str
     status: EventRequestStatus
     created_at: datetime
     updated_at: datetime
+    final_event_end_at: AwareDatetime | None = None
 
 
 class AttendeeEventResponse(BaseModel):
@@ -298,23 +360,73 @@ class SafetyDecision(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    decision: Literal["approved", "changes_requested"]
+    decision: Literal["approved", "changes_requested", "rejected"]
     reason: str | None = Field(default=None, max_length=2_000)
     targets: list[SafetyTarget] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def changes_need_a_reason(self) -> "SafetyDecision":
-        if self.decision == "changes_requested" and not self.reason:
-            raise ValueError("a reason is required when asking for changes")
+        if self.decision != "approved" and not self.reason:
+            raise ValueError("a reason is required unless approving")
         if len({(t.arrangement, t.id) for t in self.targets}) != len(self.targets):
             raise ValueError("each arrangement can be listed only once")
         return self
 
 
+class EventDetailsUpdate(BaseModel):
+    """Hotfix 8 (SCRUM-29, Q&A #102): the Coordinator's edit. Omitted values stay.
+    expected_updated_at refuses an edit made from a page that has gone stale."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    expected_updated_at: AwareDatetime
+    event_name: str | None = Field(default=None, min_length=1, max_length=200)
+    purpose: str | None = Field(default=None, min_length=1, max_length=1_000)
+    description: str | None = Field(default=None, min_length=1, max_length=5_000)
+    proposed_date_times: list[AwareDatetime] | None = Field(default=None, min_length=1)
+    expected_attendance: int | None = Field(default=None, gt=0, le=2_147_483_647)
+    venue_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
+    accessibility_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
+    equipment_requirements: str | None = Field(default=None, min_length=1, max_length=2_000)
+    registration_needs: str | None = Field(default=None, min_length=1, max_length=2_000)
+
+    @model_validator(mode="after")
+    def something_changes(self) -> "EventDetailsUpdate":
+        if self.model_fields_set <= {"expected_updated_at"}:
+            raise ValueError("no details to update")
+        for name in self.model_fields_set - {"expected_updated_at"}:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be cleared")
+        return self
+
+
+class EventArrangementVenue(BaseModel):
+    name: str
+    location: str
+    start_date: date
+    end_date: date
+    start_minute: int
+    end_minute: int
+
+
+class EventArrangementEquipment(BaseModel):
+    equipment_type: str
+    quantity: int
+    reserved: int
+
+
+class EventArrangementsResponse(BaseModel):
+    """Hotfix 14 (Week 1 brief, step 10): what is booked and reserved for an event,
+    as its Organiser may see it. Nothing about who decided or internal notes."""
+
+    venues: list[EventArrangementVenue]
+    equipment: list[EventArrangementEquipment]
+
+
 class SafetyReviewResponse(BaseModel):
     id: str
     event_request_id: str
-    decision: Literal["approved", "changes_requested"]
+    decision: Literal["approved", "changes_requested", "rejected"]
     reason: str | None
     targets: list[dict[str, Any]]
     decided_by: str
@@ -345,6 +457,16 @@ class EventChangeRequestResponse(BaseModel):
     created_at: datetime
     decided_at: datetime | None = None
     applied_booking_plan: list[EventChangeBookingPlanItem] | None = None
+    # Hotfix 20: field -> {"value": proposed value, "reason": why it was refused}.
+    rejected_changes: dict[str, Any] | None = None
+
+    @model_serializer(mode="wrap")
+    def omit_absent_rejections(self, handler: Any) -> dict[str, Any]:
+        """A request nobody partly refused reads exactly as it did before hotfix 20."""
+        data = handler(self)
+        if data.get("rejected_changes") is None:
+            data.pop("rejected_changes", None)
+        return data
 
 
 class EventChangeDatePlanBooking(BaseModel):

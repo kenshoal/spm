@@ -1,10 +1,16 @@
+import logging
 from datetime import datetime
 from typing import Any
 
+from app.repositories.coordinator_assignment_repository import (
+    CoordinatorAssignmentRepository,
+)
+from app.repositories.event_request_repository import SupabaseRepositoryError
 from app.repositories.registration_repository import (
     RegistrationRepository,
     RegistrationRpcError,
 )
+from app.services.notification_client import NotificationClient
 from app.services.registration_rules import (
     AlreadyWithdrawnError,
     EventFullError,
@@ -15,8 +21,14 @@ from app.services.registration_rules import (
     check_registration,
     check_withdrawal,
     is_window_open,
+    places_remaining,
     to_public_event,
 )
+
+logger = logging.getLogger(__name__)
+
+EVENT_ORGANISER_ROLE = "event_organiser"
+EVENT_COORDINATOR_ROLE = "event_coordinator"
 
 NOT_FOUND_ERRCODE = "P0002"
 REFUSED_ERRCODE = "P0004"
@@ -24,6 +36,38 @@ REFUSED_ERRCODE = "P0004"
 
 class AlreadyRegisteredError(Exception):
     """The attendee already holds an active registration for this event."""
+
+
+class AttendeeAlreadyRegisteredError(AlreadyRegisteredError):
+    """SCRUM-41: the same refusal, worded for the coordinator."""
+
+
+class CapacityBelowTakenError(Exception):
+    """Capacity cannot go below the places already taken (hotfix 4)."""
+
+
+class RegistrationSettingsNotAllowedError(Exception):
+    """The event's status does not allow changing registration settings (hotfix 4)."""
+
+
+class RegistrationSettingsInvalidError(Exception):
+    """The database refused the settings as invalid (hotfix 4)."""
+
+
+class AttendeeNotFoundError(Exception):
+    """No account with that email holds the attendee role."""
+
+
+class CapacityNotSetError(Exception):
+    """The event has no registration capacity, so no place can be given."""
+
+
+class NotEventDayError(Exception):
+    """SCRUM-25: check-in is only open on the event's Asia/Singapore dates."""
+
+
+class AlreadyCheckedInError(Exception):
+    """The registration already has a check-in."""
 
 
 class RegistrationService:
@@ -37,8 +81,162 @@ class RegistrationService:
     last place is told they are already registered, not that the event is full.
     """
 
-    def __init__(self, repository: RegistrationRepository) -> None:
+    def __init__(
+        self,
+        repository: RegistrationRepository,
+        coordinators: CoordinatorAssignmentRepository | None = None,
+        notification_client: NotificationClient | None = None,
+    ) -> None:
         self.repository = repository
+        self.coordinators = coordinators
+        # No client means nothing is sent (tests, or no service configured).
+        self.notification_client = notification_client or NotificationClient(None)
+
+    def registration_info(
+        self, event_id: str, caller_id: str, caller_roles: tuple[str, ...]
+    ) -> dict[str, Any]:
+        """SCRUM-34: the owning organiser or latest coordinator sees every
+        registration and the counts. Anyone else is told the event does not
+        exist, never that it does and belongs to someone else."""
+        event = self.repository.get_event_access(event_id)
+        if event is None or not self._manages(event, caller_id, caller_roles):
+            raise EventNotVisibleError
+        rows = self.repository.list_for_event(event_id)
+        registered = sum(1 for r in rows if r["status"] == "Registered")
+        attended = sum(
+            1 for r in rows if r["status"] == "Registered" and r.get("attended_at")
+        )
+        emails = self._attendee_emails(event_id)
+        rows = [{**row, "attendee_email": emails.get(row["id"])} for row in rows]
+        return {
+            "venue_capacity": self._venue_capacity(event_id),
+            "event_request_id": event_id,
+            "registration_capacity": event.get("registration_capacity"),
+            "registration_opens_at": event.get("registration_opens_at"),
+            "registration_closes_at": event.get("registration_closes_at"),
+            "registered": registered,
+            "withdrawn": sum(1 for r in rows if r["status"] == "Withdrawn"),
+            # SCRUM-34 AC5, SCRUM-24 AC8: a pending offer holds its place.
+            "places_available": places_remaining(
+                event, self.repository.places_taken(event_id)
+            ),
+            "attended": attended,
+            "absent": registered - attended,
+            "registrations": rows,
+        }
+
+    def _venue_capacity(self, event_id: str) -> int | None:
+        """Only a hint for the VIP form (hotfix 23): the database enforces the limit."""
+        try:
+            return self.repository.event_venue_capacity(event_id)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not read the venue capacity of event request %s", event_id, exc_info=True
+            )
+            return None
+
+    def _attendee_emails(self, event_id: str) -> dict[str, str]:
+        """Emails help staff but are not worth failing the list over."""
+        try:
+            return self.repository.attendee_emails(event_id)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not read attendee emails for event request %s",
+                event_id,
+                exc_info=True,
+            )
+            return {}
+
+    def _event_venues(self, event_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Venues add to the public view; a failed lookup must not hide the event."""
+        try:
+            return self.repository.list_event_venues(event_ids)
+        except SupabaseRepositoryError:
+            logger.warning("Could not read event venues", exc_info=True)
+            return {}
+
+    def set_registration_settings(
+        self,
+        event_id: str,
+        coordinator_id: str,
+        opens_at: datetime,
+        closes_at: datetime,
+        capacity: int,
+        now: datetime,
+    ) -> dict[str, Any]:
+        """The database checks assignment, status and places taken under the event
+        lock. An unassigned caller is told the event does not exist (SCRUM-39)."""
+        try:
+            return self.repository.set_registration_settings(
+                event_id, coordinator_id, opens_at, closes_at, capacity, now
+            )
+        except RegistrationRpcError as error:
+            if error.errcode in {NOT_FOUND_ERRCODE, "P0003"}:
+                raise EventNotVisibleError from error
+            if error.errcode == "22023":
+                raise RegistrationSettingsInvalidError from error
+            if error.reason == "capacity below places taken":
+                raise CapacityBelowTakenError from error
+            if error.errcode == REFUSED_ERRCODE:
+                raise RegistrationSettingsNotAllowedError from error
+            raise
+
+    def register_attendee(
+        self, event_id: str, coordinator_id: str, attendee_email: str
+    ) -> dict[str, Any]:
+        """SCRUM-41: the database function checks assignment, status, attendee,
+        duplicate and capacity under the event lock, so there is no early check."""
+        try:
+            registration = self.repository.coordinator_register(
+                event_id, coordinator_id, attendee_email
+            )
+        except RegistrationRpcError as error:
+            if error.reason == "attendee not found":
+                raise AttendeeNotFoundError from error
+            if error.reason == "already registered":
+                raise AttendeeAlreadyRegisteredError from error
+            if error.reason == "capacity not set":
+                raise CapacityNotSetError from error
+            raise self._map_refusal(error) from error
+        # The registration is saved: nothing below may fail it (SCRUM-38).
+        try:
+            event = self.repository.get_event(event_id)
+            if event is not None:
+                self._notify_registration_saved(event, registration)
+        except SupabaseRepositoryError:
+            logger.warning(
+                "Could not read event request %s to notify of a manual registration",
+                event_id,
+                exc_info=True,
+            )
+        return registration
+
+    def check_in(
+        self, event_id: str, registration_id: str, coordinator_id: str, now: datetime
+    ) -> dict[str, Any]:
+        """SCRUM-25: the database function checks assignment, status, event day
+        and the registration under lock, so there is no early check."""
+        try:
+            return self.repository.check_in(event_id, registration_id, coordinator_id, now)
+        except RegistrationRpcError as error:
+            refusal = {
+                "not event day": NotEventDayError,
+                "registration not found": RegistrationNotFoundError,
+                "already checked in": AlreadyCheckedInError,
+            }.get(error.reason or "")
+            if refusal is not None:
+                raise refusal from error
+            raise self._map_refusal(error) from error
+
+    def _manages(
+        self, event: dict[str, Any], caller_id: str, caller_roles: tuple[str, ...]
+    ) -> bool:
+        if EVENT_ORGANISER_ROLE in caller_roles and event.get("organiser_id") == caller_id:
+            return True
+        if EVENT_COORDINATOR_ROLE in caller_roles and self.coordinators is not None:
+            latest = self.coordinators.latest_for_event_request(event["id"])
+            return latest is not None and latest["coordinator_id"] == caller_id
+        return False
 
     def list_open_events(self, now: datetime) -> list[dict[str, Any]]:
         events = [
@@ -46,12 +244,21 @@ class RegistrationService:
             for event in self.repository.list_confirmed_events()
             if is_window_open(event, now)
         ]
-        counts = self.repository.count_active_for_events([e["id"] for e in events])
-        return [to_public_event(e, counts.get(e["id"], 0)) for e in events]
+        # D6 (SCRUM-24): a pending offer holds its place against capacity, so
+        # the public view counts registrations plus offers, never fewer.
+        counts = {e["id"]: self.repository.places_taken(e["id"]) for e in events}
+        venues = self._event_venues([e["id"] for e in events])
+        return [
+            {**to_public_event(e, counts.get(e["id"], 0)), "venues": venues.get(e["id"], [])}
+            for e in events
+        ]
 
     def get_event(self, event_id: str) -> dict[str, Any]:
         event = self._visible_event(event_id)
-        return to_public_event(event, self.repository.count_active(event_id))
+        return {
+            **to_public_event(event, self.repository.places_taken(event_id)),
+            "venues": self._event_venues([event_id]).get(event_id, []),
+        }
 
     def register(
         self, event_id: str, attendee_id: str, now: datetime
@@ -66,10 +273,64 @@ class RegistrationService:
             registration = self.repository.register(event_id, attendee_id, now)
         except RegistrationRpcError as error:
             raise self._map_refusal(error) from error
-        return {
-            **registration,
-            "event": to_public_event(event, self.repository.count_active(event_id)),
-        }
+        registered = self._notify_registration_saved(event, registration)
+        return {**registration, "event": to_public_event(event, registered)}
+
+    def _notify_registration_saved(
+        self, event: dict[str, Any], registration: dict[str, Any]
+    ) -> int:
+        """SCRUM-38 AC1 and AC2, after any registration is saved, however it was made.
+
+        A refused registration never reaches here, so it tells nobody. Best-effort:
+        a notice failure never undoes the registration. "Full" is not recounted here:
+        the database decides, in the transaction that saved the registration, whether
+        this save took the event from below capacity to full (Registered plus Offered
+        places) and returns it as `filled_event`. Returns the places taken.
+        """
+        self.notification_client.notify_registration_confirmed(
+            event_request_id=event["id"],
+            attendee_id=registration["attendee_id"],
+            event_name=event.get("event_name"),
+            registration_id=registration["id"],
+        )
+        if registration.get("filled_event") is True:
+            self._notify_registration_full(event, registration["id"])
+        return self.repository.places_taken(event["id"])
+
+    def _notify_registration_full(
+        self, event: dict[str, Any], registration_id: str
+    ) -> None:
+        """SCRUM-38 AC2: the last place was taken; tell the Organiser and Coordinator.
+
+        The registration is already saved, so nothing here may fail it: a
+        person we cannot look up is logged and skipped.
+        """
+        recipients: list[str] = []
+        for role, lookup in (
+            ("organiser", self.repository.get_organiser_id),
+            ("coordinator", self.repository.latest_coordinator_id),
+        ):
+            try:
+                person_id = lookup(event["id"])
+            except SupabaseRepositoryError:
+                logger.warning(
+                    "Could not find the %s of event request %s to tell that "
+                    "registration is full",
+                    role,
+                    event["id"],
+                    exc_info=True,
+                )
+                continue
+            if person_id is not None and person_id not in recipients:
+                recipients.append(person_id)
+        for recipient_id in recipients:
+            self.notification_client.notify_registration_full(
+                event_request_id=event["id"],
+                recipient_id=recipient_id,
+                event_name=event.get("event_name"),
+                registration_id=registration_id,
+                capacity=event["registration_capacity"],
+            )
 
     def withdraw(
         self, registration_id: str, attendee_id: str, now: datetime
@@ -92,6 +353,14 @@ class RegistrationService:
             withdrawn = self.repository.withdraw(registration_id, attendee_id, now)
         except RegistrationRpcError as error:
             raise self._map_withdrawal_refusal(error) from error
+        # The withdrawal is saved: the notice is best-effort and never undoes it
+        # (SCRUM-22 AC5). A refused withdrawal raised above and tells nobody.
+        self.notification_client.notify_registration_withdrawn(
+            event_request_id=event["id"],
+            attendee_id=withdrawn["attendee_id"],
+            event_name=event.get("event_name"),
+            registration_id=withdrawn["id"],
+        )
         return {
             **withdrawn,
             "event": to_public_event(event, self.repository.count_active(event["id"])),
@@ -102,13 +371,17 @@ class RegistrationService:
         event_ids = sorted({r["event_request_id"] for r in registrations})
         events = {e["id"]: e for e in self.repository.get_events(event_ids)}
         counts = self.repository.count_active_for_events(event_ids)
+        venues = self._event_venues(event_ids)
         return [
             {
                 **registration,
-                "event": to_public_event(
-                    events[registration["event_request_id"]],
-                    counts.get(registration["event_request_id"], 0),
-                ),
+                "event": {
+                    **to_public_event(
+                        events[registration["event_request_id"]],
+                        counts.get(registration["event_request_id"], 0),
+                    ),
+                    "venues": venues.get(registration["event_request_id"], []),
+                },
             }
             for registration in registrations
             if registration["event_request_id"] in events
@@ -140,6 +413,8 @@ class RegistrationService:
         if error.errcode == REFUSED_ERRCODE:
             if error.reason == "already withdrawn":
                 return AlreadyWithdrawnError()
+            if error.reason == "already checked in":
+                return AlreadyCheckedInError()
             if error.reason == "withdrawal not permitted":
                 return WithdrawalNotPermittedError()
         return error

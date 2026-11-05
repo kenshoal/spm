@@ -16,7 +16,7 @@ export interface ArrangementReview {
   arrangement: Arrangement;
   arrangement_id: string;
   trigger_id: string;
-  trigger_type: "event_change" | "equipment_unavailable" | "safety_recheck" | "venue_timing_change";
+  trigger_type: "event_change" | "equipment_unavailable" | "safety_recheck" | "venue_timing_change" | "venue_block" | "venue_change";
   changed_fields: string[];
   reason: string;
   raised_at: string;

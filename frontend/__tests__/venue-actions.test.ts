@@ -1,3 +1,4 @@
+import { ROOM_LAYOUTS } from "@/lib/venue-options";
 import { beforeEach, expect, test, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ redirect: vi.fn(), revalidatePath: vi.fn() }));
@@ -40,6 +41,7 @@ beforeEach(() => {
   navigation.revalidatePath.mockReset();
 });
 
+// SCRUM-30 AC1-H1 (happy): a valid create posts the parsed payload and opens the venue list
 // Purpose: A valid create posts the parsed payload and opens the venue list.
 test("creates a venue and redirects to the venue list", async () => {
   navigation.redirect.mockImplementation(() => { throw new Error("NEXT_REDIRECT"); });
@@ -58,14 +60,18 @@ test("creates a venue and redirects to the venue list", async () => {
       facilities: [],
       accessibility_features: [],
       supported_layouts: [],
+      layout_capacities: {},
       setup_minutes: 0,
       turnaround_minutes: 0,
+      operating_start_minute: 420,
+      operating_end_minute: 1440,
     }),
   });
   expect(navigation.revalidatePath).toHaveBeenCalledWith("/venues");
   expect(navigation.redirect).toHaveBeenCalledWith("/venues");
 });
 
+// SCRUM-30 AC1-N5 (negative): invalid form values are echoed raw and never sent to the venue service
 // Purpose: Invalid input never reaches the API and the raw values are echoed
 // back so a corrected resubmission doesn't lose what was typed.
 test("an invalid form never calls fetch and echoes the raw values", async () => {
@@ -82,14 +88,18 @@ test("an invalid form never calls fetch and echoes the raw values", async () => 
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
+    layout_capacities: Object.fromEntries(ROOM_LAYOUTS.map((layout) => [layout, ""])),
 
     setup_minutes: "",
 
     turnaround_minutes: "",
+    operating_start_minute: "",
+    operating_end_minute: "",
   });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+// SCRUM-30 AC1-N1 (negative): a refused create explains that only Venue Staff can change the catalogue
 // Purpose: Only Venue Staff may change the catalogue; the backend's refusal is explained.
 test("a 403 explains that only Venue Staff can change the catalogue", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 403 }));
@@ -104,13 +114,17 @@ test("a 403 explains that only Venue Staff can change the catalogue", async () =
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
+    layout_capacities: Object.fromEntries(ROOM_LAYOUTS.map((layout) => [layout, ""])),
 
     setup_minutes: "",
 
     turnaround_minutes: "",
+    operating_start_minute: "",
+    operating_end_minute: "",
   });
 });
 
+// SCRUM-30 AC1-N3 (negative): updating a venue removed since the page loaded is explained, not created
 // Purpose: A venue removed since the page loaded is explained.
 test("a 404 on update explains the venue no longer exists", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
@@ -135,10 +149,13 @@ test("a backend 422 is worded without referring to highlighted fields", async ()
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
+    layout_capacities: Object.fromEntries(ROOM_LAYOUTS.map((layout) => [layout, ""])),
 
     setup_minutes: "",
 
     turnaround_minutes: "",
+    operating_start_minute: "",
+    operating_end_minute: "",
   });
 });
 
@@ -166,9 +183,12 @@ test("returns a retryable error when the venue service cannot be reached", async
     facilities: "",
     accessibility_features: "",
     supported_layouts: [],
+    layout_capacities: Object.fromEntries(ROOM_LAYOUTS.map((layout) => [layout, ""])),
 
     setup_minutes: "",
 
     turnaround_minutes: "",
+    operating_start_minute: "",
+    operating_end_minute: "",
   });
 });

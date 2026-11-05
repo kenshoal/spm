@@ -1,8 +1,9 @@
 import { unstable_rethrow } from "next/navigation";
 import { requireAnyRole } from "@/lib/auth";
 import { buildVenueSearch, type VenueSearchInput } from "@/lib/venue-form";
-import { layoutLabel, ROOM_LAYOUTS, searchVenues } from "@/lib/venues";
 import { TimeRangeFields } from "../../components/time-range-fields";
+import { monthOfDate } from "@/lib/venue-calendar";
+import { layoutLabel, ROOM_LAYOUTS, searchVenues } from "@/lib/venues";
 import { AppShell, workspaceLinks } from "../../components/app-shell";
 import { VenueResults } from "./venue-results";
 
@@ -14,7 +15,7 @@ function first(value: string | string[] | undefined): string {
 }
 
 export default async function VenueSearchPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const user = await requireAnyRole(["event_coordinator", "venue_staff"]);
+  const user = await requireAnyRole(["event_coordinator", "venue_staff", "safety_officer"]);
   const raw = await searchParams;
   const input: VenueSearchInput = {
     required_capacity: first(raw.required_capacity),
@@ -57,7 +58,7 @@ export default async function VenueSearchPage({ searchParams }: { searchParams: 
         <label className={labelClass}>Required facilities<input name="facility" defaultValue={input.facility} placeholder="Projector, WiFi" className={inputClass} /></label>
         <label className={labelClass}>Accessibility needs<input name="accessibility" defaultValue={input.accessibility} placeholder="Ramp access" className={inputClass} /></label>
         <div className="flex items-end"><button type="submit" className="min-h-11 w-full rounded-xl bg-[#0f6b5b] px-5 text-sm font-bold text-white hover:bg-[#0b5b4d]">Search venues</button></div>
-        <p className="text-xs text-[#718078] sm:col-span-2 lg:col-span-4">Venues blocked or booked at an overlapping time on the chosen date are excluded, as are venues blocked as a whole. With only a date, a venue needs some free time that day.</p>
+        <p className="text-xs text-[#718078] sm:col-span-2 lg:col-span-4">Venues blocked or booked at an overlapping time on the chosen date are excluded, as are venues blocked as a whole. With only a date, a venue needs some free time that day. A venue free except for a tentative hold is shown as Tentatively held.</p>
       </form>
       {outcome === null ? (
         Object.keys(errors).length ? null : <p className="text-sm text-[#718078]">Add at least one filter to search.</p>
@@ -66,6 +67,7 @@ export default async function VenueSearchPage({ searchParams }: { searchParams: 
       ) : (
         <VenueResults
           venues={outcome.venues}
+          month={monthOfDate(input.date ?? "")}
           requirements={{
             expected_attendance: input.required_capacity ?? "",
             required_layout: input.layout ?? "",

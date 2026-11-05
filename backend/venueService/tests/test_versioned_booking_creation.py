@@ -71,6 +71,10 @@ class RecordingStore:
         self.calls.append((booking, expected_event_updated_at))
         return booking
 
+    def list_approved_for_venue(self, venue_id, start_date, end_date) -> list[BookingRequest]:
+        # The clash warning (SCRUM-67) reads approved bookings; this store holds none.
+        return []
+
 
 def prepare_route() -> tuple[dict, FakeEventService]:
     events = FakeEventService()

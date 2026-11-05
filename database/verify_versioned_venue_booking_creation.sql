@@ -30,7 +30,9 @@ BEGIN
  SELECT id INTO owner_id FROM auth.users ORDER BY id LIMIT 1;
  ASSERT owner_id IS NOT NULL, 'SETUP: existing disposable Auth FK fixture required';
  INSERT INTO public.event_requests(id,organiser_id,status,event_name,expected_attendance,venue_requirements)
- VALUES(e,owner_id,'Submitted','Current stored event',55,'Stored stage requirement'),
+ -- Hotfix 2 (0090, SCRUM-32 AC7): a booking can only be requested in Approved, Planning or Safety Review, so the
+ -- fixture event is Planning; this verifier is about versions and assignment, not status.
+ VALUES(e,owner_id,'Planning','Current stored event',55,'Stored stage requirement'),
        (other,owner_id,'Approved','Other event',20,'Other requirement');
  INSERT INTO public.event_coordinator_assignments(event_request_id,coordinator_id,assigned_by)
  VALUES(e,old_actor::text,'verify35'),(e,actor::text,'verify35'),(other,actor::text,'verify35');

@@ -6,6 +6,9 @@ function sessionCookie(value: string) {
   return [{ name: "cs_access_token", value, url: "http://127.0.0.1:3100" }];
 }
 
+// SCRUM-17 AC2-H1 (happy): the full decision loop — clarify, organiser response, resume, approve —
+// keeps one request, its reasons and its statuses consistent across both roles
+// (AC2, AC3 and AC4; the read-only field checks at each step also prove AC1).
 // Purpose: Proves the full clarification loop keeps one request, its reason and its status consistent across both roles.
 test("coordinator requests clarification, organiser responds and coordinator approves", async ({
   page,
@@ -84,6 +87,8 @@ test("coordinator requests clarification, organiser responds and coordinator app
   await expect(page.getByText("A wireless microphone is required.")).toBeVisible();
 });
 
+// SCRUM-17 AC3-X2 (cross-cutting): a failed history read shows an accessible alert and
+// withholds the decision, resume and response controls for both actors.
 // Purpose: A failed history read blocks blind clarification actions for both actors.
 test("shows review activity failures and withholds dependent actions", async ({
   page,

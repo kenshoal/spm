@@ -36,7 +36,8 @@ const completeDraft: EventRequest = {
   registration_needs: "Online registration",
 };
 
-// Purpose: Confirms a saved draft gives the organiser a direct path back to editing it.
+// SCRUM-8 AC3-P2 (partition): the list links a saved draft straight back to its
+// edit form.
 test("routes a saved draft to the editable form", () => {
   render(<RequestList requests={[draft]} />);
 
@@ -66,7 +67,8 @@ test("requires confirmation before deleting a draft", () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-// Purpose: Proves every event-request field may remain empty when saving an early draft.
+// SCRUM-8 AC2-P3 (partition): Save draft bypasses form validation so every
+// field may stay empty on an early draft.
 test("allows an incomplete event request to be saved as a draft", () => {
   render(<EventRequestForm />);
 
@@ -76,7 +78,8 @@ test("allows an incomplete event request to be saved as a draft", () => {
   expect(screen.getByRole("button", { name: "Submit request" })).toBeDefined();
 });
 
-// Purpose: Confirms reopening a draft restores its saved values before further edits.
+// SCRUM-8 AC3-P1 (partition): reopening a draft restores its saved values for
+// further editing.
 test("prefills the form when an organiser continues a draft", () => {
   render(<EventRequestForm request={draft} />);
 
@@ -89,7 +92,8 @@ test("prefills the form when an organiser continues a draft", () => {
   expect(screen.getByRole("button", { name: "Save changes" })).toBeDefined();
 });
 
-// Purpose: Requires explicit confirmation before a completed form becomes read-only.
+// SCRUM-11 AC7-X1 (cross-cutting): submission demands explicit confirmation
+// that the request becomes read-only.
 test("confirms submission of a complete request", () => {
   render(<EventRequestForm request={completeDraft} />);
 
@@ -101,7 +105,8 @@ test("confirms submission of a complete request", () => {
   expect(dialog.textContent).toContain("cannot edit or delete");
 });
 
-// Purpose: Shows a submitted request as view-only and removes draft mutation controls.
+// SCRUM-11 AC7-P1 (partition): a Submitted request keeps only the view control
+// and loses its draft mutation controls.
 test("renders a submitted request as read-only in the list", () => {
   render(<RequestList requests={[{ ...completeDraft, status: "Submitted" }]} />);
 

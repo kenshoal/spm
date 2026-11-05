@@ -8,6 +8,11 @@ const SESSIONS = {
   "test-session": { id: "playwright-user", role: "event_organiser" },
   "tech-session": { id: "playwright-tech", role: "technical_support" },
   "safety-session": { id: "playwright-safety", role: "safety_officer" },
+  // The real service lets an event's coordinator read its requirements (SCRUM-33),
+  // so every coordinator page that shows them needs these sessions (hotfix 7).
+  "coordinator-session": { id: "playwright-coordinator", role: "event_coordinator" },
+  "other-coordinator-session": { id: "playwright-other-coordinator", role: "event_coordinator" },
+  "ops-session": { id: "playwright-ops", role: "event_operations_manager" },
 };
 // SCRUM-33/13 reads by event, seeded by the SCRUM-60 journey.
 const requirements = [];
@@ -43,7 +48,8 @@ createServer(async (request, response) => {
 
   const byEvent = url.pathname.match(/^\/equipment-(requirements|reservations)\/by-event\/([^/]+)$/);
   if (byEvent && request.method === "GET") {
-    if (!["technical_support", "safety_officer"].includes(user.role)) return send(response, 403, { detail: "Insufficient permissions" });
+    const readers = byEvent[1] === "requirements" ? ["technical_support", "safety_officer", "event_coordinator"] : ["technical_support", "safety_officer"];
+    if (!readers.includes(user.role)) return send(response, 403, { detail: "Insufficient permissions" });
     const rows = byEvent[1] === "requirements" ? requirements : reservations;
     return send(response, 200, rows.filter((row) => row.event_request_id === decodeURIComponent(byEvent[2])));
   }

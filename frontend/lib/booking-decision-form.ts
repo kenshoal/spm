@@ -71,6 +71,8 @@ const REFUSAL_TEXT: Record<string, string> = {
   setup_outside_window: "The venue's setup time would start before 07:00.",
   turnaround_outside_window: "The venue's turnaround time would end after 24:00.",
   booking_conflict: "Another approved booking, including the venue's setup and turnaround time, already holds part of this period.",
+  // SCRUM-18: an active tentative hold protects its time like a booking.
+  hold_conflict: "A tentative hold, including the venue's setup and turnaround time, already covers part of this period.",
 };
 
 export function refusalMessages(codes: readonly string[]): string[] {
