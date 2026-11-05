@@ -6,7 +6,12 @@ from pydantic import BaseModel, Field
 from supabase import Client
 from supabase_auth.errors import AuthApiError, AuthError
 
-from app.integrations import get_supabase_admin_client, get_supabase_client
+from app.integrations import (
+    get_supabase_admin_client,
+    get_supabase_client,
+    get_supabase_verifier_client,
+)
+from app.token_cache import VerifiedUserCache
 
 
 class ServiceResponse(BaseModel):
@@ -178,12 +183,17 @@ def login(
     return LoginResponse.model_validate(auth_response.session, from_attributes=True)
 
 
-def _verify_bearer(supabase: Client, authorization: str | None):
+def _bearer_token(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
     token = authorization.removeprefix("Bearer ").strip()
     if not token or " " in token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
+    return token
+
+
+def _verify_bearer(supabase: Client, authorization: str | None):
+    token = _bearer_token(authorization)
 
     try:
         auth_response = supabase.auth.get_user(token)
@@ -250,19 +260,31 @@ def get_optional_admin_client() -> Client | None:
         return None
 
 
+# Verified /auth/me results, kept briefly so repeat calls skip Supabase. See
+# app/token_cache.py for the staleness trade-off.
+verified_users: VerifiedUserCache[AuthenticatedUser] = VerifiedUserCache()
+
+
 @app.get("/auth/me", response_model=AuthenticatedUser, tags=["auth"])
 def current_user(
-    supabase: Annotated[Client, Depends(get_supabase_client)],
+    supabase: Annotated[Client, Depends(get_supabase_verifier_client)],
     response: Response,
     admin_client: Annotated[Client | None, Depends(get_optional_admin_client)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> AuthenticatedUser:
-    user = _verify_bearer(supabase, authorization)
+    token = _bearer_token(authorization)
     response.headers["Cache-Control"] = "no-store"
+    cached = verified_users.get(token)
+    if cached is not None:
+        return cached
+
+    user = _verify_bearer(supabase, authorization)
     roles = _staff_roles_of(user, admin_client)
-    return AuthenticatedUser(
+    verified = AuthenticatedUser(
         id=user.id, email=user.email, role=roles[0], roles=roles
     )
+    verified_users.put(token, verified.id, verified)
+    return verified
 
 
 @app.patch(
@@ -273,7 +295,7 @@ def current_user(
 def update_user_role(
     user_id: str,
     payload: RoleUpdateRequest,
-    supabase: Annotated[Client, Depends(get_supabase_client)],
+    supabase: Annotated[Client, Depends(get_supabase_verifier_client)],
     admin_client: Annotated[Client, Depends(get_admin_client)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> RoleUpdateResponse:
@@ -302,6 +324,9 @@ def update_user_role(
                 "assigned_by": caller.id,
             }
         ).execute()
+        # staff_roles changed, so the user's remembered /auth/me result is
+        # stale even if the app_metadata update below fails.
+        verified_users.invalidate_user(user_id)
         roles = _staff_roles_of(response.user, admin_client)
         admin_client.auth.admin.update_user_by_id(
             user_id, {"app_metadata": {"role": roles[0], "roles": roles}}
@@ -334,7 +359,7 @@ def update_user_role(
 @app.get("/auth/users", response_model=list[UserSummary], tags=["auth"])
 def list_users_by_role(
     role: Role,
-    supabase: Annotated[Client, Depends(get_supabase_client)],
+    supabase: Annotated[Client, Depends(get_supabase_verifier_client)],
     admin_client: Annotated[Client, Depends(get_admin_client)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> list[UserSummary]:

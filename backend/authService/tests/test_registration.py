@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from postgrest.exceptions import APIError
 from supabase_auth.errors import AuthApiError, AuthUnknownError
 
-from app.integrations import get_supabase_client
+from app.integrations import get_supabase_client, get_supabase_verifier_client
 from app.main import app, get_admin_client, get_optional_admin_client
 
 
@@ -15,6 +15,7 @@ from app.main import app, get_admin_client, get_optional_admin_client
 def supabase() -> Iterator[Mock]:
     supabase = Mock()
     app.dependency_overrides[get_supabase_client] = lambda: supabase
+    app.dependency_overrides[get_supabase_verifier_client] = lambda: supabase
     app.dependency_overrides[get_optional_admin_client] = lambda: None
     yield supabase
     app.dependency_overrides.clear()
