@@ -161,7 +161,7 @@ test("readVenueFormValues keeps the typed setup and turnaround text", () => {
 });
 
 
-// SCRUM-30 AC1-H6 (happy): the opening and closing times are sent as minutes after midnight
+// SCRUM-30 H12 AC1-H6 (happy): the opening and closing times are sent as minutes after midnight
 test("parses the operating hours", () => {
   const { payload, errors } = parseVenueForm(
     venueForm({ ...valid, operating_start_minute: "540", operating_end_minute: "1080" }),
@@ -173,14 +173,14 @@ test("parses the operating hours", () => {
   expect(payload.operating_end_minute).toBe(1080);
 });
 
-// SCRUM-30 AC1-P6 (partition): blank hours mean the whole day, 07:00 to 24:00
+// SCRUM-30 H12 AC1-P6 (partition): blank hours mean the whole day, 07:00 to 24:00
 test("blank operating hours mean the whole day", () => {
   const { payload } = parseVenueForm(venueForm(valid), { includeStatus: false });
 
   expect([payload.operating_start_minute, payload.operating_end_minute]).toEqual([420, 1440]);
 });
 
-// SCRUM-30 AC1-B4, AC1-B5 (boundary): the first and last quarter hours of the day are valid on their own
+// SCRUM-30 H12 AC1-B4, AC1-B5 (boundary): the first and last quarter hours of the day are valid on their own
 test.each([["420", "435"], ["1425", "1440"]])("accepts %s to %s", (start, end) => {
   const { errors } = parseVenueForm(
     venueForm({ ...valid, operating_start_minute: start, operating_end_minute: end }),
@@ -190,7 +190,7 @@ test.each([["420", "435"], ["1425", "1440"]])("accepts %s to %s", (start, end) =
   expect(errors).toEqual({});
 });
 
-// SCRUM-30 AC6-N1 to AC6-N7 (negative): an invalid range is reported, not sent
+// SCRUM-30 H12 AC6-N1 to AC6-N7 (negative): an invalid range is reported, not sent
 test.each([
   ["405", "1080"], ["540", "1455"], ["545", "1080"], ["540", "1085"], ["600", "600"], ["900", "600"], ["abc", "1080"],
 ])("rejects operating hours %s to %s", (start, end) => {
@@ -202,7 +202,7 @@ test.each([
   expect(errors.operating_hours).toMatch(/opening time before the closing time/i);
 });
 
-// SCRUM-30 AC6-X1 (cross-cutting): the raw hours are echoed back untouched after a refusal
+// SCRUM-30 H12 AC6-X1 (cross-cutting): the raw hours are echoed back untouched after a refusal
 test("readVenueFormValues echoes the hours as typed", () => {
   const values = readVenueFormValues(venueForm({ ...valid, operating_start_minute: "900", operating_end_minute: "600" }));
 

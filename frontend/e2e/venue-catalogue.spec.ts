@@ -85,7 +85,7 @@ test("venue staff set setup and turnaround time and coordinators see it", async 
   await expect(result).toContainText("60 min");
 });
 
-// SCRUM-30 AC1-H8, AC6-E1 (happy and negative): e2e: venue staff set a venue's operating hours; an opening time
+// SCRUM-30 H12 AC1-H8, AC6-E1 (happy and negative): e2e: venue staff set a venue's operating hours; an opening time
 // after the closing time is refused with the chosen times kept, and the corrected hours show on the catalogue
 test("venue staff set a venue's operating hours", async ({ page }) => {
   await page.goto("/auth");
