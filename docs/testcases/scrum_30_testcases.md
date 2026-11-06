@@ -1,16 +1,16 @@
 # SCRUM-30 — Maintain the Venue Catalogue
 
-Source: [Jira SCRUM-30](https://is212g9t4.atlassian.net/browse/SCRUM-30) (Venue Staff maintains the catalogue). The three ACs below were pulled from Jira on 1 November 2026 and are recorded as approved; this document and its labels were drafted by the test-case gap sweep on the same day.
+Source: issue tracker SCRUM-30 (Venue Staff maintains the catalogue). The three ACs below were pulled from the issue tracker on 1 November 2026 and are recorded as approved; this document and its labels were drafted by the test-case gap sweep on the same day.
 
-Status: **AI-drafted test design, not yet reviewed by a teammate (`testing.md` §10). Jira remains the source of truth.** The automated tests predate this document: this pass added label comments to them and designed the matrix, and ran no suite — every row below is **Not executed** and no pass/fail is claimed (`testing.md` §8).
+Status: **AI-drafted test design, not yet reviewed by a teammate (`testing.md` §10). The issue tracker remains the source of truth.** The automated tests predate this document: this pass added label comments to them and designed the matrix, and ran no suite — every row below is **Not executed** and no pass/fail is claimed (`testing.md` §8).
 
-> **Update from PR #125 (1 Nov 2026).** (1) **Jira's ACs changed after this document was drafted, and the new AC1 does not match the system.** At 16:07 the SCRUM-30 ACs were rewritten as AC1 to AC7 (Jira shows the time; the editor was not checked). AC1 now says a venue has "one daily operating start and end … on 15-minute steps within 07:00 to 24:00", and AC4 and AC5 say search and suitability use the venue's operating hours. The system does not do this: the form has no such field, and the stored `operating_slots` (AM, PM, NIGHT) are read by nothing since SCRUM-65 (assumption A1). This is a requirement-to-code mismatch, not a test gap: either per-venue operating times are built, or the AC is amended. It needs the Product Owner's decision. (2) The other new ACs map to this matrix as: AC2 = AC1 (update), AC3 = AC2, AC4 and AC5 = AC3, AC6 = AC1-N rows, AC7 = AC1-N1 and the new AC1-X rows. Re-base the IDs when the story owner reviews. (3) Cases added by PR #125 are in `backend/venueService/tests/test_venues_catalogue_contract.py`; the planned AC3-X1 case is now covered by AC3-X2 to AC3-X5.
+> **Update from PR #125 (1 Nov 2026).** (1) **The issue tracker's ACs changed after this document was drafted, and the new AC1 does not match the system.** At 16:07 the SCRUM-30 ACs were rewritten as AC1 to AC7 (issue tracker shows the time; the editor was not checked). AC1 now says a venue has "one daily operating start and end … on 15-minute steps within 07:00 to 24:00", and AC4 and AC5 say search and suitability use the venue's operating hours. The system does not do this: the form has no such field, and the stored `operating_slots` (AM, PM, NIGHT) are read by nothing since SCRUM-65 (assumption A1). This is a requirement-to-code mismatch, not a test gap: either per-venue operating times are built, or the AC is amended. It needs the Product Owner's decision. (2) The other new ACs map to this matrix as: AC2 = AC1 (update), AC3 = AC2, AC4 and AC5 = AC3, AC6 = AC1-N rows, AC7 = AC1-N1 and the new AC1-X rows. Re-base the IDs when the story owner reviews. (3) Cases added by PR #125 are in `backend/venueService/tests/test_venues_catalogue_contract.py`; the planned AC3-X1 case is now covered by AC3-X2 to AC3-X5.
 
 ## Story contract
 
 **User story:** As Venue Staff, I want to create and update venue records in the catalogue, so that Coordinators search and check suitability against accurate venue information.
 
-### Acceptance criteria (approved, Jira 1 Nov 2026)
+### Acceptance criteria (approved, issue tracker 1 Nov 2026)
 
 | ID | Criterion |
 | --- | --- |

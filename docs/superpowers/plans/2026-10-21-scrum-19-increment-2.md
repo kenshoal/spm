@@ -12,7 +12,7 @@ Builds on `2026-10-19-scrum-19-assign-technical-support.md` (increment 1) and `d
 | Item | State |
 | --- | --- |
 | Increment 1 (commits 1–9: DB, rules, API, repository, notification client) | Done on branch. Re-run 21 Oct in `backend/eventRequestService`: `pytest -q` **694 passed, 1 skipped**; `ruff check .` clean (Linux, Python 3.14, uv env outside the repo; no live Supabase) |
-| Jira SCRUM-19 | Still **To Do**, 3 points, Sprint 3 ends **22 Oct**. Move to In Progress |
+| issue tracker SCRUM-19 | Still **To Do**, 3 points, Sprint 3 ends **22 Oct**. Move to In Progress |
 | Frontend (F layer: AC1-X3, AC2-X6, AC3-P6, AC4-X1) | Not started; no test files exist |
 | E2E (AC5-H3) | Not started |
 | Shared dev | `0052` + `seed_technical_support_skills.sql` not applied; `technical_support2@example.com` not created |

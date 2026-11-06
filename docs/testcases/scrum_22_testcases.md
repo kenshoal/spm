@@ -1,7 +1,7 @@
 # SCRUM-22 — Withdraw a Registration
 
-Source: [Jira SCRUM-22](https://is212g9t4.atlassian.net/browse/SCRUM-22). Builds on SCRUM-21 (`0048_event_registrations.sql`, `registration_*` modules in eventRequestService), merged to `dev` (re-checked at `9276da2`, 23 Oct).
-Status: **D1–D3 approved as recommended by Yang (story owner) on 23 October 2026**; recorded here, not written back to Jira. PO sign-off on D1–D3 is still worth confirming. D7 and D8 are deferred: they need `0061` / `0060`, which are not in `dev` (see Scope).
+Source: issue tracker SCRUM-22. Builds on SCRUM-21 (`0048_event_registrations.sql`, `registration_*` modules in eventRequestService), merged to `dev` (re-checked at `9276da2`, 23 Oct).
+Status: **D1–D3 approved as recommended by Yang (story owner) on 23 October 2026**; recorded here, not written back to the issue tracker. PO sign-off on D1–D3 is still worth confirming. D7 and D8 are deferred: they need `0061` / `0060`, which are not in `dev` (see Scope).
 
 ## Dependency check (23 Oct 2026, `origin/dev` at `9276da2`)
 
@@ -15,7 +15,7 @@ Status: **D1–D3 approved as recommended by Yang (story owner) on 23 October 20
 | Attendee can see their registrations | `GET /attendee/registrations` | Yes |
 | Test fakes | `tests/registration_support.py` (`FakeRegistrationRepository`, `add_event`) | Yes |
 
-No Jira blockers on SCRUM-22. Not dependencies (stay out of scope): SCRUM-24 waiting-list promotion, SCRUM-38 notifications.
+No issue tracker blockers on SCRUM-22. Not dependencies (stay out of scope): SCRUM-24 waiting-list promotion, SCRUM-38 notifications.
 SCRUM-36 merged into `dev` (PR #93, `9276da2`). It touches no registration code or migrations, so it doesn't affect SCRUM-22.
 
 Unmerged branches that do touch `event_registrations` (no blockers, but they need coordinating):
@@ -37,7 +37,7 @@ Caveat: there is **no attendee frontend on `dev` yet** (SCRUM-21 increment 2), s
 
 ## AC review
 
-| Jira AC | Outcome | Proposed wording |
+| issue tracker AC | Outcome | Proposed wording |
 | --- | --- | --- |
 | An Attendee can withdraw a registration they currently hold (where withdrawal is permitted). | **Split** — "where permitted" is undefined | **AC1:** Given an Attendee holding a `Registered` registration for a Confirmed event that has not started (D1), when they withdraw it, then its status becomes `Withdrawn`, `withdrawn_at` is set and the updated registration is returned. **AC2:** Given a registration that is not theirs, unknown, already `Withdrawn`, or whose event is not Confirmed or has started, when they try to withdraw, then they are refused with the reason and nothing changes. |
 | Given a withdrawal, when completed, then the place is released and freed capacity becomes available to others. | **Keep, clarified** | **AC3:** Given a completed withdrawal, then the event's `places_remaining` rises by one, another Attendee can take that place while the window is open, and the withdrawn Attendee may register again (D3). |
@@ -133,7 +133,7 @@ Not yet done: AC1-H3, AC2-N8, AC2-N9 (blocked on `0060` / `0061`), shared-databa
 
 ## Follow-up: withdrawal notice (AC5, added 26 October 2026)
 
-Not in the Jira ACs. SCRUM-38 AC1 split it out ("the confirmation of a withdrawal is SCRUM-22's `registration_withdrawn`", `docs/testcases/scrum_38_testcases.md`), and Yang agreed to build it. Built on the SCRUM-38 branch (`feat/scrum-38-registration-notices`) because it reuses that branch's `NotificationClient` registration helper and the `RegistrationService` constructor wiring. Merge SCRUM-38 first.
+Not in the issue tracker ACs. SCRUM-38 AC1 split it out ("the confirmation of a withdrawal is SCRUM-22's `registration_withdrawn`", `docs/testcases/scrum_38_testcases.md`), and Yang agreed to build it. Built on the SCRUM-38 branch (`feat/scrum-38-registration-notices`) because it reuses that branch's `NotificationClient` registration helper and the `RegistrationService` constructor wiring. Merge SCRUM-38 first.
 
 **AC5:** Given an Attendee's withdrawal is saved, when it completes, then the Attendee receives `registration_withdrawn` (event name, status `Withdrawn`) through the same `POST /notifications/events` call, once per registration. A refused withdrawal, or one the database refuses after the early check, tells nobody. A notification failure never undoes the withdrawal.
 

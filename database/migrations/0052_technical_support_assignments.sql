@@ -4,8 +4,8 @@
 -- description plus one skill tag), sees a candidate list of Technical Support
 -- Staff who hold that skill, and assigns them. "Suitable" means the person
 -- holds the technical_support role AND the requirement's skill tag; no
--- availability or double-booking check exists in this slice (Jira SCRUM-19,
--- customer clarification #6).
+-- availability or double-booking check exists in this slice (customer
+-- clarification #6).
 --
 -- Errcode contract (the service maps on these, never on message text):
 --   P0002 event request not found / technical support requirement not found

@@ -6,7 +6,7 @@ Vera owns this test design, opt-in runner and catalogue. Devon owns SCRUM-64 pro
 
 ## Historical 18 October sources, approval and pins
 
-The user authorised preparing and executing the combined integration checks. Root freshly reviewed Jira SCRUM-64, SCRUM-60 and SCRUM-58 and supplied the human-agreed session contract (discussion2168/2194/2195) before implementation inspection. The requirements below are normalised approved outcomes, not quotations from a passing implementation.
+The user authorised preparing and executing the combined integration checks. Root freshly reviewed issue tracker SCRUM-64, SCRUM-60 and SCRUM-58 and supplied the human-agreed session contract (discussion2168/2194/2195) before implementation inspection. The requirements below are normalised approved outcomes, not quotations from a passing implementation.
 
 - Current feature checkout: `a7ea77df6f1facd994ef335a9f3b90dfe7284c0b` on `feat/scrum-64-arrangement-review`; no new product code is introduced by these tests.
 - Initial Jaren PR62 pin, retained as historical evidence: `289a814917dc8a9e4f874b43595285cf7dc68ef9`. Exact `0034_safety_review_decisions.sql` SHA256 `4099f1f7a0c60df682d076c0080e7911da05008495313126de0c9e3f79e817aa`; exact own verification SHA256 `9627a4da26058dd4fe3f8bfbd18abcf8763b4124f2157185176bbc786179c916`.

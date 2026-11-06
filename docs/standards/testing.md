@@ -1,10 +1,10 @@
 # Testing standard
 
-Read this before writing, changing or reviewing tests, deriving test cases from a Jira story, or reporting test results. The always-apply rules are in `AGENTS.md`; this file holds the detail.
+Read this before writing, changing or reviewing tests, deriving test cases from an issue-tracker story, or reporting test results. The always-apply rules are in `AGENTS.md`; this file holds the detail.
 
 ## 1. Establish the story contract
 
-Before detailed test design or implementation, fetch the Jira story and review every acceptance criterion (AC). Do not assume the existing wording is ready for development.
+Before detailed test design or implementation, fetch the issue tracker story and review every acceptance criterion (AC). Do not assume the existing wording is ready for development.
 
 ### AC review gate
 
@@ -29,9 +29,9 @@ Present the review before any production code, with: the original AC, the outcom
 
 Record in `docs/testcases/scrum_<n>_testcases.md`:
 
-- Jira key, story title and user story;
+- issue tracker key, story title and user story;
 - numbered ACs (`AC1`, `AC2`, …);
-- included and excluded behaviour, with related Jira stories;
+- included and excluded behaviour, with related issue tracker stories;
 - actors and relationship permissions;
 - allowed state transitions;
 - persistence and atomicity requirements;
@@ -104,7 +104,7 @@ it("accepts a booking at the attendee limit", () => { ... });
 
 ## 4. Traceability matrix
 
-Every behaviour follows the chain: Jira story → AC → test-case ID → failing test → implementation → passing local evidence → pull-request evidence.
+Every behaviour follows the chain: issue tracker story → AC → test-case ID → failing test → implementation → passing local evidence → pull-request evidence.
 
 The story's test-case document holds the matrix in two parts.
 
@@ -190,7 +190,7 @@ Before handing a story to the Definition of Done check (`definition-of-done.md`)
 AI may draft test cases from the story and its ACs; every draft is reviewed against the 5-step method before it is accepted.
 
 1. **Agree tests before code.** Never generate the implementation first and derive tests from it.
-2. **Expect gaps where rules are implicit.** Drafts are strongest on happy paths and weakest on domain boundaries and business-rule negatives; check those by hand against Jira.
+2. **Expect gaps where rules are implicit.** Drafts are strongest on happy paths and weakest on domain boundaries and business-rule negatives; check those by hand against the issue tracker.
 3. **Reject coverage theatre.** Each case proves a distinct risk; merge or delete duplicates.
 4. **Check each expected result against the requirement,** not against what the code returns.
 5. **Avoid shared blind spots.** When AI writes both code and tests, a human confirms the tests check the right behaviour. Record who reviewed the test design.

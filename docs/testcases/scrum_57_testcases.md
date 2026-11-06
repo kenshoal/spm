@@ -1,6 +1,6 @@
 # SCRUM-57 — Notify Event Workflow Changes: cancellation and delivery options
 
-**Jira:** [SCRUM-57](https://is212g9t4.atlassian.net/browse/SCRUM-57)
+**Issue tracker:** SCRUM-57
 
 **User story:** As a user responsible for an event, I want to be notified when its workflow or important arrangements change, so that I can take the action required of my role.
 
@@ -8,9 +8,9 @@
 
 ## Story contract review
 
-Jira lists two bullets. Numbering follows them, with the second bullet split in two because it holds two independently testable rules.
+Issue tracker lists two bullets. Numbering follows them, with the second bullet split in two because it holds two independently testable rules.
 
-| Jira bullet | Outcome | Reason | Proposed wording |
+| issue tracker bullet | Outcome | Reason | Proposed wording |
 | --- | --- | --- | --- |
 | 1. Cancellation notice to Organiser, Coordinator and venue/equipment staff | **Split** → **AC1** (Organiser, Coordinator) and **AC1b** (staff, **on hold**) | Intent is valid. The Organiser and the assigned Coordinator are known for every event. The staff recipients are not defined, because staff have no individual assignment to a booking. Asked the PO on 27 Oct 2026 (Telegram, message 2825). | AC1: Given an event is cancelled, when the cancellation is recorded, then the Organiser and the assigned Coordinator are each notified once. AC1b: …and the staff responsible for its committed venue or equipment arrangements are each notified once. _Staff rule to be confirmed by the PO._ |
 | 2a. Per-type channel setting | **Split** from bullet 2 → **AC2** | Choosing a channel per type and delivering by email are separate behaviours with separate failure modes. | AC2: Given a notification of a given type is sent, when the channel setting for that type is in-app, email or both, then it is delivered by exactly the chosen channel(s). A type with no setting is delivered in-app only. |
@@ -28,7 +28,7 @@ Scope effect: AC2 and AC3 are one shared change in notificationService (and one 
 - Cancellation notices to registered attendees: SCRUM-38 (done, `event_cancelled`).
 - Notices for approved significant changes to arrangements: SCRUM-64.
 - Batching and per-user on/off switches: dropped by the PO on 23 Oct 2026 (clarifications #55 and #37).
-- Authenticating `POST /notifications/events` and retrying the clarification notice through the outbox: engineering items in Jira, not ACs.
+- Authenticating `POST /notifications/events` and retrying the clarification notice through the outbox: engineering items in the issue tracker, not ACs.
 - Editing the setting through the application: no admin screen or endpoint; the setting is changed in the database (decided with the story owner, 27 Oct 2026).
 
 ## Actors and relationship permissions

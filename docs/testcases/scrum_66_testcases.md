@@ -1,6 +1,6 @@
 # SCRUM-66 — Apply Setup/Turnaround Padding in Venue Availability and Search
 
-**Jira:** [SCRUM-66](https://is212g9t4.atlassian.net/browse/SCRUM-66)
+**Issue tracker:** SCRUM-66
 
 **User story:** As an Event Coordinator, I want venue availability and search to account for each venue's setup and turnaround time, so that I don't request a slot that will be refused at approval.
 
@@ -8,7 +8,7 @@
 
 SCRUM-66 is the follow-up to SCRUM-20 raised by the Product Owner (Jaren) on 22 October 2026. It completes Week 7 Customer Change #1, which says setup and turnaround "must be included when checking availability and detecting booking conflicts": SCRUM-20 (0054) covered conflict detection in booking approval; SCRUM-66 covers availability. The calendar part builds on SCRUM-69 (Kennedy, PR #108), which moved the SCRUM-31 calendar to times and left the padding seam `occupied_minutes` for this story.
 
-| Jira criterion | Outcome | Reason |
+| issue tracker criterion | Outcome | Reason |
 | --- | --- | --- |
 | Availability, search and the SCRUM-31 calendar treat a booking as occupying its start minus setup to its end plus turnaround, using the same rule as SCRUM-20's conflict check. | Keep → AC1, AC3, AC4 | All three use `time_conflicts.padded_range`, the Python twin of `private.check_booking_candidate` (0054). |
 | A slot that approval would refuse because of padding is not shown as free. | Keep → AC1, AC2, AC3, AC4 | Includes a time whose own setup or turnaround leaves 07:00–24:00, as approval refuses it. |

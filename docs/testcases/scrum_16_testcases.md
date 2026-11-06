@@ -2,16 +2,16 @@
 
 Last reviewed: 2 October 2026
 
-Catalogue for the equipment-status story (Jira status: Done, 20 September 2026). The matrix retro-fits the existing `equipmentService` and frontend suites to the acceptance criteria and adds the cases that were missing. Companion catalogue: [scrum_45_testcases.md](scrum_45_testcases.md).
+Catalogue for the equipment-status story (issue tracker status: Done, 20 September 2026). The matrix retro-fits the existing `equipmentService` and frontend suites to the acceptance criteria and adds the cases that were missing. Companion catalogue: [scrum_45_testcases.md](scrum_45_testcases.md).
 
 ## Story contract
 
-- **Jira key:** [SCRUM-16](https://is212g9t4.atlassian.net/browse/SCRUM-16), "Maintain Equipment Status". Related: SCRUM-27 (Authorise Access by Role).
+- **Issue tracker key:** SCRUM-16, "Maintain Equipment Status". Related: SCRUM-27 (Authorise Access by Role).
 - **User story:** As a Technical Support Staff member, I want to update the operational status of equipment, so that damaged or unavailable equipment is never treated as available.
 
 ### Acceptance criteria
 
-Verbatim from Jira (checklist form):
+Verbatim from the issue tracker (checklist form):
 
 1. Technical Support Staff can mark an equipment item/type as unavailable (e.g., due to damage, repair, or maintenance).
 2. Given equipment set to damaged/repair/maintenance, when availability is checked, then that equipment is excluded from available quantity.

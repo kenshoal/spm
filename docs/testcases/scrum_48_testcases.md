@@ -1,6 +1,6 @@
 # SCRUM-48 — View Event Status History
 
-Source: [Jira SCRUM-48](https://is212g9t4.atlassian.net/browse/SCRUM-48), read 10 October 2026. Branch: `feat/scrum-48-status-history`, base `dd0036b`.
+Source: issue tracker SCRUM-48, read 10 October 2026. Branch: `feat/scrum-48-status-history`, base `dd0036b`.
 
 ## Current verification summary — 12 October 2026
 
@@ -22,7 +22,7 @@ Pre-display-increment accounting: **87 specifications: 85 passing verification r
 
 As an Event Organiser or the currently assigned Event Coordinator, I want to view chronological event-request status history so I understand how it reached its current stage and who performed each transition.
 
-The requester approved the reviewed seven criteria and recommendations on 10 October 2026 (“okay follow your recommendation”). Jira wording is retained; the interpretations below are recorded here, not silently written back to Jira.
+The requester approved the reviewed seven criteria and recommendations on 10 October 2026 (“okay follow your recommendation”). The issue tracker wording is retained; the interpretations below are recorded here, not silently written back to the issue tracker.
 
 - **AC1:** Creation and each actual status change record exactly one immutable history entry in the same transaction.
 - **AC2:** Each entry records the event, previous status (nullable initially), new status, acting user and role or system source, and timestamp.
@@ -503,7 +503,7 @@ This inventory preserves all seven approved ACs. No new users, roles, membership
 
 ### Audit outcome and outstanding gates
 
-**Partially verified:** earlier tested local acceptance behaviours passed and the discovered single-render mismatch is fixed. The newly approved latest-five display increment passed independent frontend and focused browser verification after meaningful Red. Vera owns the test/matrix changes; Devon owns the production loader/detail-page/refactor changes. Neither edited the other's files. No commit, push, Jira update or applied-migration edit occurred. The 10 October independent audit made no shared-data writes; the authorised 12 October verification created and retained the three named events above through normal authenticated APIs, committed one shared primary review and intentionally reassigned d136 to coordinator1.
+**Partially verified:** earlier tested local acceptance behaviours passed and the discovered single-render mismatch is fixed. The newly approved latest-five display increment passed independent frontend and focused browser verification after meaningful Red. Vera owns the test/matrix changes; Devon owns the production loader/detail-page/refactor changes. Neither edited the other's files. No commit, push, issue tracker update or applied-migration edit occurred. The 10 October independent audit made no shared-data writes; the authorised 12 October verification created and retained the three named events above through normal authenticated APIs, committed one shared primary review and intentionally reassigned d136 to coordinator1.
 
 The bounded real browser journey, eleven live API cases including reassignment, actual keyboard/AX smoke and focused named mutation-tool checks passed within their stated scope. The single inventory above distinguishes additional live fixture/expiry/held-session/full-screen-reader gaps from required human review and PR CI/review/merge/integrated-stack gates, now pending after explicit PR authorisation on 12 October 2026. No new AC or full-WCAG/whole-module-mutation requirement was added. Prior focused local row-lock mutation evidence is preserved below; it is not a full mutation score. The repository DoD explicitly requires human review and reviewed CI/merged integrated behaviour; independent AI verification does not satisfy those gates. No absolute claim that every possible loophole is closed is made.
 
@@ -615,4 +615,4 @@ terminology does not replace the 2020 Guide.
 References supplied by the requester:
 `/Users/tionghengrui/Documents/SCH/Y2S2/SPM/SCRUM guide/2020-Scrum-Guide-US.pdf`
 and `/Users/tionghengrui/Documents/SCH/Y2S2/SPM/SCRUM guide/scrumprimer20.pdf`.
-No Jira criteria, assignment or workflow status was changed by this increment.
+No issue tracker criteria, assignment or workflow status was changed by this increment.

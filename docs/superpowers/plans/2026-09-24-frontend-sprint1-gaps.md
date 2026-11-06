@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16.3 (app router, server actions), React 19.2, Tailwind 4, Vitest 5 + Testing Library, Playwright (Chromium, mock Node HTTP servers); FastAPI + pytest for the two backend tasks.
 
-**Spec:** Jira Sprint 1 acceptance criteria, quoted in the "Spec (acceptance criteria)" section below; existing traceability in `docs/testcases/scrum_14_testcases.md`.
+**Spec:** issue tracker Sprint 1 acceptance criteria, quoted in the "Spec (acceptance criteria)" section below; existing traceability in `docs/testcases/scrum_14_testcases.md`.
 
 ## Global Constraints
 

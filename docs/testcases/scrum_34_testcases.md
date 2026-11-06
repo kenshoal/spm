@@ -1,14 +1,14 @@
 # SCRUM-34 — View Event Registration Information
 
-Source: [Jira SCRUM-34](https://is212g9t4.atlassian.net/browse/SCRUM-34). Branch: `feat/scrum-34-view-registration-info`, base `e429e72` (`dev`).
+Source: issue tracker SCRUM-34. Branch: `feat/scrum-34-view-registration-info`, base `e429e72` (`dev`).
 
 ## Approved contract
 
 As an Event Organiser or Event Coordinator, I want to view appropriate registration information for an event I manage, so that I can monitor participation without accessing unrelated attendee data.
 
-Jaren (story owner) approved the review below on 23 October 2026 ("do it for me"). The rewording is recorded here, not written back to Jira.
+Jaren (story owner) approved the review below on 23 October 2026 ("do it for me"). The rewording is recorded here, not written back to the issue tracker.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | An Event Organiser can view registration information only for events they are permitted to manage. | **Clarify** | **AC1:** Given an event whose `organiser_id` is the caller, when an `event_organiser` requests its registration information, then it is returned. Another organiser's event, including a same-organisation colleague's (SCRUM-39 sharing is read-only and does not extend to attendee data), is reported as not found. |
 | An Event Coordinator can view registration information only for events they coordinate. | **Clarify** | **AC2:** Given an event whose latest coordinator assignment is the caller, when an `event_coordinator` requests its registration information, then it is returned. A coordinator who was never assigned, or was reassigned away, is told the event is not found. |

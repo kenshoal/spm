@@ -6,7 +6,7 @@ Shared rules for every agent and contributor in this repository. Codex reads thi
 
 | If the task involves… | Read this first |
 | --- | --- |
-| Writing, changing or reviewing tests; deriving test cases from a Jira story or its acceptance criteria; editing `docs/testcases/`; reporting test results or evidence | `docs/standards/testing.md` |
+| Writing, changing or reviewing tests; deriving test cases from an issue-tracker story or its acceptance criteria; editing `docs/testcases/`; reporting test results or evidence | `docs/standards/testing.md` |
 | Committing, branching, merging or opening a pull request | `docs/standards/commits.md` |
 | Status changes, roles, permissions, ownership, database writes, RLS, or error responses for protected resources | `docs/standards/security-and-state.md` |
 | Deciding whether a story is Done | `docs/standards/definition-of-done.md` |
@@ -15,7 +15,7 @@ Read the file even when the task looks small. If a detail file conflicts with th
 
 ## Core principles
 
-1. **Requirements are the test oracle.** Expected behaviour comes from the Jira story, its approved acceptance criteria (ACs) and agreed domain rules, not from what the code currently does. When requirements and code disagree, stop and resolve it through Jira or the team before changing either.
+1. **Requirements are the test oracle.** Expected behaviour comes from the issue tracker story, its approved acceptance criteria (ACs) and agreed domain rules, not from what the code currently does. When requirements and code disagree, stop and resolve it through the issue tracker or the team before changing either.
 2. **Approve the ACs before building.** Review every AC and get explicit approval of the scope before detailed test design, production code or database changes. Until then, work read-only.
 3. **Small vertical increments, Red → Green → Refactor.** One reviewable behaviour at a time, through every layer it touches.
 4. **Stay inside the story.** Do not implement adjacent backlog stories or claim their behaviour.
@@ -40,7 +40,7 @@ Read the file even when the task looks small. If a detail file conflicts with th
 
 ## Iteration sequence
 
-1. Fetch the Jira story, review every AC and get the scope approved (`testing.md` §1).
+1. Fetch the issue tracker story, review every AC and get the scope approved (`testing.md` §1).
 2. Record the approved story contract and design the test cases in `docs/testcases/` (`testing.md` §2–4).
 3. Pick one behaviour, starting with the happy path. Write a test and watch it fail for the intended reason.
 4. Make the smallest change that passes, refactor, and run the related tests.

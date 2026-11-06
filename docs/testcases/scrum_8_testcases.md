@@ -1,8 +1,8 @@
 # SCRUM-8 — Save a Draft Event Request
 
-Source: [Jira SCRUM-8](https://is212g9t4.atlassian.net/browse/SCRUM-8) (title "Save a Draft Event Request"; the Jira user-story sentence is not recorded in the September catalogue and is not restated here).
+Source: issue tracker SCRUM-8 (title "Save a Draft Event Request"; the issue tracker user-story sentence is not recorded in the September catalogue and is not restated here).
 
-Status (converted 1 Nov 2026): **AI-drafted conversion of the September catalogue to the `testing.md` matrix format; teammate review pending (`testing.md` §10).** The AC wording below is as recorded in the converted catalogue (the old catalogue's AC table, kept verbatim); **Jira remains the source of truth.** Labels in the test files read `SCRUM-8 AC<n>-<L><k>` (story-prefixed, following the `SCRUM-38 AC4-X1` precedent) because `test_event_request_controller.py` also carries SCRUM-39 labels with overlapping `AC4`/`AC5` numbering. Nothing was executed in this pass: the matrix and the labels were added; every execution row below is `Not executed`.
+Status (converted 1 Nov 2026): **AI-drafted conversion of the September catalogue to the `testing.md` matrix format; teammate review pending (`testing.md` §10).** The AC wording below is as recorded in the converted catalogue (the old catalogue's AC table, kept verbatim); **Issue tracker remains the source of truth.** Labels in the test files read `SCRUM-8 AC<n>-<L><k>` (story-prefixed, following the `SCRUM-38 AC4-X1` precedent) because `test_event_request_controller.py` also carries SCRUM-39 labels with overlapping `AC4`/`AC5` numbering. Nothing was executed in this pass: the matrix and the labels were added; every execution row below is `Not executed`.
 
 ## Story contract
 
@@ -56,7 +56,7 @@ No transition out of `Draft` happens as a side effect of saving.
 
 ### Assumptions and open questions
 
-1. AC2 says "all ten listed fields"; the request model exposes **nine** organiser-editable fields (event name, purpose, description, proposed date/times, expected attendance, venue, accessibility, equipment, registration). The tenth Jira field is presumably a system column (status or organiser). Confirm against Jira at review.
+1. AC2 says "all ten listed fields"; the request model exposes **nine** organiser-editable fields (event name, purpose, description, proposed date/times, expected attendance, venue, accessibility, equipment, registration). The tenth issue tracker field is presumably a system column (status or organiser). Confirm against the issue tracker at review.
 2. The September catalogue cited `test_draft_persists_when_the_application_restarts` for AC3; that test no longer exists in `test_event_request_controller.py`. AC3-N1 is recorded as a planned gap — decide whether a dedicated restart case is needed or the E2E reload journey (`AC3-H1`) is the agreed evidence.
 3. AC5 stays open exactly as the September catalogue left it: the coordinator review/assignment interface belongs to its own story; the negative integration test ("a draft never appears there") must be written when that interface exists.
 4. The September suite counts (41 cases) are stale; the suites have grown with later stories. Counts are not restated here — run the suites for current numbers.

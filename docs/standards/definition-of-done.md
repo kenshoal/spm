@@ -20,4 +20,4 @@ A story is **Done** only when every applicable item is met for the current code:
 - [ ] AI-generated code and tests were reviewed and understood by a human team member.
 - [ ] The pull request is reviewed, all required CI checks pass, and the work is merged into `dev` and runs in the integrated stack.
 
-A story that does not meet the DoD does not count toward velocity and returns to the Product Backlog for re-planning. Product Owner feedback from the Sprint Review is recorded in the review notes or Jira, not as a DoD item.
+A story that does not meet the DoD does not count toward velocity and returns to the Product Backlog for re-planning. Product Owner feedback from the Sprint Review is recorded in the review notes or issue tracker, not as a DoD item.

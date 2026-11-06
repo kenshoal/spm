@@ -1,13 +1,13 @@
 # SCRUM-26 — Authenticate to the System
 
-Source: [Jira SCRUM-26](https://is212g9t4.atlassian.net/browse/SCRUM-26). The
+Source: issue tracker SCRUM-26. The
 story asks that users sign in securely before accessing protected information
 or functionality. The currently implemented protected area is the event-request
 workspace.
 
 Status (1 November 2026): this document was converted to the standard two-matrix
 format (`testing.md` §4) from the 16 September 2026 revision. **AI-drafted test
-design, teammate review pending (`testing.md` §10); Jira remains the source of
+design, teammate review pending (`testing.md` §10); issue tracker remains the source of
 truth.** The labelled-test pass added comments only to files owned by this
 sweep; execution evidence below is not re-claimed — every row is **Not
 executed** in this pass, and the 16 September results are preserved as

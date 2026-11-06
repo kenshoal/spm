@@ -1,6 +1,6 @@
 # SCRUM-58 — Plan and Confirm an Event
 
-Source: [Jira SCRUM-58](https://is212g9t4.atlassian.net/browse/SCRUM-58), read 13 October 2026. Branches: `feat/scrum-58-plan-and-confirm` (AC1, AC4; base `11dae05`), `feat/scrum-58-start-planning-button` (Start planning control) and `feat/scrum-58-safety-review` (AC2, AC3).
+Source: issue tracker SCRUM-58, read 13 October 2026. Branches: `feat/scrum-58-plan-and-confirm` (AC1, AC4; base `11dae05`), `feat/scrum-58-start-planning-button` (Start planning control) and `feat/scrum-58-safety-review` (AC2, AC3).
 
 This document grew one section per increment. The table below is the current contract; the increment sections further down hold the detail and evidence for each part.
 
@@ -8,16 +8,16 @@ This document grew one section per increment. The table below is the current con
 
 As the event's coordinator, I want to move an approved event into planning and then send it for its safety check once everything is booked, so that everyone can see which events are going ahead.
 
-The story owner (Tate) reviewed the four Jira ACs and approved the scope below on 13 October 2026. Jira wording is kept; the rewording below is recorded here, not written back to Jira.
+The story owner (Tate) reviewed the four issue tracker ACs and approved the scope below on 13 October 2026. The issue tracker wording is kept; the rewording below is recorded here, not written back to the issue tracker.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | The coordinator can move an approved event into planning. | **Keep, clarified** | **AC1:** Given an Approved event assigned to me, when I start planning, then its status becomes Planning and the status history records me (role `event_coordinator`, source `coordinator.planning`) as the actor. |
 | Once all of the event's venue bookings are approved and its equipment is reserved, the coordinator can send it for the safety check. | **Clarified 16 Oct** (parked 13–16 Oct) | **AC2:** Planning → Safety Review when there is at least one approved venue booking, none pending (rejected and cancelled ignored) and every equipment requirement's reservations add up to its quantity. See "Increment: send for safety review" and "Increment: shared readiness". |
 | If anything is still waiting, missing or marked for review, the system says what and doesn't send it. | **Split 16 Oct** (parked 13–16 Oct) | **AC3a** (16 Oct): otherwise refused with every outstanding booking/equipment item listed. **AC3b** (19 Oct): every outstanding SCRUM-64 review also blocks, listed after them. See the two increments below. |
 | Only the event's own coordinator can do this. Anyone else is stopped, and nothing changes. | **Keep, clarified** | **AC4:** Given an event assigned to coordinator A, when anyone else tries to start planning (another or a reassigned-away coordinator, an organiser, an operations manager, or a caller with no session), then they are refused (403, or 401 without a session) and the status and history do not change. |
 
-The story title says "Confirm", but no Jira AC confirms an event. Settled 16 Oct: only the Safety Officer confirms (SCRUM-60); this story ends at Safety Review.
+The story title says "Confirm", but no issue tracker AC confirms an event. Settled 16 Oct: only the Safety Officer confirms (SCRUM-60); this story ends at Safety Review.
 
 ## Scope
 
@@ -105,7 +105,7 @@ Branch `feat/scrum-58-safety-review`, based on Jaren's `feat/scrum-60-safety-che
 
 Jaren (SCRUM-60 owner) answered the AC2 question on 15–16 October: the status is **Safety Review**, and only the Safety Officer moves an event to `Confirmed` (SCRUM-60 AC3/AC6). The story owner (Tate) approved the wording and rules below on 16 October 2026.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | AC2 (send once booked and reserved) | **Clarified** (was Parked) | **AC2:** Given a Planning event assigned to me with at least one approved venue booking, no pending booking, and every equipment requirement's reservations adding up to its full quantity, when I send it for safety review, then it becomes `Safety Review` and the status history records me (role `event_coordinator`, source `coordinator.safety_review`). Rejected bookings are ignored. An event with no equipment requirements is ready. |
 | AC3 (say what is missing, don't send) | **Split** | **AC3a:** Otherwise it is refused with `409` and a list of every outstanding item (no venue booked; each pending booking by venue; each under-reserved requirement with reserved and required counts), each with a plain-language message, and nothing changes. **AC3b (parked):** items marked for review also block, once SCRUM-64 builds the flag. |
@@ -282,5 +282,5 @@ After PR #76 merged (`dev` at `2de4a3b`; the migration and verifier files identi
 **Reviewed by Tate Lim (story owner), 20 October 2026: accepted as written.** The test cases were drafted by Claude; Tate reviewed the contract, the expected results and the "Not yet done" lists against the agreed requirements.
 
 Points raised in the review and left open:
-- Two readiness rules are the story owner's decisions (16 Oct), not yet confirmed by the PO: rejected bookings are ignored, and "reserved" means reservations add up to the requirement's quantity rather than Technical Support's `arranged` status. Jira's wording is "all of the event's venue bookings are approved".
+- Two readiness rules are the story owner's decisions (16 Oct), not yet confirmed by the PO: rejected bookings are ignored, and "reserved" means reservations add up to the requirement's quantity rather than Technical Support's `arranged` status. The issue tracker's wording is "all of the event's venue bookings are approved".
 - No browser (Playwright) journey covers "Start planning" or "Send for safety review"; the controls are proven with mocked APIs only.

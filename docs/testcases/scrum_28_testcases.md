@@ -1,8 +1,8 @@
 # SCRUM-28 — Track Event Status
 
-Source: [Jira SCRUM-28](https://is212g9t4.atlassian.net/browse/SCRUM-28) (the shared event-request status model, authorised transitions, atomic database updates and status visibility). Later stories add their own transitions on top of this boundary and are named, not claimed, throughout.
+Source: issue tracker SCRUM-28 (the shared event-request status model, authorised transitions, atomic database updates and status visibility). Later stories add their own transitions on top of this boundary and are named, not claimed, throughout.
 
-Status (1 November 2026): **AI-drafted conversion of the previous catalogue to the standard format; teammate review pending (`testing.md` §10).** The AC wording below is as recorded in the converted catalogue (seven ACs, AC1–AC7, numbered as the previous document recorded them); Jira remains the source of truth. The plan brief for this sweep described six ACs — the seventh (`AC7`, repeated and stale actions) is recorded separately here because the converted catalogue lists it as its own criterion; flag for the story owner if Jira should merge it into AC2.
+Status (1 November 2026): **AI-drafted conversion of the previous catalogue to the standard format; teammate review pending (`testing.md` §10).** The AC wording below is as recorded in the converted catalogue (seven ACs, AC1–AC7, numbered as the previous document recorded them); issue tracker remains the source of truth. The plan brief for this sweep described six ACs — the seventh (`AC7`, repeated and stale actions) is recorded separately here because the converted catalogue lists it as its own criterion; flag for the story owner if issue tracker should merge it into AC2.
 
 ## Story contract
 
@@ -51,7 +51,7 @@ Status (1 November 2026): **AI-drafted conversion of the previous catalogue to t
 
 ### Assumptions and open questions
 
-1. **Vocabulary drift (Jira decision needed).** AC1's recorded wording says ten approved statuses; the code now stores eleven (`Safety Review` inserted between `Planning` and `Confirmed` by SCRUM-60, migration `0029`). The frontend asserts eleven. Ask the story owner whether Jira AC1 should be updated or `Safety Review` recorded as an approved later addition.
+1. **Vocabulary drift (issue tracker decision needed).** AC1's recorded wording says ten approved statuses; the code now stores eleven (`Safety Review` inserted between `Planning` and `Confirmed` by SCRUM-60, migration `0029`). The frontend asserts eleven. Ask the story owner whether issue tracker AC1 should be updated or `Safety Review` recorded as an approved later addition.
 2. **Transition set drift.** The `advance_event_request_by_coordinator` function now also accepts SCRUM-58's `Approved → Planning` and `Planning → Safety Review`. The SCRUM-28-owned transition table above stays as recorded; those moves are SCRUM-58's, tested there.
 3. **AC4's real-Postgres race coverage.** SCRUM-48's `database/tests/test_event_status_history_concurrency.py` races transition-vs-transition on the same row lock (one wins, one `P0004`, one history row) — referenced, not relabelled. No test races **assignment**-vs-**transition** specifically; that remains a gap (`AC4-X3`).
 4. **Historical evidence.** The previous catalogue's runs (157 backend tests, 38 authService, 55 frontend unit, database verifications on shared Supabase, PR #29 checks at commit `4c1b743`) are historical, not current evidence.

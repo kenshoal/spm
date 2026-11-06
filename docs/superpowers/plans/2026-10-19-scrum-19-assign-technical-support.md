@@ -4,7 +4,7 @@ Drafted 19 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 
 **Goal:** The assigned Event Coordinator records what technical support an event needs (with one skill tag), assigns Technical Support Staff who hold that skill, sees who is assigned on the event, and the assigned staff are told.
 
-**Source of truth:** [Jira SCRUM-19](https://is212g9t4.atlassian.net/browse/SCRUM-19) (Sprint 3, 2 points, Lowest) and spm-brain (`backlog/user-stories.md` M4-3 and E4-2; `backlog/customer-clarifications.md` #6; Q&A #25, #66, #87, #88, #89). Once §2 is approved, the contract and test catalogue live in `docs/testcases/scrum_19_testcases.md`. This plan only says *how* to build it.
+**Source of truth:** issue tracker SCRUM-19 (Sprint 3, 2 points, Lowest) and spm-brain (`backlog/user-stories.md` M4-3 and E4-2; `backlog/customer-clarifications.md` #6; Q&A #25, #66, #87, #88, #89). Once §2 is approved, the contract and test catalogue live in `docs/testcases/scrum_19_testcases.md`. This plan only says *how* to build it.
 
 **Branch:** `feat/scrum-19-assign-technical-support`, 20 Oct 2026 even with `origin/dev` `a14ed6d`. PR into `dev`.
 
@@ -14,8 +14,8 @@ Drafted 19 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 
 | Story / artefact | State (19 Oct) | Effect on SCRUM-19 |
 | --- | --- | --- |
-| *(no Jira story)* E4-2 Record a Technical Support Requirement | Backlog card only, "prerequisite for M4-3" | **Gap.** Jira AC1's precondition ("an event that indicated a technical-support requirement") has nothing in the schema to point at. `event_requests` has only free-text `equipment_requirements`; `equipment_requirements` (SCRUM-33) is equipment, not people. See D2 |
-| *(no table)* Staff skill tags | — | **Gap.** Jira AC2 defines "suitable" by a skill tag, but `staff_roles` holds roles only. See D3 |
+| *(no issue tracker story)* E4-2 Record a Technical Support Requirement | Backlog card only, "prerequisite for M4-3" | **Gap.** issue tracker AC1's precondition ("an event that indicated a technical-support requirement") has nothing in the schema to point at. `event_requests` has only free-text `equipment_requirements`; `equipment_requirements` (SCRUM-33) is equipment, not people. See D2 |
+| *(no table)* Staff skill tags | — | **Gap.** issue tracker AC2 defines "suitable" by a skill tag, but `staff_roles` holds roles only. See D3 |
 | SCRUM-14 Assign Coordinator | Done | Reused: "latest assignment is the caller" decides who may assign support (`event_coordinator_assignments`, highest `id`) |
 | SCRUM-37 In-app notifications | Done | Reused: `NotificationClient` → `POST /notifications/events`; `notifications_recipient_event_key` dedupes retries by `event_id` |
 | SCRUM-58 Plan and Confirm | In Progress (Approved → Planning merged) | Planning exists in dev, so all three allowed statuses can be seeded |
@@ -31,9 +31,9 @@ Drafted 19 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 
 ## 2. AC review gate (approve before commit 1)
 
-| Jira AC | Outcome | Proposed wording |
+| issue tracker AC | Outcome | Proposed wording |
 | --- | --- | --- |
-| *(none: precondition of Jira AC1)* | **Narrow-in from E4-2 (Team Design Proposal)** | **AC1:** Given an Approved, Planning or Confirmed event, when its assigned Coordinator records a technical-support requirement with a description and one skill tag, then the requirement is stored against the event. Any other caller or event status is refused and nothing is stored. |
+| *(none: precondition of issue tracker AC1)* | **Narrow-in from E4-2 (Team Design Proposal)** | **AC1:** Given an Approved, Planning or Confirmed event, when its assigned Coordinator records a technical-support requirement with a description and one skill tag, then the requirement is stored against the event. Any other caller or event status is refused and nothing is stored. |
 | For an event that indicated a technical-support requirement, the Coordinator can assign Technical Support Staff. | **Clarify** | **AC2:** Given an Approved, Planning or Confirmed event with a recorded requirement, when its assigned Coordinator assigns a suitable staff member to that requirement, then one assignment is stored. An unknown requirement, a requirement on another event, a disallowed status, a repeat assignment of the same person, or a caller who is not the assigned Coordinator is refused and nothing is stored. |
 | "Suitable" for this release means the staff member holds the technical-support role/skill tag recorded against the requirement; the system does not check staff scheduling availability or double-booking in this slice. | **Keep, clarified** | **AC3:** Given a requirement with skill tag *T*, a person is suitable only if they hold the `technical_support` role **and** tag *T*. The candidate list shows exactly those people; assigning anyone else is refused as not suitable. Being assigned to another event at the same time does not make someone unsuitable. |
 | Given a support requirement, when staff are assigned, then the event shows the assigned staff. | **Keep, clarified** | **AC4:** Given an event with requirements, when its assigned Coordinator or any Technical Support Staff member views the event's technical support, then each requirement is listed with its assigned staff (who, assigned by, when) in a stable order, and a requirement with nobody assigned shows an empty list. |
@@ -41,7 +41,7 @@ Drafted 19 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 
 **Cross-cutting (all ACs, `security-and-state.md` §2):** no session → 401; a role outside the allowed set → 403; an `event_coordinator` who is not the event's latest coordinator → 404 (do not disclose the event); the coordinator and the event status are rechecked inside the locked DB function, not only at page load; browser roles (`anon`, `authenticated`) cannot execute the new functions or read the new tables.
 
-**Expected scope change:** +1 AC (AC1) and +2 tables versus the Jira text. If the PO prefers, AC1 can instead become its own story (E4-2 slice) that blocks SCRUM-19; then SCRUM-19 tests seed requirements by SQL and the live journey waits for that story.
+**Expected scope change:** +1 AC (AC1) and +2 tables versus the issue tracker text. If the PO prefers, AC1 can instead become its own story (E4-2 slice) that blocks SCRUM-19; then SCRUM-19 tests seed requirements by SQL and the live journey waits for that story.
 
 ---
 
@@ -50,15 +50,15 @@ Drafted 19 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 | # | Decision | Proposal | Why |
 | --- | --- | --- | --- |
 | D1 | Service | **eventRequestService.** It owns `event_requests` and `event_coordinator_assignments`, so status and coordinator are checked under one row lock | Same as SCRUM-14, SCRUM-21, SCRUM-58 |
-| D2 | Requirement record | New `technical_support_requirements`: `id, event_request_id, description (1–2000 chars, not blank), skill_tag, recorded_by, recorded_at`. **Excluded from E4-2:** when-needed (before/during), TSS acknowledgement statuses, clarification thread (#87), notify-on-new-requirement, edit/delete, flag-on-reschedule | Smallest record that makes Jira AC1–AC3 testable |
-| D3 | Skill tags | Fixed vocabulary: `audio_visual`, `lighting`, `it_network`, `livestream` (CHECK constraint + Python `StrEnum`). Staff tags in `technical_support_skills (user_id varchar(64), skill_tag, PRIMARY KEY (user_id, skill_tag))`, **seeded by SQL**. A screen to maintain staff skills is a new story | Jira AC2 needs a tag; Q&A #89 lets us propose how availability/suitability data is kept |
-| D4 | Suitability rule | Suitable ⇔ `staff_roles` has (`user_id`, `technical_support`) **and** `technical_support_skills` has (`user_id`, requirement's tag). One SQL helper `private.is_suitable_technical_support(p_staff_id, p_skill_tag)` used by both the candidate list and the assign function. No availability or double-booking check | Jira AC2 verbatim; one source of truth so the list and the write never disagree |
+| D2 | Requirement record | New `technical_support_requirements`: `id, event_request_id, description (1–2000 chars, not blank), skill_tag, recorded_by, recorded_at`. **Excluded from E4-2:** when-needed (before/during), TSS acknowledgement statuses, clarification thread (#87), notify-on-new-requirement, edit/delete, flag-on-reschedule | Smallest record that makes issue tracker AC1–AC3 testable |
+| D3 | Skill tags | Fixed vocabulary: `audio_visual`, `lighting`, `it_network`, `livestream` (CHECK constraint + Python `StrEnum`). Staff tags in `technical_support_skills (user_id varchar(64), skill_tag, PRIMARY KEY (user_id, skill_tag))`, **seeded by SQL**. A screen to maintain staff skills is a new story | issue tracker AC2 needs a tag; Q&A #89 lets us propose how availability/suitability data is kept |
+| D4 | Suitability rule | Suitable ⇔ `staff_roles` has (`user_id`, `technical_support`) **and** `technical_support_skills` has (`user_id`, requirement's tag). One SQL helper `private.is_suitable_technical_support(p_staff_id, p_skill_tag)` used by both the candidate list and the assign function. No availability or double-booking check | issue tracker AC2 verbatim; one source of truth so the list and the write never disagree |
 | D5 | Who records and assigns | Only the **latest-assigned** `event_coordinator`. Unrelated coordinator → 404; other roles → 403 | `security-and-state.md` §2; matches `GET /event-requests/{id}` |
 | D6 | Allowed event statuses | `Approved`, `Planning`, `Confirmed`. All others → 409 `support_not_allowed` | README: "venue and equipment work begins only after approval"; Completed/Cancelled/Rejected are terminal |
-| D7 | Repeat assignment | One row per (requirement, staff). A repeat is 409 `already_assigned` (unique constraint → `23505`). Several different staff per requirement are allowed | Not in the Jira ACs, so needs PO sign-off (`testing.md` §6) |
+| D7 | Repeat assignment | One row per (requirement, staff). A repeat is 409 `already_assigned` (unique constraint → `23505`). Several different staff per requirement are allowed | Not in the issue tracker ACs, so needs PO sign-off (`testing.md` §6) |
 | D8 | Unassign | **Out of scope** (no AC). Assignments are append-only in this slice | Keep within 2–3 points |
 | D9 | Notification | After the DB commit, `NotificationClient.notify_technical_support_assigned(...)`: `event_type = "technical_support_assigned"`, `recipient_id = staff_id`, `event_id = assignment id`, payload `{event_request_id, event_name, requirement_id, skill_tag, assigned_by}`. Failure is logged, never raised | Existing SCRUM-37 contract; `event_id` makes retries idempotent |
-| D10 | Who can view | `GET …/technical-support`: latest coordinator, or any `technical_support` (Q&A #66: TSS not restricted by type). Organiser, venue staff, ops manager, attendee → 403 | Jira AC3 names "the event"; staff need to see what they are on |
+| D10 | Who can view | `GET …/technical-support`: latest coordinator, or any `technical_support` (Q&A #66: TSS not restricted by type). Organiser, venue staff, ops manager, attendee → 403 | issue tracker AC3 names "the event"; staff need to see what they are on |
 | D11 | Candidate list | `GET …/requirements/{rid}/candidates` (coordinator only) returns suitable staff ids sorted ascending, each with `already_assigned`. Emails come from authService `GET /auth/users?role=technical_support` in the frontend, like `coordinatorLabel` | Avoids a cross-service call in the backend |
 | D12 | Error body | `{"detail": {"code": "<code>", "message": "<text>"}}` for the new 404/409 codes; 401/403/422 stay as FastAPI defaults | Lets tests assert the specific failure (`testing.md` §6) |
 
@@ -186,7 +186,7 @@ Plausible one-line bugs the catalogue must catch (`testing.md` §2):
 
 | # | Commit | Files | State after |
 | --- | --- | --- | --- |
-| 0 | *(no commit)* AC review and D1–D12 approved | Jira comment / standup note | — |
+| 0 | *(no commit)* AC review and D1–D12 approved | issue tracker comment / standup note | — |
 | 1 | `docs(scrum-19): record approved contract and test catalogue` | `docs/testcases/scrum_19_testcases.md`, this plan | — |
 | 2 | `test(scrum-19): add Red unit tests for the technical support rules` | `tests/test_technical_support_rules.py`, `app/services/technical_support_rules.py` (stubs raising `NotImplementedError`), `app/models/technical_support.py` | Unit Red |
 | 3 | `test(scrum-19): add Red API tests for technical support assignment` | `tests/technical_support_fakes.py`, `tests/test_technical_support_api.py`, stub `technical_support_repository.py` + `TechnicalSupportRpcError`, `create_app` param | API Red (route 404) |

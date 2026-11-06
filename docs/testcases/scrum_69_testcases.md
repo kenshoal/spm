@@ -2,13 +2,13 @@
 
 Last reviewed: 27 October 2026
 
-Status: **scope approved by the Product Owner and the story owner (Kennedy) on 27 October 2026.** The criteria below are the six written on the Jira ticket, split into test-case groups; the response shape in A1 to A3 is the proposal Koei builds SCRUM-66's padding on, so it is shared with him before the frontend is built. Results are recorded below as work proceeds.
+Status: **scope approved by the Product Owner and the story owner (Kennedy) on 27 October 2026.** The criteria below are the six written on the issue tracker ticket, split into test-case groups; the response shape in A1 to A3 is the proposal Koei builds SCRUM-66's padding on, so it is shared with him before the frontend is built. Results are recorded below as work proceeds.
 
 ## Story
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-69 |
+| issue tracker key | SCRUM-69 |
 | Title | Show Venue Availability in Times |
 | Sprint | Sprint 4 (22 October to 5 November 2026) |
 | Points | 3 |
@@ -17,18 +17,18 @@ Status: **scope approved by the Product Owner and the story owner (Kennedy) on 2
 
 ## Story contract
 
-| ID | Criterion (Jira) | Review outcome | Reason |
+| ID | Criterion (issue tracker) | Review outcome | Reason |
 | --- | --- | --- | --- |
 | AC1 | The calendar shows each date of the month as booked and blocked time ranges within 07:00 to 24:00, and the free time between them, in 15-minute steps. Ranges on a date do not overlap. | **Keep, Clarify** | The month, role and error rules of SCRUM-31 AC1 are kept unchanged. The new rule: each date is a partition of 07:00 to 24:00 into booked, blocked and free ranges (A1). |
 | AC2 | A booked range comes from an approved booking and a blocked range from an active block, on the dates and times it covers. Pending, rejected and cancelled bookings and ended (lifted) blocks do not show. Where a block and a booking overlap, the time is shown as blocked. | **Keep** | Same sources and precedence as SCRUM-31 (A4), now on minutes. Times are half-open. |
 | AC3 | A venue blocked as a whole in the catalogue shows its dates as unavailable. | **Keep** | Replaces SCRUM-31's `unavailable` slot state with a flag on each date (A2). |
 | AC4 | The calendar shows no block reasons, event names or ids. | **Keep** | SCRUM-31 A3, unchanged. |
-| AC5 | AM / PM / Night and "Not offered" no longer appear on the calendar or its API response. | **Clarify** | "Not offered" is dropped because every venue operates 07:00 to 24:00 (Product Owner, 20 October 2026). The Jira wording also mentions "the venue search link text"; that link never carried a slot, so the criterion is read as the calendar and its response only. |
+| AC5 | AM / PM / Night and "Not offered" no longer appear on the calendar or its API response. | **Clarify** | "Not offered" is dropped because every venue operates 07:00 to 24:00 (Product Owner, 20 October 2026). The issue tracker wording also mentions "the venue search link text"; that link never carried a slot, so the criterion is read as the calendar and its response only. |
 | AC6 | Availability shown agrees with venue search and with the Venue Staff calendar for the same venue and date. | **Keep** | Checked against the search endpoint at every 15-minute step, and against the Venue Staff calendar model. |
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | `GET /venues/{venue_id}/calendar?month=YYYY-MM` returning times instead of slots | SCRUM-69 |
 | Included | The availability page and its table showing booked, blocked and free times in words | SCRUM-69 |

@@ -1,6 +1,6 @@
 # SCRUM-18 — Place a Tentative Venue Hold
 
-**Jira:** [SCRUM-18](https://is212g9t4.atlassian.net/browse/SCRUM-18)
+**Issue tracker:** SCRUM-18
 
 **User story:** As an Event Coordinator, I want to place a tentative hold on a venue while an event is being finalised, so that the space is protected before the booking is confirmed.
 
@@ -8,7 +8,7 @@
 
 The acceptance criteria were updated on 23 October 2026 for Week 7 Customer Change #4 (*Tentative Venue Holds Expire*: each hold has an expiry, the venue becomes available afterwards, the coordinator is informed before or when it expires, and an expired hold is never a confirmed booking). The PO's review proposed the six criteria below; the 7-day maximum, the 24-hour reminder and the conversion behaviour are team design proposals agreed with the PO (discussion #39 left duration to the team).
 
-| Jira criterion | Outcome | Reason |
+| issue tracker criterion | Outcome | Reason |
 | --- | --- | --- |
 | (place) The assigned coordinator holds a venue before confirmation, in 15-minute times, with an expiry at most 7 days ahead. | Keep → AC1 | "Before the event is confirmed" is implemented as **Approved, Planning or Safety Review**: venues are identified and requested after the request is approved (briefing steps 5–7), and holds stay out of the request-review page. |
 | (conflict) An active, unexpired hold prevents overlapping holds and booking approvals with the same padding; check and write together. | Keep → AC2 | Also event reschedules (SCRUM-35, 0059): the shared guard reports holds to every caller, and eventRequestService returns `hold_conflict` as booking-conflict evidence. A hold never blocks its own event's bookings (Heng Rui's review, 30 October). |

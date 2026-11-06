@@ -1,8 +1,8 @@
 # SCRUM-11 — Submit an Event Request
 
-Source: [Jira SCRUM-11](https://is212g9t4.atlassian.net/browse/SCRUM-11) (title "Submit an Event Request"; the Jira user-story sentence is not recorded in the September catalogue and is not restated here).
+Source: issue tracker SCRUM-11 (title "Submit an Event Request"; the issue tracker user-story sentence is not recorded in the September catalogue and is not restated here).
 
-Status (converted 1 Nov 2026): **AI-drafted conversion of the September catalogue to the `testing.md` matrix format; teammate review pending (`testing.md` §10).** The AC wording below follows the September catalogue's recorded AC table (AC summaries kept, restated as scenario rules); **Jira remains the source of truth.** Labels in the test files read `SCRUM-11 AC<n>-<L><k>` (story-prefixed, following the `SCRUM-38 AC4-X1` precedent) so they cannot be confused with SCRUM-8 or SCRUM-39 labels in the same files. Nothing was executed in this pass: the matrix and the labels were added; every execution row below is `Not executed`.
+Status (converted 1 Nov 2026): **AI-drafted conversion of the September catalogue to the `testing.md` matrix format; teammate review pending (`testing.md` §10).** The AC wording below follows the September catalogue's recorded AC table (AC summaries kept, restated as scenario rules); **Issue tracker remains the source of truth.** Labels in the test files read `SCRUM-11 AC<n>-<L><k>` (story-prefixed, following the `SCRUM-38 AC4-X1` precedent) so they cannot be confused with SCRUM-8 or SCRUM-39 labels in the same files. Nothing was executed in this pass: the matrix and the labels were added; every execution row below is `Not executed`.
 
 ## Story contract
 
@@ -31,7 +31,7 @@ Status (converted 1 Nov 2026): **AI-drafted conversion of the September catalogu
 | Excluded | Outbox notification delivery: a later consumer reads the outbox; delivery is that workflow's concern and must be idempotent by event UUID | notification-consumer story |
 | Excluded | `Completed` data (depends on an agreed `eventService` integration) and any `Submitted` → `Draft` reversal (the September catalogue deferred both to future stories) | future stories |
 
-The September catalogue records that **submission of an existing Draft is the Jira-required story path**; direct submission of a complete new form (`POST /event-requests/submissions`) is supported behaviour on the branch and is kept as partition cases under AC5.
+The September catalogue records that **submission of an existing Draft is the issue tracker-required story path**; direct submission of a complete new form (`POST /event-requests/submissions`) is supported behaviour on the branch and is kept as partition cases under AC5.
 
 ### Actors and permissions
 

@@ -4,7 +4,7 @@ Last reviewed: 3 November 2026 (hotfix 2 is the last section)
 
 Status: **built and verified on 1 November 2026 by Kennedy.** The scope is the 25 gaps found when the whole app was run against the Week 1 brief, the Week 4 and Week 7 documents and the GitHub discussions. Hotfixes 20 to 25 are customer rulings from the discussions that had an answer and were not built. Product Owner (Jaren) confirmation of the few open points in the last section is still needed.
 
-These are corrections, not new stories. Each one traces to a customer source, and to the Jira story whose criteria it completes where there is one. IDs follow `AC<n>-<technique><k>`, where `<n>` is the hotfix number below. Every automated test carries its ID in a comment.
+These are corrections, not new stories. Each one traces to a customer source, and to the issue tracker story whose criteria it completes where there is one. IDs follow `AC<n>-<technique><k>`, where `<n>` is the hotfix number below. Every automated test carries its ID in a comment.
 
 ## Hotfixes
 
@@ -89,7 +89,7 @@ An earlier version of this section listed partly accepted change requests (#104)
 
 # Hotfix 2: acceptance criteria that `dev` did not meet (3 November 2026; migrations 0085 to 0092)
 
-Status: **built and verified on 3 November 2026; the pull-request CI and the shared database are not yet run.** Scope: every acceptance criterion (AC) of the 48 stories as rewritten on 1 November 2026, compared with `dev` at `489f35b` (PRs #123 to #125), then the gaps that the Product Owner's decisions of 2 November (P1 to P15) and the hotfix 2 brief left to the hotfix. Hotfixes 1 to 25 above are unchanged. Hotfix 2 is tracked here and in the pull request, not as Jira tickets, as before.
+Status: **built and verified on 3 November 2026; the pull-request CI and the shared database are not yet run.** Scope: every acceptance criterion (AC) of the 48 stories as rewritten on 1 November 2026, compared with `dev` at `489f35b` (PRs #123 to #125), then the gaps that the Product Owner's decisions of 2 November (P1 to P15) and the hotfix 2 brief left to the hotfix. Hotfixes 1 to 25 above are unchanged. Hotfix 2 is tracked here and in the pull request, not as issue tracker tickets, as before.
 
 Test IDs follow `AC<n>-<technique><k>`, with `<n>` the AC of the story named in the row. SQL cases are in `database/verify_release_1_hotfixes_2.sql`, one block per migration. Every item was written test first; the failing run was seen before the change, and each SQL block was mutation-checked (a deliberate one-line fault must make it fail).
 
@@ -126,7 +126,7 @@ Test IDs follow `AC<n>-<technique><k>`, with `<n>` the AC of the story named in 
 
 - **Display names** (SCRUM-34 AC3, SCRUM-48 AC7): a known limitation (P13); there is no name or profile source.
 - **The attendee email in the registration view** (SCRUM-34 AC4 says no email): hotfix 16 added it under Q&A #32, and without display names it is the only readable identity. It needs a Product Owner ruling and was not changed.
-- **SCRUM-28 AC1 lists eleven statuses;** the database has thirteen (Withdrawn, Postponed). The Jira text needs updating; the code is unchanged.
+- **SCRUM-28 AC1 lists eleven statuses;** the database has thirteen (Withdrawn, Postponed). The issue tracker text needs updating; the code is unchanged.
 - **Test and document gaps of the story owners** (P14), and the technical-support readiness of the safety check (P9).
 
 ## Latest execution record (3 November 2026, branch `fix/release-1-hotfixes-2`, from `489f35b`)

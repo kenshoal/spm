@@ -3,13 +3,13 @@
 Last reviewed: 2 October 2026
 
 Catalogue for the equipment-catalogue story. The acceptance criteria below are
-taken verbatim from Jira SCRUM-45 (story marked Done 20 September 2026); the
+taken verbatim from the issue tracker SCRUM-45 (story marked Done 20 September 2026); the
 matrix retro-fits the existing `equipmentService` suite to them and adds the
 cases that were missing. Companion catalogue: [scrum_16_testcases.md](scrum_16_testcases.md).
 
 ## Story contract
 
-- **Jira key:** SCRUM-45 — "Maintain the Equipment Catalogue".
+- **Issue tracker key:** SCRUM-45 — "Maintain the Equipment Catalogue".
 - **User story:** As a Technical Support staff, I want to maintain each equipment's information in the catalogue, so that I can review requested equipment and update the catalogue.
 - **Actors:** Technical Support Staff (create, quantity update), any authenticated user (view/list). The event coordinator is the denied partition; an Operations Manager who also holds `technical_support` is allowed through the roles list.
 - **Persistence:** create and quantity update are atomic database RPCs (`create_equipment`, `update_equipment_quantity`) with errcode-based 404 mapping.

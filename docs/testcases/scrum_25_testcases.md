@@ -1,14 +1,14 @@
 # SCRUM-25 — Record Attendance at an Event
 
-Source: [Jira SCRUM-25](https://is212g9t4.atlassian.net/browse/SCRUM-25). Branch: `feat/scrum-25-record-attendance`, stacked on `feat/scrum-41-manual-registration` (same registrations panel). Retarget to `dev` once SCRUM-34 and SCRUM-41 merge.
+Source: issue tracker SCRUM-25. Branch: `feat/scrum-25-record-attendance`, stacked on `feat/scrum-41-manual-registration` (same registrations panel). Retarget to `dev` once SCRUM-34 and SCRUM-41 merge.
 
 ## Approved contract
 
 As ConnectSphere event staff, I want to check registered attendees in at the event, so that actual attendance is recorded separately from registration.
 
-Jaren (story owner) approved on 23 October 2026: "the event's coordinator checks people in. Manual lookup only, QR becomes its own story, check-in only on the event day." On 31 October 2026 Jaren withdrew the separate QR story (SCRUM-68): QR scanning is not built in this release and is recorded only here. The rewording is recorded here, not written back to Jira.
+Jaren (story owner) approved on 23 October 2026: "the event's coordinator checks people in. Manual lookup only, QR becomes its own story, check-in only on the event day." On 31 October 2026 Jaren withdrew the separate QR story (SCRUM-68): QR scanning is not built in this release and is recorded only here. The rewording is recorded here, not written back to the issue tracker.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | Staff can check in a registered attendee at the counter by scanning a QR code or by manual lookup. | **Split** | **AC1:** Given a Confirmed event on one of its event days, when its latest coordinator picks a registration from the registrations list and checks it in, then the check-in is recorded. QR scanning is not built in this release (see the note above). |
 | Given a check-in, when recorded, then the attendee is marked **attended**, distinct from merely registered. | **Keep, clarified** | **AC2:** Given a check-in, then the registration stores `attended_at` (the check-in time) and `checked_in_by` (the coordinator) and keeps status `Registered`, so capacity counts are unchanged. |

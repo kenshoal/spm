@@ -8,16 +8,16 @@ Status: **the AC review below was approved as proposed by the story owner (Yang 
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-33 |
+| issue tracker key | SCRUM-33 |
 | Title | Record Equipment Requirements for an Event |
 | User story | As an Event Coordinator, I want to record the equipment an event requires, so that Technical Support Staff can review and arrange it. |
 | Blocks | SCRUM-13 Reserve Equipment for an Event |
 
 ## Story contract
 
-Jira criteria read on 6 October 2026, reviewed with `docs/standards/testing.md` §1.
+Issue tracker criteria read on 6 October 2026, reviewed with `docs/standards/testing.md` §1.
 
-| Jira criterion | Outcome | Reason |
+| issue tracker criterion | Outcome | Reason |
 | --- | --- | --- |
 | J1 "The Coordinator can record required equipment for an event, including type, quantity, and relevant technical requirements." | **Clarify, Split** → AC1, AC2 | "Type" and valid quantity are undefined; the happy path and input rules are independently testable. |
 | J2 "Given a recorded requirement, when saved, then it is associated with the event and visible to Technical Support Staff for review." | **Split** → AC3, AC4 | Association (per-event list) and the Technical Support review queue are separate behaviours. |
@@ -52,7 +52,7 @@ Jira criteria read on 6 October 2026, reviewed with `docs/standards/testing.md` 
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 |
 
 ### Actors and relationship permissions

@@ -8,7 +8,7 @@ Status: **contract approved by the story owner and Product Owner (Jaren) on 20 O
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-65 |
+| issue tracker key | SCRUM-65 |
 | Title | Book Venues in 15-Minute Increments |
 | Sprint | Sprint 3 (ends 22 October 2026): slice 1, and slice 2 pulled forward by the Product Owner on 20 October 2026 |
 | User story | As a coordinator, I want to book a venue for an exact start and end time in 15-minute steps, so that the booking matches the time my event actually needs. |
@@ -17,7 +17,7 @@ Status: **contract approved by the story owner and Product Owner (Jaren) on 20 O
 
 ## Story contract
 
-The seven live Jira criteria (read on 20 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1, against the schema (`0016`, `0018`, `0023`, `0024`), venueService, the frontend, Koei's SCRUM-20 helper (`feat/scrum-20-venue-booking-conflicts`, `app/time_conflicts.py`) and the shared data.
+The seven live issue tracker criteria (read on 20 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1, against the schema (`0016`, `0018`, `0023`, `0024`), venueService, the frontend, Koei's SCRUM-20 helper (`feat/scrum-20-venue-booking-conflicts`, `app/time_conflicts.py`) and the shared data.
 
 | ID | Original criterion | Outcome | Reason |
 | --- | --- | --- | --- |
@@ -31,7 +31,7 @@ The seven live Jira criteria (read on 20 October 2026) were reviewed with the vo
 
 ### Decisions (Product Owner, 20 October 2026)
 
-1. **Slot ranges:** AM = 07:00–12:00, PM = 12:00–18:00, Night = 18:00–24:00. These replace Jira's proposed 07–12 / 13–18 / 19–24. They leave no gaps, so consecutive slots become one exact range: the active AM + PM blocks on shared become 07:00–18:00 with nothing added or lost.
+1. **Slot ranges:** AM = 07:00–12:00, PM = 12:00–18:00, Night = 18:00–24:00. These replace the issue tracker's proposed 07–12 / 13–18 / 19–24. They leave no gaps, so consecutive slots become one exact range: the active AM + PM blocks on shared become 07:00–18:00 with nothing added or lost.
 2. **Operating window:** one fixed 07:00–24:00 window for every venue (#131). Per-venue operating slots retire in Sprint 4, with the venue form, search and suitability. Every venue on shared already operates all three slots.
 3. **Sprint split:** slice 1 in Sprint 3; the rest in Sprint 4. **Changed 20 October 2026 (Product Owner):** slice 2 is pulled into Sprint 3 as well.
 4. **SCRUM-31's calendar stays on slots** (Kai Jie's story): its slot states read the derived `slots` column. Its "Not offered" state still follows the venue's old operating slots, which no longer limit booking or search; Kai Jie to decide how the calendar moves to times.

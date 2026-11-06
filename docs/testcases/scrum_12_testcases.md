@@ -8,14 +8,14 @@ Status: **the AC review below was approved as proposed by the story owner (Kenne
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-12 |
+| issue tracker key | SCRUM-12 |
 | Title | Check Venue Suitability |
 | Sprint | Sprint 2 |
 | User story | As an Event Coordinator, I want the system to indicate whether a venue appears suitable for an event, so that I avoid proposing venues that cannot meet the event's requirements. |
 
 ## Story contract
 
-The ACs below are the five live Jira criteria (read on 3 October 2026), rewritten as Given / When / Then. Review outcomes use the vocabulary in `docs/standards/testing.md` §1. Approved as proposed by Kennedy on 4 October 2026; the assumptions A1 to A5 below were presented with it and are not separately confirmed.
+The ACs below are the five live issue tracker criteria (read on 3 October 2026), rewritten as Given / When / Then. Review outcomes use the vocabulary in `docs/standards/testing.md` §1. Approved as proposed by Kennedy on 4 October 2026; the assumptions A1 to A5 below were presented with it and are not separately confirmed.
 
 | ID | Criterion | Review outcome | Reason |
 | --- | --- | --- | --- |
@@ -29,7 +29,7 @@ Expected change to scope: none. Expected change to testing effort: one case per 
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | `POST /venues/{venue_id}/suitability`: an advisory comparison of caller-supplied requirements against one venue's recorded attributes | SCRUM-12 |
 | Excluded | Whether the venue is free on a date (blocks, bookings) | SCRUM-31, SCRUM-23 |

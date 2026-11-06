@@ -4,7 +4,7 @@ Drafted 17 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 
 **Goal:** An Attendee can see the public details of a Confirmed event, register during its registration window while places remain, and view their registration.
 
-**Source of truth:** [Jira SCRUM-21](https://is212g9t4.atlassian.net/browse/SCRUM-21) and spm-brain (`backlog/user-stories.md` M5-2; Q&A #17, #22, #30, #42, #48, #53, #99). Once §2 is approved, the contract and test catalogue live in `docs/testcases/scrum_21_testcases.md`. This plan only says *how* to build it.
+**Source of truth:** issue tracker SCRUM-21 and spm-brain (`backlog/user-stories.md` M5-2; Q&A #17, #22, #30, #42, #48, #53, #99). Once §2 is approved, the contract and test catalogue live in `docs/testcases/scrum_21_testcases.md`. This plan only says *how* to build it.
 
 **Branch:** `feat/scrum-21-register-for-event` from `origin/dev`. PR into `dev`.
 
@@ -46,8 +46,8 @@ Then `git push`, since the branch is ahead of `origin/feat/scrum-21-register-for
 
 | Story | State (19 Oct) | Effect on SCRUM-21 |
 | --- | --- | --- |
-| SCRUM-58 Plan and Confirm (Tate) | In Progress. Approved → Planning merged (#59) and the Start Planning button (#61). Planning → Safety Review (`0039_send_for_safety_review.sql`) is still only on `feat/scrum-58-safety-review` | Linked blocker in Jira, but not needed by SCRUM-21's code. Without `0039` on `dev`, no real event can reach Confirmed, so the live run (§7) waits for it |
-| SCRUM-60 Operational Safety Check (Jaren) | **Merged into `dev` on 19 Oct (PR #62).** Jira still shows To Do | **The only story that sets `Confirmed`** (`decide_safety_review`, `0034`/`0044`). No longer a blocker. Not linked to SCRUM-21 in Jira |
+| SCRUM-58 Plan and Confirm (Tate) | In Progress. Approved → Planning merged (#59) and the Start Planning button (#61). Planning → Safety Review (`0039_send_for_safety_review.sql`) is still only on `feat/scrum-58-safety-review` | Linked blocker in the issue tracker, but not needed by SCRUM-21's code. Without `0039` on `dev`, no real event can reach Confirmed, so the live run (§7) waits for it |
+| SCRUM-60 Operational Safety Check (Jaren) | **Merged into `dev` on 19 Oct (PR #62).** issue tracker still shows To Do | **The only story that sets `Confirmed`** (`decide_safety_review`, `0034`/`0044`). No longer a blocker. Not linked to SCRUM-21 in the issue tracker |
 | SCRUM-64 Arrangement review (Jaren) | **Merged into `dev` on 19 Oct (PR #63)** | No effect on registration. Its trigger on `event_requests` ignores the registration columns (U5) |
 | SCRUM-13 Reserve Equipment (Yang) | Merged (#60) | SCRUM-60 depends on it |
 | SCRUM-22 Withdraw, SCRUM-24 Waiting list, SCRUM-38 Notify, SCRUM-41 Manual register, SCRUM-34 Registration info | To Do | Out of scope. They build on the table this story adds |
@@ -59,7 +59,7 @@ Then `git push`, since the branch is ahead of `origin/feat/scrum-21-register-for
 
 ## 2. AC review gate (approve before step 4)
 
-| Jira AC | Outcome | Proposed wording |
+| issue tracker AC | Outcome | Proposed wording |
 | --- | --- | --- |
 | An Attendee can view the event information appropriate for external users before registering. | **Clarify** | **AC1:** Given a Confirmed event, when an Attendee opens it, then they see its public details (D4) and places remaining. Internal planning data is never returned, and an event that isn't Confirmed is reported as not found. |
 | Registration is only possible for a **confirmed** event within its open registration period (separate start/end dates). | **Split** | **AC2:** Given an event that isn't Confirmed, when an Attendee tries to register, then they are refused and no registration is stored. The window half moves into AC3. |
@@ -79,7 +79,7 @@ Then `git push`, since the branch is ahead of `origin/feat/scrum-21-register-for
 | D2 | Window and capacity fields | Migration adds `registration_opens_at timestamptz`, `registration_closes_at timestamptz` (CHECK closes > opens) and `registration_capacity integer` (CHECK > 0), all nullable, to `event_requests`. **The screen for coordinators to set them is a new story** (raise at standup; Q&A #30, #42 extension, #99 capacity ≤ venue). SCRUM-21 only reads them | Q&A #30; persona note "do not invent default registration dates or capacity numbers" |
 | D3 | Window boundaries | Open from `registration_opens_at` (inclusive) until `registration_closes_at` (exclusive). Null window or null capacity = not open | Needs PO confirmation. Determines AC3-B2/B5 |
 | D4 | Public fields | `id, event_name, purpose, description, proposed_date_times, registration_opens_at, registration_closes_at, registration_capacity, places_remaining`. **Not returned:** organiser, coordinator, accessibility/venue/equipment/registration needs, status history, review decisions | Briefing §8b; persona ATT "must not see internal planning info" |
-| D5 | Duplicate registration | Team Design Proposal: one active registration per attendee per event. A second attempt is refused with 409 `already_registered` (partial unique index) | Not in the Jira ACs. `testing.md` §6 says not to assert refusals the requirement doesn't demand, so it needs approval |
+| D5 | Duplicate registration | Team Design Proposal: one active registration per attendee per event. A second attempt is refused with 409 `already_registered` (partial unique index) | Not in the issue tracker ACs. `testing.md` §6 says not to assert refusals the requirement doesn't demand, so it needs approval |
 | D6 | Registration fields | Release 1 stores only the attendee's account id and timestamp. No extra form fields | Q&A #22 leaves this to the team. Keep it minimal until someone needs more |
 | D7 | Non-visible event | Viewing or registering for an event that isn't Confirmed returns **404**, not 409 | `security-and-state.md` §2: don't disclose internal events |
 | D8 | List of open events | Include `GET /attendee/events` (Confirmed events with an open window) | Q&A #17. Without it the attendee can't find the event. If the PO calls it out of scope, drop AC1-H2 |
@@ -168,7 +168,7 @@ Before treating a test as done, ask what plausible one-line bug should make it f
 
 | # | Commit | Files | State after |
 | --- | --- | --- | --- |
-| 0 | *(no commit)* AC review approved; D1 to D9 answered | Jira comment or standup note | — |
+| 0 | *(no commit)* AC review approved; D1 to D9 answered | issue tracker comment or standup note | — |
 | 1 | `docs(scrum-21): record approved contract and test catalogue` | `docs/testcases/scrum_21_testcases.md` | — |
 | 2 | `test(scrum-21): add Red unit tests for the registration rules` | `tests/test_registration_rules.py`, `app/services/registration_rules.py` (stubs raising `NotImplementedError`), `app/clock.py` | Unit tests Red |
 | 3 | `test(scrum-21): add Red API tests for attendee registration` | `tests/registration_support.py` (fake repository with Confirmed fixtures and an attendee auth stub), `tests/test_registration_api.py` | API tests Red (route 404) |
@@ -198,10 +198,10 @@ SCRUM-60 and SCRUM-64 are merged, so this no longer waits on them. A live run ne
 ## 8. Open questions (take to standup or the PO)
 
 1. ~~D3 window boundaries, D5 duplicates, D8 list: need PO sign-off.~~ Approved by the PO on 20 Oct 2026: D3 and D5 as proposed; D8 kept in this story, conditional on listing only in-window Confirmed events and always reflecting capacity (both proven by the strengthened AC1-H2).
-2. Who owns the "set registration window and capacity" story (D2)? Until it exists, live testing needs SQL-seeded values. **Still no Jira story as of 19 Oct; now the main gap for a live demo.**
+2. Who owns the "set registration window and capacity" story (D2)? Until it exists, live testing needs SQL-seeded values. **Still no issue tracker story as of 19 Oct; now the main gap for a live demo.**
 3. Should capacity be checked against the confirmed venue's `max_capacity` (Q&A #99)? Proposed: the setter story enforces it, not SCRUM-21.
 4. Discussion #127 (separate Open/Closed registration status) is unanswered. This plan derives "open" from the window, so no new status is needed.
-5. ~~Add the SCRUM-60 → SCRUM-21 "blocks" link in Jira.~~ No longer needed: SCRUM-60 merged on 19 Oct. Jira still shows SCRUM-60 as To Do; ask Jaren to move it.
+5. ~~Add the SCRUM-60 → SCRUM-21 "blocks" link in the issue tracker.~~ No longer needed: SCRUM-60 merged on 19 Oct. The issue tracker still shows SCRUM-60 as To Do; ask Jaren to move it.
 
 ## 9. Done check
 

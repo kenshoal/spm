@@ -1,6 +1,6 @@
 # SCRUM-59 — Set a Venue's Setup and Turnaround Time
 
-**Jira:** [SCRUM-59](https://is212g9t4.atlassian.net/browse/SCRUM-59)
+**Issue tracker:** SCRUM-59
 
 **User story:** As venue staff, I want to record how long each venue needs to be set up before an event and reset after it, so that bookings leave enough time for both.
 

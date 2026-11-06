@@ -2,20 +2,20 @@
 
 Last reviewed: 5 October 2026
 
-Status: **AC review approved by the story owner (Jaren) on 5 October 2026**, including the `403` response for same-organisation writes. Q1 (Drafts) was settled from the backlog: card E5-1 says "Drafts appear only to their owner", and M1-1 says a request becomes visible once submitted. The Jira ACs were revised the same day to apply customer clarification #81. The other role scopes (attendee, coordinator, venue, technical support) were implemented on this branch before this document existed; see [Disclosures](#disclosures).
+Status: **AC review approved by the story owner (Jaren) on 5 October 2026**, including the `403` response for same-organisation writes. Q1 (Drafts) was settled from the backlog: card E5-1 says "Drafts appear only to their owner", and M1-1 says a request becomes visible once submitted. The issue tracker ACs were revised the same day to apply customer clarification #81. The other role scopes (attendee, coordinator, venue, technical support) were implemented on this branch before this document existed; see [Disclosures](#disclosures).
 
 ## Story
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-39 |
+| issue tracker key | SCRUM-39 |
 | Title | Restrict Data Access by Relationship |
 | Sprint | Sprint 2 |
 | User story | As a ConnectSphere system user, I want access to be limited to event and organisation data related to my role and relationship, so that unrelated clients' and attendees' information stays protected. |
 
 ## Story contract
 
-The live Jira ACs (revised 5 October 2026) are a role checklist. Following `testing.md` §1, each checklist item is rewritten below as a Given / When / Then scenario.
+The live issue tracker ACs (revised 5 October 2026) are a role checklist. Following `testing.md` §1, each checklist item is rewritten below as a Given / When / Then scenario.
 
 | ID | Criterion | Review outcome | Reason |
 | --- | --- | --- | --- |
@@ -32,7 +32,7 @@ Expected change to scope: adds a client-organisation model (AC2, AC3). Expected 
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | Client organisations and organisation membership as seeded data | SCRUM-39 |
 | Included | Organiser list and detail including same-organisation requests, read-only | SCRUM-39 |

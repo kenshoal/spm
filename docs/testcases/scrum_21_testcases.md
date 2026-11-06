@@ -1,14 +1,14 @@
 # SCRUM-21 — Register for a Confirmed Event
 
-Source: [Jira SCRUM-21](https://is212g9t4.atlassian.net/browse/SCRUM-21) and `docs/superpowers/plans/2026-10-17-scrum-21-register-for-event.md`. Branch: `feat/scrum-21-register-for-event`, base `0846c22`.
+Source: issue tracker SCRUM-21 and `docs/superpowers/plans/2026-10-17-scrum-21-register-for-event.md`. Branch: `feat/scrum-21-register-for-event`, base `0846c22`.
 
 ## Approved contract
 
 As an Attendee, I want to register for a confirmed event, so that my place is recorded.
 
-The AC wording and decisions D1 to D9 below are the proposals in the implementation plan. Yang (story owner) asked for the plan to be implemented on 18 October 2026, and they were built as written. **The Product Owner approved D3, D5 and D8 on 20 October 2026** (see Decisions; SCRUM-48 and SCRUM-33 confirm D5, Q&A #17 confirms D8). The rewording is recorded here, not written back to Jira.
+The AC wording and decisions D1 to D9 below are the proposals in the implementation plan. Yang (story owner) asked for the plan to be implemented on 18 October 2026, and they were built as written. **The Product Owner approved D3, D5 and D8 on 20 October 2026** (see Decisions; SCRUM-48 and SCRUM-33 confirm D5, Q&A #17 confirms D8). The rewording is recorded here, not written back to the issue tracker.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | An Attendee can view the event information appropriate for external users before registering. | **Clarify** | **AC1:** Given a Confirmed event, when an Attendee opens it, then they see its public details (D4) and places remaining. Internal planning data is never returned, and an event that isn't Confirmed is reported as not found. |
 | Registration is only possible for a confirmed event within its open registration period. | **Split** | **AC2:** Given an event that isn't Confirmed, when an Attendee tries to register, then they are refused and no registration is stored. |
@@ -54,7 +54,7 @@ An event is registrable only while `status = 'Confirmed'` and `registration_open
 1. ~~D3, D5, D8 need PO confirmation.~~ Approved by the PO on 20 Oct 2026.
 2. Who owns the "set window and capacity" story? Until it exists, live tests need SQL-seeded values.
 3. Capacity versus venue `max_capacity` (Q&A #99) is for the setter story.
-4. Add the SCRUM-60 to SCRUM-21 "blocks" link in Jira.
+4. Add the SCRUM-60 to SCRUM-21 "blocks" link in the issue tracker.
 
 ## Test case specification
 

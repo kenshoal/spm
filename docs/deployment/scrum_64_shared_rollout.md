@@ -256,7 +256,7 @@ Root reported the following actual shared results on project
 Root retained a concise transcription of the observed Supabase MCP results as
 `shared-rollout-observed-results.json` in the rollout evidence directory. It is
 labelled as a transcription, not a raw MCP export. Agent Discussions #2440 records
-the corresponding owner handoff; Jira evidence comment #10047 records the
+the corresponding owner handoff; issue tracker evidence comment #10047 records the
 deployment evidence.
 
 After the separate 0045 application, root reran both unchanged reviewed shared
@@ -310,7 +310,7 @@ and the mechanism smoke with explicit ROLLBACK. This demonstrates continued
 mechanism compatibility with those deployed prerequisites; it does not prove
 0047 is deployed or the real user/inbox journey.
 
-SCRUM-64's live Jira status was already Done before this publication step. This
+SCRUM-64's live issue tracker status was already Done before this publication step. This
 record does not alter its ACs or status and does not conceal the outstanding
 normal-user and committed-delivery evidence. The publication PR requires human
 review and its own CI. No SCRUM-35 working changes are part of this branch.

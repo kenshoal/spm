@@ -1,14 +1,14 @@
 # SCRUM-60 — Operational Safety Check
 
-Source: [Jira SCRUM-60](https://is212g9t4.atlassian.net/browse/SCRUM-60), read 15 October 2026. Branch: `feat/scrum-60-safety-check`, base `bf4aed5`.
+Source: issue tracker SCRUM-60, read 15 October 2026. Branch: `feat/scrum-60-safety-check`, base `bf4aed5`.
 
 ## Approved contract
 
 As the Safety Officer, I want to review an event's safety once its venues and equipment are confirmed, so that no event goes ahead without my approval.
 
-Jaren (story owner) reviewed the six Jira ACs and approved the scope below on 15 October 2026. Jira wording is kept; the rewording is recorded here.
+Jaren (story owner) reviewed the six issue tracker ACs and approved the scope below on 15 October 2026. The issue tracker wording is kept; the rewording is recorded here.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | There is a Safety Officer role, and only Safety Officers can record a safety decision. | **Clarify** | **AC1:** Given a user holds `safety_officer`, when they record a safety decision, then it is accepted; any other role gets `403` and nothing changes. An admin grants the role like any other role. |
 | The Safety Officer sees the events waiting for a check, with expected attendance, venue size and layout, accessibility needs, equipment and any venue restrictions. | **Clarify, narrow** | **AC2:** Given events are in `Safety Review`, when the Safety Officer opens the safety queue, then they are listed oldest first, each with expected attendance and accessibility needs; each venue booking with the venue's capacity, supported layouts, accessibility features, dates and slots; venue blocks overlapping those dates ("restrictions"); and the equipment requirements and reservations. Read-only. Other roles get `403`. |

@@ -1,14 +1,14 @@
 # SCRUM-36 — Notify Decision Outcomes
 
-Source: [Jira SCRUM-36](https://is212g9t4.atlassian.net/browse/SCRUM-36), read 23 October 2026. Branch: `feat/scrum-36-decision-outcomes`, base `dev` at `e429e72`+ (fast-forwarded 23 Oct).
+Source: issue tracker SCRUM-36, read 23 October 2026. Branch: `feat/scrum-36-decision-outcomes`, base `dev` at `e429e72`+ (fast-forwarded 23 Oct).
 
 ## Approved contract
 
 As a user responsible for an event request or venue booking, I want to be notified when it reaches a decision, so that I know the outcome without chasing another staff member.
 
-The story owner (Tate) reviewed the four Jira ACs and approved the review below on 23 October 2026. Jira wording is kept; the rewording below is recorded here, not written back to Jira.
+The story owner (Tate) reviewed the four issue tracker ACs and approved the review below on 23 October 2026. The issue tracker wording is kept; the rewording below is recorded here, not written back to the issue tracker.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | Request approved, rejected or returned for clarification → the Organiser is notified. | **Narrow** | **AC1:** Given a Coordinator records an Approved or Rejected decision on an event request, when the decision is saved, then the request's Organiser receives `event_request_approved` or `event_request_rejected` (the rejection carries the reason). "Returned for clarification" is already delivered by SCRUM-37 (`clarification_requested`) and is not rebuilt. |
 | Venue booking approved or rejected → the responsible Coordinator (and Organiser where relevant) is notified. | **Clarify** | **AC2:** Given Venue Staff reject a booking request, when the decision is saved, then the Organiser of the booking's event also receives `venue_booking_rejected` (venue, dates, reason, suggested alternative). An approval notifies the Coordinator only, as today. "Where relevant" is read as: the Organiser is told when the outcome can change their plans (a rejection), not on every approval (decided by the story owner, 23 Oct — option B). The Coordinator notice (SCRUM-15 AC4) is unchanged. |

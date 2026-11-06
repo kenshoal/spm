@@ -1,8 +1,8 @@
 # SCRUM-17 — Review and Decide on an Event Request
 
-Source: [Jira SCRUM-17](https://is212g9t4.atlassian.net/browse/SCRUM-17). User story: as an Event Coordinator, I want to review a submitted request and approve it, reject it, or ask for clarification, so that planning only proceeds on sufficiently clear requests.
+Source: issue tracker SCRUM-17. User story: as an Event Coordinator, I want to review a submitted request and approve it, reject it, or ask for clarification, so that planning only proceeds on sufficiently clear requests.
 
-Status (converted 1 Nov 2026): **AI-drafted conversion of the September catalogue to the `testing.md` matrix format; teammate review pending (`testing.md` §10).** The AC wording below is the approved wording recorded by the 30 September review (kept from the converted catalogue); **Jira remains the source of truth.** Labels in the test files read `SCRUM-17 AC<n>-<L><k>` (story-prefixed, following the `SCRUM-38 AC4-X1` precedent) because the shared files also carry SCRUM-8/11/14/28/39/60 labels. Nothing was executed in this pass: the matrix and the labels were added; every execution row below is `Not executed`. The 30 September evidence recorded by the previous revision is preserved as provenance for that commit, not re-claimed here (`testing.md` §8).
+Status (converted 1 Nov 2026): **AI-drafted conversion of the September catalogue to the `testing.md` matrix format; teammate review pending (`testing.md` §10).** The AC wording below is the approved wording recorded by the 30 September review (kept from the converted catalogue); **Issue tracker remains the source of truth.** Labels in the test files read `SCRUM-17 AC<n>-<L><k>` (story-prefixed, following the `SCRUM-38 AC4-X1` precedent) because the shared files also carry SCRUM-8/11/14/28/39/60 labels. Nothing was executed in this pass: the matrix and the labels were added; every execution row below is `Not executed`. The 30 September evidence recorded by the previous revision is preserved as provenance for that commit, not re-claimed here (`testing.md` §8).
 
 ## Story contract
 
@@ -60,7 +60,7 @@ No other transition is reachable through this story's endpoints; a stale or repe
 
 1. The old catalogue's `AC2-T4` row (an unrelated or reassigned-away coordinator cannot even read the request) is now owned by SCRUM-39's labelled tests in `test_event_request_controller.py`; this matrix proves the mutation-side refusals (`AC2-N1`, `AC2-N2`) and the history-visibility partition (`AC3-P1…P5`).
 2. The old `UI-T1` row (progress tracker per status) is owned by SCRUM-28's labelled tests in `frontend/__tests__/event-request-status.test.tsx`; not re-labelled here.
-3. The reason/response boundary of 2,000 characters comes from the September catalogue's recorded rule; confirm against Jira at review.
+3. The reason/response boundary of 2,000 characters comes from the September catalogue's recorded rule; confirm against the issue tracker at review.
 
 ### How to run the suites
 

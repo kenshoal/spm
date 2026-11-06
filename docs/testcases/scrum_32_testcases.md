@@ -8,16 +8,16 @@ Status: **the AC review below was approved as proposed by the story owner (Kenne
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-32 |
+| issue tracker key | SCRUM-32 |
 | Title | Submit a Venue Booking Request |
 | Sprint | Sprint 2 |
 | User story | As an Event Coordinator, I want to submit a booking request for a chosen venue, so that Venue Staff can assess and decide on it for my event. |
 
 ## Story contract
 
-The four live Jira criteria (read on 4 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1. Jira's criteria 1 to 4 became AC1 to AC6 here; the mapping is in the last column.
+The four live issue tracker criteria (read on 4 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1. The issue tracker's criteria 1 to 4 became AC1 to AC6 here; the mapping is in the last column.
 
-| ID | Criterion | Review outcome | Jira criterion |
+| ID | Criterion | Review outcome | issue tracker criterion |
 | --- | --- | --- | --- |
 | AC1 | Given a Coordinator currently assigned to an event, when they submit a request for a venue with a start date, an end date (inclusive; equal for a single day) and one or more slots, then a request is created with status pending, linked to that event and recorded as requested by that Coordinator. | **Clarify, Narrow** | 1 |
 | AC2 | Given a request created for an event, then it stores the requested dates and slots and a snapshot taken from the event at submission: event name, expected attendance and venue-requirements text. | **Clarify** | 2 |
@@ -39,7 +39,7 @@ The four live Jira criteria (read on 4 October 2026) were reviewed with the voca
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | The `venue_booking_requests` table, its constraints and server-only access; then the submit, queue and status-read endpoints | SCRUM-32 |
 | Excluded | Approving or rejecting a request, the venue-row lock, and creating the decision | SCRUM-15 |
@@ -63,7 +63,7 @@ The four live Jira criteria (read on 4 October 2026) were reviewed with the voca
 
 | ID | Assumption or question | Used by |
 | --- | --- | --- |
-| A1 | Submission does not refuse past dates, blocked venues or duplicate requests; the decision step handles them. Proposed with the plan, not stated in the Jira criteria. | AC1, AC4 |
+| A1 | Submission does not refuse past dates, blocked venues or duplicate requests; the decision step handles them. Proposed with the plan, not stated in the issue tracker criteria. | AC1, AC4 |
 | A2 | The snapshot copies the event's venue-requirements text only, not its accessibility needs. | AC2 |
 | A3 | Dates are calendar dates with no time zone, and NIGHT belongs to its starting date, as for blocks. | AC1 |
 | A4 | `requested_by` and `decided_by` are plain `uuid` columns with no foreign key to `auth.users`, as in the equipment and `staff_roles` tables. | AC1, AC5 |
@@ -197,7 +197,7 @@ Submission order: authenticate (401), check the role (403), validate the body (4
 
 | ID | Assumption or question | Used by |
 | --- | --- | --- |
-| A5 | Venue Staff may list any status; the default is `pending`. The Jira criteria only name the pending queue. | AC3-P1, AC3-P2, AC3-N1 |
+| A5 | Venue Staff may list any status; the default is `pending`. The issue tracker criteria only name the pending queue. | AC3-P1, AC3-P2, AC3-N1 |
 | A6 | A venue that does not exist is refused before eventRequestService is called. | AC1-N25 |
 | A7 | The role check (403) happens before body validation (422). | AC6-X5, AC6-X6 |
 | A8 | Errors for a request that is not the caller's, and for an unknown request, are identical (404), as the security standard asks. | AC5-N14 |

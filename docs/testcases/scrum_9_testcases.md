@@ -1,16 +1,16 @@
 # SCRUM-9 — Search and Filter Venues
 
-Source: [Jira SCRUM-9](https://is212g9t4.atlassian.net/browse/SCRUM-9) (Event Coordinator shortlists venues). The four ACs below were pulled from Jira on 1 November 2026 and are recorded as approved; this document and its labels were drafted by the test-case gap sweep on the same day.
+Source: issue tracker SCRUM-9 (Event Coordinator shortlists venues). The four ACs below were pulled from the issue tracker on 1 November 2026 and are recorded as approved; this document and its labels were drafted by the test-case gap sweep on the same day.
 
-Status: **AI-drafted test design, not yet reviewed by a teammate (`testing.md` §10). Jira remains the source of truth.** The automated tests predate this document: this pass added label comments to them and designed the matrix, and ran no suite — every row below is **Not executed** and no pass/fail is claimed (`testing.md` §8).
+Status: **AI-drafted test design, not yet reviewed by a teammate (`testing.md` §10). The issue tracker remains the source of truth.** The automated tests predate this document: this pass added label comments to them and designed the matrix, and ran no suite — every row below is **Not executed** and no pass/fail is claimed (`testing.md` §8).
 
-> **Update from PR #125 (1 Nov 2026).** (1) Jira changed after this document was drafted: the Product Owner rewrote the ACs into AC1 to AC6 at 11:54 and added out-of-scope, dependencies and a change log at 16:23 and 16:28 ("the meaning did not change", approved by Heng Rui). This matrix still follows the earlier four bullets. They map as: new AC1 = AC1, new AC2 and AC3 = AC2, new AC4 = AC3, new AC5 = AC4, new AC6 (roles) = the AC2-X rows. Re-base the IDs onto the new ACs when the story owner reviews. (2) The gap this document called out (AC3-B1 to AC3-B3) is now automated, and the role cases are added as AC2-X2 to AC2-X11, in `backend/venueService/tests/test_venues_search_contract.py`. (3) One case does not hold: AC2-X12.
+> **Update from PR #125 (1 Nov 2026).** (1) issue tracker changed after this document was drafted: the Product Owner rewrote the ACs into AC1 to AC6 at 11:54 and added out-of-scope, dependencies and a change log at 16:23 and 16:28 ("the meaning did not change", approved by Heng Rui). This matrix still follows the earlier four bullets. They map as: new AC1 = AC1, new AC2 and AC3 = AC2, new AC4 = AC3, new AC5 = AC4, new AC6 (roles) = the AC2-X rows. Re-base the IDs onto the new ACs when the story owner reviews. (2) The gap this document called out (AC3-B1 to AC3-B3) is now automated, and the role cases are added as AC2-X2 to AC2-X11, in `backend/venueService/tests/test_venues_search_contract.py`. (3) One case does not hold: AC2-X12.
 
 ## Story contract
 
 **User story:** As an Event Coordinator, I want to search and filter venues by my event's requirements, so that I can shortlist the venues that can host it.
 
-### Acceptance criteria (approved, Jira 1 Nov 2026)
+### Acceptance criteria (approved, issue tracker 1 Nov 2026)
 
 | ID | Criterion |
 | --- | --- |
@@ -43,7 +43,7 @@ Status: **AI-drafted test design, not yet reviewed by a teammate (`testing.md` �
 
 | ID | Assumption or question | Used by |
 | --- | --- | --- |
-| A1 | AC1's "date/slot" has been implemented, since SCRUM-65 (discussion #131), as a **date plus an optional 07:00–24:00 time range in 15-minute steps**; per-venue operating slots no longer filter search (`test_slot_filter_matches_operating_slots` now asserts both venues come back, under SCRUM-65's AC4-P2 label). The Jira wording predates SCRUM-65 — the card owner should confirm the wording or close the point as superseded. | AC1-P6, AC1-N3, AC4-P1 |
+| A1 | AC1's "date/slot" has been implemented, since SCRUM-65 (discussion #131), as a **date plus an optional 07:00–24:00 time range in 15-minute steps**; per-venue operating slots no longer filter search (`test_slot_filter_matches_operating_slots` now asserts both venues come back, under SCRUM-65's AC4-P2 label). The issue tracker wording predates SCRUM-65 — the card owner should confirm the wording or close the point as superseded. | AC1-P6, AC1-N3, AC4-P1 |
 | A2 | "Key attributes" (AC2) = name, location, maximum capacity, supported layouts, facilities and accessibility features, plus setup/turnaround times (SCRUM-59). | AC2-H2 |
 | A3 | The capacity filter must be a positive whole number: the form reports `0`, `abc`, `2.5`, `-1` instead of sending them, and the API rejects `required_capacity <= 0` with 422 (`Query(gt=0)`). | AC1-N1 |
 | A4 | "Unavailable" (AC4) means the venue's status is `blocked`, or, on a dated search, a venue block or an **approved** booking overlaps the requested time; a date-only search requires some free time within 07:00–24:00 that day; a pending booking reserves nothing. | AC4-H1, AC4-P1, AC4-P2, AC4-B1 |
@@ -103,7 +103,7 @@ Layer codes: **API** = `backend/venueService/tests/test_venues_search.py` (FastA
 | AC2-X5, AC2-X6, AC2-X7, AC2-X8, AC2-X9 | AC2 | Event Organiser, Attendee, Technical Support, Event Coordinator Lead and Admin are refused | Cross-cutting | One venue; each role in turn | `GET /venues/search` | roles | 403; no venue data in the body | Nothing returned | API (same file) |
 | AC2-X10 | AC2 | One permitted role among several is enough | Cross-cutting | Roles `attendee` and `event_coordinator` | `GET /venues/search` | — | 200 | — | API (same file) |
 | AC2-X11 | AC2 | A search with no session is refused | Cross-cutting | No session | `GET /venues/search` | — | 401 | — | API (same file) |
-| AC2-X12 | AC2 | A Safety Officer can open the venue search page (the Jira AC lets them search) | Cross-cutting | Safety Officer session | Open `/venues/search` | — | The page opens | — | E2E (not automated) |
+| AC2-X12 | AC2 | A Safety Officer can open the venue search page (the issue tracker AC lets them search) | Cross-cutting | Safety Officer session | Open `/venues/search` | — | The page opens | — | E2E (not automated) |
 
 AC2-X12 **does not hold today** and has no test, because it would fail: `frontend/app/venues/search/page.tsx` line 18 admits only `event_coordinator` and `venue_staff`, and the navigation offers a Safety Officer no search link (the service does accept them). Decision for the Product Owner: admit the Safety Officer on the page, or reword the AC.
 

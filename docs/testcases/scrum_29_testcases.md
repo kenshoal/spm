@@ -1,6 +1,6 @@
 # SCRUM-29 — Update Event Information
 
-Source: [Jira SCRUM-29](https://is212g9t4.atlassian.net/browse/SCRUM-29). The AC wording below is the **approved Jira pull of 1 November 2026**; **Jira remains the source of truth.**
+Source: issue tracker SCRUM-29. The AC wording below is the **approved issue tracker pull of 1 November 2026**; **Issue tracker remains the source of truth.**
 
 Status (1 Nov 2026): **AI-drafted test design from the approved ACs, teammate review pending (`testing.md` §10).** Labels in the test files read `SCRUM-29 AC<n>-<L><k>` (story-prefixed, following the `SCRUM-38 AC4-X1` precedent) because the shared files carry SCRUM-8/11/35/39/60 labels. Nothing was executed in this pass: the matrix and the labels were added; every execution row below is `Not executed`.
 
@@ -13,7 +13,7 @@ Status (1 Nov 2026): **AI-drafted test design from the approved ACs, teammate re
 - **AC3:** Given a significant change, when saved, then the affected arrangements are flagged for review. (The flag itself is built in SCRUM-64; this story triggers it.)
 - **AC4:** Given an ordinary edit, when saved, then no arrangement review is triggered.
 
-### Dependencies (as recorded in Jira, 1 Nov 2026)
+### Dependencies (as recorded in the issue tracker, 1 Nov 2026)
 
 | Dependency | Effect on this story |
 | --- | --- |
@@ -56,7 +56,7 @@ No status change ever results from an edit save itself.
 
 ### Assumptions and open questions
 
-1. **Requirement vs code (flagged, not resolved here):** AC1 says "an event they have access to", but today `PATCH /event-requests/{id}` is scoped to `Draft` status — an Approved event cannot be edited through it (the SCRUM-11-labelled read-only test proves the 409). Post-approval edits currently arrive through SCRUM-35's change-request workflow, whose approval writes the fields. The Jira dependency note (built/tested on Approved events; Planning editing waits for SCRUM-58) is recorded as the contract; the endpoint's status scoping is a design decision for the story owner to confirm against Jira.
+1. **Requirement vs code (flagged, not resolved here):** AC1 says "an event they have access to", but today `PATCH /event-requests/{id}` is scoped to `Draft` status — an Approved event cannot be edited through it (the SCRUM-11-labelled read-only test proves the 409). Post-approval edits currently arrive through SCRUM-35's change-request workflow, whose approval writes the fields. The issue tracker dependency note (built/tested on Approved events; Planning editing waits for SCRUM-58) is recorded as the contract; the endpoint's status scoping is a design decision for the story owner to confirm against the issue tracker.
 2. `0031`'s trigger skips `Draft` and terminal statuses, so AC3/AC4 flags can only arise for saves on non-Draft events — today reachable via SCRUM-35's approved change, and later via direct Planning-stage edits (SCRUM-58).
 3. The four significant fields and the blank-equivalence rule (`nullif(btrim(…))` — blank text equals absent text) are implemented in `0031`; SCRUM-29 tests the list once (AC2, AC2-B1) and SCRUM-35 references it.
 4. The DB-level proof of the flag behaviour lives in SCRUM-64's own script (`database/verify_arrangement_review_flags.sql`) under SCRUM-64's matrix IDs; those rows are named in the execution record as cross-references, **not claimed**. SCRUM-29's own AC2–AC4 rows are gaps until the story owner writes SCRUM-29-labelled cases through SCRUM-29's save path.

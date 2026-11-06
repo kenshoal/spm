@@ -1,16 +1,16 @@
 # SCRUM-27 — Authorise Access by Role
 
-Source: [Jira SCRUM-27](https://is212g9t4.atlassian.net/browse/SCRUM-27). The
+Source: issue tracker SCRUM-27. The
 story decides what an authenticated user may do: the features available to them
 follow from the roles they hold.
 
-Status (1 November 2026): **AI-drafted test design from the approved Jira ACs
-(pulled 1 November 2026), teammate review pending (`testing.md` §10); Jira
+Status (1 November 2026): **AI-drafted test design from the approved issue tracker ACs
+(pulled 1 November 2026), teammate review pending (`testing.md` §10); issue tracker
 remains the source of truth.** The labelled-test pass added comments only to
 files owned by this sweep; no suite was run in this pass, so every execution
 row is **Not executed** (`testing.md` §8).
 
-> **Update from PR #125 (1 Nov 2026).** (1) Jira changed after this document was drafted: at 16:07 the SCRUM-27 ACs were rewritten as AC1 to AC7 (Jira shows the time; the editor was not checked) (any role permits an action; the business roles including Safety Officer; only the Lead assigns Coordinators; several roles; relationship access is SCRUM-39; a stored role change applies at the next identity verification; only Admin grants roles, the Lead only Event Coordinator). This matrix follows the earlier three bullets. The new AC6 corresponds to the planned case AC3-N1, which still has no test. Re-base the IDs when the story owner reviews. (2) Cases added by PR #125 are in `frontend/__tests__/role-access.test.ts` (AC1-X2, AC1-N3, AC1-X3, AC1-N4, AC2-X2, AC3-P4, AC3-P5, AC3-P6), including a check that every page except sign-in and the refusal page calls a session or role guard; it was seen to fail when a guard was removed from a page.
+> **Update from PR #125 (1 Nov 2026).** (1) issue tracker changed after this document was drafted: at 16:07 the SCRUM-27 ACs were rewritten as AC1 to AC7 (issue tracker shows the time; the editor was not checked) (any role permits an action; the business roles including Safety Officer; only the Lead assigns Coordinators; several roles; relationship access is SCRUM-39; a stored role change applies at the next identity verification; only Admin grants roles, the Lead only Event Coordinator). This matrix follows the earlier three bullets. The new AC6 corresponds to the planned case AC3-N1, which still has no test. Re-base the IDs when the story owner reviews. (2) Cases added by PR #125 are in `frontend/__tests__/role-access.test.ts` (AC1-X2, AC1-N3, AC1-X3, AC1-N4, AC2-X2, AC3-P4, AC3-P5, AC3-P6), including a check that every page except sign-in and the refusal page calls a session or role guard; it was seen to fail when a guard was removed from a page.
 
 ## Story contract
 
@@ -137,7 +137,7 @@ can add or find labels; nothing below is pass/fail evidence.
 | AC3-P2 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `backend/eventRequestService/tests/test_organisation_access.py::test_assigned_coordinator_access_survives_unrelated_organisation`, already labelled `AC8-X1` for SCRUM-39; named, not re-labelled |
 | AC3-X1 | Automated (existing test) | Not run in this pass | Not executed | docs/testcase-gap-sweep, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | Per-service role-refusal suites, e.g. `backend/eventRequestService/tests/test_registration_info_api.py` `AC4-P1…P5` partition — those services' stories own the labels |
 | AC1-X2, AC1-N3, AC1-X3, AC1-N4, AC2-X2, AC3-P4, AC3-P5, AC3-P6 | Automated (new, PR #125) | — | See the execution evidence below | — | — | `frontend/__tests__/role-access.test.ts` (20 tests) |
-| AC3-N1 | Planned | — | Not executed | — | — | gap: no automated test yet — story owner to write (role change mid-session recognised on the next request); this is the new Jira AC6 |
+| AC3-N1 | Planned | — | Not executed | — | — | gap: no automated test yet — story owner to write (role change mid-session recognised on the next request); this is the new issue tracker AC6 |
 
 ## Execution evidence, 1 November 2026 (PR #125)
 

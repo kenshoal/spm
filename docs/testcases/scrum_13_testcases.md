@@ -2,7 +2,7 @@
 
 Last reviewed: 15 October 2026
 
-Test catalogue for the equipment-reservation story, designed **before implementation** (testing.md §2). It covers **AC1 to AC5, the whole story**. The two Jira criteria about flagging reservations for review (J6, J7) moved to SCRUM-64, owned by Tiong Heng Rui, on 13 October 2026; see the AC review and "Excluded".
+Test catalogue for the equipment-reservation story, designed **before implementation** (testing.md §2). It covers **AC1 to AC5, the whole story**. The two issue tracker criteria about flagging reservations for review (J6, J7) moved to SCRUM-64, owned by Tiong Heng Rui, on 13 October 2026; see the AC review and "Excluded".
 
 Companion catalogues: [scrum_10_testcases.md](scrum_10_testcases.md) (availability rules and the `equipment_reservations` table this story writes to), [scrum_33_testcases.md](scrum_33_testcases.md) (the equipment requirements reserved against) and [scrum_39_testcases.md](scrum_39_testcases.md) (its AC7, the Technical Support read of reservations, was deferred to this story).
 
@@ -12,14 +12,14 @@ Companion catalogues: [scrum_10_testcases.md](scrum_10_testcases.md) (availabili
 
 ## Story contract
 
-- **Jira key:** [SCRUM-13](https://is212g9t4.atlassian.net/browse/SCRUM-13), "Reserve Equipment for an Event". Sprint 3. Blocked by SCRUM-10 and SCRUM-33 (both Done). Blocks SCRUM-60. SCRUM-58 needs its reservations before an event can go to the safety check. Related: SCRUM-64 (flag affected arrangements; owns J6 and J7 from 13 October 2026), SCRUM-16 (equipment status).
+- **Issue tracker key:** SCRUM-13, "Reserve Equipment for an Event". Sprint 3. Blocked by SCRUM-10 and SCRUM-33 (both Done). Blocks SCRUM-60. SCRUM-58 needs its reservations before an event can go to the safety check. Related: SCRUM-64 (flag affected arrangements; owns J6 and J7 from 13 October 2026), SCRUM-16 (equipment status).
 - **User story:** As a Technical Support Staff member, I want to reserve available equipment for an event, so that the same limited equipment is not simultaneously committed to incompatible events.
 
 ### AC review
 
-Jira criteria read on 12 October 2026.
+Issue tracker criteria read on 12 October 2026.
 
-| Jira criterion | Outcome | Reason | Scenario wording |
+| issue tracker criterion | Outcome | Reason | Scenario wording |
 | --- | --- | --- | --- |
 | J1 "A reservation is made against an equipment requirement the Event Coordinator has recorded for the event." | **Clarify** → AC1 | "Against" is undefined: which catalogue row, how much, and whether a requirement can be over-reserved. Q&A #19 fixes the workflow (EC records → TSS reviews → reserve). | **AC1** Given an equipment requirement recorded for an event, when Technical Support reserves a quantity of one catalogue row of the same type against it, then the reservation is linked to that requirement and its event; the total reserved against a requirement may not exceed the requirement's quantity. |
 | J2 "Only equipment that is available — not committed elsewhere, and not damaged/under repair/under maintenance — can be reserved." | **Narrow** → AC2 | "Not committed elsewhere" is exactly J3; keeping it in both duplicates the cases (testing.md §1, non-duplication). AC2 keeps the status rule; AC3 owns commitment. `RETIRED` added, as in SCRUM-10 AC2. | **AC2** Given a catalogue row whose status is `DAMAGED`, `UNDER_REPAIR`, `UNDER_MAINTENANCE` or `RETIRED`, when Technical Support tries to reserve from it, then it is refused (409) and nothing is stored. |
@@ -31,7 +31,7 @@ Jira criteria read on 12 October 2026.
 
 ### Scope
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | `POST /equipment-reservations`: reserve units of one catalogue row against one requirement | SCRUM-13 |
 | Included | `GET /equipment-reservations/by-event/{event_request_id}`: Technical Support lists an event's reservations | SCRUM-13 (closes SCRUM-39 AC7) |
@@ -83,7 +83,7 @@ None on the event or the requirement. A reservation is created once; it has no s
 | Q1 | Should a reservation be refused when the event is Cancelled, Completed or Rejected? Technical Support cannot read event status. | **Not in this story.** Releasing reservations of cancelled events is backlog E1-2 (Q&A #60). |
 | Q2 | What does SCRUM-58 mean by "equipment is reserved": reservations summing to each requirement's quantity, or the requirement marked `arranged`? | **Agree with SCRUM-58's owner.** This story exposes both: the reservation list and the requirement status. |
 | Q3 | Should the dates come from the requirement's `event_date_times` snapshot instead of the body? | **No.** The snapshot holds candidate date-times and is not refreshed when the event changes (SCRUM-33 A3). |
-| Q4 | Can Technical Support release or reduce a reservation? | **New backlog item.** Not in the Jira ACs. |
+| Q4 | Can Technical Support release or reduce a reservation? | **New backlog item.** Not in the issue tracker ACs. |
 | Q5 | Frontend screen in this story? | **Separate story**, as SCRUM-10 and SCRUM-33 did. Backend only here. |
 
 ## Shared test data

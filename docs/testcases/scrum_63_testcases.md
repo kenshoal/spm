@@ -2,13 +2,13 @@
 
 Last reviewed: 24 October 2026
 
-Status: **AC1 to AC5 approved by the story owner (Kennedy) on 24 October 2026, including AC5** (which goes beyond the two Jira criteria; see the review table). Assumptions A1 to A5 are proposals. Q1 to Q3 were answered by the Product Owner on 27 October 2026 (see the table). Part 1 (AC1, AC2 and the readers) is merged (PR #102); part 2 (AC3 marker, AC4, AC5) is built and recorded below.
+Status: **AC1 to AC5 approved by the story owner (Kennedy) on 24 October 2026, including AC5** (which goes beyond the two issue tracker criteria; see the review table). Assumptions A1 to A5 are proposals. Q1 to Q3 were answered by the Product Owner on 27 October 2026 (see the table). Part 1 (AC1, AC2 and the readers) is merged (PR #102); part 2 (AC3 marker, AC4, AC5) is built and recorded below.
 
 ## Story
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-63 |
+| issue tracker key | SCRUM-63 |
 | Title | Replace a Venue for an Affected Booking |
 | Sprint | Sprint 4 (22 October to 5 November 2026) |
 | Points | 5 (estimated 22 October 2026) |
@@ -18,12 +18,12 @@ Status: **AC1 to AC5 approved by the story owner (Kennedy) on 24 October 2026, i
 
 ## Story contract
 
-The two live Jira criteria (read 22 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1.
+The two live issue tracker criteria (read 22 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1.
 
-| Jira criterion | Review outcome | Reason |
+| issue tracker criterion | Review outcome | Reason |
 | --- | --- | --- |
-| When a venue is blocked, its affected bookings are marked as needing a new venue, and the event itself isn't cancelled (discussions #120 and #122). | **Split** into AC1, AC2, AC3 | Three independently testable parts: the marking (a database write inside the block), what must stay untouched (the event and the booking itself), and that the coordinator can see the marking. "Affected" is not defined in Jira, so AC1 defines it by the rule SCRUM-23 already uses for its alert. |
-| The coordinator can search for and request a replacement venue linked to the affected booking, and the event's details are kept. | **Clarify, Split** into AC4, AC5 | "Search" is the existing venue search (SCRUM-12), not new behaviour. "Request ... linked" is AC4. What happens to the old booking when the replacement is decided is not stated in Jira; AC5 proposes it (Q1). |
+| When a venue is blocked, its affected bookings are marked as needing a new venue, and the event itself isn't cancelled (discussions #120 and #122). | **Split** into AC1, AC2, AC3 | Three independently testable parts: the marking (a database write inside the block), what must stay untouched (the event and the booking itself), and that the coordinator can see the marking. "Affected" is not defined in the issue tracker, so AC1 defines it by the rule SCRUM-23 already uses for its alert. |
+| The coordinator can search for and request a replacement venue linked to the affected booking, and the event's details are kept. | **Clarify, Split** into AC4, AC5 | "Search" is the existing venue search (SCRUM-12), not new behaviour. "Request ... linked" is AC4. What happens to the old booking when the replacement is decided is not stated in the issue tracker; AC5 proposes it (Q1). |
 
 Expected change to scope: migration `0064` (flag on block; further migrations for the link column, the replacement function and the AC5 decision change will take the next free numbers), one new endpoint in venueService, one new `trigger_type` in the arrangement-review readers (eventRequestService and frontend), and a panel change on the coordinator's event page.
 
@@ -37,7 +37,7 @@ Expected change to scope: migration `0064` (flag on block; further migrations fo
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | Flagging affected approved bookings when a block is created | SCRUM-63 |
 | Included | "Needs a new venue" shown on the event's venue bookings | SCRUM-63 |

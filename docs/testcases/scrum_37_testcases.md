@@ -1,14 +1,14 @@
 # SCRUM-37 — Notify Event Workflow Changes
 
-**Jira:** [SCRUM-37](https://is212g9t4.atlassian.net/browse/SCRUM-37)
+**Issue tracker:** SCRUM-37
 
 **User story:** As a user responsible for an event, I want to be notified when its workflow or important arrangements change, so that I can take the action required of my role.
 
-**Split on 8 October 2026.** This story keeps AC1–AC3 and the in-app, prompt-delivery and relevance parts of AC6. AC4, AC5 and the email, per-type setting and grouped-delivery parts of AC6 were not built in Sprint 2 and moved to [SCRUM-57](https://is212g9t4.atlassian.net/browse/SCRUM-57) (backlog). The Product Owner has not yet confirmed the split.
+**Split on 8 October 2026.** This story keeps AC1–AC3 and the in-app, prompt-delivery and relevance parts of AC6. AC4, AC5 and the email, per-type setting and grouped-delivery parts of AC6 were not built in Sprint 2 and moved to SCRUM-57 (backlog). The Product Owner has not yet confirmed the split.
 
 ## Story contract review
 
-The user story and its acceptance criteria were reviewed on 5 October 2026 against the repository, the accepted customer clarifications (#117, #55, #37) and the neighbouring stories SCRUM-35, SCRUM-36 and SCRUM-17. Jira does not number the criteria. **AC1–AC5 follow the order of the five bullets in Jira, and AC6 is the cross-cutting channel, timing and relevance bullet.**
+The user story and its acceptance criteria were reviewed on 5 October 2026 against the repository, the accepted customer clarifications (#117, #55, #37) and the neighbouring stories SCRUM-35, SCRUM-36 and SCRUM-17. The issue tracker does not number the criteria. **AC1–AC5 follow the order of the five bullets in the issue tracker, and AC6 is the cross-cutting channel, timing and relevance bullet.**
 
 | Criterion | Outcome | Reason |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ The user story and its acceptance criteria were reviewed on 5 October 2026 again
 | AC5 | Keep | Deferred. `POST /event-requests/{id}/cancellation` already exists, so the hook is feasible later; it is not built in this increment. |
 | AC6 | Split | Three independently testable rules: **relevance** (built), **channel** (in-app built; email and per-type settings not built) and **timing** (prompt delivery built, where the AC1 relay polls every 10 seconds; grouped delivery not built). |
 
-**Approval status.** Tate Lim, the story owner, asked for AC1–AC3 and the in-app side of AC6 to be built on 5 October 2026. The outcomes in the table above (especially the AC3 split with SCRUM-36 and the AC6 split) have **not** been approved by the Product Owner, and the Product Owner has not yet confirmed the 27 September refinement (Jira comment 10033). On 8 October 2026 Tate Lim, as story owner, split the unbuilt criteria into SCRUM-57 (see the note at the top); that split is also **not** yet approved by the Product Owner.
+**Approval status.** Tate Lim, the story owner, asked for AC1–AC3 and the in-app side of AC6 to be built on 5 October 2026. The outcomes in the table above (especially the AC3 split with SCRUM-36 and the AC6 split) have **not** been approved by the Product Owner, and the Product Owner has not yet confirmed the 27 September refinement (issue tracker comment 10033). On 8 October 2026 Tate Lim, as story owner, split the unbuilt criteria into SCRUM-57 (see the note at the top); that split is also **not** yet approved by the Product Owner.
 
 ## Increment scope
 
@@ -181,4 +181,4 @@ Counts re-derived from these labels match the execution record above (AC2-N1 "4 
 - [ ] Product Owner approval of the story contract review, and of the 27 September refinement.
 - [ ] Pull request reviewed, CI passing, merged to `dev` and running in the integrated stack.
 
-**Status note.** Jira has shown SCRUM-37 as Done since 8 October 2026. The unchecked items above were still open at that time, so this checklist does not by itself show the Definition of Done is met.
+**Status note.** issue tracker has shown SCRUM-37 as Done since 8 October 2026. The unchecked items above were still open at that time, so this checklist does not by itself show the Definition of Done is met.

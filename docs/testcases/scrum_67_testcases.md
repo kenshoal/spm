@@ -17,7 +17,7 @@ Checked read-only against `origin/dev` at `af01e75` (workload W6, branch `docs/t
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-67 |
+| issue tracker key | SCRUM-67 |
 | Title | Warn the coordinator about a likely venue conflict on submit |
 | Sprint | Sprint 4 (22 October to 5 November 2026) |
 | Points | 2 |
@@ -26,14 +26,14 @@ Checked read-only against `origin/dev` at `af01e75` (workload W6, branch `docs/t
 
 ## Story contract
 
-| ID | Jira criterion | Review outcome | Reason |
+| ID | issue tracker criterion | Review outcome | Reason |
 | --- | --- | --- | --- |
 | AC1 | When a coordinator submits a request that clashes with an approved booking (including setup/turnaround), they see a warning naming the clash. | **Clarify** | A clash is the rule SCRUM-20 uses at approval (`find_conflicts`: a shared date and overlapping times, each padded by the venue's setup and turnaround; only approved bookings). "Naming the clash" is read as the clashing booking's dates and times; never the other event's name, ids or users. "Submits" is read as the two calls that store a request: `POST /booking-requests` and the SCRUM-63 replacement. |
 | AC2 | The request can still be submitted; approval remains the hard check. | **Keep** | The warning is advice. The request is stored as pending whatever the answer, and a failed lookup never fails it. |
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | A `conflicts` list (dates and times) in the response of `POST /booking-requests` and `POST /booking-requests/{id}/replacement` | SCRUM-67 |
 | Included | The warning, in words, on the coordinator's event page after a replacement is requested | SCRUM-67 |

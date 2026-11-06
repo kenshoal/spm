@@ -1,6 +1,6 @@
 # SCRUM-23 — Block a Venue
 
-**Jira:** [SCRUM-23](https://is212g9t4.atlassian.net/browse/SCRUM-23)
+**Issue tracker:** SCRUM-23
 
 **User story:** As a Venue Staff member, I want to block a venue for maintenance, renovation, safety, or internal use, so that it is not offered or booked while it is unavailable.
 

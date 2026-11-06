@@ -1,14 +1,14 @@
 # SCRUM-41 — Manually Register an Attendee
 
-Source: [Jira SCRUM-41](https://is212g9t4.atlassian.net/browse/SCRUM-41). Branch: `feat/scrum-41-manual-registration`, stacked on `feat/scrum-34-view-registration-info` (AC3 needs SCRUM-34's view). Retarget to `dev` once SCRUM-34 merges.
+Source: issue tracker SCRUM-41. Branch: `feat/scrum-41-manual-registration`, stacked on `feat/scrum-34-view-registration-info` (AC3 needs SCRUM-34's view). Retarget to `dev` once SCRUM-34 merges.
 
 ## Approved contract
 
 As an Event Coordinator, I want to manually register an attendee who was provided to me by the Event Organiser, so that guests who don't self-register (e.g. VIPs) still hold a confirmed place.
 
-Jaren (story owner) approved the decisions below on 23 October 2026: "the guest must already have an attendee account; coordinator looks them up. Allow adding outside the window, capacity still applies." The rewording is recorded here, not written back to Jira.
+Jaren (story owner) approved the decisions below on 23 October 2026: "the guest must already have an attendee account; coordinator looks them up. Allow adding outside the window, capacity still applies." The rewording is recorded here, not written back to the issue tracker.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | Given attendee details provided by the Event Organiser, the Coordinator can create a registration for that attendee on a confirmed event. | **Clarify** | **AC1:** Given a Confirmed event whose latest coordinator is the caller, and the email of an existing account holding the `attendee` role, when the coordinator registers that email, then one `Registered` registration is stored for that account, even outside the registration window (D2). An unknown email, or one whose account isn't an attendee, is refused as `attendee_not_found` and nothing is stored. |
 | Manually added registrations count toward the event's registration capacity the same as self-registrations. | **Keep, clarified** | **AC2:** Given an event whose active registrations equal its capacity, when the coordinator registers an attendee, then it is refused as `event_full` and nothing is stored. A manual registration takes a place that self-registration then can't take. An event with no capacity set is refused as `capacity_not_set`. |

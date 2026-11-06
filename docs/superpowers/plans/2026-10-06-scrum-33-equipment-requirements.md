@@ -26,9 +26,9 @@ Technical Support never calls eventRequestService (it returns 403 for `technical
 
 ## Gate 0: AC review (approved by Yang Xue, 6 October 2026)
 
-Jira criteria read on 6 October 2026, reviewed with `docs/standards/testing.md` §1.
+Issue tracker criteria read on 6 October 2026, reviewed with `docs/standards/testing.md` §1.
 
-| Jira criterion | Outcome | Reason |
+| issue tracker criterion | Outcome | Reason |
 | --- | --- | --- |
 | J1 "The Coordinator can record required equipment for an event, including type, quantity, and relevant technical requirements." | **Clarify, Split** → AC1, AC2 | "Type" and valid quantity are undefined; the happy path and input rules are independently testable. |
 | J2 "Given a recorded requirement, when saved, then it is associated with the event and visible to Technical Support Staff for review." | **Split** → AC3, AC4 | Association (per-event list) and the Technical Support review queue are separate behaviours. |
@@ -74,7 +74,7 @@ Jira criteria read on 6 October 2026, reviewed with `docs/standards/testing.md` 
 
 ### Included and excluded
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | `equipment_requirements` table, transition function, server-only access; record, list, queue, read-one and arrangement-update endpoints; event client | SCRUM-33 |
 | Excluded | Reserving units and linking reservations to requirements | SCRUM-13 |

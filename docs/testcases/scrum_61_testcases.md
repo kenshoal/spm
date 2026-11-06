@@ -8,7 +8,7 @@ Status: **approved by the story owner (Kennedy) on 17 October 2026**, including 
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-61 |
+| issue tracker key | SCRUM-61 |
 | Title | Book Several Venues for One Event |
 | Sprint | Sprint 3 (ends 22 October 2026) |
 | Points | 5 (pre-planning estimate) |
@@ -18,7 +18,7 @@ Status: **approved by the story owner (Kennedy) on 17 October 2026**, including 
 
 ## Story contract
 
-The four live Jira criteria (read on 17 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1.
+The four live issue tracker criteria (read on 17 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1.
 
 | ID | Criterion | Review outcome | Reason |
 | --- | --- | --- | --- |
@@ -31,7 +31,7 @@ Expected change to scope: a new `cancelled` status (migration), one new read and
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | Proving that an event can hold several booking requests for different venues, each judged and decided on its own | SCRUM-61 |
 | Included | `GET /booking-requests/event/{event_request_id}`: all bookings of one event | SCRUM-61 |
@@ -189,4 +189,4 @@ The browser tests run against the **mock** venue API in `e2e/support/venue-api.m
 ## Disclosures
 
 - This document, its assumptions and the cases were drafted by Claude Code on 17 October 2026 and **approved by the story owner the same day**, before any code was written.
-- Reads of Jira and the repository on 17 October 2026 found no existing branch, code or migration for SCRUM-61.
+- Reads of issue tracker and the repository on 17 October 2026 found no existing branch, code or migration for SCRUM-61.

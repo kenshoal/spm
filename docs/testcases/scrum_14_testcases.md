@@ -1,8 +1,8 @@
 # SCRUM-14 — Assign an Event Coordinator
 
-Source: [Jira SCRUM-14](https://is212g9t4.atlassian.net/browse/SCRUM-14) (Operations Manager assigns an Event Coordinator to a submitted request). Builds on SCRUM-11/21 (submission), SCRUM-10 (roles), SCRUM-28 (the status model and the shared row lock the assignment RPC takes), SCRUM-37 (notificationService, which receives this story's `coordinator_assigned` hook) and SCRUM-62 (the Event Coordinator Lead workspace that later reused these endpoints).
+Source: issue tracker SCRUM-14 (Operations Manager assigns an Event Coordinator to a submitted request). Builds on SCRUM-11/21 (submission), SCRUM-10 (roles), SCRUM-28 (the status model and the shared row lock the assignment RPC takes), SCRUM-37 (notificationService, which receives this story's `coordinator_assigned` hook) and SCRUM-62 (the Event Coordinator Lead workspace that later reused these endpoints).
 
-Status (1 November 2026): **AI-drafted conversion of the 24 September 2026 catalogue to the standard format; teammate review pending (`testing.md` §10).** The AC wording below is as recorded in the converted catalogue, derived from the previous document's criterion purposes; Jira remains the source of truth.
+Status (1 November 2026): **AI-drafted conversion of the 24 September 2026 catalogue to the standard format; teammate review pending (`testing.md` §10).** The AC wording below is as recorded in the converted catalogue, derived from the previous document's criterion purposes; issue tracker remains the source of truth.
 
 ## Story contract
 

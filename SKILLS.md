@@ -4,7 +4,7 @@ This file defines the shared delivery standard for ConnectSphere backlog work. I
 
 ## 1. Core principles
 
-1. **Requirements are the test oracle.** Derive expected behaviour from Jira, project requirements and agreed domain rules before inspecting or changing the implementation.
+1. **Requirements are the test oracle.** Derive expected behaviour from the issue tracker, project requirements and agreed domain rules before inspecting or changing the implementation.
 2. **Work in small vertical increments.** Each increment should produce one reviewable behaviour through the relevant layers rather than a large collection of partially connected changes.
 3. **Use Red, Green, Refactor.** Record a meaningful failing test, implement the smallest valid change, then improve the design while keeping the suite green.
 4. **Test observable behaviour and business invariants.** Avoid tests that merely repeat implementation details or pass only because they mock the same logic as the code under test.
@@ -14,7 +14,7 @@ This file defines the shared delivery standard for ConnectSphere backlog work. I
 
 ## 2. Establish the story contract
 
-Before implementation or detailed test design, fetch the authoritative Jira story and review every acceptance criterion. Do not treat the existing wording as automatically ready for development.
+Before implementation or detailed test design, fetch the authoritative issue tracker story and review every acceptance criterion. Do not treat the existing wording as automatically ready for development.
 
 ### Acceptance-criteria review gate
 
@@ -38,7 +38,7 @@ Flag every questionable criterion using one of these outcomes:
 - **Narrow:** criterion includes more behaviour than the story needs;
 - **Split:** criterion contains independently deliverable or testable behaviours;
 - **Merge:** criterion duplicates or substantially overlaps another criterion;
-- **Move:** behaviour belongs to another existing or proposed Jira story;
+- **Move:** behaviour belongs to another existing or proposed issue tracker story;
 - **Remove:** behaviour is redundant, irrelevant or no longer required.
 
 Present the review before writing production code. Include:
@@ -46,10 +46,10 @@ Present the review before writing production code. Include:
 1. the original criterion;
 2. the review outcome and reason;
 3. the proposed replacement wording;
-4. affected dependencies or related Jira stories;
+4. affected dependencies or related issue tracker stories;
 5. the expected change to scope and testing effort.
 
-Obtain explicit approval from the Product Owner, story owner or requesting user for the revised scope. Record the approved wording in Jira or the story test-case document. Do not begin detailed test breakdown, production implementation or database mutation until approval is recorded.
+Obtain explicit approval from the Product Owner, story owner or requesting user for the revised scope. Record the approved wording in the issue tracker or the story test-case document. Do not begin detailed test breakdown, production implementation or database mutation until approval is recorded.
 
 If no changes are proposed, still present the reviewed criteria and obtain approval that they are ready for development. Research, repository inspection and feasibility analysis may continue while approval is pending, but they must remain read-only.
 
@@ -57,11 +57,11 @@ If no changes are proposed, still present the reviewed criteria and obtain appro
 
 After approval, record the following in `docs/testcases/scrum_<number>_testcases.md`:
 
-- Jira key and story title;
+- issue tracker key and story title;
 - user story;
 - numbered acceptance criteria (`AC1`, `AC2`, and so on);
 - included behaviour;
-- excluded behaviour and related Jira stories;
+- excluded behaviour and related issue tracker stories;
 - actor and relationship permissions;
 - allowed state transitions;
 - persistence and atomicity requirements;
@@ -82,7 +82,7 @@ Add authorization, validation, persistence or atomicity details when they materi
 Every implemented behaviour must follow this chain:
 
 ```text
-Jira story
+Issue tracker story
   -> Acceptance criterion
   -> Test-case ID
   -> Failing automated test or verification script
@@ -260,7 +260,7 @@ Earlier branch results, another developer's machine and a previous commit are no
 
 A story is **Done** only when every applicable item is satisfied:
 
-- [ ] Jira user story and numbered acceptance criteria are current.
+- [ ] issue tracker user story and numbered acceptance criteria are current.
 - [ ] Acceptance criteria were reviewed for breadth, duplication, ambiguity, dependencies and testability.
 - [ ] Proposed acceptance-criteria changes were explicitly approved before detailed test design or implementation began.
 - [ ] The approved acceptance-criteria wording and scope decision are recorded.
@@ -292,7 +292,7 @@ Use these final classifications:
 
 Each pull request should contain:
 
-1. Jira task link;
+1. The issue tracker task link;
 2. problem and resulting behaviour;
 3. scoped changes;
 4. acceptance-criterion and test-evidence document path;
@@ -309,7 +309,7 @@ Keep implementation commits small and use the repository's Conventional Commit f
 Use this sequence for each backlog task:
 
 ```text
-1. Fetch and confirm the Jira story.
+1. Fetch and confirm the issue tracker story.
 2. Review every acceptance criterion for scope, clarity, duplication, dependencies and testability.
 3. Flag each criterion as Keep, Clarify, Narrow, Split, Merge, Move or Remove.
 4. Present the proposed scope and acceptance criteria for explicit approval.
@@ -327,4 +327,4 @@ Use this sequence for each backlog task:
 16. Push and verify PR CI before marking Done.
 ```
 
-When requirements and implementation disagree, stop treating the implementation as correct by default. Resolve the requirement through Jira or an explicit team decision, then update the acceptance criteria and tests before continuing.
+When requirements and implementation disagree, stop treating the implementation as correct by default. Resolve the requirement through the issue tracker or an explicit team decision, then update the acceptance criteria and tests before continuing.

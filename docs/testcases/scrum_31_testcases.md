@@ -8,7 +8,7 @@ Status: **approved by the story owner (Kennedy) on 19 October 2026**, including 
 
 | Field | Value |
 | --- | --- |
-| Jira key | SCRUM-31 |
+| issue tracker key | SCRUM-31 |
 | Title | View Venue Availability |
 | Sprint | Sprint 3 (ends 22 October 2026) |
 | Points | 1 (estimate from Sprint 1; the real size is larger, see Included and excluded behaviour) |
@@ -17,7 +17,7 @@ Status: **approved by the story owner (Kennedy) on 19 October 2026**, including 
 
 ## Story contract
 
-The four Jira criteria (restored to their original wording on 19 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1.
+The four issue tracker criteria (restored to their original wording on 19 October 2026) were reviewed with the vocabulary in `docs/standards/testing.md` §1.
 
 | ID | Criterion | Review outcome | Reason |
 | --- | --- | --- | --- |
@@ -28,7 +28,7 @@ The four Jira criteria (restored to their original wording on 19 October 2026) w
 
 ### Included and excluded behaviour
 
-| | Behaviour | Jira |
+| | Behaviour | issue tracker |
 | --- | --- | --- |
 | Included | `GET /venues/{venue_id}/calendar?month=YYYY-MM`: one month of slot states for one venue, with no private details | SCRUM-31 |
 | Included | A read-only availability page for coordinators, venue staff and safety officers, reached from the venue search results | SCRUM-31 |

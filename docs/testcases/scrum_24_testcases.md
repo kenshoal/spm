@@ -1,8 +1,8 @@
 # SCRUM-24 — Join an Event Waiting List
 
-Source: [Jira SCRUM-24](https://is212g9t4.atlassian.net/browse/SCRUM-24) (card M6-2a/M6-2b, Sprint 4, 5 SP, owner Yang). Builds on SCRUM-21 (M5-2, `0048`, `register_for_event`), SCRUM-41 (`0060`, `coordinator_register_attendee`), SCRUM-22 (M5-3, `0062`, `withdraw_registration`, which carries a `SCRUM-24 hook` comment), SCRUM-38 (notification client and inbox lines) and SCRUM-40 (`PeriodicTaskRunner`).
+Source: issue tracker SCRUM-24 (card M6-2a/M6-2b, Sprint 4, 5 SP, owner Yang). Builds on SCRUM-21 (M5-2, `0048`, `register_for_event`), SCRUM-41 (`0060`, `coordinator_register_attendee`), SCRUM-22 (M5-3, `0062`, `withdraw_registration`, which carries a `SCRUM-24 hook` comment), SCRUM-38 (notification client and inbox lines) and SCRUM-40 (`PeriodicTaskRunner`).
 
-Status (updated 27 Oct: D11–D13 approved by the PO; AC10–AC12 and their test cases added): **AI-drafted test design, not yet reviewed by a teammate (`testing.md` §10).** D1–D4 were decided by Yang (story owner) on 26 October 2026, and D5–D9 were revised by Yang on 27 October 2026. D6 is an implied requirement. D7, D8 and D9 are Team Design Proposals that still need PO approval before any production code (`testing.md` §1). The AC wording below is a proposal; Jira still holds the original six bullets (the two withdrawal bullets were added on 26 October 2026).
+Status (updated 27 Oct: D11–D13 approved by the PO; AC10–AC12 and their test cases added): **AI-drafted test design, not yet reviewed by a teammate (`testing.md` §10).** D1–D4 were decided by Yang (story owner) on 26 October 2026, and D5–D9 were revised by Yang on 27 October 2026. D6 is an implied requirement. D7, D8 and D9 are Team Design Proposals that still need PO approval before any production code (`testing.md` §1). The AC wording below is a proposal; issue tracker still holds the original six bullets (the two withdrawal bullets were added on 26 October 2026).
 
 ## Dependency check (local refs, `origin/dev` at `de2d755`, 25 Oct)
 
@@ -21,7 +21,7 @@ Status (updated 27 Oct: D11–D13 approved by the PO; AC10–AC12 and their test
 
 ## AC review
 
-| Jira AC | Outcome | Proposed wording |
+| issue tracker AC | Outcome | Proposed wording |
 | --- | --- | --- |
 | Given a full event that supports a waiting list, when an Attendee opts in, then they are added to the list. | **Clarify** — "that supports a waiting list" is the team's card wording, not client language (D5) | **AC1:** Given a full Confirmed event whose registration window is open (D8), when an Attendee joins its waiting list, then one `Waiting` entry is stored at the back of the queue, and they can see their entries and positions. |
 | When a place opens, the system offers it in FIFO order, with a manual override permitted. | **Split** | **AC2:** Given a place becomes available, then in the same transaction it is offered to the earliest eligible `Waiting` Attendee (D7). **AC3:** Given a place becomes available, an authorised Coordinator may select its recipient instead of the FIFO order. Any automatic offer already in flight for that place is revoked; its holder keeps their waiting-list position and is notified (D9). |

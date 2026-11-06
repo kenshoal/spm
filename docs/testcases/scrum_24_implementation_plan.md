@@ -4,7 +4,7 @@ Drafted 27 October 2026 by Claude (Cowork) for Yang Xue (story owner). **Status:
 
 **Goal:** When a Confirmed event is full, an Attendee can join its waiting list. Each place that opens is held for the next eligible Attendee for 3 days. They are told when they are offered a place, warned before the offer expires, and told when it expires. They can accept, withdraw, or let the offer pass on. An assigned Coordinator can choose the recipient instead.
 
-**Source of truth:** [Jira SCRUM-24](https://is212g9t4.atlassian.net/browse/SCRUM-24); spm-brain M6-2a/M6-2b; Q&A #26, #44, #116; Briefing §4.
+**Source of truth:** issue tracker SCRUM-24; spm-brain M6-2a/M6-2b; Q&A #26, #44, #116; Briefing §4.
 
 **Branch:** `feat/scrum-24-waiting-list` from `origin/dev` (at `de2d755` on 25 Oct; fetch again first). PR into `dev`.
 
@@ -33,7 +33,7 @@ Steps 1–4 below (test catalogue commit and Red tests) can start now. Hold comm
 | --- | --- | --- |
 | SCRUM-21 Register | Merged (`0048`) | Its capacity check and `places_remaining` change to count holds (D6) |
 | SCRUM-22 Withdraw | Merged (`0062`) | `withdraw_registration` is where a place opens. **Its `SCRUM-24 hook` comment sits *before* the `UPDATE`**; the promotion call has to go *after* it, once the place is actually free |
-| SCRUM-41 Manual register | `0060` on `dev`; Jira "In Review" | Its capacity check changes too (D6, G3) |
+| SCRUM-41 Manual register | `0060` on `dev`; issue tracker "In Review" | Its capacity check changes too (D6, G3) |
 | SCRUM-40 Auto-completion | Merged (`PeriodicTaskRunner`, `build_periodic_task_runner` in `main.py`) | The waitlist timer registers as one more handler |
 | SCRUM-64 Arrangement reviews | Merged (`0037`/`0038` outbox + `ArrangementReviewNotificationRelay`) | Pattern for a durable notification outbox (§3) |
 | SCRUM-38 Registration notices | Branch only | Inbox-line pattern (`describeNotification`); no code dependency. SCRUM-38 explicitly leaves waiting-list notices to SCRUM-24 |

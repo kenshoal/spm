@@ -1,6 +1,6 @@
 # SCRUM-15 — Decide on a Venue Booking Request
 
-**Jira:** [SCRUM-15](https://is212g9t4.atlassian.net/browse/SCRUM-15)
+**Issue tracker:** SCRUM-15
 
 **User story:** As a Venue Staff member, I want to approve or reject a venue booking request and optionally suggest an alternative, so that only viable venue commitments proceed.
 

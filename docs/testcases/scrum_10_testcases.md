@@ -10,12 +10,12 @@ Test catalogue for the equipment-availability story, designed **before implement
 
 ## Story contract
 
-- **Jira key:** [SCRUM-10](https://is212g9t4.atlassian.net/browse/SCRUM-10), "Check Equipment Availability". Blocks SCRUM-13. Related: SCRUM-33, SCRUM-49, SCRUM-16.
+- **Issue tracker key:** SCRUM-10, "Check Equipment Availability". Blocks SCRUM-13. Related: SCRUM-33, SCRUM-49, SCRUM-16.
 - **User story:** As a Technical Support Staff member, I want to check whether sufficient suitable equipment is available for an event's date, so that I can decide whether the requested equipment can be provided.
 
 ### Acceptance criteria
 
-Verbatim from Jira (checklist form):
+Verbatim from the issue tracker (checklist form):
 
 1. The check returns, per requested equipment type, the quantity available for the event's required period.
 2. Equipment marked damaged, under repair, or under maintenance is excluded from available quantity.

@@ -1,14 +1,14 @@
 # SCRUM-62 — Event Coordinator Lead Oversees Assignments
 
-Source: [Jira SCRUM-62](https://is212g9t4.atlassian.net/browse/SCRUM-62), read 15 October 2026. Branch: `feat/scrum-58-start-planning-button` (shared with SCRUM-58 by the story owner's choice), base `bf4aed5`. Requirement: Week 7 Customer Change #5 (Addition of Event Coordinator Lead Role); discussion #129 (same role, new name).
+Source: issue tracker SCRUM-62, read 15 October 2026. Branch: `feat/scrum-58-start-planning-button` (shared with SCRUM-58 by the story owner's choice), base `bf4aed5`. Requirement: Week 7 Customer Change #5 (Addition of Event Coordinator Lead Role); discussion #129 (same role, new name).
 
 ## Approved contract
 
 As the Event Coordinator Lead, I want to see and manage which coordinator handles each event, so that every event has a suitable coordinator.
 
-The story owner (Tate) reviewed the five Jira ACs and approved the review below on 15 October 2026. Jira wording is kept; the rewording below is recorded here, not written back to Jira.
+The story owner (Tate) reviewed the five issue tracker ACs and approved the review below on 15 October 2026. The issue tracker wording is kept; the rewording below is recorded here, not written back to the issue tracker.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | The system says "Event Coordinator Lead" wherever it said "Event Operations Manager". | **Keep, clarified** | **AC1:** Given any screen label, message or notice that named the Event Operations Manager, then it says "Event Coordinator Lead". Only wording shown to people changes. The internal role id `event_operations_manager` (migration `0010`, auth service, API checks) is unchanged. |
 | New requests wait in a queue for the Lead and are never handed to a coordinator automatically. | **Keep** | **AC2:** Given an organiser submits a Draft, when submission completes, then the request appears in the Lead's awaiting-assignment queue and no coordinator assignment exists for it. Existing behaviour; this story adds the missing test. |

@@ -25,7 +25,7 @@ git config core.hooksPath .githooks
 ### Team practice
 
 - **Scope names the service or area:** `auth`, `event-request`, `equipment`, `venue`, `notification`, `frontend`, `e2e`, `database`, `ci`, `deps`, `env`, `compose`, `security`. Use `docs(scrum-<n>)` for a story's test-case and evidence document. History also contains `event`, `db` and `event_request_submission`; use `event-request` and `database` for new commits.
-- **Append the Jira key** when the commit delivers a story's behaviour: `feat(frontend): coordinators search and filter venues (SCRUM-9)`.
+- **Append the issue tracker key** when the commit delivers a story's behaviour: `feat(frontend): coordinators search and filter venues (SCRUM-9)`.
 - **Lower case, present tense**, describing what the change does: `list users holding a role for assignment pickers`, not `added some endpoints`.
 - **72 characters or fewer** (not enforced by the hook).
 
@@ -54,7 +54,7 @@ Open pull requests into `dev`; `dev` is promoted to `main` by pull request. Back
 
 Each pull request contains:
 
-1. the Jira link;
+1. the issue tracker link;
 2. the problem and the resulting behaviour;
 3. the scoped changes;
 4. the path to the story's test-case and evidence document;

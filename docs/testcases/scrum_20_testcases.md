@@ -1,6 +1,6 @@
 # SCRUM-20 — Detect Venue Booking Conflicts
 
-**Jira:** [SCRUM-20](https://is212g9t4.atlassian.net/browse/SCRUM-20)
+**Issue tracker:** SCRUM-20
 
 **User story:** As a Venue Staff member, I want the system to detect overlapping or incompatible venue bookings, so that a venue is never double-booked.
 
@@ -186,7 +186,7 @@ The requester approved this reader prerequisite and its publication separately f
 
 **Approved contract (owner agreement DSU #2606):** `venue_timing_change` is the fourth valid arrangement-review cause; preserve `event_change`, `equipment_unavailable` and `safety_recheck`. The API returns its complete review evidence and the UI displays **Venue timing change**. Unknown causes remain invalid. Existing permissions, event state and staff acknowledgement/clear controls remain unchanged. Existing `arrangement_needs_review` notices require no new schema or fabricated `change_request_id` (omitted/null remains valid).
 
-**AC trace:** Jira SCRUM-20 was read live on 21 October. Its sixth bullet concerns the turnaround boundary; this document's separately approved **AC6 venue timing-change** contract is the source for the three integration IDs below. This appendix does not rewrite Jira or Koei's earlier specifications. Those sections and their results remain dated evidence for the broader story.
+**AC trace:** issue tracker SCRUM-20 was read live on 21 October. Its sixth bullet concerns the turnaround boundary; this document's separately approved **AC6 venue timing-change** contract is the source for the three integration IDs below. This appendix does not rewrite issue tracker or Koei's earlier specifications. Those sections and their results remain dated evidence for the broader story.
 
 | ID | Requirement / purpose | Concrete setup | Action and expected result | Plausible fault / forbidden effect | Layer |
 | --- | --- | --- | --- | --- | --- |

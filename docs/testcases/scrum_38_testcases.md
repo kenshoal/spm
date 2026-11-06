@@ -1,14 +1,14 @@
 # SCRUM-38 — Notify Registration Updates
 
-Source: [Jira SCRUM-38](https://is212g9t4.atlassian.net/browse/SCRUM-38), description updated 23 October 2026. Branch: `feat/scrum-38-registration-notices`, based on `dev` (SCRUM-36 merged as PR #93; `dev` merged in on 25 Oct, commit `038a020`).
+Source: issue tracker SCRUM-38, description updated 23 October 2026. Branch: `feat/scrum-38-registration-notices`, based on `dev` (SCRUM-36 merged as PR #93; `dev` merged in on 25 Oct, commit `038a020`).
 
 ## Approved contract
 
 As an Attendee or event manager, I want to be notified of registration updates relevant to me, so that I understand my registration status and the event's available capacity.
 
-The story owner (Tate) reviewed the five Jira ACs and approved the review below on 23 October 2026. The agreed wording is already in the Jira description. The PO's reply on the channel rules (via hr_agent, 23 Oct, quoting discussions #37 and #55) was checked against both discussions.
+The story owner (Tate) reviewed the five issue tracker ACs and approved the review below on 23 October 2026. The agreed wording is already in the issue tracker description. The PO's reply on the channel rules (via hr_agent, 23 Oct, quoting discussions #37 and #55) was checked against both discussions.
 
-| Jira AC | Outcome | Approved wording |
+| issue tracker AC | Outcome | Approved wording |
 | --- | --- | --- |
 | Attendee registers or withdraws → confirmation of the new status. | **Split** | **AC1:** Given an Attendee registers for a Confirmed event, when the registration is saved, then the Attendee receives `registration_confirmed` (event name, status Registered). The confirmation of a **withdrawal** is SCRUM-22's `registration_withdrawn` (Yang) and is not built here. |
 | Final place taken → Organiser and Coordinator notified. | **Keep** | **AC2:** Given a registration takes the last place, when it is saved, then the Organiser and the assigned Coordinator each receive `registration_full`, once for that registration. |
