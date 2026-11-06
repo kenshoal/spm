@@ -140,5 +140,15 @@ Layers: A = API/controller (backend pytest), R = repository contract, D = databa
 | AC1-P1, AC6-H1, AC6-H2, AC6-P1, AC6-P3, AC6-P4, AC6-P5 | Automated (label added in this pass) | Not run | Not executed | Working tree, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `frontend/__tests__/event-request-status.test.tsx` |
 | AC1-H1, AC6-N1, AC6-B1 | Automated (labels predate this pass — `AC5-X8` ×4 and `AC6-P2` for SCRUM-60; untouched) | Not run | Not executed | Working tree, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | Same file: the eleven-status constant, the rejected/cancelled notices, the draft journey |
 | AC6-X1, AC6-X2 | Automated (label added in this pass) | Not run | Not executed | Working tree, 1 Nov 2026 | Claude for Yang Xue, 1 Nov 2026 | `frontend/e2e/track-event-status.spec.ts`; runs against mock Node servers, not the real services |
-| AC1-N1 | Planned | Not run | Not executed | — | — | gap: no automated test asserts an unknown status value is rejected — story owner to write. Enforcement points exist (`EventRequestStatus` enum → 422 at the API; `event_requests_status_check` CHECK per `0007`/`0011`/`0029`) but nothing asserts them |
+| AC1-N1 | Automated (backfilled 6 Nov 2026 at the API/enum layer — the D-layer CHECK stays asserted only by the migrations) | `POST /event-requests/{id}/decision` with `"Archived"` → 422 (`enum` error at `body.decision`); stored status unchanged, no decision row | Pass | working tree, branch `test/backfill-planned-cases` | Claude for Yang Xue, 6 Nov 2026 | `backend/eventRequestService/tests/test_event_transition_controller.py::test_unknown_status_value_is_refused_without_storage` — the one route accepting a caller-supplied status; distinct from SCRUM-17 AC2-N3's in-vocabulary validator case (`"Completed"`) |
 | AC4-X3 | Planned | Not run | Not executed | — | — | gap: no real-Postgres race between `assign_event_request_coordinator` and `advance_event_request_by_coordinator` — story owner to write; SCRUM-48's test (AC4-X1) covers the transition-vs-transition half |
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H7 — Postponed was missing from the Lead's list; a reassignment from a stale screen won.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H7 AC4-N6 | AC4 (Jira, 1 Nov) | The P0002/P0004/P0005/P0006 errcode contract survives the transport, so the service maps conflicts on codes, not message text | Negative | The P0002/P0004/P0005/P0006 errcode contract survives the transport, so the service maps conflicts on codes, not message text | Repository | backend/eventRequestService/tests/test_coordinator_assignment_repository.py::test_create_preserves_assignment_rpc_error_code |

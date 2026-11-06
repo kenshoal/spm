@@ -525,3 +525,28 @@ def test_stale_review_refused_after_cancellation_without_second_mutation() -> No
     assert cancelled.status_code == 200
     assert review.status_code == 409
     assert event_requests.rows[event_request_id]["status"] == "Cancelled"
+
+
+# AC1-N1 (negative, SCRUM-28): a status value outside the agreed vocabulary —
+# e.g. "Archived" — is refused by the EventRequestStatus enum (422) and nothing is stored
+# Purpose: An unknown status value cannot be stored through the status API.
+def test_unknown_status_value_is_refused_without_storage() -> None:
+    client, event_requests, event_request_id = make_assigned_client(
+        status="Submitted"
+    )
+    with client:
+        response = client.post(
+            f"/event-requests/{event_request_id}/decision",
+            headers=headers("coord-1"),
+            json={"decision": "Archived"},
+        )
+
+    assert response.status_code == 422
+    assert any(
+        error["loc"] == ["body", "decision"]
+        and error["type"] == "enum"
+        and error["input"] == "Archived"
+        for error in response.json()["detail"]
+    )
+    assert event_requests.rows[event_request_id]["status"] == "Submitted"
+    assert event_requests.review_decision_rows == []

@@ -120,7 +120,7 @@ test("edit form is prefilled with the setup and turnaround minutes", () => {
   expect((screen.getByLabelText("Turnaround time (minutes)") as HTMLInputElement).value).toBe("45");
 });
 
-// SCRUM-30 AC1-H7 (happy): a new venue form offers an opening and a closing time, starting at the whole day
+// SCRUM-30 H12 AC1-H7 (happy): a new venue form offers an opening and a closing time, starting at the whole day
 test("new venue form offers opening and closing times on 15-minute steps from 07:00 to 24:00", () => {
   render(<VenueForm />);
 
@@ -137,7 +137,7 @@ test("new venue form offers opening and closing times on 15-minute steps from 07
   expect(openingTimes).toHaveLength(68);
 });
 
-// SCRUM-30 AC2-H2 (happy): the edit form shows the venue's own hours
+// SCRUM-30 H12 AC2-H2 (happy): the edit form shows the venue's own hours
 test("edit venue form shows the stored operating hours", () => {
   render(<VenueForm venue={{ ...venue, operating_start_minute: 540, operating_end_minute: 1080 }} />);
 
@@ -145,7 +145,7 @@ test("edit venue form shows the stored operating hours", () => {
   expect((screen.getByLabelText("Closing time") as HTMLSelectElement).value).toBe("1080");
 });
 
-// SCRUM-30 AC6-N8 (negative): a refusal of the hours is shown and what was chosen is kept
+// SCRUM-30 H12 AC6-N8 (negative): a refusal of the hours is shown and what was chosen is kept
 test("a refused range is shown and the chosen times are kept", async () => {
   vi.mocked(updateVenue).mockResolvedValue({
     message: "Check the highlighted fields.",

@@ -721,6 +721,21 @@ def test_all_draft_fields_round_trip_unchanged() -> None:
             assert created.json()[field] == value
 
 
+# SCRUM-8 AC2-H1 (happy): a draft with no fields at all saves as a Draft.
+def test_create_completely_empty_draft() -> None:
+    with make_client() as client:
+        created = client.post("/event-requests", json={})
+
+    assert created.status_code == 201
+    assert created.json()["status"] == "Draft"
+    assert created.json()["organiser_id"] == ORGANISER_ID
+    for field in complete_payload():
+        if field == "proposed_date_times":
+            assert created.json()[field] == []
+        else:
+            assert created.json()[field] is None
+
+
 # Purpose: Protects request privacy by excluding records owned by another organiser.
 def test_list_returns_only_the_current_organisers_requests() -> None:
     repository = FakeEventRequestRepository()
@@ -991,6 +1006,25 @@ def test_submit_completed_draft() -> None:
     assert len(repository.rows) == 1
 
 
+# SCRUM-11 AC6-N1 (negative): submission assigns no Coordinator — the inspectable
+# assignment store gains no row for the request (SCRUM-14 owns real assignments).
+def test_submit_creates_no_coordinator_assignment() -> None:
+    repository = FakeEventRequestRepository()
+    coordinators = FakeCoordinatorAssignmentRepository(repository)
+    with make_client(repository) as client:
+        created = client.post(
+            "/event-requests", json={"event_name": "Initial title"}
+        ).json()
+        response = client.post(
+            f"/event-requests/{created['id']}/submit", json=complete_payload()
+        )
+
+    assert response.status_code == 200
+    assert repository.rows[created["id"]]["status"] == "Submitted"
+    assert coordinators.rows == []
+    assert coordinators.latest_for_event_request(created["id"]) is None
+
+
 # SCRUM-11 AC4-N1 (negative): a refused submission leaves the draft an editable
 # Draft with its saved values.
 def test_incomplete_draft_remains_draft_after_rejected_submission() -> None:
@@ -1008,6 +1042,27 @@ def test_incomplete_draft_remains_draft_after_rejected_submission() -> None:
     assert response.status_code == 422
     assert fetched.json()["status"] == "Draft"
     assert fetched.json()["event_name"] == "Incomplete"
+
+
+# SCRUM-11 AC4-N2 (negative): the 422 refusal body names every missing item.
+def test_refused_submission_names_every_missing_field() -> None:
+    repository = FakeEventRequestRepository()
+    with make_client(repository) as client:
+        created = client.post(
+            "/event-requests", json={"event_name": "Incomplete"}
+        ).json()
+        response = client.post(
+            f"/event-requests/{created['id']}/submit",
+            json={"event_name": "Incomplete"},
+        )
+
+    reported_fields = {
+        error["loc"][-1]
+        for error in response.json()["detail"]
+        if error["loc"][0] == "body"
+    }
+    assert response.status_code == 422
+    assert reported_fields == set(complete_payload()) - {"event_name"}
 
 
 # SCRUM-11 AC2-N1, AC4 (negative): timezone-unaware dates are refused (422) and

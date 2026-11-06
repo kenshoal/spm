@@ -53,7 +53,7 @@ Jira criteria read on 6 October 2026, reviewed with `docs/standards/testing.md` 
 ### Included and excluded behaviour
 
 | | Behaviour | Jira |
-|
+| --- | --- | --- |
 
 ### Actors and relationship permissions
 
@@ -104,7 +104,7 @@ Each update names the status it expects to find; a mismatch is a stale action an
 ## Test data
 
 | Name | Value |
-|
+| --- | --- |
 
 "Nothing stored" in an API case means the fake Supabase client recorded no insert and no RPC call. "No lookup" means the fake eventRequestService received no request.
 
@@ -415,3 +415,25 @@ Two tests were corrected during the Red run because they would have passed vacuo
 - `tests/conftest.py` gained four SCRUM-33 fixtures (`req_store`, `req_events`, `as_user`, `req_api`); the existing fixtures are unchanged.
 - Per `commits.md` §4, the red tests are not pushed; they are committed with the code that makes them pass in Leg 2.
 - Leg 2's production code (migration `0021`, the event client, the requirements router) was written by Claude (Cowork) against the already-approved test suite, in the slice order of the plan; the D9 note-keeping rule is implemented in the database function, so every caller gets it.
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H3 — Requirements were accepted in Draft, Submitted, Under Review, Changes Requested and Confirmed.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H3 AC6-N1 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N10 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N2 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N3 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N4 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N5 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N6 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N7 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N8 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-N9 | AC6 (Jira, 1 Nov) | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | Negative | Every status outside Approved, Planning and Safety Review refuses a new requirement (409) and stores nothing | API | backend/equipmentService/tests/test_requirements_record.py::test_closed_event_refuses_requirements |
+| H3 AC6-P1 | AC6 (Jira, 1 Nov) | Each status in the allow-list accepts a requirement | Partition | Each status in the allow-list accepts a requirement | API | backend/equipmentService/tests/test_requirements_record.py::test_open_event_statuses_accept_requirements |
+| H3 AC6-P2 | AC6 (Jira, 1 Nov) | Each status in the allow-list accepts a requirement | Partition | Each status in the allow-list accepts a requirement | API | backend/equipmentService/tests/test_requirements_record.py::test_open_event_statuses_accept_requirements |
+| H3 AC6-P3 | AC6 (Jira, 1 Nov) | Each status in the allow-list accepts a requirement | Partition | Each status in the allow-list accepts a requirement | API | backend/equipmentService/tests/test_requirements_record.py::test_open_event_statuses_accept_requirements |

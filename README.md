@@ -40,6 +40,13 @@ Authentication coverage for SCRUM-26 is documented in
 Submission coverage for SCRUM-11 is documented in
 [`docs/testcases/scrum_11_testcases.md`](docs/testcases/scrum_11_testcases.md).
 
+## Hosted deployment
+
+A hosted instance of the application runs at **http://52.221.213.254:3000** — no setup needed to try it. Visits start at the sign-in page; sign in with one of the demo accounts from the table below (password `12345678`), for example `event_coordinator1@example.com` for the coordinator workspace at `/coordination/requests`.
+
+- Only the frontend (port 3000) is exposed. The five API ports (`8001`–`8005`) are not reachable from the internet; their Swagger pages are available only in a local run.
+- The server is a teaching/demo environment served over plain HTTP, so use only the demo credentials there and never a password you use anywhere else.
+
 ## Services
 
 | Service | Technology | Local port | Purpose |

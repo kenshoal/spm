@@ -223,7 +223,7 @@ test("pre-fills each result's check form from the search filters", () => {
   expect(within(card).getByRole("button", { name: "Check this venue" })).toBeDefined();
 });
 
-// SCRUM-30 AC5-N2 (negative): an operating-hours mismatch is named and explained, not shown as a bare code
+// SCRUM-30 H12 AC5-N2 (negative): an operating-hours mismatch is named and explained, not shown as a bare code
 test("names an operating hours mismatch", () => {
   render(
     <SuitabilityVerdict

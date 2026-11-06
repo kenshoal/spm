@@ -1,4 +1,4 @@
-"""Per-venue daily operating hours (hotfix 2, H12).
+"""Per-venue daily operating hours (hotfix 2, H12; the hold and approval cases are review item E1).
 
 SCRUM-30 AC1, AC2, AC6 (the catalogue), AC4 (search), AC5 (suitability); SCRUM-31 AC4
 (the calendar); SCRUM-12 AC3. A venue has one daily operating start and end, on 15-minute
@@ -370,7 +370,7 @@ def place_hold(venue_id: str, start: int, end: int) -> httpx.Response:
     )
 
 
-# AC4-N2 (negative): a hold outside the hours is refused with outside_operating_hours and nothing is stored
+# E1 AC4-N2 (negative): a hold outside the hours is refused with outside_operating_hours and nothing is stored
 def test_a_hold_outside_the_hours_is_refused_with_its_code() -> None:
     venue = open_venue(540, 1080)
 
@@ -381,14 +381,14 @@ def test_a_hold_outside_the_hours_is_refused_with_its_code() -> None:
     assert memory_hold_store.list_for_event(EVENT) == []
 
 
-# AC4-B5 (boundary): a hold that starts exactly when the venue opens and ends when it closes is placed
+# E1 AC4-B5 (boundary): a hold that starts exactly when the venue opens and ends when it closes is placed
 def test_a_hold_across_exactly_the_hours_is_placed() -> None:
     venue = open_venue(540, 1080)
 
     assert place_hold(venue.id, 540, 1080).status_code == 201
 
 
-# AC4-N3 (negative): approving a request outside the hours is refused with the code, the request stays pending
+# E1 AC4-N3 (negative): approving a request outside the hours is refused with the code, the request stays pending
 def test_approval_outside_the_hours_is_refused_with_its_code() -> None:
     venue = open_venue(540, 1080)
     request = seed_booking(
@@ -406,7 +406,7 @@ def test_approval_outside_the_hours_is_refused_with_its_code() -> None:
     assert [r["refusal_codes"] for r in refusals] == [["outside_operating_hours"]]
 
 
-# AC4-H3 (happy): approving a request inside the hours still works
+# E1 AC4-H3 (happy): approving a request inside the hours still works
 def test_approval_inside_the_hours_is_approved() -> None:
     venue = open_venue(540, 1080)
     request = seed_booking(

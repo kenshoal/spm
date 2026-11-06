@@ -147,3 +147,17 @@ Run on 1 November 2026 for AC1 (commit 6a406eb, local): `cd backend/eventRequest
 | AC1-N3 | Green | As expected | Pass (local, fake HTTP) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_notification_outage_does_not_block_the_cancellation. Client failure handling mutation-checked |
 | AC1-B1 | Green | As expected | Pass (local, fakes) | commit c80428b, local | Claude (AI) for Tate Lim, 1 Nov 2026 | test_cancelling_twice_tells_nobody_twice. Mutation-checked |
 | AC1-X2 | Green | As expected | Pass (local, vitest) | commit 6a406eb, local | Claude (AI) for Tate Lim, 1 Nov 2026 | frontend/__tests__/cancellation-recorded-notification.test.ts (3 tests). Not seen in a browser |
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H11 — Equipment staff came from the release's `created_by`; assigned Technical Support was never told.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H11 AC1-H1 | AC1 (Jira, 1 Nov) | The approvers of the bookings, the staff who last updated each requirement and the Technical Support Staff assigned to the event are all told, each once | Happy | The approvers of the bookings, the staff who last updated each requirement and the Technical Support Staff assigned to the event are all told, each once | Unit | backend/eventRequestService/tests/test_cancellation_staff.py::test_all_three_groups_of_staff_are_told_once |
+| H11 AC1-N1 | AC1 (Jira, 1 Nov) | A requirement still 'requested' has no updated_by, so nobody is told for it | Negative | A requirement still 'requested' has no updated_by, so nobody is told for it | Unit | backend/eventRequestService/tests/test_cancellation_staff.py::test_a_requirement_nobody_has_updated_tells_nobody |
+| H11 AC1-N2 | AC1 (Jira, 1 Nov) | The reservation releases are no longer the source; who reserved a unit is not who the AC names | Negative | The reservation releases are no longer the source; who reserved a unit is not who the AC names | Unit | backend/eventRequestService/tests/test_cancellation_staff.py::test_the_release_table_is_not_read |
+| H11 AC1-N3 | AC1 (Jira, 1 Nov) | If any lookup fails the whole lookup fails, so the service logs it and still tells the others | Negative | If any lookup fails the whole lookup fails, so the service logs it and still tells the others | Unit | backend/eventRequestService/tests/test_cancellation_staff.py::test_a_failed_lookup_is_reported |
+| H11 AC1-X1 | AC1 (Jira, 1 Nov) | Each lookup is scoped to this event and asks for only the column it needs | Cross-cutting | Each lookup is scoped to this event and asks for only the column it needs | Unit | backend/eventRequestService/tests/test_cancellation_staff.py::test_each_lookup_is_scoped_to_the_event |

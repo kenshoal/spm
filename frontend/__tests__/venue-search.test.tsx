@@ -113,7 +113,7 @@ test("shows None when a venue has no setup or turnaround time", () => {
   expect(within(attributes).getByText("Turnaround").nextElementSibling?.textContent).toBe("None");
 });
 
-// SCRUM-30 AC4-H3 (happy): each result shows the hours the venue is open
+// SCRUM-30 H12 AC4-H3 (happy): each result shows the hours the venue is open
 test("shows the venue's operating hours on each result", () => {
   render(<VenueResults venues={[{ ...venue, operating_start_minute: 540, operating_end_minute: 1080 }]} />);
 

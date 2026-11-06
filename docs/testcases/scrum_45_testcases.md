@@ -82,3 +82,20 @@ layer only.
 - **No DB-layer tests exist yet** for the `create_equipment` /
   `update_equipment_quantity` RPCs' constraints (audit trail, quantity floor at
   the database). Same outstanding item as SCRUM-16 AC3.
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H1 — A quantity could be cut below the units already reserved.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H1 AC2-B1 | AC2 (Jira, 1 Nov) | Exactly the peak is allowed | Boundary | Exactly the peak is allowed | Database | database/verify_release_1_hotfixes_2.sql:233 |
+| H1 AC2-B2 | AC2 (Jira, 1 Nov) | One below the peak is refused | Boundary | One below the peak is refused | Database | database/verify_release_1_hotfixes_2.sql:238 |
+| H1 AC2-B3 | AC2 (Jira, 1 Nov) | Two reservations that start the same day are each counted once | Boundary | Two reservations that start the same day are each counted once | Database | database/verify_release_1_hotfixes_2.sql:252 |
+| H1 AC2-N1 | AC2 (Jira, 1 Nov) | Below the peak (7) is refused and nothing changes | Negative | Below the peak (7) is refused and nothing changes | Database | database/verify_release_1_hotfixes_2.sql:224 |
+| H1 AC2-N4 | AC2 (Jira, 1 Nov) | A total below the units already reserved is refused as a conflict (409) with a reason the member can act on | Negative | A total below the units already reserved is refused as a conflict (409) with a reason the member can act on | API | backend/equipmentService/tests/test_equipment.py::test_update_quantity_below_reserved_is_a_conflict |
+| H1 AC2-P1 | AC2 (Jira, 1 Nov) | An increase is never refused | Partition | An increase is never refused | Database | database/verify_release_1_hotfixes_2.sql:243 |
+| H1 AC2-P2 | AC2 (Jira, 1 Nov) | Reservations that have already been returned do not hold the total up | Partition | Reservations that have already been returned do not hold the total up | Database | database/verify_release_1_hotfixes_2.sql:246 |
+| H1 AC2-P3 | AC2 (Jira, 1 Nov) | Zero stays allowed when nothing is reserved ahead | Partition | Zero stays allowed when nothing is reserved ahead | Database | database/verify_release_1_hotfixes_2.sql:263 |
