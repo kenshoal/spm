@@ -738,7 +738,7 @@ Vera independently read both raw final logs, rehashed the unchanged sources and 
 
 ### Current shared result — approved deployment and rollback verification, 20 October 2026
 
-**Shared deployment and the two bounded verification scripts now pass.** This supersedes the approval-pending/Not-executed shared statuses in the preparation and local-rehearsal records above; those records remain as historical evidence. Root reports that explicit human approval was obtained before the shared write. Supabase project `rrmvhxrxrrnigjdxcbwt` recorded migration **`20261020093041`**, named **`scrum64_arrangement_reviews_atomic_rollout`**, containing the reviewed nine-file SCRUM-64 bundle. This is one recorded atomic rollout, not a claim of nine separately applied migration-history entries.
+**Shared deployment and the two bounded verification scripts now pass.** This supersedes the approval-pending/Not-executed shared statuses in the preparation and local-rehearsal records above; those records remain as historical evidence. Root reports that explicit human approval was obtained before the shared write. Supabase project `eizzwhejdudmmslowvql` recorded migration **`20261020093041`**, named **`scrum64_arrangement_reviews_atomic_rollout`**, containing the reviewed nine-file SCRUM-64 bundle. This is one recorded atomic rollout, not a claim of nine separately applied migration-history entries.
 
 | Shared check | Actual result observed by root | Scope / source identity |
 | --- | --- | --- |
@@ -769,3 +769,16 @@ Root's limited runtime probe was also reviewed: `/tmp/scrum64-rollout-evidence/r
 Root then observed the separate shared migration **`20261020093706` — `safety_review_arrangement_reviews` (0045)**. After that migration, both unchanged shared verifiers passed again; smoke rollback retained zero scoped fixture events/reviews/jobs. The persisted raw MCP result capture `/tmp/scrum64-rollout-evidence/shared-regression-after-0045.json` also shows all three SCRUM-64 triggers enabled (`O`), expected helper/clear/safety-caller signatures and empty search paths. Vera independently read that capture. This supersedes the earlier 0045-deployment-pending statement **for deployment presence only**: neither the smoke nor these focused suites execute an actual saved SafetyOfficer decision through a real authenticated application journey. The separate readiness/handover publication and committed operational delivery must not be inferred from mechanism checks.
 
 No failure was found in the existing paths exercised here. That bounded conclusion is supported by fresh focused source-level regressions, canonical native evidence and shared post-migration smoke; it is not an absolute no-disruption guarantee. Real user/session binding, committed cross-role UI and notification delivery, full consuming-workflow execution and publication/CI retain their separate status. No shared writes were performed by Vera.
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H9 — A change to the accessibility needs flagged nothing and could not be proposed.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H9 AC1-H1 | AC1 (Jira, 1 Nov) | The Coordinator edit flags the approved booking once, naming the field | Happy | The Coordinator edit flags the approved booking once, naming the field | Database | database/verify_release_1_hotfixes_2.sql:490 |
+| H9 AC1-H2 | AC1 (Jira, 1 Nov) | A direct single-column update flags too, so the trigger must watch the column itself | Happy | A direct single-column update flags too, so the trigger must watch the column itself | Database | database/verify_release_1_hotfixes_2.sql:502 |
+| H9 AC1-N1 | AC1 (Jira, 1 Nov) | An ordinary edit, and a save with the same accessibility text, flag nothing | Negative | An ordinary edit, and a save with the same accessibility text, flag nothing | Database | database/verify_release_1_hotfixes_2.sql:483 |
+| H9 AC1-P1 | AC1 (Jira, 1 Nov) | A blank-to-blank or whitespace-only change is no change | Partition | A blank-to-blank or whitespace-only change is no change | Database | database/verify_release_1_hotfixes_2.sql:512 |

@@ -145,3 +145,13 @@ Layers: A = API/controller (backend pytest), S = domain service, R = repository 
 - **Existing labels left untouched.** `test_coordinator_assignment_service.py` carries `AC2-H1`/`AC2-N1` on the two assignment-notify tests and `AC4-*` on the four unassigned-notice tests; the former do not match this catalogue's numbering (the notify criterion is AC5) and name no story, and the latter evidence SCRUM-62 AC4 (see `notification_client.py`'s docstring). They are recorded here under AC5 with their existing labels intact.
 - **Schema notes.** `event_coordinator_assignments` is captured in `migrations/0011_event_coordinator_assignments.sql` (`coordinator_id`/`assigned_by` are `varchar(64)`, not uuid); the live status constraint is the migration chain's, ending at `0029_safety_review_status.sql`. Two files share the number `0011`.
 - **Mutation and live-database checks** recorded on 23 September 2026 (commit `9248a98`) — breaking the queue subtraction and querying `Draft` instead of `Submitted` each failed the intended tests, and `list_awaiting_assignment()` reconciled against the live Supabase data read-only — remain valid design evidence for why these cases exist.
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H7 — Postponed was missing from the Lead's list; a reassignment from a stale screen won.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H7 AC7-N1 | AC7 (Jira, 1 Nov) | A Withdrawn request refuses assignment | Negative | A Withdrawn request refuses assignment | API + Database | database/verify_release_1_hotfixes_2.sql:43; backend/eventRequestService/tests/test_coordinator_assignment_controller.py::test_assign_coordinator_refused_once_withdrawn |

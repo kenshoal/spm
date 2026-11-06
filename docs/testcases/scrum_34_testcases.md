@@ -85,3 +85,15 @@ Layers: A = API (`backend/eventRequestService/tests/test_registration_info_api.p
 | Signed-in live check (AC1, AC2, AC3, AC4) | Green | Coordinator1 and the event's organiser both see Registered 1, Withdrawn 0, Places available 4, Checked in 1 and the row; the organiser has no add or check-in controls. `event_organiser3` (Globex) gets "Draft not found" and no registration data | Pass | Local stack on Windows (`docker compose`, `next dev`) against shared development, seeded accounts; test event `86a4d5eb…` ("SCRUM-25/34/41 LIVE CHECK 31 Oct (Jaren)") | Claude for Jaren, 31 Oct 2026 | Attendees show as account ids, not names or emails, as in the approved contract |
 
 Test design was AI-drafted; a team member still needs to review it (`testing.md` §10).
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H6 — Available places subtracted Registered only.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H6 AC5-B1 | AC5 (Jira, 1 Nov) | A pending offer holds a place, so available places are capacity - Registered - Offered, and never go below zero | Boundary | A pending offer holds a place, so available places are capacity - Registered - Offered, and never go below zero | API | backend/eventRequestService/tests/test_registration_info_api.py::test_pending_offers_reduce_the_available_places |
+| H6 AC5-B2 | AC5 (Jira, 1 Nov) | A pending offer holds a place, so available places are capacity - Registered - Offered, and never go below zero | Boundary | A pending offer holds a place, so available places are capacity - Registered - Offered, and never go below zero | API | backend/eventRequestService/tests/test_registration_info_api.py::test_pending_offers_reduce_the_available_places |
+| H6 AC5-B3 | AC5 (Jira, 1 Nov) | A pending offer holds a place, so available places are capacity - Registered - Offered, and never go below zero | Boundary | A pending offer holds a place, so available places are capacity - Registered - Offered, and never go below zero | API | backend/eventRequestService/tests/test_registration_info_api.py::test_pending_offers_reduce_the_available_places |

@@ -175,3 +175,17 @@ Build: `feat/venue-blocking` at `c352c51` plus the PR #45 review follow-ups (dev
 | Live stack, read-only | Docker Compose services + `npm run dev`; Venue Staff (`venue_staff@example.com`) and Event Coordinator (`event_coordinator1@example.com`) test accounts | Staff page renders form, calendar and list; existing Supabase block (20–21 Sep, AM/PM) shown Blocked with its reason, 19 and 22 Sep and NIGHT Available; coordinator redirected to `/unauthorised` | No block was created in the shared database. |
 
 Pull-request CI and reviewer approval: not yet run.
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H10 — Block notices and replacement decisions went to `requested_by`.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H10 AC7-H1 | AC7 (Jira, 1 Nov) | After a reassignment, the block notice goes to the current Coordinator and the former Coordinator who made the booking is not told | Happy | After a reassignment, the block notice goes to the current Coordinator and the former Coordinator who made the booking is not told | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_a_block_notice_goes_to_the_current_coordinator |
+| H10 AC7-H2 | AC7 (Jira, 1 Nov) | The Supabase lookup reads only the latest assignment row of the one event | Happy | The Supabase lookup reads only the latest assignment row of the one event | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_the_supabase_lookup_reads_the_latest_assignment |
+| H10 AC7-N1 | AC7 (Jira, 1 Nov) | If the current Coordinator cannot be looked up, nobody is told (a former Coordinator must not be), and the block is still saved and the booking still flagged | Negative | If the current Coordinator cannot be looked up, nobody is told (a former Coordinator must not be), and the block is still saved and the booking still flagged | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_an_unreachable_assignment_store_sends_nothing_but_keeps_the_block |
+| H10 AC7-N2 | AC7 (Jira, 1 Nov) | No assignment and a malformed id give no Coordinator (never a guess); a store error is a lookup error | Negative | No assignment and a malformed id give no Coordinator (never a guess); a store error is a lookup error | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_the_supabase_lookup_edge_cases |
+| H10 AC7-P1 | AC7 (Jira, 1 Nov) | With nobody on record for the event (a local run, or an event without an assignment), the notice still goes to the Coordinator who made the booking | Partition | With nobody on record for the event (a local run, or an event without an assignment), the notice still goes to the Coordinator who made the booking | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_without_an_assignment_the_requesting_coordinator_is_told |

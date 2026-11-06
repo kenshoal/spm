@@ -174,3 +174,16 @@ Three rows still have no proving test anywhere; the execution record above alrea
 - **AC1-X1**: the nearest test, `test_venue_blocks.py::test_non_venue_staff_cannot_create_block`, carries another story's `AC1-X2` label and covers only the coordinator 403; the organiser and no-token cases and the "flags nothing" assertion are untested.
 - **AC2-H2**: no test asserts that a block leaves the event's other bookings untouched.
 - **AC3-X1**: no test asserts flag visibility by role (venue staff and safety officer 200, unassigned coordinator 404, organiser 403); `test_booking_requests_by_event.py` covers booking-read roles without flags, under unprefixed AC3 IDs that collide with this story's.
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+Hotfix H10 — Block notices and replacement decisions went to `requested_by`.
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| H10 AC5-H1 | AC5 (Jira, 1 Nov) | Approving a replacement booking tells the current Coordinator, not the one who made the replacement request | Happy | Approving a replacement booking tells the current Coordinator, not the one who made the replacement request | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_a_replacement_decision_goes_to_the_current_coordinator |
+| H10 AC5-H2 | AC5 (Jira, 1 Nov) | A rejected replacement tells the current Coordinator too | Happy | A rejected replacement tells the current Coordinator too | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_a_rejected_replacement_goes_to_the_current_coordinator |
+| H10 AC5-N1 | AC5 (Jira, 1 Nov) | An ordinary booking's decision still goes to the Coordinator who made the request (SCRUM-15 AC4), even when the event has a different Coordinator now | Negative | An ordinary booking's decision still goes to the Coordinator who made the request (SCRUM-15 AC4), even when the event has a different Coordinator now | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_an_ordinary_decision_keeps_its_recipient |
+| H10 AC5-N2 | AC5 (Jira, 1 Nov) | If the current Coordinator of a replacement cannot be looked up, nothing is sent, and the decision is still saved | Negative | If the current Coordinator of a replacement cannot be looked up, nothing is sent, and the decision is still saved | Unit | backend/venueService/tests/test_current_coordinator_notices.py::test_an_unreachable_store_still_saves_a_replacement_decision |

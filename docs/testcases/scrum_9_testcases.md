@@ -136,3 +136,14 @@ The suites below were run after the new tests were added and after `dev` (`439fe
 | End-to-end | `playwright test` (whole suite) | 59 passed |
 
 Not run: the shared development database, pull-request CI at the time of writing, and reviewer sign-off. The new tests passed first time, so they found no defect; they close gaps in the record.
+
+## Release 1 hotfix test cases (added 6 November 2026)
+
+These cases belong to this story and are labelled in the automated tests, but until now they were specified only in summary on the hotfix page (`release_1_hotfixes_testcases.md`). They are recorded here so the story document, the code labels and `TestCaseLookup.xlsx` agree; the IDs are the lookup sheet's, with the hotfix number prefixed to the case ID. They were executed as part of the hotfix verification runs recorded on that page (1 and 3 November 2026); per-case results are not restated in this document.
+
+The lookup sheet labels these two cases HX; the code comments label them `SCRUM-9 AC6-X1` and `SCRUM-9 AC6-N1` (Release 1 hotfix work on the venue-search page).
+
+| ID | AC | Test scenario | Technique | Expected result | Layer | Automated test |
+| --- | --- | --- | --- | --- | --- | --- |
+| HX AC6-N1 | AC6 (Jira, 1 Nov) | A refused role never reaches the search | Negative | A refused role never reaches the search | Component | frontend/__tests__/venue-search-page.test.tsx::a refused role searches nothing |
+| HX AC6-X1 | AC6 (Jira, 1 Nov) | Coordinators, venue staff and safety officers can open the search | Cross-cutting | Coordinators, venue staff and safety officers can open the search | Component | frontend/__tests__/venue-search-page.test.tsx::the search page is open to coordinators, venue staff and safety officers |
