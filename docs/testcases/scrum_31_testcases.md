@@ -185,3 +185,21 @@ PR #68 received review comments on 20 October 2026. Accepted and built, tests fi
 - This document, its assumptions and the cases were drafted by Claude Code on 19 October 2026 and **approved by the story owner the same day**, before any code was written.
 - The Product Owner agreed on 19 October 2026 to restore SCRUM-31's original wording and deliver it on the slot model. Assumption A1 (tentative holds not applicable) and A2 (the roles) are mine and still need confirming.
 - The points estimate (1) predates this design. The work is a new endpoint, a store method, a page and tests.
+
+## Hotfix 2 H12: the calendar follows each venue's operating hours, 3 November 2026
+
+H12 in `release_1_hotfixes_testcases.md` gave each venue its own daily operating hours (migration 0092, PR #130). This story's AC4 is Jira's rewritten AC4 of 1 November. The IDs carry the `H12` prefix, as in the tracking sheet, because this document already uses AC4-P1 to AC4-P3. The catalogue, search and suitability cases of H12 are in `scrum_30_testcases.md`.
+
+Layer: **API** = `backend/venueService/tests/test_venue_operating_hours.py` (FastAPI routes, in-memory stores, Coordinator session).
+
+| ID | AC | Test scenario | Technique | Pre-conditions | Test steps | Test data | Expected result | Forbidden side effects | Layer |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| H12 AC4-H2 | AC4 | The calendar shows free time only inside the venue's hours | Happy | Venue open 09:00 to 18:00, nothing booked | Read the month as a Coordinator | the test day | Free time is 09:00 to 18:00 only | Nothing outside the hours is free | API |
+| H12 AC4-P3 | AC4 | Bookings and blocks are still listed, and free time is what is left of the hours | Partition | Venue open 09:00 to 18:00; approved booking 10:00 to 12:00; block 07:00 to 08:00 | Read the month | the test day | Free 09:00 to 10:00 and 12:00 to 18:00; the block is still listed | — | API |
+| H12 AC4-X1 | AC4 | For a venue with short hours, the calendar and search agree at every 15-minute step | Cross-cutting | Venue with short hours | At each 15-minute step, search and read the calendar | every step of the day | Search offers the venue exactly where the calendar shows it free | — | API |
+| H12 AC4-X2 | AC4 | On a day with short hours, the calendar's ranges are ordered, do not overlap and stay inside the hours | Cross-cutting | Venue open 10:00 to 17:00 | Read the month | the test day | Every range lies within 10:00 to 17:00; no overlaps | — | API |
+
+| ID | Automation status | Actual result | Execution status | Remarks and evidence |
+| --- | --- | --- | --- | --- |
+| H12 AC4-H2, AC4-P3, AC4-X1, AC4-X2 | Automated, written test first | As expected | Pass | Hotfix 2 execution record, 3 Nov 2026 (Kennedy, Claude): venueService 854 passed, 10 skipped. Re-run on 5 Nov 2026 by Claude for Yang Xue at `fdc989f`: `test_venue_operating_hours.py` 38 passed, venueService 858 passed |
+
