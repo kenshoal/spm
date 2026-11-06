@@ -140,6 +140,26 @@ def test_setup_and_turnaround_are_counted(events: FakeEventService, start_minute
     assert bool(response.json()["conflicts"]) is clashes
 
 
+# AC1-B4 (boundary): the near edge. With setup 30 and turnaround 45 the approved 09:00-12:00
+# booking holds the venue from 08:30, so a request 07:30-07:45 pads to end exactly at 08:30 and
+# is clear (ranges are half-open); one step more pads to 08:45 and clashes.
+@pytest.mark.parametrize(
+    ("end_minute", "clashes"),
+    [(465, False), (480, True)],
+    ids=["AC1-B4-touching-clear", "AC1-B4-one-step-more-clashes"],
+)
+def test_a_touching_padded_end_is_clear_but_one_step_more_clashes(
+    events: FakeEventService, end_minute: int, clashes: bool
+) -> None:
+    venue = make_venue(setup_minutes=30, turnaround_minutes=45)
+    approved(venue.id, 540, 720)
+
+    response = submit(venue.id, 450, end_minute)
+
+    assert response.status_code == 201
+    assert bool(response.json()["conflicts"]) is clashes
+
+
 # AC1-X1 (cross-cutting): the warning carries times and dates only, never event names, ids or users
 def test_the_warning_hides_other_events_details(events: FakeEventService) -> None:
     venue = make_venue()

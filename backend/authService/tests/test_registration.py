@@ -149,6 +149,27 @@ def test_login_rejects_empty_password(client: TestClient, supabase: Mock) -> Non
     supabase.auth.sign_in_with_password.assert_not_called()
 
 
+# SCRUM-26 AC2-B2 (boundary): a password of exactly the minimum length (1
+# character) passes validation and reaches the provider — the stub's 401 is
+# the refusal path, not a validation failure.
+def test_login_minimum_length_password_reaches_provider(
+    client: TestClient, supabase: Mock
+) -> None:
+    supabase.auth.sign_in_with_password.side_effect = AuthApiError(
+        "bad password", 400, "invalid_credentials"
+    )
+
+    response = client.post(
+        "/auth/login", json={"email": "member@example.com", "password": "x"}
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid email or password"}
+    supabase.auth.sign_in_with_password.assert_called_once_with(
+        {"email": "member@example.com", "password": "x"}
+    )
+
+
 # SCRUM-26 AC3-N4 (negative): a sign-in that returns no session is a 502 with
 # no token.
 def test_login_requires_session(client: TestClient, supabase: Mock) -> None:
@@ -482,6 +503,51 @@ def test_admin_endpoint_requires_admin_role(
     assert response.status_code == 403
     admin.table.return_value.upsert.assert_not_called()
     admin.auth.admin.update_user_by_id.assert_not_called()
+
+
+# SCRUM-27 AC3-N1 (negative): a role granted mid-session authorises the very
+# next request and, once removed from the role store again, the same request
+# on the same open session is refused — the caller's roles are re-read from
+# staff_roles on every request, so no stale role is honoured.
+def test_mid_session_role_change_applies_on_the_next_request(
+    client: TestClient, supabase: Mock, admin: Mock
+) -> None:
+    supabase.auth.get_user.return_value = SimpleNamespace(
+        user=SimpleNamespace(
+            id="caller-id", email="caller@example.com", app_metadata={"roles": []}
+        )
+    )
+    admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+        SimpleNamespace(data=[]),  # before the grant: no role stored for the caller
+        # the grant: the caller now holds a listing duty in staff_roles
+        SimpleNamespace(data=[{"role": "event_operations_manager"}]),
+        SimpleNamespace(data=[{"user_id": "coord-a"}]),  # the listed directory
+        SimpleNamespace(data=[]),  # the revocation: the role row is gone
+    ]
+    admin.auth.admin.get_user_by_id.return_value = SimpleNamespace(
+        user=SimpleNamespace(id="coord-a", email="alex@example.com")
+    )
+
+    before = client.get(
+        "/auth/users?role=event_coordinator",
+        headers={"Authorization": "Bearer caller-token"},
+    )
+    granted = client.get(
+        "/auth/users?role=event_coordinator",
+        headers={"Authorization": "Bearer caller-token"},
+    )
+    revoked = client.get(
+        "/auth/users?role=event_coordinator",
+        headers={"Authorization": "Bearer caller-token"},
+    )
+
+    assert before.status_code == 403
+    assert granted.status_code == 200
+    assert granted.json() == [{"id": "coord-a", "email": "alex@example.com"}]
+    assert revoked.status_code == 403
+    # One open session carried all three requests — only the role store
+    # changed, and the token was verified afresh each time.
+    assert supabase.auth.get_user.call_count == 3
 
 
 # SCRUM-26 AC4-N4, SCRUM-27 AC2-N5 (negative): the role endpoint refuses a
