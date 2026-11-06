@@ -540,7 +540,7 @@ reviewed `0015`/`0016` source. No newer teammate change was overwritten.
 
 | Check | Result | Evidence / limitation |
 | --- | --- | --- |
-| Supabase MCP `apply_migration`, name `event_request_status_history` | **Passed** | Registered migration version `20261010034216` on project `eizzwhejdudmmslowvql`, PostgreSQL **17.6**. |
+| Supabase MCP `apply_migration`, name `event_request_status_history` | **Passed** | Registered migration version `20261010034216` on project `rrmvhxrxrrnigjdxcbwt`, PostgreSQL **17.6**. |
 | Existing-event baselines | **Passed** | 12 events, 12 baseline entries, zero invalid baseline actor/source/previous-status fields and zero events without history. |
 | Combined `verify_event_request_status_history.sql` via MCP | **Not executed successfully** | Two calls returned `McpServerError: Invalid or expired requestState`; not recorded as a passing combined-script run. A later combined middle block had the same connector error. |
 | Rolled-back workflow and initial script block | **Passed** | Draft/direct submission, review, same-state/detail edits, refusal without extra evidence/decision/outbox/assignment, clarification without transition, resume actor/time, approval, failed history write rollback, named system source and monotonic history. |

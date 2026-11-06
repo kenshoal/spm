@@ -738,7 +738,7 @@ Vera independently read both raw final logs, rehashed the unchanged sources and 
 
 ### Current shared result — approved deployment and rollback verification, 20 October 2026
 
-**Shared deployment and the two bounded verification scripts now pass.** This supersedes the approval-pending/Not-executed shared statuses in the preparation and local-rehearsal records above; those records remain as historical evidence. Root reports that explicit human approval was obtained before the shared write. Supabase project `eizzwhejdudmmslowvql` recorded migration **`20261020093041`**, named **`scrum64_arrangement_reviews_atomic_rollout`**, containing the reviewed nine-file SCRUM-64 bundle. This is one recorded atomic rollout, not a claim of nine separately applied migration-history entries.
+**Shared deployment and the two bounded verification scripts now pass.** This supersedes the approval-pending/Not-executed shared statuses in the preparation and local-rehearsal records above; those records remain as historical evidence. Root reports that explicit human approval was obtained before the shared write. Supabase project `rrmvhxrxrrnigjdxcbwt` recorded migration **`20261020093041`**, named **`scrum64_arrangement_reviews_atomic_rollout`**, containing the reviewed nine-file SCRUM-64 bundle. This is one recorded atomic rollout, not a claim of nine separately applied migration-history entries.
 
 | Shared check | Actual result observed by root | Scope / source identity |
 | --- | --- | --- |

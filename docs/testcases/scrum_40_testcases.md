@@ -224,7 +224,7 @@ On a fresh owned PostgreSQL16 instance at loopback55445, root applied genuine006
 
 ## Authorised shared execution — 24 October 2026
 
-This section supersedes earlier deployment-pending notes. Root applied the reviewed atomic 0062→guarded 0063 bundle to SPMG9T4 (`eizzwhejdudmmslowvql`), migration ledger **20261024085549**. Guarded 0063 source is `5414c4be1cbcce84a95422590984edf724ac8ba9232b522cb8eeb45b84dbf7d5`. Root deployed the matching application and worker; the test author performed no shared writes.
+This section supersedes earlier deployment-pending notes. Root applied the reviewed atomic 0062→guarded 0063 bundle to SPMG9T4 (`rrmvhxrxrrnigjdxcbwt`), migration ledger **20261024085549**. Guarded 0063 source is `5414c4be1cbcce84a95422590984edf724ac8ba9232b522cb8eeb45b84dbf7d5`. Root deployed the matching application and worker; the test author performed no shared writes.
 
 The single retained controlled target is event **`0da8c2a9-b1a5-4551-b3ba-4d6d12945cc9`**, label **`SCRUM40 LIVE 20261024T085710Z`**. Root used frozen driver `47388574c0abda35708c7a8812fc774be0fca9d38cb0aa6c2188b91cc1a55d93`: real existing normal accounts and actual public APIs, no injected Auth/repository, SQL status fake or synthetic eligibility clock. The labelled venue booking and final end coherently finish at noon Singapore on 15 October (`2026-10-15T04:00:00Z`), safely more than 168 elapsed hours old. These are intentionally labelled integration fixtures retained with their audit, not a backfill of business events.
 
